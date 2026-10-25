@@ -4,17 +4,20 @@
 // nuovo, 5. salva lo stato sul branch ogni 15 secondi e alla fine, anche se la sveglia muore.
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { SCHEDULE_GRACE_MIN } from "../config.ts";
+import { SCHEDULE_GRACE_MIN, SLOTS } from "../config.ts";
 import { ROOT, loadSecrets } from "../deps.ts";
 import { assertPaperOnly } from "../guard.ts";
-import { nearbySlot } from "../slots.ts";
+import { nearbySlot, romeTime, runIdFor } from "../slots.ts";
 
 const BRANCH = "stato";
 const WT = join(ROOT, ".stato");
 const EARLY_MIN = 45;
 const SYNC_MS = 15_000;
 const argv = process.argv.slice(2);
-const force = argv.includes("--force");
+// PROVA (temporaneo): se nel repo c'è il file PROVA e non c'è una sveglia dovuta, fa un briefing adesso.
+// Il briefing non manda mai ordini: legge il conto, salva lo stato sul branch e scrive su Telegram.
+const prova = existsSync(join(ROOT, "PROVA"));
+let force = argv.includes("--force");
 // Solo per provarlo: --fake usa broker e cervello finti, --now (con --fake) finge l'ora e non aspetta.
 const fake = argv.includes("--fake");
 const nowArg = argv.includes("--now") ? argv[argv.indexOf("--now") + 1] : undefined;
@@ -86,7 +89,14 @@ function claim(runId: string): boolean {
 
 try {
   assertPaperOnly(process.env, (await loadSecrets(!fake)) ?? undefined);
-  const target = nearbySlot(nowArg ? new Date(nowArg) : new Date(), EARLY_MIN, SCHEDULE_GRACE_MIN);
+  const now = nowArg ? new Date(nowArg) : new Date();
+  let target = nearbySlot(now, EARLY_MIN, SCHEDULE_GRACE_MIN);
+  if (!target && prova) {
+    const slot = SLOTS[0]!;
+    target = { runId: runIdFor(romeTime(now).date, slot), slot, waitMin: 0 };
+    force = true;
+    log(`file PROVA presente: sveglia di prova ${target.runId} (briefing, nessun ordine)`);
+  }
   if (!target) {
     log("nessuna sveglia dovuta in questa finestra: esco senza fare niente");
     process.exit(0);

@@ -112,7 +112,7 @@ export function missedSlots(prev: string, current: string, maxDays = 31): string
 export function nextSlotAfter(runId: string): string {
   const p = parseRunId(runId)!;
   const idx = SLOTS.indexOf(p.slot);
-  if (idx < SLOTS.length - 1) return runIdFor(p.date, SLOTS[idx + 1]!);
+  if (idx < SLOTS.length - 1 && isTradingWeekday(p.date)) return runIdFor(p.date, SLOTS[idx + 1]!);
   let date = addDays(p.date, 1);
   while (!isTradingWeekday(date)) date = addDays(date, 1);
   return runIdFor(date, SLOTS[0]!);
