@@ -1,5 +1,7 @@
 import type { Account, MarketClock, Order, Position } from "../broker/types.ts";
 import type { SlotKind } from "../config.ts";
+import type { Indicator } from "../indicators.ts";
+import type { Lesson } from "../lessons.ts";
 import type { Witness } from "../witness.ts";
 
 export interface ProposedOrder {
@@ -25,6 +27,10 @@ export interface BrainInput {
   recentOrders: Order[];
   clock: MarketClock;
   prices: Record<string, number>;
+  closes: Record<string, number[]>;
+  indicators: Record<string, Indicator>;
+  lessons: Lesson[];
+  buyBlock: string | null;
 }
 
 export interface Brain {

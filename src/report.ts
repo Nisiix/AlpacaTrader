@@ -29,6 +29,14 @@ export function endOfRunText(w: Witness): string {
   if (w.ordiniRifiutati.length === 0) L.push("• nessuno");
   for (const r of w.ordiniRifiutati) L.push(`• ${r.lato.toUpperCase()} ${r.quantita} ${r.simbolo} [${r.origine}]: ${r.motivo}`);
 
+  if (w.stopSuAlpaca) {
+    const st = w.stopSuAlpaca;
+    L.push("", `Stop su Alpaca: ${st.attivi.length ? st.attivi.join(", ") : "nessuno"}${st.piazzati.length ? ` (nuovi: ${st.piazzati.join(", ")})` : ""}`);
+    for (const e of st.errori) L.push(`• STOP NON A POSTO: ${e}`);
+  }
+  for (const l of w.lezioniNuove ?? []) L.push(`Lezione nuova: ${l.motivo} (fino al ${l.finoAl})`);
+  if (w.acquistiBloccati) L.push(`Acquisti bloccati: ${w.acquistiBloccati}`);
+
   L.push("", `Motivazioni: ${twoLines(w.ragionamento)}`);
   if (w.conto) {
     const base = w.conto.patrimonio - w.conto.pnlGiorno;
@@ -36,6 +44,10 @@ export function endOfRunText(w: Witness): string {
     L.push("", `Conto: ${money(w.conto.patrimonio)} · contanti ${money(w.conto.contanti)} · P&L giorno ${signed(w.conto.pnlGiorno)} (${pct}%)${w.conto.aggiornato === false ? " · ATTENZIONE: dato di inizio sveglia, Alpaca non ha risposto alla fine" : ""}`);
   } else {
     L.push("", "Conto: non disponibile (broker non raggiungibile)");
+  }
+  if (w.confronto) {
+    const p = (x: number) => `${x >= 0 ? "+" : ""}${(x * 100).toFixed(2)}%`;
+    L.push(`Dal ${w.confronto.dal}: conto ${p(w.confronto.conto)}, SPY ${p(w.confronto.spy)}`);
   }
   L.push(`Prossima sveglia: ${describeRunId(w.prossimaSveglia)}`);
   if (w.allarmi.length) L.push(`Allarmi in questa sveglia: ${w.allarmi.length} (vedi messaggi ⚠️)`);

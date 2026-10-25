@@ -1,10 +1,16 @@
 import { mkdirSync, renameSync } from "node:fs";
+import { hostname } from "node:os";
 import { join } from "node:path";
 import { BrainError, type Brain, type Decision } from "./brain/types.ts";
-import type { Account, Broker, MarketClock, Order, Position } from "./broker/types.ts";
-import { applyCage, lossPct } from "./cage.ts";
-import { CLOCK_SKEW_ALARM_MIN, MAX_LATENESS_MIN, UNIVERSE } from "./config.ts";
-import { sendOne, clientOrderId, type ExecOutcome } from "./execute.ts";
+import { isProtectiveStop, type Account, type Broker, type MarketClock, type Order, type Position } from "./broker/types.ts";
+import { compareWithSpy, type Comparison } from "./benchmark.ts";
+import { evaluateBreaker, readBreaker, writeBreaker } from "./breaker.ts";
+import { applyCage, lossPct, tradingBlockReason } from "./cage.ts";
+import { CLOCK_SKEW_ALARM_MIN, DAILY_BARS_DAYS, LIMITS, MAX_LATENESS_MIN, UNIVERSE } from "./config.ts";
+import { sendOne, clientOrderId, waitForFills, type ExecOutcome } from "./execute.ts";
+import { indicatorsFor } from "./indicators.ts";
+import { activeLessons, learnFromBrokerReject, learnFromStopLoss, pruneLessons, readLessons, writeLessons, type Lesson } from "./lessons.ts";
+import { manageStops, type StopsReport } from "./stops.ts";
 import { acquireLock, findOrphanClaims, flattenLock, inspectLock, releaseLock, updateLock, type LockData } from "./lock.ts";
 import { Logger, type Redactor } from "./log.ts";
 import { reconcile } from "./reconcile.ts";
@@ -42,9 +48,10 @@ export interface WakeResult {
 interface Snapshot {
   account: Account;
   positions: Position[];
-  recentOrders: Order[];
+  recentOrders: Order[]; // ultime 48 ore più tutti gli ordini ancora aperti
   clock: MarketClock;
   prices: Record<string, number>;
+  closes: Record<string, number[]>;
 }
 
 async function retry<T>(fn: () => Promise<T>, sleep: (ms: number) => Promise<void>, delays = [2_000, 5_000]): Promise<T> {
@@ -58,21 +65,29 @@ async function retry<T>(fn: () => Promise<T>, sleep: (ms: number) => Promise<voi
   }
 }
 
-async function snapshot(broker: Broker, sleep: (ms: number) => Promise<void>): Promise<Snapshot> {
-  return retry(async () => {
-    const [account, positions, recentOrders, clock] = await Promise.all([broker.getAccount(), broker.getPositions(), broker.getRecentOrders(48), broker.getClock()]);
+async function snapshot(broker: Broker, sleep: (ms: number) => Promise<void>, log: Logger): Promise<Snapshot> {
+  const snap = await retry(async () => {
+    const [account, positions, recent, open, clock] = await Promise.all([broker.getAccount(), broker.getPositions(), broker.getRecentOrders(48), broker.getOpenOrders(), broker.getClock()]);
+    const recentOrders = [...recent, ...open.filter((o) => !recent.some((r) => r.id === o.id))];
     const symbols = [...new Set([...UNIVERSE, ...positions.map((p) => p.symbol)])];
     const prices = await broker.getLatestPrices(symbols);
     // Per le posizioni il prezzo corrente di Alpaca vale come fallback.
     for (const p of positions) if (!prices[p.symbol] && p.currentPrice > 0) prices[p.symbol] = p.currentPrice;
-    return { account, positions, recentOrders, clock, prices };
+    return { account, positions, recentOrders, clock, prices, closes: {} as Record<string, number[]> };
   }, sleep);
+  // Senza storico la gabbia non compra (metodo non verificabile), ma vendite e stop vanno avanti.
+  try {
+    snap.closes = await retry(() => broker.getDailyCloses([...UNIVERSE], DAILY_BARS_DAYS), sleep);
+  } catch (e) {
+    log.warn(`storico prezzi non disponibile: ${(e as Error).message}. Niente acquisti in questa sveglia.`);
+  }
+  return snap;
 }
 
 function resolveRun(now: Date, opts: WakeOptions): { runId: string; label: string; kind: ReturnType<typeof findSlot> } | { error: WakeStatus; message: string } {
   if (opts.slot) {
     const slot = findSlot(opts.slot);
-    if (!slot) throw new Error(`--slot ${opts.slot} non esiste. Sveglie valide: 09:00 15:30 18:30 21:40`);
+    if (!slot) throw new Error(`--slot ${opts.slot} non esiste. Sveglie valide: 09:00 15:40 18:30 21:40`);
     return { runId: runIdFor(romeTime(now).date, slot), label: slot.label, kind: slot };
   }
   const latest = latestSlotToday(now);
@@ -108,7 +123,7 @@ export async function runWake(deps: WakeDeps, opts: WakeOptions = {}): Promise<W
   }
 
   // 2. Il mio lock, subito: dentro ci metto i lock morti da riconciliare, così se muoio anch'io non si perdono.
-  const lock: LockData = { runId, pid: process.pid, startedAt: startedAt.toISOString(), intended: [] };
+  const lock: LockData = { runId, pid: process.pid, host: hostname(), startedAt: startedAt.toISOString(), intended: [] };
   if (!acquireLock(deps.stateDir, lock)) {
     const msg = "Un'altra sveglia ha preso il lock nello stesso istante: questa si ferma senza fare niente.";
     await alarm("Sveglia doppia", msg);
@@ -161,17 +176,23 @@ export async function runWake(deps: WakeDeps, opts: WakeOptions = {}): Promise<W
     return { status: "already-done", runId, message: msg };
   }
   const missed = lastDone ? missedSlots(lastDone.sveglia, runId) : [];
-  if (missed.length) {
-    await alarm("Sveglie saltate", `${missed.map(describeRunId).join("\n")}\nMacchina spenta o offline? Non le recupero: un ordine di ore fa non ha più senso.`);
-  }
 
   // 4. Alpaca.
   let snap: Snapshot | null = null;
   try {
-    snap = await snapshot(deps.broker, deps.sleep);
+    snap = await snapshot(deps.broker, deps.sleep, log);
     log.info(`conto: patrimonio ${snap.account.equity}, contanti ${snap.account.cash}, posizioni ${snap.positions.length}, ordini 48h ${snap.recentOrders.length}, mercato ${snap.clock.isOpen ? "aperto" : "chiuso"}`);
   } catch (e) {
     await alarm("Errore del broker", `Alpaca non risponde: ${(e as Error).message}. Nessun ordine in questa sveglia.`);
+  }
+
+  // Sveglie saltate. Se su Alpaca ci sono ordini con il loro ID, non erano saltate: sono morte senza lasciare traccia qui.
+  if (missed.length) {
+    const lines = missed.map((id) => {
+      const theirs = snap?.recentOrders.filter((o) => o.clientOrderId.startsWith(`${id}-`)) ?? [];
+      return theirs.length ? `${describeRunId(id)}: NON lasciò il testimone, ma su Alpaca ha questi ordini: ${theirs.map((o) => `${o.side.toUpperCase()} ${o.qty} ${o.symbol} (${o.status})`).join(", ")}` : describeRunId(id);
+    });
+    await alarm("Sveglie saltate", `${lines.join("\n")}\nMacchina spenta o offline? Non le recupero: un ordine di ore fa non ha più senso.`);
   }
 
   // L'ora vera è quella di Alpaca: se la macchina sbaglia, il ritardo si misura con l'orologio del broker.
@@ -204,11 +225,41 @@ export async function runWake(deps: WakeDeps, opts: WakeOptions = {}): Promise<W
     await alarm("Verifica ordini incerti", lines.join("\n"));
   }
 
+  // Memoria del rischio: registro degli errori e interruttore. Li scrive il codice, li applica la gabbia.
+  const today = romeTime(deps.now()).date;
+  const lr = readLessons(deps.stateDir, deps.now());
+  const lessonsFile = lr.file;
+  if (lr.problem) await alarm("Registro degli errori illeggibile", lr.problem);
+  const learned: Lesson[] = [];
+  if (snap) {
+    for (const o of snap.recentOrders) {
+      if (!isProtectiveStop(o) || o.status !== "filled") continue;
+      const l = learnFromStopLoss(lessonsFile, `stop-${o.clientOrderId}`, o.symbol, today, `stop su Alpaca eseguito, ${o.filledQty} azioni`);
+      if (l) learned.push(l);
+    }
+  }
+  let buyBlock: string | null = null;
+  if (snap) {
+    const br = readBreaker(deps.stateDir);
+    if (br.kind === "corrupt") {
+      buyBlock = `file dell'interruttore illeggibile (${br.error}): acquisti bloccati finché non lanci bun run breaker-reset`;
+      await alarm("Interruttore illeggibile", buyBlock);
+    } else {
+      const ev = evaluateBreaker(br.file, snap.account.equity, snap.account.lastEquity, deps.now().toISOString());
+      writeBreaker(deps.stateDir, ev.file);
+      buyBlock = ev.buyBlock;
+      if (ev.newlyTripped) await alarm("Interruttore scattato", `${ev.newlyTripped}. Acquisti bloccati finché non lanci bun run breaker-reset; vendite e stop restano attivi.`);
+    }
+    if (buyBlock) log.warn(`acquisti bloccati: ${buyBlock}`);
+  }
+  const lessonsNow = activeLessons(lessonsFile, today);
+  const indicators = snap ? indicatorsFor(snap.closes, snap.prices, LIMITS.trendSmaDays, LIMITS.volLookbackDays) : {};
+
   // 5. Cervello.
   let decision: Decision = { orders: [], reasoning: "", plan_next: prev?.pianoProssima ?? "" };
   if (snap) {
     try {
-      decision = await deps.brain.decide({ runId, slotKind: slot.kind, slotLabel: slot.label, previousWitness: prev, ...snap });
+      decision = await deps.brain.decide({ runId, slotKind: slot.kind, slotLabel: slot.label, previousWitness: prev, ...snap, indicators, lessons: lessonsNow, buyBlock });
       log.info(`decisione del cervello: ${JSON.stringify(decision)}`);
     } catch (e) {
       const why = e instanceof BrainError ? e.message : `errore imprevisto: ${(e as Error).message}`;
@@ -221,7 +272,7 @@ export async function runWake(deps: WakeDeps, opts: WakeOptions = {}): Promise<W
 
   // 6. Gabbia.
   const cage = snap
-    ? applyCage({ slotKind: slot.kind, marketOpen: snap.clock.isOpen, latenessMin: lateness, account: snap.account, positions: snap.positions, prices: snap.prices, recentOrders: snap.recentOrders, proposals: decision.orders })
+    ? applyCage({ slotKind: slot.kind, marketOpen: snap.clock.isOpen, latenessMin: lateness, account: snap.account, positions: snap.positions, prices: snap.prices, closes: snap.closes, recentOrders: snap.recentOrders, lessons: lessonsNow, buyBlock, proposals: decision.orders })
     : { orders: [], rejected: decision.orders.map((p) => ({ symbol: p.symbol, side: p.side, qty: p.qty, source: "modello" as const, reason: "broker non raggiungibile" })) };
   for (const x of cage.rejected) log.warn(`rifiutato ${x.side} ${x.qty} ${x.symbol} [${x.source}]: ${x.reason}`);
 
@@ -235,17 +286,49 @@ export async function runWake(deps: WakeDeps, opts: WakeOptions = {}): Promise<W
   const failed = outcomes.filter((o) => o.kind === "fallito");
   if (failed.length) await alarm("Ordini rifiutati da Alpaca", failed.map((o) => `${o.id}: ${o.kind === "fallito" ? o.error : ""}`).join("\n"));
 
+  // Il registro impara da questa sveglia: stop loss eseguiti e rifiuti ripetuti di Alpaca.
+  for (const o of outcomes) {
+    const l =
+      o.kind === "inviato" && o.plan.source === "stop-loss" ? learnFromStopLoss(lessonsFile, `stop-${o.id}`, o.plan.symbol, today, o.plan.why)
+      : o.kind === "fallito" ? learnFromBrokerReject(lessonsFile, o.plan.symbol, o.plan.side, today, o.error)
+      : null;
+    if (l) learned.push(l);
+  }
+  pruneLessons(lessonsFile, today);
+  writeLessons(deps.stateDir, lessonsFile);
+  for (const l of learned) log.info(`lezione nuova: ${l.motivo} (fino al ${l.finoAl})`);
+
+  // Stop su Alpaca: uno per posizione, solo quando si possono fare ordini.
+  let stops: StopsReport | null = null;
+  if (snap && !tradingBlockReason({ slotKind: slot.kind, marketOpen: snap.clock.isOpen, latenessMin: lateness, account: snap.account })) {
+    await waitForFills(deps.broker, outcomes.filter((o) => o.kind === "inviato").map((o) => o.id), deps.sleep, log);
+    try {
+      const [pos, open] = await Promise.all([deps.broker.getPositions(), deps.broker.getOpenOrders()]);
+      stops = await manageStops(deps.broker, runId, pos, open, log);
+    } catch (e) {
+      stops = { ok: [], placed: [], cancelled: [], errors: [`Alpaca non risponde: ${(e as Error).message}`] };
+    }
+    if (stops.errors.length) await alarm("Stop su Alpaca non a posto", `${stops.errors.join("\n")}\nLo stop loss del codice resta attivo alle sveglie.`);
+  }
+
   // 8. Conto aggiornato per il resoconto (se Alpaca risponde).
   let account = snap?.account ?? null;
   let positions = snap?.positions ?? [];
   let accountFresh = true;
-  if (snap && outcomes.length) {
+  if (snap && (outcomes.length || stops?.placed.length || stops?.cancelled.length)) {
     try {
       [account, positions] = await Promise.all([deps.broker.getAccount(), deps.broker.getPositions()]);
     } catch (e) {
       accountFresh = false;
       log.warn(`conto finale non leggibile, uso quello iniziale: ${(e as Error).message}`);
     }
+  }
+
+  let confronto: Comparison | null = null;
+  if (account) {
+    const bm = compareWithSpy(deps.stateDir, today, account.equity, snap?.prices.SPY);
+    confronto = bm.cmp;
+    if (bm.note) log.warn(bm.note);
   }
 
   // 9. Testimone nuovo.
@@ -272,6 +355,11 @@ export async function runWake(deps: WakeDeps, opts: WakeOptions = {}): Promise<W
     pianoProssima: decision.plan_next,
     prossimaSveglia: next,
     allarmi: alarms,
+    stopSuAlpaca: stops ? { attivi: [...stops.ok, ...stops.placed], piazzati: stops.placed, tolti: stops.cancelled, errori: stops.errors } : null,
+    lezioniAttive: activeLessons(lessonsFile, today),
+    lezioniNuove: learned,
+    acquistiBloccati: buyBlock,
+    confronto,
   };
   writeWitness(deps.stateDir, witness);
   log.info(`testimone scritto: ${witness.appunto}`);

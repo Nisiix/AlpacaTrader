@@ -15,25 +15,25 @@ const count = (text: string, needle: string) => text.split(needle).length - 1;
 
 describe("guasto 1: morte a metà", () => {
   test("kill subito dopo il primo ordine, poi la sveglia dopo (18:30) non rimanda il vecchio ordine", async () => {
-    const env = makeEnv(at("15:31"));
+    const env = makeEnv(at("15:41"));
     env.setFake((s) => (s.faults.crashAfterSubmits = 1));
-    expect(Bun.spawnSync(onceArgs(env, at("15:31"))).signalCode).toBe("SIGKILL");
+    expect(Bun.spawnSync(onceArgs(env, at("15:41"))).signalCode).toBe("SIGKILL");
     env.setFake((s) => (s.faults = {}));
     expect(Bun.spawnSync(onceArgs(env, at("18:31"))).exitCode).toBe(0);
     const out = env.outbox();
-    expect(out).toContain("Sveglia precedente interrotta (2026-09-24-15-30)");
-    expect(out).toContain("NON partito: BUY 5 GLD (id 2026-09-24-15-30-GLD-buy), non lo rimando");
-    expect(env.broker.load().orders.some((o) => o.clientOrderId === "2026-09-24-15-30-GLD-buy")).toBe(false);
+    expect(out).toContain("Sveglia precedente interrotta (2026-09-24-15-40)");
+    expect(out).toContain("NON partito: BUY 5 GLD (id 2026-09-24-15-40-GLD-buy), non lo rimando");
+    expect(env.broker.load().orders.some((o) => o.clientOrderId === "2026-09-24-15-40-GLD-buy")).toBe(false);
   });
 
   test("kill anche durante la riconciliazione: la terza sveglia sa ancora cosa è successo alla prima", async () => {
-    const env = makeEnv(at("15:31"));
+    const env = makeEnv(at("15:41"));
     env.setFake((s) => (s.faults.crashAfterSubmits = 1));
-    expect(Bun.spawnSync(onceArgs(env, at("15:31"))).signalCode).toBe("SIGKILL");
+    expect(Bun.spawnSync(onceArgs(env, at("15:41"))).signalCode).toBe("SIGKILL");
     env.setFake((s) => (s.faults = { crashOnMethod: "getOrderByClientId" }));
-    expect(Bun.spawnSync(onceArgs(env, at("15:32"))).signalCode).toBe("SIGKILL");
+    expect(Bun.spawnSync(onceArgs(env, at("15:42"))).signalCode).toBe("SIGKILL");
     env.setFake((s) => (s.faults = {}));
-    expect(Bun.spawnSync(onceArgs(env, at("15:33"))).exitCode).toBe(0);
+    expect(Bun.spawnSync(onceArgs(env, at("15:43"))).exitCode).toBe(0);
     const out = env.outbox();
     expect(out).toContain("partito: BUY 10 SPY");
     expect(out).toContain("NON partito: BUY 5 GLD");
@@ -43,8 +43,8 @@ describe("guasto 1: morte a metà", () => {
 
 describe("guasto 2: doppio lancio", () => {
   test("quattro sveglie uguali lanciate insieme: una lavora, le altre si fermano, un ordine per titolo", async () => {
-    const env = makeEnv(at("15:31"));
-    const procs = Array.from({ length: 4 }, () => Bun.spawn(onceArgs(env, at("15:31")), { stdout: "pipe", stderr: "pipe" }));
+    const env = makeEnv(at("15:41"));
+    const procs = Array.from({ length: 4 }, () => Bun.spawn(onceArgs(env, at("15:41")), { stdout: "pipe", stderr: "pipe" }));
     const codes = await Promise.all(procs.map((p) => p.exited));
     const outs = await Promise.all(procs.map((p) => new Response(p.stdout).text()));
     expect(outs.filter((o) => o.includes("[done]"))).toHaveLength(1);
@@ -54,11 +54,11 @@ describe("guasto 2: doppio lancio", () => {
   });
 
   test("due sveglie insieme dopo una morta: una sola riconcilia", async () => {
-    const env = makeEnv(at("15:31"));
+    const env = makeEnv(at("15:41"));
     env.setFake((s) => (s.faults.crashAfterSubmits = 1));
-    Bun.spawnSync(onceArgs(env, at("15:31")));
+    Bun.spawnSync(onceArgs(env, at("15:41")));
     env.setFake((s) => (s.faults = {}));
-    const procs = Array.from({ length: 3 }, () => Bun.spawn(onceArgs(env, at("15:32")), { stdout: "pipe", stderr: "pipe" }));
+    const procs = Array.from({ length: 3 }, () => Bun.spawn(onceArgs(env, at("15:42")), { stdout: "pipe", stderr: "pipe" }));
     await Promise.all(procs.map((p) => p.exited));
     expect(count(env.outbox(), "Sveglia precedente interrotta")).toBe(1);
     expect(ordersFor(env, "SPY")).toHaveLength(1);
@@ -68,7 +68,7 @@ describe("guasto 2: doppio lancio", () => {
 
 describe("guasto 3: Alpaca in timeout durante l'invio", () => {
   test("30 secondi di panne: l'ordine arrivato non viene duplicato e il resoconto dice la verità", async () => {
-    const env = makeEnv(at("15:31"));
+    const env = makeEnv(at("15:41"));
     env.setFake((s) => (s.faults.outageOnSubmitMs = 30_000));
     const res = await runWake(env.deps());
     expect(ordersFor(env, "SPY")).toHaveLength(1);
@@ -78,16 +78,16 @@ describe("guasto 3: Alpaca in timeout durante l'invio", () => {
   });
 
   test("panne più lunga dei tentativi: esito incerto dichiarato, e la sveglia dopo verifica e lo dice", async () => {
-    const env = makeEnv(at("15:31"));
+    const env = makeEnv(at("15:41"));
     env.setFake((s) => (s.faults.outageOnSubmitMs = 10 * 60_000));
     const res = await runWake(env.deps());
-    expect(res.witness!.ordiniIncerti.map((o) => o.id)).toContain("2026-09-24-15-30-SPY-buy");
+    expect(res.witness!.ordiniIncerti.map((o) => o.id)).toContain("2026-09-24-15-40-SPY-buy");
     expect(env.outbox()).toContain("ESITO INCERTO");
     expect(ordersFor(env, "SPY")).toHaveLength(1);
     env.setFake((s) => (s.faults = {}));
     env.clock.t = at("18:31").getTime();
     await runWake(env.deps());
-    expect(env.outbox()).toContain("2026-09-24-15-30-SPY-buy risulta partito");
+    expect(env.outbox()).toContain("2026-09-24-15-40-SPY-buy risulta partito");
   });
 });
 
@@ -101,7 +101,7 @@ describe("guasto 4: il modello risponde male", () => {
   for (const [name, stdout] of truncations) {
     test(`${name}: nessun ordine del modello, allarme, stop loss comunque attivo`, async () => {
       const brain = new ClaudeBrain(async () => ({ code: 0, stdout, stderr: "" }));
-      const env = makeEnv(at("15:31"), brain);
+      const env = makeEnv(at("15:41"), brain);
       env.setFake((s) => {
         s.positions.AAPL = { qty: 10, avgEntryPrice: 270 };
         s.cash -= 2_700;
@@ -115,7 +115,7 @@ describe("guasto 4: il modello risponde male", () => {
   }
 
   test("JSON valido ma ordini strani: quantità testo, frazionaria, lato inventato, tutti rifiutati con motivo", async () => {
-    const env = makeEnv(at("15:31"), brainSaying({ orders: [{ symbol: "SPY", side: "buy", qty: "10" as any, why: "" }, { symbol: "QQQ", side: "buy", qty: 1.5, why: "" }, { symbol: "IWM", side: "short", qty: 1, why: "" }], reasoning: "x", plan_next: "" }));
+    const env = makeEnv(at("15:41"), brainSaying({ orders: [{ symbol: "SPY", side: "buy", qty: "10" as any, why: "" }, { symbol: "QQQ", side: "buy", qty: 1.5, why: "" }, { symbol: "IWM", side: "short", qty: 1, why: "" }], reasoning: "x", plan_next: "" }));
     const res = await runWake(env.deps());
     expect(res.witness!.ordiniRifiutati).toHaveLength(3);
     expect(env.broker.load().orders).toHaveLength(0);
@@ -127,7 +127,7 @@ describe("guasto 5: testimone scritto a metà", () => {
     const env = makeEnv(at("09:01"));
     await runWake(env.deps());
     writeFileSync(join(env.stateDir, "witness.json.tmp-999-abc"), '{"versione":1,"sveglia":"2026-09-24-15');
-    env.clock.t = at("15:31").getTime();
+    env.clock.t = at("15:41").getTime();
     const res = await runWake(env.deps());
     expect(res.status).toBe("done");
     expect(env.outbox()).not.toContain("Testimone illeggibile");
@@ -135,7 +135,7 @@ describe("guasto 5: testimone scritto a metà", () => {
   });
 
   test("witness.json troncato dopo la sveglia: rilanciarla non produce una seconda decisione", async () => {
-    const env = makeEnv(at("15:31"));
+    const env = makeEnv(at("15:41"));
     await runWake(env.deps());
     const p = join(env.stateDir, "witness.json");
     writeFileSync(p, readFileSync(p, "utf8").slice(0, 120));

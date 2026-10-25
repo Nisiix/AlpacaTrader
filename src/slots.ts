@@ -61,7 +61,7 @@ export function isTradingWeekday(date: string): boolean {
   return w >= 1 && w <= 5;
 }
 
-function addDays(date: string, n: number): string {
+export function addDays(date: string, n: number): string {
   const d = new Date(`${date}T12:00:00Z`);
   d.setUTCDate(d.getUTCDate() + n);
   return d.toISOString().slice(0, 10);
@@ -122,4 +122,26 @@ export function describeRunId(runId: string): string {
   const p = parseRunId(runId);
   if (!p) return runId;
   return `${p.date} ${p.slot.time} (${p.slot.label})`;
+}
+
+// N giorni feriali dopo `date`. Le festività contano come giorni di borsa, quindi in quelle settimane il blocco dura un giorno di borsa in meno.
+export function addTradingDays(date: string, n: number): string {
+  let d = date;
+  for (let i = 0; i < n; ) {
+    d = addDays(d, 1);
+    if (isTradingWeekday(d)) i++;
+  }
+  return d;
+}
+
+// Per le sessioni cloud, che partono qualche minuto prima: la sveglia di oggi tra `earlyMin` minuti
+// prima e `graceMin` minuti dopo adesso, con quanti minuti mancano (negativo se è già passata).
+export function nearbySlot(now: Date, earlyMin: number, graceMin: number): { runId: string; slot: SlotDef; waitMin: number } | null {
+  const rt = romeTime(now);
+  if (!isTradingWeekday(rt.date)) return null;
+  for (const slot of SLOTS) {
+    const wait = slotMinutes(slot) - rt.minutes;
+    if (wait <= earlyMin && -wait <= graceMin) return { runId: runIdFor(rt.date, slot), slot, waitMin: wait };
+  }
+  return null;
 }

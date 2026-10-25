@@ -1,4 +1,5 @@
 import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readdirSync, readFileSync, renameSync, unlinkSync, writeSync } from "node:fs";
+import { hostname } from "node:os";
 import { join } from "node:path";
 import { LOCK_MAX_AGE_MS } from "./config.ts";
 import { isObject, writeJsonAtomic } from "./fsutil.ts";
@@ -13,6 +14,7 @@ export interface IntendedOrder {
 export interface LockData {
   runId: string;
   pid: number;
+  host?: string; // nel cloud il lock viaggia tra macchine diverse: il PID vale solo sulla stessa
   startedAt: string;
   intended: IntendedOrder[];
   // Lock di sveglie morte che questa sveglia sta ancora riconciliando: se muore anche lei, la prossima li ritrova qui.
@@ -54,7 +56,10 @@ export function inspectLock(stateDir: string, now: Date, selfPid = process.pid):
     return { kind: "none" };
   }
   const data = parseLock(raw);
-  if (data && data.pid !== selfPid && pidAlive(data.pid) && now.getTime() - Date.parse(data.startedAt) < LOCK_MAX_AGE_MS) {
+  const young = data !== null && now.getTime() - Date.parse(data.startedAt) < LOCK_MAX_AGE_MS;
+  const sameHost = !data?.host || data.host === hostname();
+  // Su un'altra macchina non posso controllare il PID: se è giovane lo considero vivo, per prudenza.
+  if (data && young && (sameHost ? data.pid !== selfPid && pidAlive(data.pid) : true)) {
     return { kind: "alive", data };
   }
   // Un lock appena creato da un'altra sveglia può essere ancora vuoto: non è morto, è giovane.

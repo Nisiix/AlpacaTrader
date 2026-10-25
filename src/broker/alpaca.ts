@@ -1,6 +1,6 @@
 import { HTTP_TIMEOUT_MS, MARKET_DATA_URL, PAPER_TRADING_URL } from "../config.ts";
 import { assertPaperUrl } from "../guard.ts";
-import type { Account, Broker, MarketClock, Order, OrderRequest, Position } from "./types.ts";
+import type { Account, Broker, MarketClock, Order, OrderRequest, Position, StopOrderRequest } from "./types.ts";
 import { BrokerError, DuplicateOrderError } from "./types.ts";
 
 const num = (v: unknown) => (v === null || v === undefined || v === "" ? 0 : Number(v));
@@ -15,6 +15,8 @@ function toOrder(o: any): Order {
     filledQty: num(o.filled_qty),
     status: String(o.status),
     submittedAt: String(o.submitted_at ?? o.created_at ?? ""),
+    type: String(o.type ?? o.order_type ?? "market"),
+    stopPrice: o.stop_price === null || o.stop_price === undefined ? null : Number(o.stop_price),
   };
 }
 
@@ -77,6 +79,11 @@ export class AlpacaBroker implements Broker {
     return (list as any[]).map(toOrder);
   }
 
+  async getOpenOrders(): Promise<Order[]> {
+    const list = await this.request(this.baseUrl, "/v2/orders?status=open&limit=500&direction=desc");
+    return (list as any[]).map(toOrder);
+  }
+
   async getClock(): Promise<MarketClock> {
     const c = await this.request(this.baseUrl, "/v2/clock");
     return { isOpen: Boolean(c.is_open), timestamp: String(c.timestamp) };
@@ -109,5 +116,44 @@ export class AlpacaBroker implements Broker {
       client_order_id: req.clientOrderId,
     };
     return toOrder(await this.request(this.baseUrl, "/v2/orders", { method: "POST", body: JSON.stringify(body) }));
+  }
+
+  async submitStopOrder(req: StopOrderRequest): Promise<Order> {
+    const body = {
+      symbol: req.symbol,
+      qty: String(req.qty),
+      side: "sell",
+      type: "stop",
+      stop_price: req.stopPrice.toFixed(2),
+      time_in_force: "gtc",
+      client_order_id: req.clientOrderId,
+    };
+    return toOrder(await this.request(this.baseUrl, "/v2/orders", { method: "POST", body: JSON.stringify(body) }));
+  }
+
+  async cancelOrder(orderId: string): Promise<void> {
+    try {
+      await this.request(this.baseUrl, `/v2/orders/${encodeURIComponent(orderId)}`, { method: "DELETE" });
+    } catch (e) {
+      // 404/422: già eseguito o già cancellato. La verità la rilegge chi chiama.
+      if (e instanceof BrokerError && (e.status === 404 || e.status === 422)) return;
+      throw e;
+    }
+  }
+
+  async getDailyCloses(symbols: string[], days: number): Promise<Record<string, number[]>> {
+    const out: Record<string, number[]> = {};
+    if (symbols.length === 0) return out;
+    const start = new Date(Date.now() - days * 1.6 * 86_400_000).toISOString().slice(0, 10);
+    let token = "";
+    for (let page = 0; page < 20; page++) {
+      const q = `/v2/stocks/bars?timeframe=1Day&adjustment=all&feed=iex&limit=10000&start=${start}&symbols=${symbols.map(encodeURIComponent).join(",")}${token ? `&page_token=${encodeURIComponent(token)}` : ""}`;
+      const data = await this.request(MARKET_DATA_URL, q);
+      for (const [sym, bars] of Object.entries<any[]>(data?.bars ?? {})) (out[sym] ??= []).push(...bars.map((b) => Number(b.c)));
+      token = data?.next_page_token ?? "";
+      if (!token) break;
+    }
+    for (const sym of Object.keys(out)) out[sym] = out[sym]!.slice(-days);
+    return out;
   }
 }

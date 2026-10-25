@@ -68,4 +68,6 @@ export function makeEnv(start: Date, brain: Brain = new FakeBrain()): TestEnv {
 
 export const brainSaying = (d: Decision): Brain => new FakeBrain(d);
 
-export const ordersFor = (env: TestEnv, symbol: string) => env.broker.load().orders.filter((o) => o.symbol === symbol);
+// Ordini di trading (a mercato). Gli stop di protezione su Alpaca si contano a parte.
+export const ordersFor = (env: TestEnv, symbol: string) => env.broker.load().orders.filter((o) => o.symbol === symbol && o.type !== "stop");
+export const openStopsFor = (env: TestEnv, symbol: string) => env.broker.load().orders.filter((o) => o.symbol === symbol && o.type === "stop" && o.status === "new");

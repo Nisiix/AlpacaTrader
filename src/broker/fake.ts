@@ -1,8 +1,8 @@
 import { existsSync, readFileSync } from "node:fs";
 import { writeJsonAtomic } from "../fsutil.ts";
 import { romeTime } from "../slots.ts";
-import type { Account, Broker, MarketClock, Order, OrderRequest, Position } from "./types.ts";
-import { BrokerError, DuplicateOrderError } from "./types.ts";
+import type { Account, Broker, MarketClock, Order, OrderRequest, Position, StopOrderRequest } from "./types.ts";
+import { BrokerError, DuplicateOrderError, isOpenOrder, isProtectiveStop } from "./types.ts";
 
 export interface FakeFaults {
   // Dopo N ordini registrati il processo si uccide da solo (SIGKILL), come una macchina che muore.
@@ -14,6 +14,10 @@ export interface FakeFaults {
   crashOnMethod?: string;
   // L'orologio di Alpaca è avanti di N ms rispetto a quello della macchina.
   clockSkewMs?: number;
+  // Alpaca rifiuta sempre gli ordini a mercato su questi simboli (errore definitivo, non temporaneo).
+  rejectSymbols?: string[];
+  // Questi metodi falliscono sempre con un errore temporaneo.
+  failMethods?: string[];
 }
 
 export interface FakeState {
@@ -22,6 +26,8 @@ export interface FakeState {
   positions: Record<string, { qty: number; avgEntryPrice: number }>;
   prices: Record<string, number>;
   orders: Order[];
+  // Chiusure giornaliere per simbolo (la più recente è sostituita dal prezzo attuale).
+  closes: Record<string, number[]>;
   // auto = aperto 15:30-22:00 ora di Roma nei giorni feriali
   clock: "auto" | "open" | "closed";
   faults: FakeFaults;
@@ -35,10 +41,24 @@ export function defaultFakeState(): FakeState {
     positions: {},
     prices: { SPY: 600, QQQ: 520, IWM: 230, AAPL: 250, MSFT: 480, NVDA: 180, GLD: 380, TLT: 90, TSLA: 400 },
     orders: [],
+    closes: {},
     clock: "auto",
     faults: {},
     submits: 0,
   };
+}
+
+const FAKE_VOL: Record<string, number> = { SPY: 0.01, QQQ: 0.013, IWM: 0.015, AAPL: 0.017, MSFT: 0.015, NVDA: 0.03, GLD: 0.01, TLT: 0.009, TSLA: 0.035 };
+
+// Storico finto deterministico: trend in salita del 10% e oscillazioni ± pari alla volatilità del titolo.
+export function syntheticCloses(price: number, vol: number, days: number): number[] {
+  const out: number[] = [];
+  for (let i = 0; i < days; i++) {
+    const trend = price * (0.9 + (0.1 * i) / (days - 1));
+    out.push(trend * (1 + (i % 2 === 0 ? -vol / 2 : vol / 2)));
+  }
+  out[days - 1] = price;
+  return out;
 }
 
 // Broker finto con la stessa interfaccia di quello vero, persistito su file così sopravvive tra processi.
@@ -53,7 +73,32 @@ export class FakeBroker implements Broker {
   }
 
   load(): FakeState {
-    return { ...defaultFakeState(), ...JSON.parse(readFileSync(this.file, "utf8")) };
+    const s: FakeState = { ...defaultFakeState(), ...JSON.parse(readFileSync(this.file, "utf8")) };
+    if (this.triggerStops(s)) this.save(s);
+    return s;
+  }
+
+  // Come sul broker vero: uno stop aperto scatta da solo quando il prezzo scende sotto la soglia.
+  private triggerStops(s: FakeState): boolean {
+    let changed = false;
+    for (const o of s.orders) {
+      if (!isOpenOrder(o) || !isProtectiveStop(o) || o.stopPrice === null) continue;
+      const price = s.prices[o.symbol];
+      const pos = s.positions[o.symbol];
+      if (price === undefined || !pos || price > o.stopPrice) continue;
+      const qty = Math.min(o.qty, pos.qty);
+      pos.qty -= qty;
+      s.cash += qty * price;
+      if (pos.qty <= 0) delete s.positions[o.symbol];
+      o.status = "filled";
+      o.filledQty = qty;
+      changed = true;
+    }
+    return changed;
+  }
+
+  private heldForStops(s: FakeState, symbol: string): number {
+    return s.orders.filter((o) => o.symbol === symbol && isOpenOrder(o) && isProtectiveStop(o)).reduce((a, o) => a + o.qty, 0);
   }
 
   save(s: FakeState) {
@@ -63,6 +108,7 @@ export class FakeBroker implements Broker {
   private checkOutage(s: FakeState, method?: string) {
     const f = s.faults;
     if (method && f.crashOnMethod === method) process.kill(process.pid, "SIGKILL");
+    if (method && f.failMethods?.includes(method)) throw new BrokerError(`timeout su ${method} (broker finto)`, undefined, true);
     if (f.outageStartedAt !== undefined && f.outageOnSubmitMs !== undefined) {
       if (this.now().getTime() < f.outageStartedAt + f.outageOnSubmitMs) throw new BrokerError("timeout (broker finto in panne)", undefined, true);
     }
@@ -98,6 +144,12 @@ export class FakeBroker implements Broker {
     return s.orders.filter((o) => Date.parse(o.submittedAt) >= since).reverse();
   }
 
+  async getOpenOrders(): Promise<Order[]> {
+    const s = this.load();
+    this.checkOutage(s, "getOpenOrders");
+    return s.orders.filter(isOpenOrder).reverse();
+  }
+
   async getClock(): Promise<MarketClock> {
     const s = this.load();
     this.checkOutage(s, "getClock");
@@ -128,6 +180,7 @@ export class FakeBroker implements Broker {
     const s = this.load();
     this.checkOutage(s, "submitOrder");
     if (s.orders.some((o) => o.clientOrderId === req.clientOrderId)) throw new DuplicateOrderError(`client_order_id già usato: ${req.clientOrderId}`, 422);
+    if (s.faults.rejectSymbols?.includes(req.symbol)) throw new BrokerError(`asset ${req.symbol} is not tradable (broker finto)`, 422);
     const price = this.price(s, req.symbol);
     const pos = s.positions[req.symbol] ?? { qty: 0, avgEntryPrice: 0 };
     if (req.side === "buy") {
@@ -137,6 +190,7 @@ export class FakeBroker implements Broker {
       s.cash -= req.qty * price;
     } else {
       if (req.qty > pos.qty) throw new BrokerError("quantità superiore alla posizione", 403);
+      if (req.qty > pos.qty - this.heldForStops(s, req.symbol)) throw new BrokerError("insufficient qty available for order (azioni impegnate da uno stop)", 403);
       pos.qty -= req.qty;
       s.cash += req.qty * price;
     }
@@ -151,6 +205,8 @@ export class FakeBroker implements Broker {
       filledQty: req.qty,
       status: "filled",
       submittedAt: this.now().toISOString(),
+      type: "market",
+      stopPrice: null,
     };
     s.orders.push(order);
     s.submits += 1;
@@ -160,5 +216,51 @@ export class FakeBroker implements Broker {
     if (s.faults.crashAfterSubmits !== undefined && s.submits >= s.faults.crashAfterSubmits) process.kill(process.pid, "SIGKILL");
     if (outageNow) throw new BrokerError("timeout: nessuna risposta da Alpaca (l'ordine però è arrivato)", undefined, true);
     return order;
+  }
+
+  async submitStopOrder(req: StopOrderRequest): Promise<Order> {
+    const s = this.load();
+    this.checkOutage(s, "submitStopOrder");
+    if (s.orders.some((o) => o.clientOrderId === req.clientOrderId)) throw new DuplicateOrderError(`client_order_id già usato: ${req.clientOrderId}`, 422);
+    const pos = s.positions[req.symbol];
+    if (!pos || req.qty > pos.qty - this.heldForStops(s, req.symbol)) throw new BrokerError("insufficient qty available for order", 403);
+    const order: Order = {
+      id: `fake-${s.orders.length + 1}`,
+      clientOrderId: req.clientOrderId,
+      symbol: req.symbol,
+      side: "sell",
+      qty: req.qty,
+      filledQty: 0,
+      status: "new",
+      submittedAt: this.now().toISOString(),
+      type: "stop",
+      stopPrice: req.stopPrice,
+    };
+    s.orders.push(order);
+    this.save(s);
+    return order;
+  }
+
+  async cancelOrder(orderId: string): Promise<void> {
+    const s = this.load();
+    this.checkOutage(s, "cancelOrder");
+    const o = s.orders.find((x) => x.id === orderId);
+    if (o && isOpenOrder(o)) o.status = "canceled";
+    this.save(s);
+  }
+
+  async getDailyCloses(symbols: string[], days: number): Promise<Record<string, number[]>> {
+    const s = this.load();
+    this.checkOutage(s, "getDailyCloses");
+    const out: Record<string, number[]> = {};
+    for (const sym of symbols) {
+      const price = s.prices[sym];
+      if (!price) continue;
+      const stored = s.closes[sym];
+      const series = stored ? [...stored] : syntheticCloses(price, FAKE_VOL[sym] ?? 0.02, days);
+      series[series.length - 1] = price;
+      out[sym] = series.slice(-days);
+    }
+    return out;
   }
 }

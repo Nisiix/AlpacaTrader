@@ -13,13 +13,24 @@ import type { WakeDeps } from "./wake.ts";
 
 export const ROOT = resolve(import.meta.dir, "..");
 
+// Nell'ambiente cloud le chiavi arrivano come variabili d'ambiente: valgono per i campi vuoti di secrets.ts.
+const ENV_NAMES: Record<keyof Secrets, string> = {
+  alpacaKeyId: "ALPACA_KEY_ID",
+  alpacaSecretKey: "ALPACA_SECRET_KEY",
+  telegramBotToken: "TELEGRAM_BOT_TOKEN",
+  telegramChatId: "TELEGRAM_CHAT_ID",
+};
+
 export async function loadSecrets(required: boolean): Promise<Secrets | null> {
   const p = join(ROOT, "secrets.ts");
-  if (!existsSync(p)) {
-    if (required) throw new Error("secrets.ts non esiste: copia secrets.example.ts in secrets.ts e riempi i campi");
+  const fromFile: Partial<Secrets> = existsSync(p) ? ((await import(p)).secrets as Secrets) : {};
+  const merged = {} as Secrets;
+  for (const [k, env] of Object.entries(ENV_NAMES) as [keyof Secrets, string][]) merged[k] = fromFile[k] || process.env[env] || "";
+  if (!existsSync(p) && !merged.alpacaKeyId) {
+    if (required) throw new Error("secrets.ts non esiste e mancano ALPACA_KEY_ID/ALPACA_SECRET_KEY: copia secrets.example.ts in secrets.ts e riempi i campi");
     return null;
   }
-  return (await import(p)).secrets as Secrets;
+  return merged;
 }
 
 export function dirs(args: CliArgs) {

@@ -3,17 +3,17 @@ import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { runWake } from "../src/wake.ts";
 import { readWitness } from "../src/witness.ts";
-import { at, brainSaying, makeEnv, ordersFor } from "./helpers.ts";
+import { at, brainSaying, makeEnv, openStopsFor, ordersFor } from "./helpers.ts";
 
 const ROOT = join(import.meta.dir, "..");
 
 describe("casi richiesti", () => {
   test("stessa sveglia lanciata 2 volte: un solo ordine per titolo", async () => {
-    const env = makeEnv(at("15:31"));
+    const env = makeEnv(at("15:41"));
     const first = await runWake(env.deps());
     expect(first.status).toBe("done");
-    expect(first.runId).toBe("2026-09-24-15-30");
-    expect(ordersFor(env, "SPY")[0]!.clientOrderId).toBe("2026-09-24-15-30-SPY-buy");
+    expect(first.runId).toBe("2026-09-24-15-40");
+    expect(ordersFor(env, "SPY")[0]!.clientOrderId).toBe("2026-09-24-15-40-SPY-buy");
 
     const second = await runWake(env.deps());
     expect(second.status).toBe("already-done");
@@ -25,12 +25,15 @@ describe("casi richiesti", () => {
 
     expect(ordersFor(env, "SPY")).toHaveLength(1);
     expect(ordersFor(env, "GLD")).toHaveLength(1);
+    // Anche lo stop su Alpaca non si duplica rifacendo la sveglia.
+    expect(openStopsFor(env, "SPY")).toHaveLength(1);
+    expect(openStopsFor(env, "GLD")).toHaveLength(1);
   });
 
   test("processo ucciso dopo il primo ordine: la sveglia dopo trova il lock, riconcilia, non ricompra", async () => {
-    const env = makeEnv(at("15:31"));
+    const env = makeEnv(at("15:41"));
     env.setFake((s) => (s.faults.crashAfterSubmits = 1));
-    const args = ["bun", join(ROOT, "src/cli/once.ts"), "--fake", "--now", at("15:31").toISOString(), "--state", env.stateDir, "--logs", env.logsDir];
+    const args = ["bun", join(ROOT, "src/cli/once.ts"), "--fake", "--now", at("15:41").toISOString(), "--state", env.stateDir, "--logs", env.logsDir];
     const killed = Bun.spawnSync(args, { stdout: "pipe", stderr: "pipe" });
     expect(killed.signalCode).toBe("SIGKILL");
     expect(ordersFor(env, "SPY")).toHaveLength(1);
@@ -42,7 +45,7 @@ describe("casi richiesti", () => {
     expect(again.exitCode).toBe(0);
 
     const out = env.outbox();
-    expect(out).toContain("⚠️ Run 2026-09-24-15-30 · Sveglia precedente interrotta");
+    expect(out).toContain("⚠️ Run 2026-09-24-15-40 · Sveglia precedente interrotta");
     expect(out).toContain("partito: BUY 10 SPY");
     expect(out).toContain("NON partito: BUY 5 GLD");
     expect(ordersFor(env, "SPY")).toHaveLength(1);
@@ -51,7 +54,7 @@ describe("casi richiesti", () => {
     expect(w.kind === "ok" && w.value.ordiniGiaPresenti.map((o) => o.simbolo)).toEqual(["SPY"]);
   });
 
-  test("testimone delle 9 e poi niente fino alle 21:40: segnala 15:30 e 18:30 come saltate", async () => {
+  test("testimone delle 9 e poi niente fino alle 21:40: segnala 15:40 e 18:30 come saltate", async () => {
     const env = makeEnv(at("09:01"));
     expect((await runWake(env.deps())).runId).toBe("2026-09-24-09-00");
     env.clock.t = at("21:41").getTime();
@@ -59,14 +62,14 @@ describe("casi richiesti", () => {
     expect(res.runId).toBe("2026-09-24-21-40");
     expect(env.outbox()).toContain("Sveglie saltate");
     const alarm = res.witness!.allarmi.find((a) => a.startsWith("Sveglie saltate"))!;
-    expect(alarm).toContain("2026-09-24 15:30");
+    expect(alarm).toContain("2026-09-24 15:40");
     expect(alarm).toContain("2026-09-24 18:30");
     expect(alarm).not.toContain("09:00");
   });
 
   test("titolo fuori universo o 40% del conto su un titolo: rifiutati", async () => {
     const env = makeEnv(
-      at("15:31"),
+      at("15:41"),
       brainSaying({
         orders: [
           { symbol: "TSLA", side: "buy", qty: 1, why: "prova" },
@@ -103,7 +106,7 @@ describe("casi richiesti", () => {
   });
 
   test("testimone corrotto: vale come nessun testimone, la sveglia va avanti col broker", async () => {
-    const env = makeEnv(at("15:31"));
+    const env = makeEnv(at("15:41"));
     await runWake(env.deps({ now: () => at("09:01") }));
     writeFileSync(join(env.stateDir, "witness.json"), '{"versione":1,"sveglia":"2026-09-24-09-00","fin');
     const res = await runWake(env.deps());

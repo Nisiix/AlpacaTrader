@@ -1,6 +1,8 @@
 import { existsSync, mkdirSync, readdirSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { isObject, readJson, writeJsonAtomic, type ReadResult } from "./fsutil.ts";
+import type { Comparison } from "./benchmark.ts";
+import type { Lesson } from "./lessons.ts";
 import { RUN_ID_RE } from "./slots.ts";
 
 export interface WitnessOrder {
@@ -33,6 +35,12 @@ export interface Witness {
   pianoProssima: string;
   prossimaSveglia: string;
   allarmi: string[];
+  // Campi aggiunti dopo: facoltativi, così i testimoni vecchi restano validi.
+  stopSuAlpaca?: { attivi: string[]; piazzati: string[]; tolti: string[]; errori: string[] } | null;
+  lezioniAttive?: Lesson[];
+  lezioniNuove?: Lesson[];
+  acquistiBloccati?: string | null;
+  confronto?: Comparison | null;
 }
 
 export function isWitness(v: unknown): v is Witness {

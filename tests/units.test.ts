@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { syntheticCloses } from "../src/broker/fake.ts";
 import { applyCage, type CageInput } from "../src/cage.ts";
 import { assertPaperOnly, LiveEndpointError } from "../src/guard.ts";
 import { Logger, Redactor } from "../src/log.ts";
@@ -55,19 +56,21 @@ describe("chiavi mai nei log", () => {
 
 describe("orari", () => {
   test("ID della sveglia e sveglia più recente di oggi", () => {
-    expect(latestSlotToday(at("15:40"))!.runId).toBe("2026-09-24-15-30");
+    expect(latestSlotToday(at("15:40"))!.runId).toBe("2026-09-24-15-40");
     expect(latestSlotToday(at("08:59"))).toBeNull();
     expect(latestSlotToday(new Date("2026-09-26T12:00:00+02:00"))).toBeNull(); // sabato
   });
   test("ora solare: dopo il cambio d'ora Roma resta Roma", () => {
-    expect(latestSlotToday(new Date("2026-10-26T14:31:00Z"))!.runId).toBe("2026-10-26-15-30"); // CET = UTC+1
+    expect(latestSlotToday(new Date("2026-10-26T14:41:00Z"))!.runId).toBe("2026-10-26-15-40"); // CET = UTC+1
   });
   test("sveglie saltate nel weekend e prossima sveglia di lunedì", () => {
-    expect(missedSlots("2026-09-25-21-40", "2026-09-28-15-30")).toEqual(["2026-09-28-09-00"]);
+    expect(missedSlots("2026-09-25-21-40", "2026-09-28-15-40")).toEqual(["2026-09-28-09-00"]);
     expect(nextSlotAfter("2026-09-25-21-40")).toBe("2026-09-28-09-00");
-    expect(dueSlot(at("15:45"), 20)!.runId).toBe("2026-09-24-15-30");
+    expect(dueSlot(at("15:45"), 20)!.runId).toBe("2026-09-24-15-40");
   });
 });
+
+const PRICES: Record<string, number> = { SPY: 600, QQQ: 520, IWM: 230, AAPL: 250, MSFT: 480, NVDA: 180, GLD: 380, TLT: 90 };
 
 describe("gabbia", () => {
   const base = (over: Partial<CageInput> = {}): CageInput => ({
@@ -76,8 +79,11 @@ describe("gabbia", () => {
     latenessMin: 1,
     account: { equity: 100_000, lastEquity: 100_000, cash: 100_000, status: "ACTIVE" },
     positions: [],
-    prices: { SPY: 600, QQQ: 520, IWM: 230, AAPL: 250, MSFT: 480, NVDA: 180, GLD: 380, TLT: 90 },
+    prices: PRICES,
+    closes: Object.fromEntries(Object.entries(PRICES).map(([k, v]) => [k, syntheticCloses(v, 0.01, 80)])),
     recentOrders: [],
+    lessons: [],
+    buyBlock: null,
     proposals: [],
     ...over,
   });
@@ -96,5 +102,15 @@ describe("gabbia", () => {
   test("20% conta anche quello che hai già", () => {
     const pos = [{ symbol: "SPY", qty: 30, avgEntryPrice: 600, currentPrice: 600, marketValue: 18_000 }];
     expect(applyCage(base({ positions: pos, proposals: [{ symbol: "SPY", side: "buy", qty: 5, why: "" }] })).rejected[0]!.reason).toContain("20.0%");
+  });
+});
+
+describe("sessioni cloud", () => {
+  test("partita 10 minuti prima: trova la sveglia e quanto aspettare; troppo presto o troppo tardi: niente", async () => {
+    const { nearbySlot } = await import("../src/slots.ts");
+    expect(nearbySlot(at("15:30"), 45, 20)).toMatchObject({ runId: "2026-09-24-15-40", waitMin: 10 });
+    expect(nearbySlot(at("21:55"), 45, 20)).toMatchObject({ runId: "2026-09-24-21-40", waitMin: -15 });
+    expect(nearbySlot(at("22:05"), 45, 20)).toBeNull();
+    expect(nearbySlot(at("12:00"), 45, 20)).toBeNull();
   });
 });

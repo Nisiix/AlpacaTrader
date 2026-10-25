@@ -9,7 +9,27 @@ export const LIMITS = {
   maxPositions: 5,
   maxPositionPct: 0.2,
   stopLossPct: 0.03,
+  // Una posizione non deve poter muovere il conto di più di così in un giorno tipico (valore × volatilità giornaliera).
+  dailyRiskPerPositionPct: 0.0025,
+  // Volatilità usata quando lo storico non basta: prudente, come un titolo nervoso.
+  fallbackDailyVol: 0.03,
+  volLookbackDays: 20,
+  // Metodo dichiarato: si compra solo sopra la media mobile a 50 giorni.
+  trendSmaDays: 50,
+  // Titoli che si muovono insieme: tetto complessivo.
+  groups: [{ name: "tecnologia", symbols: ["QQQ", "NVDA", "MSFT", "AAPL"], maxPct: 0.35 }],
+  // Interruttore: oltre questa perdita dal massimo gli acquisti si fermano finché non lo riarmi tu.
+  maxDrawdownPct: 0.05,
+  // Oltre questa perdita in giornata niente acquisti fino a domani.
+  maxDailyLossPct: 0.02,
+  // Dopo uno stop loss su un titolo, niente riacquisto per questi giorni di borsa.
+  stopLossCooldownDays: 5,
+  // Due rifiuti di Alpaca uguali (titolo + lato) entro questi giorni bloccano quel titolo-lato per altrettanti giorni.
+  brokerRejectWindowDays: 5,
 };
+
+// Storico giornaliero da chiedere: media a 50 giorni più un po' di margine per festività.
+export const DAILY_BARS_DAYS = 80;
 
 export const TIMEZONE = "Europe/Rome";
 
@@ -24,7 +44,7 @@ export interface SlotDef {
 // Sveglie dal lunedì al venerdì, ora di Roma.
 export const SLOTS: SlotDef[] = [
   { time: "09:00", kind: "briefing", label: "Briefing" },
-  { time: "15:30", kind: "open", label: "Apertura" },
+  { time: "15:40", kind: "open", label: "Apertura" }, // 10 minuti dopo l'apertura USA: spread e prezzi più calmi
   { time: "18:30", kind: "mid", label: "Metà seduta" },
   { time: "21:40", kind: "close", label: "Chiusura" },
 ];
