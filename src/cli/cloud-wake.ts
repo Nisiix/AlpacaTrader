@@ -101,6 +101,20 @@ function claim(runId: string): boolean {
 }
 
 let runId = "cloud";
+// PROVA (temporaneo): controlla se le API di GitHub sono raggiungibili con il token.
+if (prova && process.env.GITHUB_TOKEN) {
+  const h = { authorization: `Bearer ${process.env.GITHUB_TOKEN}`, "user-agent": "agente-alpaca" };
+  for (const url of ["https://api.github.com/repos/Nisiix/AlpacaTrader", "https://api.github.com/repos/Nisiix/AlpacaTrader/git/ref/heads/main", "https://codeload.github.com/Nisiix/AlpacaTrader/tar.gz/main"]) {
+    try {
+      const r = await fetch(url, { headers: h, signal: AbortSignal.timeout(15_000) });
+      const body = await r.text();
+      const push = body.match(/"push":\s*(true|false)/)?.[1];
+      log(`sonda ${url.replace(/^https:\/\//, "")}: ${r.status}${push ? ` push=${push}` : ""}`);
+    } catch (e) {
+      log(`sonda ${url}: errore ${(e as Error).name}`);
+    }
+  }
+}
 try {
   assertPaperOnly(process.env, (await loadSecrets(!fake)) ?? undefined);
   const now = nowArg ? new Date(nowArg) : new Date();
