@@ -9,12 +9,13 @@ import { applyCage, lossPct, tradingBlockReason } from "./cage.ts";
 import { CLOCK_SKEW_ALARM_MIN, DAILY_BARS_DAYS, LIMITS, MAX_LATENESS_MIN, UNIVERSE } from "./config.ts";
 import { sendOne, clientOrderId, waitForFills, type ExecOutcome } from "./execute.ts";
 import { indicatorsFor } from "./indicators.ts";
+import { applyFills, contextFor, journalForBrain, learnFromJournal, learningStatus, pruneJournal, readJournal, recordIntent, statsOf, writeJournal, type Trade } from "./journal.ts";
 import { activeLessons, learnFromBrokerReject, learnFromStopLoss, pruneLessons, readLessons, writeLessons, type Lesson } from "./lessons.ts";
 import { manageStops, type StopsReport } from "./stops.ts";
 import { acquireLock, findOrphanClaims, flattenLock, inspectLock, releaseLock, updateLock, type LockData } from "./lock.ts";
 import { Logger, type Redactor } from "./log.ts";
 import { reconcile } from "./reconcile.ts";
-import { alarmText, endOfRunText } from "./report.ts";
+import { alarmText, endOfRunText, weeklyText } from "./report.ts";
 import { describeRunId, findSlot, latenessMinutes, latestSlotToday, missedSlots, nextSlotAfter, romeTime, runIdFor } from "./slots.ts";
 import type { Notifier } from "./telegram.ts";
 import { latestFromHistory, readWitness, removeLeftoverTemps, writeWitness, type Witness, type WitnessOrder } from "./witness.ts";
@@ -255,11 +256,18 @@ export async function runWake(deps: WakeDeps, opts: WakeOptions = {}): Promise<W
   const lessonsNow = activeLessons(lessonsFile, today);
   const indicators = snap ? indicatorsFor(snap.closes, snap.prices, LIMITS.trendSmaDays, LIMITS.volLookbackDays) : {};
 
+  // Diario dei trade: raccoglie sempre, ma arriva al modello solo a raccolta finita.
+  const jr = readJournal(deps.stateDir, deps.now());
+  const journal = jr.file;
+  if (jr.problem) await alarm("Diario dei trade illeggibile", jr.problem);
+  const learning = learningStatus(journal, today);
+  log.info(`diario: ${learning.motivo}`);
+
   // 5. Cervello.
   let decision: Decision = { orders: [], reasoning: "", plan_next: prev?.pianoProssima ?? "" };
   if (snap) {
     try {
-      decision = await deps.brain.decide({ runId, slotKind: slot.kind, slotLabel: slot.label, previousWitness: prev, ...snap, indicators, lessons: lessonsNow, buyBlock });
+      decision = await deps.brain.decide({ runId, slotKind: slot.kind, slotLabel: slot.label, previousWitness: prev, ...snap, indicators, lessons: lessonsNow, buyBlock, journal: learning.attivo ? journalForBrain(journal) : null });
       log.info(`decisione del cervello: ${JSON.stringify(decision)}`);
     } catch (e) {
       const why = e instanceof BrainError ? e.message : `errore imprevisto: ${(e as Error).message}`;
@@ -275,6 +283,14 @@ export async function runWake(deps: WakeDeps, opts: WakeOptions = {}): Promise<W
     ? applyCage({ slotKind: slot.kind, marketOpen: snap.clock.isOpen, latenessMin: lateness, account: snap.account, positions: snap.positions, prices: snap.prices, closes: snap.closes, recentOrders: snap.recentOrders, lessons: lessonsNow, buyBlock, proposals: decision.orders })
     : { orders: [], rejected: decision.orders.map((p) => ({ symbol: p.symbol, side: p.side, qty: p.qty, source: "modello" as const, reason: "broker non raggiungibile" })) };
   for (const x of cage.rejected) log.warn(`rifiutato ${x.side} ${x.qty} ${x.symbol} [${x.source}]: ${x.reason}`);
+
+  // Il contesto di ogni ordine va nel diario prima dell'invio: se la sveglia muore dopo, non si perde.
+  for (const o of cage.orders) {
+    const proposed = decision.orders.find((p) => p.symbol === o.symbol && p.side === o.side);
+    const context = contextFor(indicators[o.symbol], snap?.prices[o.symbol], o.source === "modello" ? (proposed?.confidence ?? null) : null, o.source === "modello" ? (proposed?.expect ?? "") : "", o.why);
+    recordIntent(journal, { id: clientOrderId(runId, o.symbol, o.side), simbolo: o.symbol, lato: o.side, origine: o.source, data: today, contesto: context });
+  }
+  if (cage.orders.length) writeJournal(deps.stateDir, journal);
 
   // 7. Intenzioni nel lock, poi invio.
   lock.intended = cage.orders.map((o) => ({ clientOrderId: clientOrderId(runId, o.symbol, o.side), symbol: o.symbol, side: o.side, qty: o.qty }));
@@ -309,6 +325,27 @@ export async function runWake(deps: WakeDeps, opts: WakeOptions = {}): Promise<W
       stops = { ok: [], placed: [], cancelled: [], errors: [`Alpaca non risponde: ${(e as Error).message}`] };
     }
     if (stops.errors.length) await alarm("Stop su Alpaca non a posto", `${stops.errors.join("\n")}\nLo stop loss del codice resta attivo alle sveglie.`);
+  }
+
+  // Il diario legge gli ordini eseguiti di una settimana: copre il weekend e le sveglie saltate.
+  let closedNow: Trade[] = [];
+  if (snap) {
+    let filled = snap.recentOrders;
+    try {
+      filled = await retry(() => deps.broker.getRecentOrders(24 * 7), deps.sleep);
+    } catch (e) {
+      log.warn(`diario: ordini della settimana non leggibili, uso quelli delle 48 ore: ${(e as Error).message}`);
+    }
+    const fills = applyFills(journal, filled);
+    closedNow = fills.closed;
+    for (const t of fills.opened) log.info(`diario: aperto trade ${t.simbolo} (${t.comprate} a ${(t.costo / t.comprate).toFixed(2)})`);
+    for (const t of closedNow) log.info(`diario: chiuso trade ${t.simbolo}: ${((t.risultato ?? 0) * 100).toFixed(2)}% in ${t.giorni} giorni (${t.motivoUscita})`);
+    const statLessons = learnFromJournal(lessonsFile, journal, today);
+    for (const l of statLessons) log.info(`lezione nuova dal diario: ${l.motivo} (fino al ${l.finoAl})`);
+    learned.push(...statLessons);
+    if (statLessons.length) writeLessons(deps.stateDir, lessonsFile);
+    pruneJournal(journal, today);
+    writeJournal(deps.stateDir, journal);
   }
 
   // 8. Conto aggiornato per il resoconto (se Alpaca risponde).
@@ -360,6 +397,8 @@ export async function runWake(deps: WakeDeps, opts: WakeOptions = {}): Promise<W
     lezioniNuove: learned,
     acquistiBloccati: buyBlock,
     confronto,
+    tradeChiusi: closedNow.map((t) => ({ simbolo: t.simbolo, risultato: t.risultato ?? 0, giorni: t.giorni ?? 0, uscita: t.motivoUscita ?? "sconosciuto" })),
+    diario: { stato: learning.motivo, statistiche: statsOf(journal.trade) },
   };
   writeWitness(deps.stateDir, witness);
   log.info(`testimone scritto: ${witness.appunto}`);
@@ -367,6 +406,11 @@ export async function runWake(deps: WakeDeps, opts: WakeOptions = {}): Promise<W
   // 10. Resoconto e via il lock.
   const res = await deps.notifier.send(deps.redactor.apply(endOfRunText(witness)));
   if (!res.ok) log.error(`Telegram non ha ricevuto il resoconto: ${res.error}`);
+  // Il venerdì sera, dopo la chiusura, il riepilogo della settimana.
+  if (slot.kind === "close" && new Date(`${today}T12:00:00Z`).getUTCDay() === 5) {
+    const wk = await deps.notifier.send(deps.redactor.apply(weeklyText(runId, journal, today, learning.motivo, confronto)));
+    if (!wk.ok) log.error(`Telegram non ha ricevuto il riepilogo settimanale: ${wk.error}`);
+  }
   releaseLock(deps.stateDir);
   log.info(`=== fine sveglia ${runId}`);
   return { status: "done", runId, witness, message: witness.appunto };

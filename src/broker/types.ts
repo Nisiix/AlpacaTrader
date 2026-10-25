@@ -26,6 +26,9 @@ export interface Order {
   submittedAt: string;
   type: string; // market | stop | ...
   stopPrice: number | null;
+  // Prezzo medio e ora di esecuzione: servono al diario dei trade.
+  filledAvgPrice?: number | null;
+  filledAt?: string | null;
 }
 
 export interface MarketClock {

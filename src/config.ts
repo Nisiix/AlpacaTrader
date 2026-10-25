@@ -66,3 +66,17 @@ export const LOCK_MAX_AGE_MS = 15 * 60_000;
 
 // Quanti tentativi di verifica per un ordine con esito incerto (timeout, rete).
 export const SUBMIT_VERIFY_DELAYS_MS = [2_000, 5_000, 10_000, 20_000];
+
+// Diario dei trade. Per i primi mesi raccoglie e misura soltanto: le statistiche non arrivano al modello
+// e non creano blocchi finché non sono passati observeDays dal primo trade E ci sono minReliable trade chiusi.
+export const JOURNAL = {
+  observeDays: 90,
+  minReliable: 30,
+  minIndicative: 10,
+  minForLesson: 6,
+  lessonDays: 10,
+  strongMomentum: 0.03,
+  highVol: 0.015,
+  keepIdsDays: 30,
+  recentForBrain: 10,
+};

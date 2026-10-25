@@ -12,12 +12,14 @@ export const DECISION_SCHEMA = {
       items: {
         type: "object",
         additionalProperties: false,
-        required: ["symbol", "side", "qty", "why"],
+        required: ["symbol", "side", "qty", "why", "confidence", "expect"],
         properties: {
           symbol: { type: "string" },
           side: { type: "string", enum: ["buy", "sell"] },
           qty: { type: "integer", minimum: 1 },
           why: { type: "string" },
+          confidence: { type: "string", enum: ["bassa", "media", "alta"] },
+          expect: { type: "string" },
         },
       },
     },
@@ -39,6 +41,9 @@ export function validateDecision(v: unknown): Decision {
       side: typeof r.side === "string" ? r.side.trim().toLowerCase() : String(r.side ?? "?"),
       qty: typeof r.qty === "number" ? r.qty : Number.NaN,
       why: typeof r.why === "string" ? r.why : "",
+      // Fiducia e previsione servono solo al diario: se mancano l'ordine resta valido.
+      confidence: r.confidence === "bassa" || r.confidence === "media" || r.confidence === "alta" ? r.confidence : null,
+      expect: typeof r.expect === "string" ? r.expect : "",
     };
   });
   return { orders, reasoning: v.reasoning, plan_next: v.plan_next };

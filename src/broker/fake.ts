@@ -92,6 +92,8 @@ export class FakeBroker implements Broker {
       if (pos.qty <= 0) delete s.positions[o.symbol];
       o.status = "filled";
       o.filledQty = qty;
+      o.filledAvgPrice = price;
+      o.filledAt = this.now().toISOString();
       changed = true;
     }
     return changed;
@@ -207,6 +209,8 @@ export class FakeBroker implements Broker {
       submittedAt: this.now().toISOString(),
       type: "market",
       stopPrice: null,
+      filledAvgPrice: price,
+      filledAt: this.now().toISOString(),
     };
     s.orders.push(order);
     s.submits += 1;

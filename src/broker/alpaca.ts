@@ -17,6 +17,8 @@ function toOrder(o: any): Order {
     submittedAt: String(o.submitted_at ?? o.created_at ?? ""),
     type: String(o.type ?? o.order_type ?? "market"),
     stopPrice: o.stop_price === null || o.stop_price === undefined ? null : Number(o.stop_price),
+    filledAvgPrice: o.filled_avg_price === null || o.filled_avg_price === undefined ? null : Number(o.filled_avg_price),
+    filledAt: o.filled_at ? String(o.filled_at) : null,
   };
 }
 

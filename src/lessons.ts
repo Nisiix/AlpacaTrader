@@ -7,8 +7,10 @@ import { addDays, addTradingDays } from "./slots.ts";
 // Il registro degli errori: lo scrive il codice, non il modello, e la gabbia lo applica.
 export interface Lesson {
   id: string;
-  tipo: "stop-loss" | "rifiuto-alpaca";
-  simbolo: string;
+  tipo: "stop-loss" | "rifiuto-alpaca" | "statistica";
+  simbolo: string; // "*" = qualsiasi titolo con quel tipo di ingresso
+  setup?: string;
+  campione?: number; // trade chiusi su cui si basa una lezione statistica
   lato: "buy" | "sell"; // il lato bloccato
   dal: string; // YYYY-MM-DD
   finoAl: string; // incluso

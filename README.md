@@ -61,6 +61,7 @@ Il repo deve essere **privato**: il branch `stato` contiene conto e posizioni.
 | `src/cage.ts` | regole: universo, 5 titoli, 20% e volatilità, gruppo tech, trend, stop loss 3%, no short/leva, orari |
 | `src/indicators.ts` | media mobile, volatilità, momentum |
 | `src/lessons.ts` | registro degli errori |
+| `src/journal.ts` | diario dei trade: contesto, fiducia e previsione all'ingresso, risultato all'uscita, statistiche; per i primi 90 giorni e 30 trade chiusi solo raccolta, poi blocchi su titoli e tipi di ingresso perdenti (solo restrittivi) |
 | `src/breaker.ts` | interruttore sulla perdita |
 | `src/stops.ts` | uno stop GTC su Alpaca per ogni posizione |
 | `src/benchmark.ts` | confronto con SPY compra e tieni |

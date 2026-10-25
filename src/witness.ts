@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readdirSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { isObject, readJson, writeJsonAtomic, type ReadResult } from "./fsutil.ts";
 import type { Comparison } from "./benchmark.ts";
+import type { Stats } from "./journal.ts";
 import type { Lesson } from "./lessons.ts";
 import { RUN_ID_RE } from "./slots.ts";
 
@@ -41,6 +42,8 @@ export interface Witness {
   lezioniNuove?: Lesson[];
   acquistiBloccati?: string | null;
   confronto?: Comparison | null;
+  tradeChiusi?: { simbolo: string; risultato: number; giorni: number; uscita: string }[];
+  diario?: { stato: string; statistiche: Stats };
 }
 
 export function isWitness(v: unknown): v is Witness {

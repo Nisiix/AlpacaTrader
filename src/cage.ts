@@ -2,8 +2,14 @@ import type { ProposedOrder } from "./brain/types.ts";
 import type { Account, Order, Position, Side } from "./broker/types.ts";
 import { isOpenOrder, isProtectiveStop } from "./broker/types.ts";
 import { LIMITS, MAX_LATENESS_MIN, UNIVERSE, type SlotKind } from "./config.ts";
-import { dailyVol, sma } from "./indicators.ts";
+import { dailyVol, indicatorsFor, sma } from "./indicators.ts";
+import { setupOf } from "./journal.ts";
 import type { Lesson } from "./lessons.ts";
+
+function setupOfSymbol(i: CageInput, symbol: string): string {
+  const c = i.closes[symbol];
+  return c ? setupOf(indicatorsFor({ [symbol]: c }, i.prices, LIMITS.trendSmaDays, LIMITS.volLookbackDays)[symbol]) : "dati insufficienti";
+}
 
 export interface PlannedOrder {
   symbol: string;
@@ -100,7 +106,7 @@ export function applyCage(i: CageInput): CageResult {
     const key = `${p.symbol}-${p.side}`;
     if (seen.has(key)) { reject(stopped.has(p.symbol) && p.side === "sell" ? "già venduto dallo stop loss" : "doppione nella stessa sveglia"); continue; }
     if (p.side === "buy" && stopped.has(p.symbol)) { reject("stop loss attivo su questo titolo"); continue; }
-    const lesson = i.lessons.find((l) => l.simbolo === p.symbol && l.lato === p.side);
+    const lesson = i.lessons.find((l) => l.lato === p.side && (l.simbolo === p.symbol || (l.simbolo === "*" && l.setup !== undefined && l.setup === setupOfSymbol(i, p.symbol))));
     if (lesson) { reject(`lezione dal registro degli errori: ${lesson.motivo} (fino al ${lesson.finoAl})`); continue; }
     if (openOrders.some((o) => o.symbol === p.symbol && o.side === p.side)) { reject("c'è già un ordine aperto uguale"); continue; }
 
