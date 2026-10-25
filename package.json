@@ -1,0 +1,17 @@
+{
+  "name": "alpaca-paper-agent",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "schedule": "bun src/cli/schedule.ts",
+    "once": "bun src/cli/once.ts",
+    "status": "bun src/cli/status.ts",
+    "telegram-chat-id": "bun src/cli/telegram-chat-id.ts",
+    "test": "bun test",
+    "typecheck": "tsc -p ."
+  },
+  "devDependencies": {
+    "bun-types": "1.4.4",
+    "typescript": "^7.0.2"
+  }
+}

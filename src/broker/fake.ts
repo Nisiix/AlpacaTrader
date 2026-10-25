@@ -1,0 +1,164 @@
+import { existsSync, readFileSync } from "node:fs";
+import { writeJsonAtomic } from "../fsutil.ts";
+import { romeTime } from "../slots.ts";
+import type { Account, Broker, MarketClock, Order, OrderRequest, Position } from "./types.ts";
+import { BrokerError, DuplicateOrderError } from "./types.ts";
+
+export interface FakeFaults {
+  // Dopo N ordini registrati il processo si uccide da solo (SIGKILL), come una macchina che muore.
+  crashAfterSubmits?: number;
+  // Al primo invio Alpaca accetta l'ordine ma la risposta si perde; poi tutto va in timeout per N ms.
+  outageOnSubmitMs?: number;
+  outageStartedAt?: number;
+  // Il processo muore (SIGKILL) appena viene chiamato questo metodo, es. "getOrderByClientId".
+  crashOnMethod?: string;
+  // L'orologio di Alpaca è avanti di N ms rispetto a quello della macchina.
+  clockSkewMs?: number;
+}
+
+export interface FakeState {
+  cash: number;
+  lastEquity: number;
+  positions: Record<string, { qty: number; avgEntryPrice: number }>;
+  prices: Record<string, number>;
+  orders: Order[];
+  // auto = aperto 15:30-22:00 ora di Roma nei giorni feriali
+  clock: "auto" | "open" | "closed";
+  faults: FakeFaults;
+  submits: number;
+}
+
+export function defaultFakeState(): FakeState {
+  return {
+    cash: 100_000,
+    lastEquity: 100_000,
+    positions: {},
+    prices: { SPY: 600, QQQ: 520, IWM: 230, AAPL: 250, MSFT: 480, NVDA: 180, GLD: 380, TLT: 90, TSLA: 400 },
+    orders: [],
+    clock: "auto",
+    faults: {},
+    submits: 0,
+  };
+}
+
+// Broker finto con la stessa interfaccia di quello vero, persistito su file così sopravvive tra processi.
+export class FakeBroker implements Broker {
+  readonly name = "finto";
+
+  constructor(
+    private file: string,
+    private now: () => Date = () => new Date(),
+  ) {
+    if (!existsSync(file)) writeJsonAtomic(file, defaultFakeState());
+  }
+
+  load(): FakeState {
+    return { ...defaultFakeState(), ...JSON.parse(readFileSync(this.file, "utf8")) };
+  }
+
+  save(s: FakeState) {
+    writeJsonAtomic(this.file, s);
+  }
+
+  private checkOutage(s: FakeState, method?: string) {
+    const f = s.faults;
+    if (method && f.crashOnMethod === method) process.kill(process.pid, "SIGKILL");
+    if (f.outageStartedAt !== undefined && f.outageOnSubmitMs !== undefined) {
+      if (this.now().getTime() < f.outageStartedAt + f.outageOnSubmitMs) throw new BrokerError("timeout (broker finto in panne)", undefined, true);
+    }
+  }
+
+  private price(s: FakeState, sym: string): number {
+    const p = s.prices[sym];
+    if (!p) throw new BrokerError(`simbolo sconosciuto ${sym}`, 422);
+    return p;
+  }
+
+  async getAccount(): Promise<Account> {
+    const s = this.load();
+    this.checkOutage(s, "getAccount");
+    let equity = s.cash;
+    for (const [sym, p] of Object.entries(s.positions)) equity += p.qty * this.price(s, sym);
+    return { equity, lastEquity: s.lastEquity, cash: s.cash, status: "ACTIVE" };
+  }
+
+  async getPositions(): Promise<Position[]> {
+    const s = this.load();
+    this.checkOutage(s, "getPositions");
+    return Object.entries(s.positions).map(([symbol, p]) => {
+      const currentPrice = this.price(s, symbol);
+      return { symbol, qty: p.qty, avgEntryPrice: p.avgEntryPrice, currentPrice, marketValue: p.qty * currentPrice };
+    });
+  }
+
+  async getRecentOrders(hours: number): Promise<Order[]> {
+    const s = this.load();
+    this.checkOutage(s, "getRecentOrders");
+    const since = this.now().getTime() - hours * 3600_000;
+    return s.orders.filter((o) => Date.parse(o.submittedAt) >= since).reverse();
+  }
+
+  async getClock(): Promise<MarketClock> {
+    const s = this.load();
+    this.checkOutage(s, "getClock");
+    const now = new Date(this.now().getTime() + (s.faults.clockSkewMs ?? 0));
+    let isOpen = s.clock === "open";
+    if (s.clock === "auto") {
+      const rt = romeTime(now);
+      isOpen = rt.weekday >= 1 && rt.weekday <= 5 && rt.minutes >= 15 * 60 + 30 && rt.minutes < 22 * 60;
+    }
+    return { isOpen, timestamp: now.toISOString() };
+  }
+
+  async getLatestPrices(symbols: string[]): Promise<Record<string, number>> {
+    const s = this.load();
+    this.checkOutage(s, "getLatestPrices");
+    const out: Record<string, number> = {};
+    for (const sym of symbols) if (s.prices[sym]) out[sym] = s.prices[sym]!;
+    return out;
+  }
+
+  async getOrderByClientId(clientOrderId: string): Promise<Order | null> {
+    const s = this.load();
+    this.checkOutage(s, "getOrderByClientId");
+    return s.orders.find((o) => o.clientOrderId === clientOrderId) ?? null;
+  }
+
+  async submitOrder(req: OrderRequest): Promise<Order> {
+    const s = this.load();
+    this.checkOutage(s, "submitOrder");
+    if (s.orders.some((o) => o.clientOrderId === req.clientOrderId)) throw new DuplicateOrderError(`client_order_id già usato: ${req.clientOrderId}`, 422);
+    const price = this.price(s, req.symbol);
+    const pos = s.positions[req.symbol] ?? { qty: 0, avgEntryPrice: 0 };
+    if (req.side === "buy") {
+      if (req.qty * price > s.cash) throw new BrokerError("fondi insufficienti", 403);
+      pos.avgEntryPrice = (pos.avgEntryPrice * pos.qty + price * req.qty) / (pos.qty + req.qty);
+      pos.qty += req.qty;
+      s.cash -= req.qty * price;
+    } else {
+      if (req.qty > pos.qty) throw new BrokerError("quantità superiore alla posizione", 403);
+      pos.qty -= req.qty;
+      s.cash += req.qty * price;
+    }
+    if (pos.qty > 0) s.positions[req.symbol] = pos;
+    else delete s.positions[req.symbol];
+    const order: Order = {
+      id: `fake-${s.orders.length + 1}`,
+      clientOrderId: req.clientOrderId,
+      symbol: req.symbol,
+      side: req.side,
+      qty: req.qty,
+      filledQty: req.qty,
+      status: "filled",
+      submittedAt: this.now().toISOString(),
+    };
+    s.orders.push(order);
+    s.submits += 1;
+    const outageNow = s.faults.outageOnSubmitMs !== undefined && s.faults.outageStartedAt === undefined;
+    if (outageNow) s.faults.outageStartedAt = this.now().getTime();
+    this.save(s);
+    if (s.faults.crashAfterSubmits !== undefined && s.submits >= s.faults.crashAfterSubmits) process.kill(process.pid, "SIGKILL");
+    if (outageNow) throw new BrokerError("timeout: nessuna risposta da Alpaca (l'ordine però è arrivato)", undefined, true);
+    return order;
+  }
+}
