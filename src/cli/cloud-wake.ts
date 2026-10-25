@@ -4,23 +4,20 @@
 // nuovo, 5. salva lo stato sul branch ogni 15 secondi e alla fine, anche se la sveglia muore.
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { SCHEDULE_GRACE_MIN, SLOTS } from "../config.ts";
+import { SCHEDULE_GRACE_MIN } from "../config.ts";
 import { ROOT, loadSecrets } from "../deps.ts";
 import { assertPaperOnly } from "../guard.ts";
 import { Redactor } from "../log.ts";
 import { alarmText } from "../report.ts";
 import { TelegramNotifier } from "../telegram.ts";
-import { nearbySlot, romeTime, runIdFor } from "../slots.ts";
+import { nearbySlot } from "../slots.ts";
 
 const BRANCH = "stato";
 const WT = join(ROOT, ".stato");
 const EARLY_MIN = 45;
 const SYNC_MS = 15_000;
 const argv = process.argv.slice(2);
-// PROVA (temporaneo): se nel repo c'è il file PROVA e non c'è una sveglia dovuta, fa un briefing adesso.
-// Il briefing non manda mai ordini: legge il conto, salva lo stato sul branch e scrive su Telegram.
-const prova = existsSync(join(ROOT, "PROVA"));
-let force = argv.includes("--force");
+const force = argv.includes("--force");
 // Solo per provarlo: --fake usa broker e cervello finti, --now (con --fake) finge l'ora e non aspetta.
 const fake = argv.includes("--fake");
 const nowArg = argv.includes("--now") ? argv[argv.indexOf("--now") + 1] : undefined;
@@ -101,30 +98,9 @@ function claim(runId: string): boolean {
 }
 
 let runId = "cloud";
-// PROVA (temporaneo): controlla se le API di GitHub sono raggiungibili con il token.
-if (prova && process.env.GITHUB_TOKEN) {
-  const h = { authorization: `Bearer ${process.env.GITHUB_TOKEN}`, "user-agent": "agente-alpaca" };
-  for (const url of ["https://api.github.com/repos/Nisiix/AlpacaTrader", "https://api.github.com/repos/Nisiix/AlpacaTrader/git/ref/heads/main", "https://codeload.github.com/Nisiix/AlpacaTrader/tar.gz/main"]) {
-    try {
-      const r = await fetch(url, { headers: h, signal: AbortSignal.timeout(15_000) });
-      const body = await r.text();
-      const push = body.match(/"push":\s*(true|false)/)?.[1];
-      log(`sonda ${url.replace(/^https:\/\//, "")}: ${r.status}${push ? ` push=${push}` : ""}`);
-    } catch (e) {
-      log(`sonda ${url}: errore ${(e as Error).name}`);
-    }
-  }
-}
 try {
   assertPaperOnly(process.env, (await loadSecrets(!fake)) ?? undefined);
-  const now = nowArg ? new Date(nowArg) : new Date();
-  let target = nearbySlot(now, EARLY_MIN, SCHEDULE_GRACE_MIN);
-  if (!target && prova) {
-    const slot = SLOTS[0]!;
-    target = { runId: runIdFor(romeTime(now).date, slot), slot, waitMin: 0 };
-    force = true;
-    log(`file PROVA presente: sveglia di prova ${target.runId} (briefing, nessun ordine)`);
-  }
+  const target = nearbySlot(nowArg ? new Date(nowArg) : new Date(), EARLY_MIN, SCHEDULE_GRACE_MIN);
   if (!target) {
     log("nessuna sveglia dovuta in questa finestra: esco senza fare niente");
     process.exit(0);
