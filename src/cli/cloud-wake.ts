@@ -7,6 +7,9 @@ import { join } from "node:path";
 import { SCHEDULE_GRACE_MIN, SLOTS } from "../config.ts";
 import { ROOT, loadSecrets } from "../deps.ts";
 import { assertPaperOnly } from "../guard.ts";
+import { Redactor } from "../log.ts";
+import { alarmText } from "../report.ts";
+import { TelegramNotifier } from "../telegram.ts";
 import { nearbySlot, romeTime, runIdFor } from "../slots.ts";
 
 const BRANCH = "stato";
@@ -26,6 +29,13 @@ if (nowArg && !fake) throw new Error("--now si usa solo con --fake");
 function git(args: string[], cwd = ROOT): { ok: boolean; out: string } {
   const r = Bun.spawnSync(["git", "-c", "user.name=Agente Alpaca", "-c", "user.email=agente-alpaca@users.noreply.github.com", ...args], { cwd, stdout: "pipe", stderr: "pipe" });
   return { ok: r.exitCode === 0, out: (r.stdout.toString() + r.stderr.toString()).trim() };
+}
+
+// Gli errori di git possono contenere l'URL del remote con il token dentro.
+function clean(out: string): string {
+  const token = process.env.GITHUB_TOKEN;
+  const masked = token ? out.split(token).join("***") : out;
+  return masked.replace(/x-access-token:[^@\s]+@/g, "x-access-token:***@").slice(-400);
 }
 
 function log(msg: string) {
@@ -71,6 +81,7 @@ function sync(message: string): boolean {
 }
 
 // Prenotazione: un file per sveglia, pubblicato con un push. Chi arriva secondo trova il file e si ferma.
+let lastPushError = "";
 function claim(runId: string): boolean {
   const dir = join(WT, "claims");
   mkdirSync(dir, { recursive: true });
@@ -81,12 +92,15 @@ function claim(runId: string): boolean {
     writeFileSync(p, `${new Date().toISOString()}\n`);
     git(["add", "-A"], WT);
     git(["commit", "-qm", `prenota ${runId}`], WT);
-    if (git(["push", "-q", "origin", `HEAD:${BRANCH}`], WT).ok) return true;
+    const push = git(["push", "-q", "origin", `HEAD:${BRANCH}`], WT);
+    if (push.ok) return true;
+    lastPushError = push.out;
     git(["reset", "-q", "--hard", `origin/${BRANCH}`], WT);
   }
-  throw new Error("non riesco a prenotare la sveglia: push rifiutato più volte");
+  throw new Error(`non riesco a prenotare la sveglia: push sul branch ${BRANCH} rifiutato più volte. Git dice: ${clean(lastPushError)}`);
 }
 
+let runId = "cloud";
 try {
   assertPaperOnly(process.env, (await loadSecrets(!fake)) ?? undefined);
   const now = nowArg ? new Date(nowArg) : new Date();
@@ -101,6 +115,7 @@ try {
     log("nessuna sveglia dovuta in questa finestra: esco senza fare niente");
     process.exit(0);
   }
+  runId = target.runId;
   openStateBranch();
   ensureIgnore();
   if (!claim(target.runId)) {
@@ -126,6 +141,14 @@ try {
   log(`sveglia ${target.runId} finita con codice ${code}; stato ${saved ? "salvato" : "NON salvato"} sul branch ${BRANCH}`);
   process.exit(code === 0 && saved ? 0 : 1);
 } catch (e) {
-  console.error(`ERRORE: ${(e as Error).message}`);
+  const msg = clean((e as Error).message);
+  console.error(`ERRORE: ${msg}`);
+  // Se la sveglia non parte nemmeno, la sessione cloud non lo dice a nessuno: lo dice Telegram.
+  const secrets = fake ? null : await loadSecrets(false).catch(() => null);
+  if (secrets?.telegramBotToken && secrets.telegramChatId) {
+    const redactor = new Redactor([secrets.alpacaKeyId, secrets.alpacaSecretKey, secrets.telegramBotToken]);
+    const res = await new TelegramNotifier(secrets.telegramBotToken, secrets.telegramChatId).send(redactor.apply(alarmText(runId, "Sveglia non partita", msg)));
+    if (!res.ok) console.error(`Telegram non ha ricevuto l'allarme: ${redactor.apply(res.error ?? "")}`);
+  }
   process.exit(2);
 }
