@@ -147,11 +147,13 @@ export class AlpacaBroker implements Broker {
     const out: Record<string, number[]> = {};
     if (symbols.length === 0) return out;
     const start = new Date(Date.now() - days * 1.6 * 86_400_000).toISOString().slice(0, 10);
+    const today = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date());
     let token = "";
     for (let page = 0; page < 20; page++) {
       const q = `/v2/stocks/bars?timeframe=1Day&adjustment=all&feed=iex&limit=10000&start=${start}&symbols=${symbols.map(encodeURIComponent).join(",")}${token ? `&page_token=${encodeURIComponent(token)}` : ""}`;
       const data = await this.request(MARKET_DATA_URL, q);
-      for (const [sym, bars] of Object.entries<any[]>(data?.bars ?? {})) (out[sym] ??= []).push(...bars.map((b) => Number(b.c)));
+      // Solo giornate chiuse: la barra di oggi, a seduta aperta, è un prezzo provvisorio.
+      for (const [sym, bars] of Object.entries<any[]>(data?.bars ?? {})) (out[sym] ??= []).push(...bars.filter((b) => String(b.t).slice(0, 10) < today).map((b) => Number(b.c)));
       token = data?.next_page_token ?? "";
       if (!token) break;
     }

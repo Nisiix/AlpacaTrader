@@ -1,0 +1,215 @@
+// Le regole della revisione di strategia di ottobre 2026: stop legato alla volatilità, uscita di trend nel codice,
+// media a 200 giorni, ingressi solo all'apertura, calendario di Fed e trimestrali, 60/40, voto a maggioranza.
+import { describe, expect, test } from "bun:test";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { compareWithBenchmarks } from "../src/benchmark.ts";
+import { buildPrompt } from "../src/brain/prompt.ts";
+import { majority, VotingBrain } from "../src/brain/vote.ts";
+import { BrainError, type Brain, type BrainInput, type Decision } from "../src/brain/types.ts";
+import { syntheticCloses } from "../src/broker/fake.ts";
+import { applyCage, type CageInput } from "../src/cage.ts";
+import { eventBlockFor, staleCalendar, type MarketEvent } from "../src/events.ts";
+import { stopPctFor } from "../src/stops.ts";
+import { runWake } from "../src/wake.ts";
+import { brainSaying, makeEnv, ordersFor } from "./helpers.ts";
+
+const PRICES: Record<string, number> = { SPY: 600, QQQ: 520, IWM: 230, AAPL: 250, MSFT: 480, NVDA: 180, GLD: 380, TLT: 90 };
+const EV: MarketEvent[] = [
+  { date: "2026-10-28", kind: "fed", confirmed: true },
+  { date: "2026-10-28", kind: "trimestrale", symbol: "MSFT", confirmed: true },
+  { date: "2026-11-02", kind: "trimestrale", symbol: "AAPL", confirmed: true },
+];
+const base = (over: Partial<CageInput> = {}): CageInput => ({
+  today: "2026-09-24",
+  events: EV,
+  slotKind: "open",
+  marketOpen: true,
+  latenessMin: 1,
+  account: { equity: 100_000, lastEquity: 100_000, cash: 100_000, status: "ACTIVE" },
+  positions: [],
+  prices: PRICES,
+  closes: Object.fromEntries(Object.entries(PRICES).map(([k, v]) => [k, syntheticCloses(v, 0.01, 260)])),
+  recentOrders: [],
+  lessons: [],
+  buyBlock: null,
+  proposals: [],
+  ...over,
+});
+const buy = (symbol: string, qty = 1) => ({ symbol, side: "buy", qty, why: "prova" });
+const day = (date: string, rome: string) => new Date(`${date}T${rome}:00+02:00`);
+
+describe("stop di protezione legato alla volatilità", () => {
+  test("2,5 × volatilità × √5, al mezzo punto, tra 5% e 10%", () => {
+    expect(stopPctFor(syntheticCloses(100, 0.005, 260))).toBe(0.05); // ETF calmo: il minimo
+    expect(stopPctFor(syntheticCloses(100, 0.012, 260))).toBe(0.07);
+    expect(stopPctFor(syntheticCloses(100, 0.03, 260))).toBe(0.1); // titolo nervoso: il massimo
+    expect(stopPctFor(undefined)).toBe(0.1); // senza storico: il più largo, non uno stop a caso
+  });
+  test("-4% non vende più: il rumore normale non chiude la posizione", () => {
+    const pos = [{ symbol: "MSFT", qty: 20, avgEntryPrice: 500, currentPrice: 480, marketValue: 9_600 }];
+    expect(applyCage(base({ slotKind: "mid", positions: pos, prices: { ...PRICES, MSFT: 480 } })).orders).toEqual([]);
+  });
+});
+
+describe("uscita di trend fatta dal codice", () => {
+  const falling = Array.from({ length: 260 }, (_, i) => (i < 230 ? 400 + i : 630 - (i - 229) * 8)); // sale, poi scende sotto la media a 50
+  const pos = [{ symbol: "MSFT", qty: 20, avgEntryPrice: 470, currentPrice: 480, marketValue: 9_600 }];
+  test("all'apertura, chiusura sotto la media a 50 giorni: vende tutto anche se il modello tace", () => {
+    const r = applyCage(base({ positions: pos, closes: { ...base().closes, MSFT: falling } }));
+    expect(r.orders.map((o) => `${o.symbol} ${o.side} ${o.qty} ${o.source}`)).toEqual(["MSFT sell 20 uscita-trend"]);
+  });
+  test("a metà seduta no: il trend si legge una volta al giorno", () => {
+    expect(applyCage(base({ slotKind: "mid", positions: pos, closes: { ...base().closes, MSFT: falling } })).orders).toEqual([]);
+  });
+  test("sopra la media resta in mano", () => {
+    expect(applyCage(base({ positions: pos })).orders).toEqual([]);
+  });
+});
+
+describe("filtro di lungo periodo", () => {
+  test("sopra la media a 50 ma sotto quella a 200: non si compra", () => {
+    // scende per 200 giorni, poi rimbalza: sopra la 50, ancora sotto la 200 (come TLT a ottobre 2026)
+    const tlt = Array.from({ length: 260 }, (_, i) => (i < 200 ? 150 - i * 0.35 : 80 + (i - 200) * 0.2));
+    const r = applyCage(base({ closes: { ...base().closes, TLT: tlt }, prices: { ...PRICES, TLT: tlt.at(-1)! }, proposals: [buy("TLT", 10)] }));
+    expect(r.rejected[0]!.reason).toContain("sotto la media a 200 giorni");
+  });
+  test("chiusura sopra le medie ma prezzo crollato in giornata sotto la 50: non si compra", () => {
+    const r = applyCage(base({ prices: { ...PRICES, SPY: 500 }, proposals: [buy("SPY", 10)] }));
+    expect(r.rejected[0]!.reason).toContain("in giornata");
+  });
+});
+
+describe("ingressi solo alla sveglia di apertura", () => {
+  test("a metà seduta e alla chiusura gli acquisti sono rifiutati, le vendite no", () => {
+    const pos = [{ symbol: "SPY", qty: 10, avgEntryPrice: 600, currentPrice: 600, marketValue: 6_000 }];
+    for (const slotKind of ["mid", "close"] as const) {
+      const r = applyCage(base({ slotKind, positions: pos, proposals: [buy("GLD", 5), { symbol: "SPY", side: "sell", qty: 4, why: "" }] }));
+      expect(r.rejected.map((x) => x.symbol)).toEqual(["GLD"]);
+      expect(r.rejected[0]!.reason).toContain("solo alla sveglia di apertura");
+      expect(r.orders.map((o) => o.symbol)).toEqual(["SPY"]);
+    }
+  });
+});
+
+describe("calendario di Fed e trimestrali", () => {
+  test("giorno della Fed: niente acquisti nuovi, nemmeno di ETF", () => {
+    expect(eventBlockFor("SPY", "2026-10-28", EV)).toContain("decisione della Fed");
+    expect(applyCage(base({ today: "2026-10-28", proposals: [buy("SPY")] })).rejected[0]!.reason).toContain("Fed");
+  });
+  test("trimestrale: blocco dai 2 giorni di borsa prima al giorno stesso, solo per quel titolo", () => {
+    expect(eventBlockFor("AAPL", "2026-10-29", EV)).toContain("trimestrale AAPL");
+    expect(eventBlockFor("AAPL", "2026-11-02", EV)).toContain("trimestrale AAPL");
+    expect(eventBlockFor("AAPL", "2026-11-03", EV)).toBeNull();
+    expect(eventBlockFor("AAPL", "2026-10-27", EV)).toBeNull();
+    expect(eventBlockFor("SPY", "2026-10-30", EV)).toBeNull();
+    expect(eventBlockFor("MSFT", "2026-10-26", EV)).toContain("trimestrale MSFT");
+    expect(eventBlockFor("MSFT", "2026-10-23", EV)).toBeNull();
+  });
+  test("calendario scaduto: dice cosa manca", () => {
+    expect(staleCalendar("2026-12-01", EV)).toEqual(["nessuna decisione della Fed futura", "nessuna trimestrale futura per AAPL", "nessuna trimestrale futura per MSFT", "nessuna trimestrale futura per NVDA"]);
+  });
+  test("il lunedì al briefing arriva il promemoria se il calendario ha buchi", async () => {
+    const env = makeEnv(new Date("2027-12-13T09:01:00+01:00")); // lunedì, dopo l'ultima Fed in calendario
+    await runWake(env.deps());
+    expect(env.outbox()).toContain("Calendario eventi da aggiornare");
+  });
+  test("il modello vede gli eventi delle prossime settimane", async () => {
+    let input: BrainInput | null = null;
+    const spy: Brain = { name: "spia", decide: async (i) => ((input = i), { orders: [], reasoning: "", plan_next: "" }) };
+    const env = makeEnv(day("2026-10-23", "09:01"), spy);
+    await runWake(env.deps());
+    expect(input!.events).toContain("decisione della Fed il 2026-10-28");
+    expect(input!.events).toContain("trimestrale MSFT il 2026-10-28");
+    expect(buildPrompt(input!)).toContain("decisione della Fed il 2026-10-28");
+  });
+});
+
+describe("confronto con il 60/40", () => {
+  test("file vecchio con solo SPY: riceve TLT e il 60/40 parte da oggi", () => {
+    const dir = mkdtempSync(join(tmpdir(), "bm-"));
+    writeFileSync(join(dir, "benchmark.json"), JSON.stringify({ versione: 1, dal: "2026-10-25", patrimonio: 100_000, spy: 600 }));
+    const first = compareWithBenchmarks(dir, "2026-10-26", 100_000, 600, 80);
+    expect(first.cmp!.misto).toEqual({ dal: "2026-10-26", conto: 0, rendimento: 0 });
+    const later = compareWithBenchmarks(dir, "2026-11-26", 102_000, 660, 72);
+    expect(later.cmp!.spy).toBeCloseTo(0.1);
+    expect(later.cmp!.misto!.rendimento).toBeCloseTo(0.6 * 0.1 + 0.4 * -0.1);
+    expect(later.cmp!.misto!.conto).toBeCloseTo(0.02);
+    expect(JSON.parse(readFileSync(join(dir, "benchmark.json"), "utf8")).tlt).toBe(80);
+  });
+  test("il resoconto lo scrive", async () => {
+    const env = makeEnv(day("2026-09-24", "09:01"));
+    await runWake(env.deps());
+    expect(env.outbox()).toContain("60/40 SPY/TLT +0.00%");
+  });
+});
+
+describe("voto a maggioranza", () => {
+  const d = (orders: { symbol: string; side: string; qty: number }[]): Decision => ({ orders: orders.map((o) => ({ ...o, why: "x" })), reasoning: "R.", plan_next: "P" });
+  test("passa solo ciò che proposto da almeno 2 su 3; quantità = mediana bassa", () => {
+    const r = majority([d([{ symbol: "AAPL", side: "buy", qty: 50 }, { symbol: "TLT", side: "buy", qty: 200 }]), d([{ symbol: "AAPL", side: "buy", qty: 40 }]), d([{ symbol: "AAPL", side: "buy", qty: 60 }, { symbol: "MSFT", side: "buy", qty: 30 }])], 2, 3);
+    expect(r.orders.map((o) => `${o.symbol} ${o.qty}`)).toEqual(["AAPL 50"]);
+    expect(r.reasoning).toContain("scartati per mancanza di accordo: TLT-buy (1/3), MSFT-buy (1/3)");
+  });
+  test("due risposte d'accordo su due: quantità più prudente", () => {
+    expect(majority([d([{ symbol: "SPY", side: "buy", qty: 10 }]), d([{ symbol: "SPY", side: "buy", qty: 8 }])], 2).orders[0]!.qty).toBe(8);
+  });
+  test("una risposta che ripete lo stesso ordine vota una volta sola", () => {
+    expect(majority([d([{ symbol: "SPY", side: "buy", qty: 10 }, { symbol: "SPY", side: "buy", qty: 10 }]), d([])], 2).orders).toEqual([]);
+  });
+  test("meno risposte valide del quorum: errore del cervello, nessun ordine del modello", async () => {
+    let n = 0;
+    const flaky: Brain = { name: "a volte", decide: async () => { if (n++ > 0) throw new BrainError("troncato"); return d([{ symbol: "SPY", side: "buy", qty: 1 }]); } };
+    await expect(new VotingBrain(flaky, 3, 2).decide({} as any)).rejects.toThrow("solo 1 risposte valide su 3");
+  });
+  test("nella sveglia: 3 chiamate in parallelo, l'ordine concorde parte", async () => {
+    let calls = 0;
+    const inner: Brain = { name: "finto", decide: async () => (calls++, d(calls === 2 ? [] : [{ symbol: "SPY", side: "buy", qty: 5 }])) };
+    const env = makeEnv(day("2026-09-24", "15:41"), new VotingBrain(inner, 3, 2));
+    const res = await runWake(env.deps());
+    expect(calls).toBe(3);
+    expect(ordersFor(env, "SPY")).toHaveLength(1);
+    expect(res.witness!.ragionamento).toContain("Voto: 3/3 risposte valide, 1 ordini con la maggioranza");
+  });
+});
+
+describe("una giornata intera con le regole nuove", () => {
+  test("compra all'apertura, a metà seduta il modello non può aggiungere, il giorno dopo l'uscita di trend vende", async () => {
+    const env = makeEnv(day("2026-09-24", "15:41"), brainSaying({ orders: [buy("SPY", 10)], reasoning: "In trend.", plan_next: "" }));
+    expect((await runWake(env.deps())).witness!.ordiniInviati.map((o) => o.simbolo)).toEqual(["SPY"]);
+    env.clock.t = day("2026-09-24", "18:31").getTime();
+    const mid = await runWake(env.deps({ brain: brainSaying({ orders: [buy("SPY", 5)], reasoning: "", plan_next: "" }) }));
+    expect(mid.witness!.ordiniRifiutati[0]!.motivo).toContain("solo alla sveglia di apertura");
+    // ieri SPY ha chiuso sotto la media a 50 giorni
+    env.setFake((s) => (s.closes.SPY = Array.from({ length: 260 }, (_, i) => (i < 230 ? 500 + i : 730 - (i - 229) * 8))));
+    env.clock.t = day("2026-09-25", "15:41").getTime();
+    const next = await runWake(env.deps({ brain: brainSaying({ orders: [], reasoning: "Tengo.", plan_next: "" }) }));
+    expect(next.witness!.ordiniInviati.map((o) => `${o.simbolo} ${o.lato} ${o.origine}`)).toEqual(["SPY sell uscita-trend"]);
+    expect(env.broker.load().positions.SPY).toBeUndefined();
+    expect(next.witness!.lezioniNuove ?? []).toEqual([]); // un'uscita di trend non è un errore da ricordare
+  });
+});
+
+describe("solo giornate chiuse", () => {
+  test("Alpaca: la barra di oggi, ancora in corso, non entra nello storico", async () => {
+    const { AlpacaBroker } = await import("../src/broker/alpaca.ts");
+    const today = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date());
+    const real = globalThis.fetch;
+    globalThis.fetch = (async () => new Response(JSON.stringify({ bars: { SPY: [{ t: "2020-01-02T05:00:00Z", c: 100 }, { t: "2020-01-03T05:00:00Z", c: 101 }, { t: `${today}T04:00:00Z`, c: 90 }] } }), { status: 200 })) as unknown as typeof fetch;
+    try {
+      expect(await new AlpacaBroker("k", "s").getDailyCloses(["SPY"], 10)).toEqual({ SPY: [100, 101] });
+    } finally {
+      globalThis.fetch = real;
+    }
+  });
+  test("storico non disponibile: lo stop già piazzato resta dov'è, non si sposta al valore di ripiego", async () => {
+    const env = makeEnv(day("2026-09-24", "15:41"), brainSaying({ orders: [buy("SPY", 10)], reasoning: "", plan_next: "" }));
+    await runWake(env.deps());
+    env.setFake((s) => (s.faults.failMethods = ["getDailyCloses"]));
+    env.clock.t = day("2026-09-24", "18:31").getTime();
+    const res = await runWake(env.deps({ brain: brainSaying({ orders: [], reasoning: "", plan_next: "" }) }));
+    expect(res.witness!.stopSuAlpaca!.piazzati).toEqual([]);
+    expect(res.witness!.stopSuAlpaca!.attivi[0]).toContain("SPY 10 @ 567.00");
+  });
+});

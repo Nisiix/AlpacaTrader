@@ -3,9 +3,10 @@ import { hostname } from "node:os";
 import { join } from "node:path";
 import { BrainError, type Brain, type Decision } from "./brain/types.ts";
 import { isProtectiveStop, type Account, type Broker, type MarketClock, type Order, type Position } from "./broker/types.ts";
-import { compareWithSpy, type Comparison } from "./benchmark.ts";
+import { compareWithBenchmarks, type Comparison } from "./benchmark.ts";
 import { evaluateBreaker, readBreaker, writeBreaker } from "./breaker.ts";
 import { applyCage, lossPct, tradingBlockReason } from "./cage.ts";
+import { staleCalendar, upcomingEvents } from "./events.ts";
 import { CLOCK_SKEW_ALARM_MIN, DAILY_BARS_DAYS, LIMITS, MAX_LATENESS_MIN, UNIVERSE } from "./config.ts";
 import { sendOne, clientOrderId, waitForFills, type ExecOutcome } from "./execute.ts";
 import { indicatorsFor } from "./indicators.ts";
@@ -254,7 +255,13 @@ export async function runWake(deps: WakeDeps, opts: WakeOptions = {}): Promise<W
     if (buyBlock) log.warn(`acquisti bloccati: ${buyBlock}`);
   }
   const lessonsNow = activeLessons(lessonsFile, today);
-  const indicators = snap ? indicatorsFor(snap.closes, snap.prices, LIMITS.trendSmaDays, LIMITS.volLookbackDays) : {};
+  const indicators = snap ? indicatorsFor(snap.closes, snap.prices, LIMITS.trendSmaDays, LIMITS.volLookbackDays, LIMITS.longSmaDays, LIMITS.rankMomentumDays) : {};
+  const events = upcomingEvents(today);
+  // Il calendario degli eventi si aggiorna a mano: il lunedì mattina ricordo cosa manca.
+  const stale = staleCalendar(today);
+  if (stale.length && slot.kind === "briefing" && new Date(`${today}T12:00:00Z`).getUTCDay() === 1) {
+    await alarm("Calendario eventi da aggiornare", `In src/events.ts: ${stale.join(", ")}. Senza la data il blocco degli acquisti prima di Fed e trimestrali non può scattare.`);
+  }
 
   // Diario dei trade: raccoglie sempre, ma arriva al modello solo a raccolta finita.
   const jr = readJournal(deps.stateDir, deps.now());
@@ -267,7 +274,7 @@ export async function runWake(deps: WakeDeps, opts: WakeOptions = {}): Promise<W
   let decision: Decision = { orders: [], reasoning: "", plan_next: prev?.pianoProssima ?? "" };
   if (snap) {
     try {
-      decision = await deps.brain.decide({ runId, slotKind: slot.kind, slotLabel: slot.label, previousWitness: prev, ...snap, indicators, lessons: lessonsNow, buyBlock, journal: learning.attivo ? journalForBrain(journal) : null });
+      decision = await deps.brain.decide({ runId, slotKind: slot.kind, slotLabel: slot.label, previousWitness: prev, ...snap, indicators, events, lessons: lessonsNow, buyBlock, journal: learning.attivo ? journalForBrain(journal) : null });
       log.info(`decisione del cervello: ${JSON.stringify(decision)}`);
     } catch (e) {
       const why = e instanceof BrainError ? e.message : `errore imprevisto: ${(e as Error).message}`;
@@ -280,7 +287,7 @@ export async function runWake(deps: WakeDeps, opts: WakeOptions = {}): Promise<W
 
   // 6. Gabbia.
   const cage = snap
-    ? applyCage({ slotKind: slot.kind, marketOpen: snap.clock.isOpen, latenessMin: lateness, account: snap.account, positions: snap.positions, prices: snap.prices, closes: snap.closes, recentOrders: snap.recentOrders, lessons: lessonsNow, buyBlock, proposals: decision.orders })
+    ? applyCage({ today, slotKind: slot.kind, marketOpen: snap.clock.isOpen, latenessMin: lateness, account: snap.account, positions: snap.positions, prices: snap.prices, closes: snap.closes, recentOrders: snap.recentOrders, lessons: lessonsNow, buyBlock, proposals: decision.orders })
     : { orders: [], rejected: decision.orders.map((p) => ({ symbol: p.symbol, side: p.side, qty: p.qty, source: "modello" as const, reason: "broker non raggiungibile" })) };
   for (const x of cage.rejected) log.warn(`rifiutato ${x.side} ${x.qty} ${x.symbol} [${x.source}]: ${x.reason}`);
 
@@ -320,7 +327,7 @@ export async function runWake(deps: WakeDeps, opts: WakeOptions = {}): Promise<W
     await waitForFills(deps.broker, outcomes.filter((o) => o.kind === "inviato").map((o) => o.id), deps.sleep, log);
     try {
       const [pos, open] = await Promise.all([deps.broker.getPositions(), deps.broker.getOpenOrders()]);
-      stops = await manageStops(deps.broker, runId, pos, open, log);
+      stops = await manageStops(deps.broker, runId, pos, open, log, snap.closes);
     } catch (e) {
       stops = { ok: [], placed: [], cancelled: [], errors: [`Alpaca non risponde: ${(e as Error).message}`] };
     }
@@ -363,7 +370,7 @@ export async function runWake(deps: WakeDeps, opts: WakeOptions = {}): Promise<W
 
   let confronto: Comparison | null = null;
   if (account) {
-    const bm = compareWithSpy(deps.stateDir, today, account.equity, snap?.prices.SPY);
+    const bm = compareWithBenchmarks(deps.stateDir, today, account.equity, snap?.prices.SPY, snap?.prices.TLT);
     confronto = bm.cmp;
     if (bm.note) log.warn(bm.note);
   }

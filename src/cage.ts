@@ -1,10 +1,12 @@
 import type { ProposedOrder } from "./brain/types.ts";
 import type { Account, Order, Position, Side } from "./broker/types.ts";
 import { isOpenOrder, isProtectiveStop } from "./broker/types.ts";
-import { LIMITS, MAX_LATENESS_MIN, UNIVERSE, type SlotKind } from "./config.ts";
-import { dailyVol, indicatorsFor, sma } from "./indicators.ts";
+import { ENTRY_SLOT, LIMITS, MAX_LATENESS_MIN, UNIVERSE, type SlotKind } from "./config.ts";
+import { EVENTS, eventBlockFor, type MarketEvent } from "./events.ts";
+import { dailyVol, indicatorsFor, sma, trendOf } from "./indicators.ts";
 import { setupOf } from "./journal.ts";
 import type { Lesson } from "./lessons.ts";
+import { stopPctFor } from "./stops.ts";
 
 function setupOfSymbol(i: CageInput, symbol: string): string {
   const c = i.closes[symbol];
@@ -16,18 +18,23 @@ export interface PlannedOrder {
   side: Side;
   qty: number;
   why: string;
-  source: "modello" | "stop-loss";
+  source: OrderSource;
 }
+
+// stop-loss = protezione contro i crolli; uscita-trend = l'uscita normale del metodo, decisa dal codice.
+export type OrderSource = "modello" | "stop-loss" | "uscita-trend";
 
 export interface Rejection {
   symbol: string;
   side: string;
   qty: number;
   reason: string;
-  source: "modello" | "stop-loss";
+  source: OrderSource;
 }
 
 export interface CageInput {
+  today: string; // YYYY-MM-DD, per il calendario degli eventi
+  events?: MarketEvent[]; // di serie il calendario di events.ts
   slotKind: SlotKind;
   marketOpen: boolean;
   latenessMin: number;
@@ -73,7 +80,7 @@ export function applyCage(i: CageInput): CageResult {
   const rejected: Rejection[] = [];
   const universe = new Set<string>(UNIVERSE);
   const held = new Map(i.positions.filter((p) => p.qty > 0).map((p) => [p.symbol, p]));
-  const stopLoss = i.positions.filter((p) => p.qty > 0 && lossPct(p) <= -LIMITS.stopLossPct);
+  const stopLoss = i.positions.filter((p) => p.qty > 0 && lossPct(p) <= -stopPctFor(i.closes[p.symbol]));
 
   const block = tradingBlockReason(i);
   if (block) {
@@ -88,6 +95,21 @@ export function applyCage(i: CageInput): CageResult {
     seen.add(`${p.symbol}-sell`);
   }
   const stopped = new Set(stopLoss.map((p) => p.symbol));
+
+  // Uscita di trend: alla sveglia di apertura, chi ha chiuso ieri sotto la media a 50 giorni esce tutto.
+  // È il codice a farla, come lo stop: il metodo non dipende dal modello che se ne ricordi.
+  if (i.slotKind === ENTRY_SLOT) {
+    for (const p of i.positions) {
+      if (p.qty <= 0 || stopped.has(p.symbol)) continue;
+      const c = i.closes[p.symbol];
+      const m = c ? sma(c, LIMITS.trendSmaDays) : null;
+      const last = c?.[c.length - 1];
+      if (m === null || last === undefined || last >= m) continue;
+      orders.push({ symbol: p.symbol, side: "sell", qty: p.qty, source: "uscita-trend", why: `uscita di trend: chiusura ${last.toFixed(2)} sotto la media a ${LIMITS.trendSmaDays} giorni (${m.toFixed(2)})` });
+      seen.add(`${p.symbol}-sell`);
+      stopped.add(p.symbol);
+    }
+  }
 
   // Gli stop di protezione su Alpaca sono ordini aperti per scelta nostra: non contano come doppioni.
   const openOrders = i.recentOrders.filter((o) => isOpenOrder(o) && !isProtectiveStop(o));
@@ -104,8 +126,8 @@ export function applyCage(i: CageInput): CageResult {
     if (!universe.has(p.symbol)) { reject("fuori universo"); continue; }
     if (!Number.isInteger(p.qty) || p.qty < 1) { reject("solo azioni intere e quantità positiva"); continue; }
     const key = `${p.symbol}-${p.side}`;
-    if (seen.has(key)) { reject(stopped.has(p.symbol) && p.side === "sell" ? "già venduto dallo stop loss" : "doppione nella stessa sveglia"); continue; }
-    if (p.side === "buy" && stopped.has(p.symbol)) { reject("stop loss attivo su questo titolo"); continue; }
+    if (seen.has(key)) { reject(stopped.has(p.symbol) && p.side === "sell" ? "già venduto dal codice (stop o uscita di trend)" : "doppione nella stessa sveglia"); continue; }
+    if (p.side === "buy" && stopped.has(p.symbol)) { reject("in uscita in questa sveglia (stop o trend)"); continue; }
     const lesson = i.lessons.find((l) => l.lato === p.side && (l.simbolo === p.symbol || (l.simbolo === "*" && l.setup !== undefined && l.setup === setupOfSymbol(i, p.symbol))));
     if (lesson) { reject(`lezione dal registro degli errori: ${lesson.motivo} (fino al ${lesson.finoAl})`); continue; }
     if (openOrders.some((o) => o.symbol === p.symbol && o.side === p.side)) { reject("c'è già un ordine aperto uguale"); continue; }
@@ -115,6 +137,9 @@ export function applyCage(i: CageInput): CageResult {
       if (p.qty > q) { reject(`niente short: in portafoglio ce ne sono ${q}`); continue; }
     } else {
       if (i.buyBlock) { reject(i.buyBlock); continue; }
+      if (i.slotKind !== ENTRY_SLOT) { reject("gli acquisti si fanno solo alla sveglia di apertura, sulle chiusure di ieri"); continue; }
+      const ev = eventBlockFor(p.symbol, i.today, i.events ?? EVENTS);
+      if (ev) { reject(ev); continue; }
       const price = i.prices[p.symbol];
       if (!price || price <= 0) { reject("prezzo non disponibile"); continue; }
       const cost = p.qty * price;
@@ -127,9 +152,11 @@ export function applyCage(i: CageInput): CageResult {
         if (g > group.maxPct) { reject(`porterebbe il gruppo ${group.name} al ${pct(g)} del conto (massimo ${pct(group.maxPct)}): sono titoli che si muovono insieme`); continue; }
       }
       const closes = i.closes[p.symbol];
-      const avg = closes ? sma(closes, LIMITS.trendSmaDays) : null;
-      if (avg === null) { reject(`storico insufficiente per il metodo (servono ${LIMITS.trendSmaDays} giorni di chiusure)`); continue; }
-      if (price <= avg) { reject(`prezzo ${price.toFixed(2)} sotto la media a ${LIMITS.trendSmaDays} giorni (${avg.toFixed(2)}): il metodo compra solo in trend`); continue; }
+      const t = trendOf(closes, LIMITS.trendSmaDays, LIMITS.longSmaDays);
+      if (t === null) { reject(`storico insufficiente per il metodo (servono ${LIMITS.longSmaDays} giorni di chiusure)`); continue; }
+      if (t.close <= t.sma) { reject(`chiusura ${t.close.toFixed(2)} sotto la media a ${LIMITS.trendSmaDays} giorni (${t.sma.toFixed(2)}): il metodo compra solo in trend`); continue; }
+      if (t.close <= t.long) { reject(`chiusura ${t.close.toFixed(2)} sotto la media a ${LIMITS.longSmaDays} giorni (${t.long.toFixed(2)}): trend di lungo periodo negativo`); continue; }
+      if (price <= t.sma) { reject(`prezzo ${price.toFixed(2)} sceso sotto la media a ${LIMITS.trendSmaDays} giorni (${t.sma.toFixed(2)}) in giornata`); continue; }
       const w = maxWeightFor(closes);
       if (share > w.max) { reject(`con volatilità giornaliera ${pct(w.vol)}${w.estimated ? " (stimata)" : ""} il massimo è ${pct(w.max)} del conto, qui si arriverebbe al ${pct(share)}`); continue; }
       if (cost > cash) { reject("niente leva: contanti insufficienti"); continue; }

@@ -74,13 +74,15 @@ const PRICES: Record<string, number> = { SPY: 600, QQQ: 520, IWM: 230, AAPL: 250
 
 describe("gabbia", () => {
   const base = (over: Partial<CageInput> = {}): CageInput => ({
+    today: "2026-09-24",
+    events: [],
     slotKind: "open",
     marketOpen: true,
     latenessMin: 1,
     account: { equity: 100_000, lastEquity: 100_000, cash: 100_000, status: "ACTIVE" },
     positions: [],
     prices: PRICES,
-    closes: Object.fromEntries(Object.entries(PRICES).map(([k, v]) => [k, syntheticCloses(v, 0.01, 80)])),
+    closes: Object.fromEntries(Object.entries(PRICES).map(([k, v]) => [k, syntheticCloses(v, 0.01, 260)])),
     recentOrders: [],
     lessons: [],
     buyBlock: null,

@@ -100,6 +100,7 @@ const daysBetween = (a: string, b: string) => Math.max(0, Math.round((Date.parse
 function exitReason(o: Order, intent: Intent | undefined): string {
   if (isProtectiveStop(o)) return "stop su Alpaca";
   if (intent?.origine === "stop-loss") return "stop loss del codice";
+  if (intent?.origine === "uscita-trend") return "uscita di trend del codice";
   if (intent?.origine === "modello") return "scelta del modello";
   return "sconosciuto";
 }

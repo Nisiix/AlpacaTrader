@@ -32,6 +32,7 @@ export interface BrainInput {
   prices: Record<string, number>;
   closes: Record<string, number[]>;
   indicators: Record<string, Indicator>;
+  events: string[]; // Fed e trimestrali delle prossime settimane
   lessons: Lesson[];
   buyBlock: string | null;
   // Solo quando la raccolta dati è finita; prima resta null e il modello decide senza.

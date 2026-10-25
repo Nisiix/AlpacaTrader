@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { ClaudeBrain } from "./brain/claude.ts";
 import { FakeBrain } from "./brain/fake.ts";
+import { VotingBrain } from "./brain/vote.ts";
 import { AlpacaBroker } from "./broker/alpaca.ts";
 import { FakeBroker } from "./broker/fake.ts";
 import type { CliArgs } from "./cli/args.ts";
@@ -63,5 +64,5 @@ export async function buildDeps(args: CliArgs): Promise<WakeDeps & { warnings: s
     notifier = outbox;
     warnings.push(`Telegram non configurato (manca token o chat id): i messaggi vanno in ${outbox.file}`);
   }
-  return { broker: new AlpacaBroker(s.alpacaKeyId, s.alpacaSecretKey), brain: new ClaudeBrain(), notifier, stateDir, logsDir, redactor, now, sleep, warnings };
+  return { broker: new AlpacaBroker(s.alpacaKeyId, s.alpacaSecretKey), brain: new VotingBrain(new ClaudeBrain()), notifier, stateDir, logsDir, redactor, now, sleep, warnings };
 }

@@ -103,9 +103,9 @@ describe("guasto 4: il modello risponde male", () => {
       const brain = new ClaudeBrain(async () => ({ code: 0, stdout, stderr: "" }));
       const env = makeEnv(at("15:41"), brain);
       env.setFake((s) => {
-        s.positions.AAPL = { qty: 10, avgEntryPrice: 270 };
-        s.cash -= 2_700;
-      }); // 250 vs 270 = -7.4%
+        s.positions.AAPL = { qty: 10, avgEntryPrice: 290 };
+        s.cash -= 2_900;
+      }); // 250 vs 290 = -13.8%, oltre lo stop di AAPL (9,5%)
       const res = await runWake(env.deps());
       expect(res.status).toBe("done");
       expect(env.outbox()).toContain("Errore del cervello");

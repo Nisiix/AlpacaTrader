@@ -52,6 +52,8 @@ export function endOfRunText(w: Witness): string {
   if (w.confronto) {
     const p = (x: number) => `${x >= 0 ? "+" : ""}${(x * 100).toFixed(2)}%`;
     L.push(`Dal ${w.confronto.dal}: conto ${p(w.confronto.conto)}, SPY ${p(w.confronto.spy)}`);
+    const m = w.confronto.misto;
+    if (m) L.push(`Dal ${m.dal}: conto ${p(m.conto)}, 60/40 SPY/TLT ${p(m.rendimento)}`);
   }
   if (w.diario && w.diario.statistiche.trade > 0) L.push(`Diario: ${statsLine(w.diario.statistiche)}`);
   L.push(`Prossima sveglia: ${describeRunId(w.prossimaSveglia)}`);
@@ -80,6 +82,7 @@ export function weeklyText(runId: string, j: JournalFile, today: string, learnin
   const open = j.trade.filter((t) => t.stato === "aperto").map((t) => t.simbolo);
   L.push(`Trade aperti: ${open.length ? open.join(", ") : "nessuno"}`);
   if (cmp) L.push(`Dal ${cmp.dal}: conto ${pctOf(cmp.conto)}, SPY ${pctOf(cmp.spy)}`);
+  if (cmp?.misto) L.push(`Dal ${cmp.misto.dal}: conto ${pctOf(cmp.misto.conto)}, 60/40 SPY/TLT ${pctOf(cmp.misto.rendimento)}`);
   L.push("", `Stato del diario: ${learning}`);
   return L.join("\n");
 }

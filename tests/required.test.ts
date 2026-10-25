@@ -90,11 +90,11 @@ describe("casi richiesti", () => {
     expect(ordersFor(env, "NVDA")).toHaveLength(0);
   });
 
-  test("posizione a -4%: la gabbia la vende anche se il modello dice di tenere", async () => {
+  test("posizione a -12%, oltre lo stop di protezione: la gabbia la vende anche se il modello dice di tenere", async () => {
     const env = makeEnv(at("18:31"), brainSaying({ orders: [], reasoning: "Tengo tutto.", plan_next: "" }));
     env.setFake((s) => {
       s.positions.MSFT = { qty: 20, avgEntryPrice: 500 };
-      s.prices.MSFT = 480; // -4%
+      s.prices.MSFT = 440; // -12%, lo stop di MSFT è all'8,5%
       s.cash -= 10_000;
     });
     const res = await runWake(env.deps());

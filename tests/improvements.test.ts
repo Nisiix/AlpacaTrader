@@ -19,7 +19,7 @@ describe("1. registro degli errori", () => {
     const env = makeEnv(day("2026-09-24", "18:31"), saying());
     env.setFake((s) => {
       s.positions.MSFT = { qty: 20, avgEntryPrice: 500 };
-      s.prices.MSFT = 480;
+      s.prices.MSFT = 450; // -10%, oltre lo stop di MSFT (8,5% con volatilità 1,5%)
       s.cash -= 10_000;
     });
     const first = await runWake(env.deps());
@@ -39,7 +39,7 @@ describe("1. registro degli errori", () => {
   test("uno stop eseguito da Alpaca tra due sveglie diventa una lezione", async () => {
     const env = makeEnv(day("2026-09-24", "15:41"), saying(buy("SPY", 10)));
     await runWake(env.deps());
-    env.setFake((s) => (s.prices.SPY = 570)); // sotto lo stop a 582
+    env.setFake((s) => (s.prices.SPY = 560)); // sotto lo stop a 567
     expect(env.broker.load().positions.SPY).toBeUndefined();
     env.clock.t = day("2026-09-24", "18:31").getTime();
     const res = await runWake(env.deps());
@@ -52,11 +52,11 @@ describe("1. registro degli errori", () => {
     const env = makeEnv(day("2026-09-24", "15:41"), saying(buy("GLD", 5)));
     env.setFake((s) => (s.faults.rejectSymbols = ["GLD"]));
     expect((await runWake(env.deps())).witness!.ordiniFalliti).toHaveLength(1);
-    env.clock.t = day("2026-09-24", "18:31").getTime();
+    env.clock.t = day("2026-09-25", "15:41").getTime();
     const second = await runWake(env.deps());
     expect(second.witness!.ordiniFalliti).toHaveLength(1);
     expect(second.witness!.lezioniNuove![0]!.tipo).toBe("rifiuto-alpaca");
-    env.clock.t = day("2026-09-24", "21:41").getTime();
+    env.clock.t = day("2026-09-28", "15:41").getTime();
     const third = await runWake(env.deps());
     expect(third.witness!.ordiniFalliti).toHaveLength(0);
     expect(reasonFor(third, "GLD")).toContain("Alpaca ha rifiutato 2 volte");
@@ -64,24 +64,24 @@ describe("1. registro degli errori", () => {
 });
 
 describe("2. stop loss piazzato su Alpaca", () => {
-  test("dopo l'acquisto c'è uno stop per tutta la quantità al -3% dal carico", async () => {
+  test("dopo l'acquisto c'è uno stop per tutta la quantità, lontano quanto chiede la volatilità (SPY 1%: -5,5%)", async () => {
     const env = makeEnv(day("2026-09-24", "15:41"), saying(buy("SPY", 10)));
     const res = await runWake(env.deps());
     const stops = openStopsFor(env, "SPY");
     expect(stops).toHaveLength(1);
     expect(stops[0]!.qty).toBe(10);
-    expect(stops[0]!.stopPrice).toBe(582);
-    expect(res.witness!.stopSuAlpaca!.piazzati).toEqual(["SPY 10 @ 582.00"]);
-    expect(env.outbox()).toContain("Stop su Alpaca: SPY 10 @ 582.00");
+    expect(stops[0]!.stopPrice).toBe(567);
+    expect(res.witness!.stopSuAlpaca!.piazzati).toEqual(["SPY 10 @ 567.00"]);
+    expect(env.outbox()).toContain("Stop su Alpaca: SPY 10 @ 567.00");
   });
 
   test("lo stop vende da solo a sveglie ferme", async () => {
     const env = makeEnv(day("2026-09-24", "15:41"), saying(buy("SPY", 10)));
     await runWake(env.deps());
-    env.setFake((s) => (s.prices.SPY = 575));
+    env.setFake((s) => (s.prices.SPY = 560));
     const s = env.broker.load();
     expect(s.positions.SPY).toBeUndefined();
-    expect(s.cash).toBeCloseTo(100_000 - 6_000 + 5_750);
+    expect(s.cash).toBeCloseTo(100_000 - 6_000 + 5_600);
   });
 
   test("vendita parziale del modello: lo stop si toglie prima e si rimette sulla quantità rimasta", async () => {
@@ -114,7 +114,7 @@ describe("3. dimensione in base alla volatilità", () => {
     const res = await runWake(env.deps());
     expect(reasonFor(res, "NVDA")).toMatch(/volatilità giornaliera 3\.\d% .*massimo è 8\.\d% del conto/);
     expect(res.witness!.ordiniInviati.map((o) => o.simbolo)).toEqual(["SPY"]);
-    env.clock.t = day("2026-09-24", "18:31").getTime();
+    env.clock.t = day("2026-09-25", "15:41").getTime();
     const ok = await runWake(env.deps({ brain: saying(buy("NVDA", 40)) }));
     expect(ok.witness!.ordiniInviati.map((o) => o.simbolo)).toEqual(["NVDA"]);
   });
@@ -180,7 +180,7 @@ describe("6. metodo dichiarato", () => {
   test("sotto la media a 50 giorni non si compra; senza storico nemmeno", async () => {
     const env = makeEnv(day("2026-09-24", "15:41"), saying(buy("IWM", 10), buy("TLT", 10)));
     env.setFake((s) => {
-      s.closes.IWM = Array.from({ length: 80 }, (_, i) => 300 - i); // in discesa fino a 230
+      s.closes.IWM = Array.from({ length: 260 }, (_, i) => 300 - i * 0.27); // in discesa fino a 230
       s.closes.TLT = [90, 90, 90];
     });
     const res = await runWake(env.deps());
@@ -203,14 +203,15 @@ describe("7. confronto con SPY", () => {
 });
 
 describe("8. backtest della gabbia", () => {
-  test("crollo di SPY: lo stop scatta e il registro impedisce di ricomprare subito", () => {
+  // Il blocco del riacquisto dopo uno stop è provato nel test 1: qui, dopo un crollo, lo impedisce già la volatilità.
+  test("crollo di SPY: lo stop scatta, l'interruttore pure, e il backtest va avanti", () => {
     const closes: Record<string, number[]> = {};
-    for (const s of UNIVERSE) closes[s] = Array.from({ length: 120 }, (_, i) => 100 * (1 + 0.004 * i) * (1 + (i % 2 ? 0.003 : -0.003)));
-    closes.SPY = closes.SPY!.map((v, i) => (i === 80 ? v * 0.8 : v)); // un giorno a -20%, poi torna in trend
-    const r = runBacktest(closes);
-    expect(r.days).toBe(70);
+    for (const s of UNIVERSE) closes[s] = Array.from({ length: 320 }, (_, i) => 100 * (1 + 0.004 * i) * (1 + (i % 2 ? 0.003 : -0.003)));
+    closes.SPY = closes.SPY!.map((v, i) => (i === 260 ? v * 0.6 : v)); // un giorno a -40%, oltre lo stop più largo, poi torna in trend
+    const r = runBacktest(closes, 100_000, undefined, 1); // interruttore riarmato subito, per vedere il registro
+    expect(r.days).toBe(120);
+    expect(r.breakerTrips).toBeGreaterThanOrEqual(1);
     expect(r.stopOuts).toBeGreaterThanOrEqual(1);
-    expect(r.blockedByLessons).toBeGreaterThanOrEqual(1);
     expect(r.trades).toBeGreaterThan(0);
   });
 });
@@ -230,7 +231,7 @@ describe("avvocato del diavolo sui pezzi nuovi", () => {
     env.setFake((s) => {
       s.faults.failMethods = ["getDailyCloses"];
       s.positions.MSFT = { qty: 20, avgEntryPrice: 500 };
-      s.prices.MSFT = 480;
+      s.prices.MSFT = 440; // -12%: senza storico lo stop è il più largo, 10%
       s.positions.SPY = { qty: 10, avgEntryPrice: 600 };
       s.cash -= 16_000;
     });
@@ -249,6 +250,6 @@ describe("avvocato del diavolo sui pezzi nuovi", () => {
     expect(openStopsFor(env, "SPY")).toHaveLength(0);
     env.clock.t = day("2026-09-24", "18:31").getTime();
     const res = await runWake(env.deps({ brain: saying() }));
-    expect(res.witness!.stopSuAlpaca!.piazzati).toEqual(["SPY 10 @ 582.00"]);
+    expect(res.witness!.stopSuAlpaca!.piazzati).toEqual(["SPY 10 @ 567.00"]);
   });
 });

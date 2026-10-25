@@ -8,14 +8,21 @@ export const UNIVERSE = ["SPY", "QQQ", "IWM", "AAPL", "MSFT", "NVDA", "GLD", "TL
 export const LIMITS = {
   maxPositions: 5,
   maxPositionPct: 0.2,
-  stopLossPct: 0.03,
+  // Stop di protezione: non è più l'uscita normale (quella è il trend), serve solo contro i crolli.
+  // Distanza = multiplo × volatilità giornaliera × √giorni, arrotondata al mezzo punto e tenuta tra min e max.
+  stop: { volMultiple: 2.5, horizonDays: 5, minPct: 0.05, maxPct: 0.1 },
   // Una posizione non deve poter muovere il conto di più di così in un giorno tipico (valore × volatilità giornaliera).
   dailyRiskPerPositionPct: 0.0025,
   // Volatilità usata quando lo storico non basta: prudente, come un titolo nervoso.
   fallbackDailyVol: 0.03,
   volLookbackDays: 20,
-  // Metodo dichiarato: si compra solo sopra la media mobile a 50 giorni.
+  // Metodo dichiarato: si compra solo sopra la media a 50 E a 200 giorni; si esce quando la chiusura va sotto la 50.
   trendSmaDays: 50,
+  longSmaDays: 200,
+  // Classifica tra i candidati: momentum a 6 mesi (circa 120 giorni di borsa).
+  rankMomentumDays: 120,
+  // Niente acquisti di singoli titoli in questi giorni di borsa prima della trimestrale (giorno compreso).
+  earningsBlackoutDays: 2,
   // Titoli che si muovono insieme: tetto complessivo.
   groups: [{ name: "tecnologia", symbols: ["QQQ", "NVDA", "MSFT", "AAPL"], maxPct: 0.35 }],
   // Interruttore: oltre questa perdita dal massimo gli acquisti si fermano finché non lo riarmi tu.
@@ -28,8 +35,14 @@ export const LIMITS = {
   brokerRejectWindowDays: 5,
 };
 
-// Storico giornaliero da chiedere: media a 50 giorni più un po' di margine per festività.
-export const DAILY_BARS_DAYS = 80;
+// Storico giornaliero da chiedere: media a 200 giorni più margine per festività.
+export const DAILY_BARS_DAYS = 260;
+
+// Le decisioni di ingresso e le uscite di trend si prendono solo a questa sveglia, sulle chiusure complete.
+export const ENTRY_SLOT: SlotKind = "open";
+
+// Voto a maggioranza: il cervello risponde più volte in parallelo, passa solo l'ordine proposto da almeno quorum risposte.
+export const BRAIN_VOTES = { calls: 3, quorum: 2 };
 
 export const TIMEZONE = "Europe/Rome";
 

@@ -24,16 +24,36 @@ export function momentum(closes: number[], n: number): number | null {
 export interface Indicator {
   sma50: number | null;
   sopraMedia: boolean | null;
+  sma200: number | null;
+  sopraMedia200: boolean | null;
   volGiornaliera: number | null;
   momentum20: number | null;
+  momentum120: number | null;
 }
 
-export function indicatorsFor(closes: Record<string, number[]>, prices: Record<string, number>, smaDays: number, volDays: number): Record<string, Indicator> {
+export function indicatorsFor(closes: Record<string, number[]>, prices: Record<string, number>, smaDays: number, volDays: number, longSmaDays = 200, rankDays = 120): Record<string, Indicator> {
   const out: Record<string, Indicator> = {};
   for (const [sym, c] of Object.entries(closes)) {
     const m = sma(c, smaDays);
+    const l = sma(c, longSmaDays);
     const p = prices[sym] ?? c[c.length - 1];
-    out[sym] = { sma50: m, sopraMedia: m === null || p === undefined ? null : p > m, volGiornaliera: dailyVol(c, volDays), momentum20: momentum(c, 20) };
+    out[sym] = {
+      sma50: m,
+      sopraMedia: m === null || p === undefined ? null : p > m,
+      sma200: l,
+      sopraMedia200: l === null || p === undefined ? null : p > l,
+      volGiornaliera: dailyVol(c, volDays),
+      momentum20: momentum(c, 20),
+      momentum120: momentum(c, rankDays),
+    };
   }
   return out;
+}
+
+// Il trend si giudica sulle chiusure complete, non sul prezzo di metà seduta: una sola lettura al giorno, meno rumore.
+export function trendOf(closes: number[] | undefined, smaDays: number, longSmaDays: number): { close: number; sma: number; long: number } | null {
+  if (!closes || closes.length === 0) return null;
+  const m = sma(closes, smaDays);
+  const l = sma(closes, longSmaDays);
+  return m === null || l === null ? null : { close: closes[closes.length - 1]!, sma: m, long: l };
 }

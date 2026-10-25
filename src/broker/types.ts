@@ -65,7 +65,7 @@ export interface Broker {
   submitOrder(req: OrderRequest): Promise<Order>;
   submitStopOrder(req: StopOrderRequest): Promise<Order>;
   cancelOrder(orderId: string): Promise<void>;
-  // Chiusure giornaliere, dalla più vecchia alla più recente.
+  // Chiusure giornaliere di sedute finite, dalla più vecchia alla più recente.
   getDailyCloses(symbols: string[], days: number): Promise<Record<string, number[]>>;
 }
 

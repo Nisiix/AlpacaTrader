@@ -75,17 +75,17 @@ describe("diario dei trade", () => {
   });
 
   test("uno stop eseguito da Alpaca nel weekend chiude il trade alla sveglia di lunedì", async () => {
-    const env = makeEnv(day("2026-09-25", "21:41"), saying(order("buy", "SPY", 10, 0, "a")));
+    const env = makeEnv(day("2026-09-25", "15:41"), saying(order("buy", "SPY", 10, 0, "a")));
     env.setFake((s) => (s.clock = "open"));
     await runWake(env.deps());
     env.clock.t = day("2026-09-25", "21:55").getTime();
-    env.setFake((s) => (s.prices.SPY = 570)); // sotto lo stop a 582, scatta venerdì sera
+    env.setFake((s) => (s.prices.SPY = 560)); // sotto lo stop a 567, scatta venerdì sera
     env.broker.load();
     env.clock.t = day("2026-09-28", "09:01").getTime(); // lunedì, oltre le 48 ore
     env.setFake((s) => (s.clock = "auto"));
     const res = await runWake(env.deps({ brain: saying() }));
     expect(res.witness!.tradeChiusi?.[0]?.uscita).toBe("stop su Alpaca");
-    expect(res.witness!.tradeChiusi?.[0]?.risultato).toBeCloseTo(570 / 600 - 1, 5);
+    expect(res.witness!.tradeChiusi?.[0]?.risultato).toBeCloseTo(560 / 600 - 1, 5);
   });
 
   test("un diario rotto si mette da parte, si dice, e la sveglia va avanti", async () => {
@@ -176,8 +176,8 @@ describe("prima la raccolta, poi l'apprendimento", () => {
   test("le lezioni del diario possono solo stringere: un titolo vincente non supera le regole fisse", () => {
     const winning = journalWith(Array.from({ length: 30 }, () => 0.03), "SPY", "2026-01-05");
     expect(learnFromJournal(emptyLessons(), winning, "2026-09-24")).toEqual([]);
-    const closes = Array.from({ length: 80 }, (_, i) => 500 + i);
-    const cage = applyCage({ slotKind: "open", marketOpen: true, latenessMin: 0, account: { equity: 100_000, lastEquity: 100_000, cash: 100_000, status: "ACTIVE" }, positions: [], prices: { SPY: 600 }, closes: { SPY: closes }, recentOrders: [], lessons: [], buyBlock: null, proposals: [{ symbol: "SPY", side: "buy", qty: 70, why: "vince sempre" }] });
+    const closes = Array.from({ length: 260 }, (_, i) => 500 + i);
+    const cage = applyCage({ today: "2026-09-24", slotKind: "open", marketOpen: true, latenessMin: 0, account: { equity: 100_000, lastEquity: 100_000, cash: 100_000, status: "ACTIVE" }, positions: [], prices: { SPY: 600 }, closes: { SPY: closes }, recentOrders: [], lessons: [], buyBlock: null, proposals: [{ symbol: "SPY", side: "buy", qty: 70, why: "vince sempre" }] });
     expect(cage.orders).toEqual([]);
     expect(cage.rejected[0]!.reason).toContain("massimo 20");
   });
