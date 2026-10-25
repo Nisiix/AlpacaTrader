@@ -1,0 +1,36 @@
+{
+  "versione": 1,
+  "sveglia": "2026-10-25-09-00",
+  "tipo": "Briefing",
+  "iniziataAlle": "2026-10-25T12:27:15.140Z",
+  "finitaAlle": "2026-10-25T12:27:22.417Z",
+  "esito": "completata con problemi",
+  "appunto": "Briefing: 0 ordini inviati, 0 rifiutati. Prossima sveglia 2026-10-26 09:00 (Briefing): Alla prossima sveglia a mercato aperto controllare se TLT, AAPL e MSFT restano sopra la media a 50 giorni. Se sì, comprarli in ordine di momentum (TLT, AAPL, MSFT) con pesi più bassi per i più volatili. Restare sotto il 20% per titolo e rispettare il limite di volatilità e il tetto del 35% sulla tecnologia. Verificare anche se QQQ, SPY, IWM, NVDA o GLD tornano sopra la media.",
+  "conto": {
+    "patrimonio": 100000,
+    "contanti": 100000,
+    "pnlGiorno": 0,
+    "aggiornato": true
+  },
+  "posizioni": [],
+  "ordiniInviati": [],
+  "ordiniGiaPresenti": [],
+  "ordiniIncerti": [],
+  "ordiniFalliti": [],
+  "ordiniRifiutati": [],
+  "ragionamento": "È un briefing a mercato chiuso, quindi nessun ordine è consentito. Il conto è tutto in contanti e senza posizioni. Sopra la media a 50 giorni ci sono TLT, AAPL e MSFT, con momentum positivo ma debole. Gli altri titoli sono sotto la media e non vanno comprati. Il metodo dice di non fare nulla nel dubbio, quindi valuto gli ingressi quando il mercato apre.",
+  "pianoProssima": "Alla prossima sveglia a mercato aperto controllare se TLT, AAPL e MSFT restano sopra la media a 50 giorni. Se sì, comprarli in ordine di momentum (TLT, AAPL, MSFT) con pesi più bassi per i più volatili. Restare sotto il 20% per titolo e rispettare il limite di volatilità e il tetto del 35% sulla tecnologia. Verificare anche se QQQ, SPY, IWM, NVDA o GLD tornano sopra la media.",
+  "prossimaSveglia": "2026-10-26-09-00",
+  "allarmi": [
+    "Sveglia in ritardo: Parte con 267 minuti di ritardo sull'orario 09:00: nessun ordine, solo lettura del conto."
+  ],
+  "stopSuAlpaca": null,
+  "lezioniAttive": [],
+  "lezioniNuove": [],
+  "acquistiBloccati": null,
+  "confronto": {
+    "dal": "2026-10-25",
+    "conto": 0,
+    "spy": 0
+  }
+}
