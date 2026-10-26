@@ -1,0 +1,79 @@
+{
+  "versione": 1,
+  "sveglia": "2026-10-26-15-40",
+  "tipo": "Apertura",
+  "iniziataAlle": "2026-10-26T14:40:18.778Z",
+  "finitaAlle": "2026-10-26T14:40:35.665Z",
+  "esito": "completata",
+  "appunto": "Apertura: 1 ordini inviati, 0 rifiutati. Prossima sveglia 2026-10-26 18:30 (Metà seduta): Controllare che AAPL resti sopra la media a 50 giorni e che lo stop sia attivo. Rivalutare MSFT dopo il 28 ottobre, a Fed e trimestrale passate, se è ancora sopra le medie. Verificare se QQQ, SPY, NVDA o IWM tornano sopra la media a 50 giorni. Non vendere AAPL per piccoli cali.",
+  "conto": {
+    "patrimonio": 99998.93,
+    "contanti": 82711.43,
+    "pnlGiorno": -1.070000000006985,
+    "aggiornato": true
+  },
+  "posizioni": [
+    {
+      "simbolo": "AAPL",
+      "quantita": 50,
+      "prezzoCarico": 345.7714,
+      "prezzoAttuale": 345.75,
+      "variazione": "-0.01%"
+    }
+  ],
+  "ordiniInviati": [
+    {
+      "id": "2026-10-26-15-40-AAPL-buy",
+      "simbolo": "AAPL",
+      "lato": "buy",
+      "quantita": 50,
+      "origine": "modello",
+      "perche": "AAPL è sopra le medie a 50 e 200 giorni e ha momentum a 6 mesi di circa 26%. La trimestrale è il 2 novembre, fuori dalla finestra di blocco.",
+      "stato": "pending_new"
+    }
+  ],
+  "ordiniGiaPresenti": [],
+  "ordiniIncerti": [],
+  "ordiniFalliti": [],
+  "ordiniRifiutati": [],
+  "ragionamento": "Il conto è tutto in contanti. Solo AAPL e MSFT rispettano il metodo, cioè chiusura sopra la media a 50 e a 200 giorni. MSFT ha la trimestrale e la Fed il 28 ottobre, entro 2 giorni di borsa, quindi l'acquisto è vietato. AAPL ha la trimestrale il 2 novembre, fuori dalla finestra. Compro 50 azioni, circa 17,3% del conto: sta sotto il tetto del 20% e il valore per volatilità è circa 179 contro un limite di 250. TLT, GLD, IWM, QQQ, SPY e NVDA sono sotto la media a 50 o a 200 giorni, quindi li escludo. Voto: 3/3 risposte valide, 1 ordini con la maggioranza.",
+  "pianoProssima": "Controllare che AAPL resti sopra la media a 50 giorni e che lo stop sia attivo. Rivalutare MSFT dopo il 28 ottobre, a Fed e trimestrale passate, se è ancora sopra le medie. Verificare se QQQ, SPY, NVDA o IWM tornano sopra la media a 50 giorni. Non vendere AAPL per piccoli cali.",
+  "prossimaSveglia": "2026-10-26-18-30",
+  "allarmi": [],
+  "stopSuAlpaca": {
+    "attivi": [
+      "AAPL 50 @ 325.03"
+    ],
+    "piazzati": [
+      "AAPL 50 @ 325.03"
+    ],
+    "tolti": [],
+    "errori": []
+  },
+  "lezioniAttive": [],
+  "lezioniNuove": [],
+  "acquistiBloccati": null,
+  "confronto": {
+    "dal": "2026-10-25",
+    "conto": -0.00001070000000003013,
+    "spy": 0.006959610577555564,
+    "misto": {
+      "dal": "2026-10-26",
+      "conto": -0.00001070000000003013,
+      "rendimento": 0.007029745925817333
+    }
+  },
+  "tradeChiusi": [],
+  "diario": {
+    "stato": "solo raccolta dati (nessun trade ancora, 0/30 trade chiusi): le statistiche non influenzano le scelte",
+    "statistiche": {
+      "trade": 0,
+      "vinti": 0,
+      "percVinti": null,
+      "mediaVincita": null,
+      "mediaPerdita": null,
+      "attesa": null,
+      "campione": "nessuno"
+    }
+  }
+}

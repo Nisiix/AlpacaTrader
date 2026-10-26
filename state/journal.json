@@ -1,6 +1,27 @@
 {
   "versione": 1,
-  "trade": [],
+  "trade": [
+    {
+      "id": "2026-10-26-15-40-AAPL-buy",
+      "simbolo": "AAPL",
+      "stato": "aperto",
+      "apertoIl": "2026-10-26T14:40:34.872724Z",
+      "comprate": 50,
+      "costo": 17288.57,
+      "vendute": 0,
+      "incassato": 0,
+      "quantita": 50,
+      "contesto": {
+        "setup": "momentum debole · volatilità bassa",
+        "momentum20": 0.019558970148378485,
+        "volGiornaliera": 0.010331146080596529,
+        "distanzaMedia": 0.049350586285754394,
+        "fiducia": "media",
+        "attesa": "AAPL resta sopra la media a 50 giorni (circa 329) nelle prossime settimane, senza far scattare lo stop tra il 5% e il 10% sotto il prezzo di carico.",
+        "perche": "AAPL è sopra le medie a 50 e 200 giorni e ha momentum a 6 mesi di circa 26%. La trimestrale è il 2 novembre, fuori dalla finestra di blocco."
+      }
+    }
+  ],
   "intenzioni": [
     {
       "id": "2026-10-26-15-40-AAPL-buy",
@@ -19,5 +40,10 @@
       }
     }
   ],
-  "ordiniVisti": []
+  "ordiniVisti": [
+    {
+      "id": "3ae05773-0334-4c77-a245-6ba1ef7dd054",
+      "data": "2026-10-26"
+    }
+  ]
 }
