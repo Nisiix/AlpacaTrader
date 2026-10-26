@@ -2,5 +2,9 @@
   "versione": 1,
   "dal": "2026-10-25",
   "patrimonio": 100000,
-  "spy": 760.1
+  "spy": 760.1,
+  "dalMisto": "2026-10-26",
+  "spyMisto": 760.1,
+  "tlt": 81.29,
+  "patrimonioMisto": 100000
 }

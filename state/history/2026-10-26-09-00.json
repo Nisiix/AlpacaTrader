@@ -1,0 +1,52 @@
+{
+  "versione": 1,
+  "sveglia": "2026-10-26-09-00",
+  "tipo": "Briefing",
+  "iniziataAlle": "2026-10-26T08:00:37.032Z",
+  "finitaAlle": "2026-10-26T08:00:48.436Z",
+  "esito": "completata",
+  "appunto": "Briefing: 0 ordini inviati, 0 rifiutati. Prossima sveglia 2026-10-26 15:40 (Apertura): Alla sveglia di apertura verificare che AAPL resti sopra le medie a 50 e 200 giorni e comprarlo con peso moderato, sotto il 20% e nel limite di volatilità. Valutare MSFT solo se l'acquisto è consentito: il 28 ottobre ci sono Fed e trimestrale, quindi probabilmente va rimandato a dopo l'evento. Escludere TLT perché è sotto la media a 200 giorni. Controllare se QQQ, SPY, NVDA, IWM o GLD tornano sopra le medie.",
+  "conto": {
+    "patrimonio": 100000,
+    "contanti": 100000,
+    "pnlGiorno": 0,
+    "aggiornato": true
+  },
+  "posizioni": [],
+  "ordiniInviati": [],
+  "ordiniGiaPresenti": [],
+  "ordiniIncerti": [],
+  "ordiniFalliti": [],
+  "ordiniRifiutati": [],
+  "ragionamento": "È un briefing a mercato chiuso, quindi nessun ordine è consentito. Il conto è tutto in contanti e senza posizioni. Solo MSFT e AAPL sono sopra la media a 50 e a 200 giorni, con momentum a 6 mesi forte (circa 27% e 26%). TLT è sopra la media a 50 ma sotto quella a 200 e ha momentum negativo, quindi non rispetta il metodo, e l'appunto precedente lo includeva per errore. Il 28 ottobre ci sono la Fed e la trimestrale MSFT, perciò MSFT non si compra nei giorni vicini a questi eventi. Voto: 3/3 risposte valide, 0 ordini con la maggioranza.",
+  "pianoProssima": "Alla sveglia di apertura verificare che AAPL resti sopra le medie a 50 e 200 giorni e comprarlo con peso moderato, sotto il 20% e nel limite di volatilità. Valutare MSFT solo se l'acquisto è consentito: il 28 ottobre ci sono Fed e trimestrale, quindi probabilmente va rimandato a dopo l'evento. Escludere TLT perché è sotto la media a 200 giorni. Controllare se QQQ, SPY, NVDA, IWM o GLD tornano sopra le medie.",
+  "prossimaSveglia": "2026-10-26-15-40",
+  "allarmi": [],
+  "stopSuAlpaca": null,
+  "lezioniAttive": [],
+  "lezioniNuove": [],
+  "acquistiBloccati": null,
+  "confronto": {
+    "dal": "2026-10-25",
+    "conto": 0,
+    "spy": 0,
+    "misto": {
+      "dal": "2026-10-26",
+      "conto": 0,
+      "rendimento": 0
+    }
+  },
+  "tradeChiusi": [],
+  "diario": {
+    "stato": "solo raccolta dati (nessun trade ancora, 0/30 trade chiusi): le statistiche non influenzano le scelte",
+    "statistiche": {
+      "trade": 0,
+      "vinti": 0,
+      "percVinti": null,
+      "mediaVincita": null,
+      "mediaPerdita": null,
+      "attesa": null,
+      "campione": "nessuno"
+    }
+  }
+}
