@@ -1,15 +1,15 @@
 {
   "versione": 1,
-  "sveglia": "2026-10-26-15-40",
-  "tipo": "Apertura",
-  "iniziataAlle": "2026-10-26T14:40:18.778Z",
-  "finitaAlle": "2026-10-26T14:40:35.665Z",
+  "sveglia": "2026-10-26-18-30",
+  "tipo": "Metà seduta",
+  "iniziataAlle": "2026-10-26T17:33:00.402Z",
+  "finitaAlle": "2026-10-26T17:33:12.700Z",
   "esito": "completata",
-  "appunto": "Apertura: 1 ordini inviati, 0 rifiutati. Prossima sveglia 2026-10-26 18:30 (Metà seduta): Controllare che AAPL resti sopra la media a 50 giorni e che lo stop sia attivo. Rivalutare MSFT dopo il 28 ottobre, a Fed e trimestrale passate, se è ancora sopra le medie. Verificare se QQQ, SPY, NVDA o IWM tornano sopra la media a 50 giorni. Non vendere AAPL per piccoli cali.",
+  "appunto": "Metà seduta: 0 ordini inviati, 0 rifiutati. Prossima sveglia 2026-10-26 21:40 (Chiusura): Alla prossima sveglia controllare che AAPL resti sopra la media a 50 giorni e che lo stop a 325,03 sia ancora attivo. Dopo il 28 ottobre, a Fed e trimestrale passate, rivalutare MSFT se è ancora sopra le medie a 50 e 200 giorni. Verificare se QQQ, SPY, NVDA o IWM tornano sopra la media a 50 giorni. Non vendere AAPL per piccoli cali.",
   "conto": {
-    "patrimonio": 99998.93,
+    "patrimonio": 99878.68,
     "contanti": 82711.43,
-    "pnlGiorno": -1.070000000006985,
+    "pnlGiorno": -121.32000000000698,
     "aggiornato": true
   },
   "posizioni": [
@@ -17,36 +17,24 @@
       "simbolo": "AAPL",
       "quantita": 50,
       "prezzoCarico": 345.7714,
-      "prezzoAttuale": 345.75,
-      "variazione": "-0.01%"
+      "prezzoAttuale": 343.345,
+      "variazione": "-0.70%"
     }
   ],
-  "ordiniInviati": [
-    {
-      "id": "2026-10-26-15-40-AAPL-buy",
-      "simbolo": "AAPL",
-      "lato": "buy",
-      "quantita": 50,
-      "origine": "modello",
-      "perche": "AAPL è sopra le medie a 50 e 200 giorni e ha momentum a 6 mesi di circa 26%. La trimestrale è il 2 novembre, fuori dalla finestra di blocco.",
-      "stato": "pending_new"
-    }
-  ],
+  "ordiniInviati": [],
   "ordiniGiaPresenti": [],
   "ordiniIncerti": [],
   "ordiniFalliti": [],
   "ordiniRifiutati": [],
-  "ragionamento": "Il conto è tutto in contanti. Solo AAPL e MSFT rispettano il metodo, cioè chiusura sopra la media a 50 e a 200 giorni. MSFT ha la trimestrale e la Fed il 28 ottobre, entro 2 giorni di borsa, quindi l'acquisto è vietato. AAPL ha la trimestrale il 2 novembre, fuori dalla finestra. Compro 50 azioni, circa 17,3% del conto: sta sotto il tetto del 20% e il valore per volatilità è circa 179 contro un limite di 250. TLT, GLD, IWM, QQQ, SPY e NVDA sono sotto la media a 50 o a 200 giorni, quindi li escludo. Voto: 3/3 risposte valide, 1 ordini con la maggioranza.",
-  "pianoProssima": "Controllare che AAPL resti sopra la media a 50 giorni e che lo stop sia attivo. Rivalutare MSFT dopo il 28 ottobre, a Fed e trimestrale passate, se è ancora sopra le medie. Verificare se QQQ, SPY, NVDA o IWM tornano sopra la media a 50 giorni. Non vendere AAPL per piccoli cali.",
-  "prossimaSveglia": "2026-10-26-18-30",
+  "ragionamento": "Siamo a metà seduta e gli acquisti sono permessi solo all'apertura, quindi non si compra nulla. AAPL è a 343,37, sopra la media a 50 giorni (329,5) e sopra quella a 200 giorni. Il calo di circa 0,7% dal carico è piccolo e non è un motivo per vendere. Lo stop a 325,03 è attivo su Alpaca. Gli altri titoli restano sotto la media a 50 o a 200 giorni, e MSFT è bloccata dagli eventi del 28 ottobre. Voto: 3/3 risposte valide, 0 ordini con la maggioranza.",
+  "pianoProssima": "Alla prossima sveglia controllare che AAPL resti sopra la media a 50 giorni e che lo stop a 325,03 sia ancora attivo. Dopo il 28 ottobre, a Fed e trimestrale passate, rivalutare MSFT se è ancora sopra le medie a 50 e 200 giorni. Verificare se QQQ, SPY, NVDA o IWM tornano sopra la media a 50 giorni. Non vendere AAPL per piccoli cali.",
+  "prossimaSveglia": "2026-10-26-21-40",
   "allarmi": [],
   "stopSuAlpaca": {
     "attivi": [
       "AAPL 50 @ 325.03"
     ],
-    "piazzati": [
-      "AAPL 50 @ 325.03"
-    ],
+    "piazzati": [],
     "tolti": [],
     "errori": []
   },
@@ -55,17 +43,17 @@
   "acquistiBloccati": null,
   "confronto": {
     "dal": "2026-10-25",
-    "conto": -0.00001070000000003013,
-    "spy": 0.006959610577555564,
+    "conto": -0.0012132000000000254,
+    "spy": 0.007288514669122392,
     "misto": {
       "dal": "2026-10-26",
-      "conto": -0.00001070000000003013,
-      "rendimento": 0.007029745925817333
+      "conto": -0.0012132000000000254,
+      "rendimento": 0.006390577124760455
     }
   },
   "tradeChiusi": [],
   "diario": {
-    "stato": "solo raccolta dati (nessun trade ancora, 0/30 trade chiusi): le statistiche non influenzano le scelte",
+    "stato": "solo raccolta dati (osservazione fino al 2027-01-24, 0/30 trade chiusi): le statistiche non influenzano le scelte",
     "statistiche": {
       "trade": 0,
       "vinti": 0,
