@@ -1,0 +1,60 @@
+{
+  "versione": 1,
+  "sveglia": "2026-10-27-21-40",
+  "tipo": "Chiusura",
+  "iniziataAlle": "2026-10-27T20:40:53.987Z",
+  "finitaAlle": "2026-10-27T20:41:00.920Z",
+  "esito": "completata",
+  "appunto": "Chiusura: 0 ordini inviati, 0 rifiutati. Prossima sveglia 2026-10-28 09:00 (Briefing): Alla prossima apertura, dopo Fed e trimestrale MSFT, rivalutare MSFT (sopra le medie, momentum120 circa 30%) e SPY, che è sopra la media a 50 giorni di poco. Verificare che lo stop AAPL a 325,03 sia ancora attivo. Non comprare altro AAPL nei 2 giorni di borsa prima della trimestrale del 2 novembre.",
+  "conto": {
+    "patrimonio": 100069.92,
+    "contanti": 82711.42,
+    "pnlGiorno": 163,
+    "aggiornato": true
+  },
+  "posizioni": [
+    {
+      "simbolo": "AAPL",
+      "quantita": 50,
+      "prezzoCarico": 345.7714,
+      "prezzoAttuale": 347.17,
+      "variazione": "0.40%"
+    }
+  ],
+  "ordiniInviati": [],
+  "ordiniGiaPresenti": [],
+  "ordiniIncerti": [],
+  "ordiniFalliti": [],
+  "ordiniRifiutati": [],
+  "ragionamento": "Mercato chiuso, quindi non si può inviare nessun ordine. AAPL resta sopra le medie a 50 e 200 giorni con momentum120 forte (+21%), e lo stop a 325,03 è attivo. Non c'è un motivo verificabile per vendere. Domani ci sono la Fed e la trimestrale MSFT, che restano bloccate per gli acquisti. Nel dubbio non faccio nulla. Voto: 3/3 risposte valide, 0 ordini con la maggioranza.",
+  "pianoProssima": "Alla prossima apertura, dopo Fed e trimestrale MSFT, rivalutare MSFT (sopra le medie, momentum120 circa 30%) e SPY, che è sopra la media a 50 giorni di poco. Verificare che lo stop AAPL a 325,03 sia ancora attivo. Non comprare altro AAPL nei 2 giorni di borsa prima della trimestrale del 2 novembre.",
+  "prossimaSveglia": "2026-10-28-09-00",
+  "allarmi": [],
+  "stopSuAlpaca": null,
+  "lezioniAttive": [],
+  "lezioniNuove": [],
+  "acquistiBloccati": null,
+  "confronto": {
+    "dal": "2026-10-25",
+    "conto": 0.0006991999999998999,
+    "spy": 0.012472043152216727,
+    "misto": {
+      "dal": "2026-10-26",
+      "conto": 0.0006991999999998999,
+      "rendimento": 0.008811802592031182
+    }
+  },
+  "tradeChiusi": [],
+  "diario": {
+    "stato": "solo raccolta dati (osservazione fino al 2027-01-24, 0/30 trade chiusi): le statistiche non influenzano le scelte",
+    "statistiche": {
+      "trade": 0,
+      "vinti": 0,
+      "percVinti": null,
+      "mediaVincita": null,
+      "mediaPerdita": null,
+      "attesa": null,
+      "campione": "nessuno"
+    }
+  }
+}

@@ -1,15 +1,15 @@
 {
   "versione": 1,
-  "sveglia": "2026-10-27-18-30",
-  "tipo": "Metà seduta",
-  "iniziataAlle": "2026-10-27T17:33:43.562Z",
-  "finitaAlle": "2026-10-27T17:33:49.989Z",
+  "sveglia": "2026-10-27-21-40",
+  "tipo": "Chiusura",
+  "iniziataAlle": "2026-10-27T20:40:53.987Z",
+  "finitaAlle": "2026-10-27T20:41:00.920Z",
   "esito": "completata",
-  "appunto": "Metà seduta: 0 ordini inviati, 0 rifiutati. Prossima sveglia 2026-10-27 21:40 (Chiusura): Alla prossima apertura, dopo Fed e trimestrale MSFT, rivalutare MSFT (sopra le medie, momentum120 circa 30%) e SPY se tiene la media a 50 giorni con margine maggiore. Verificare che lo stop AAPL a 325,03 sia ancora attivo. Non comprare altro AAPL nei 2 giorni di borsa prima del 2 novembre.",
+  "appunto": "Chiusura: 0 ordini inviati, 0 rifiutati. Prossima sveglia 2026-10-28 09:00 (Briefing): Alla prossima apertura, dopo Fed e trimestrale MSFT, rivalutare MSFT (sopra le medie, momentum120 circa 30%) e SPY, che è sopra la media a 50 giorni di poco. Verificare che lo stop AAPL a 325,03 sia ancora attivo. Non comprare altro AAPL nei 2 giorni di borsa prima della trimestrale del 2 novembre.",
   "conto": {
-    "patrimonio": 100003.92,
+    "patrimonio": 100069.92,
     "contanti": 82711.42,
-    "pnlGiorno": 97,
+    "pnlGiorno": 163,
     "aggiornato": true
   },
   "posizioni": [
@@ -17,8 +17,8 @@
       "simbolo": "AAPL",
       "quantita": 50,
       "prezzoCarico": 345.7714,
-      "prezzoAttuale": 345.85,
-      "variazione": "0.02%"
+      "prezzoAttuale": 347.17,
+      "variazione": "0.40%"
     }
   ],
   "ordiniInviati": [],
@@ -26,29 +26,22 @@
   "ordiniIncerti": [],
   "ordiniFalliti": [],
   "ordiniRifiutati": [],
-  "ragionamento": "Metà seduta: gli acquisti sono permessi solo all'apertura, quindi non apro nuove posizioni. AAPL resta sopra le medie a 50 e 200 giorni, con momentum120 forte (+21%) e stop a 325,03 attivo, quindi la tengo. Domani ci sono la Fed e la trimestrale MSFT, perciò MSFT resta bloccata. SPY è sopra la media a 50 giorni solo dello 0,4%, margine ancora esiguo. Nel dubbio non faccio nulla. Voto: 3/3 risposte valide, 0 ordini con la maggioranza.",
-  "pianoProssima": "Alla prossima apertura, dopo Fed e trimestrale MSFT, rivalutare MSFT (sopra le medie, momentum120 circa 30%) e SPY se tiene la media a 50 giorni con margine maggiore. Verificare che lo stop AAPL a 325,03 sia ancora attivo. Non comprare altro AAPL nei 2 giorni di borsa prima del 2 novembre.",
-  "prossimaSveglia": "2026-10-27-21-40",
+  "ragionamento": "Mercato chiuso, quindi non si può inviare nessun ordine. AAPL resta sopra le medie a 50 e 200 giorni con momentum120 forte (+21%), e lo stop a 325,03 è attivo. Non c'è un motivo verificabile per vendere. Domani ci sono la Fed e la trimestrale MSFT, che restano bloccate per gli acquisti. Nel dubbio non faccio nulla. Voto: 3/3 risposte valide, 0 ordini con la maggioranza.",
+  "pianoProssima": "Alla prossima apertura, dopo Fed e trimestrale MSFT, rivalutare MSFT (sopra le medie, momentum120 circa 30%) e SPY, che è sopra la media a 50 giorni di poco. Verificare che lo stop AAPL a 325,03 sia ancora attivo. Non comprare altro AAPL nei 2 giorni di borsa prima della trimestrale del 2 novembre.",
+  "prossimaSveglia": "2026-10-28-09-00",
   "allarmi": [],
-  "stopSuAlpaca": {
-    "attivi": [
-      "AAPL 50 @ 325.03"
-    ],
-    "piazzati": [],
-    "tolti": [],
-    "errori": []
-  },
+  "stopSuAlpaca": null,
   "lezioniAttive": [],
   "lezioniNuove": [],
   "acquistiBloccati": null,
   "confronto": {
     "dal": "2026-10-25",
-    "conto": 0.000039200000000017,
-    "spy": 0.012550980134192757,
+    "conto": 0.0006991999999998999,
+    "spy": 0.012472043152216727,
     "misto": {
       "dal": "2026-10-26",
-      "conto": 0.000039200000000017,
-      "rendimento": 0.00949884985933216
+      "conto": 0.0006991999999998999,
+      "rendimento": 0.008811802592031182
     }
   },
   "tradeChiusi": [],
