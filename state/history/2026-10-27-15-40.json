@@ -1,0 +1,67 @@
+{
+  "versione": 1,
+  "sveglia": "2026-10-27-15-40",
+  "tipo": "Apertura",
+  "iniziataAlle": "2026-10-27T14:40:41.561Z",
+  "finitaAlle": "2026-10-27T14:40:59.468Z",
+  "esito": "completata",
+  "appunto": "Apertura: 0 ordini inviati, 0 rifiutati. Prossima sveglia 2026-10-27 18:30 (Metà seduta): Dopo la Fed e la trimestrale MSFT del 28 ottobre, rivalutare MSFT se resta sopra le medie a 50 e 200 giorni con momentum120 forte. Controllare se SPY tiene la media a 50 giorni con un margine maggiore prima di considerarlo. Verificare che lo stop di AAPL a 325,03 sia ancora attivo e non vendere AAPL per piccoli cali. La trimestrale AAPL è il 2 novembre, quindi non comprare altro AAPL nei 2 giorni di borsa precedenti.",
+  "conto": {
+    "patrimonio": 100005.42,
+    "contanti": 82711.42,
+    "pnlGiorno": 98.5,
+    "aggiornato": true
+  },
+  "posizioni": [
+    {
+      "simbolo": "AAPL",
+      "quantita": 50,
+      "prezzoCarico": 345.7714,
+      "prezzoAttuale": 345.88,
+      "variazione": "0.03%"
+    }
+  ],
+  "ordiniInviati": [],
+  "ordiniGiaPresenti": [],
+  "ordiniIncerti": [],
+  "ordiniFalliti": [],
+  "ordiniRifiutati": [],
+  "ragionamento": "AAPL è sopra la media a 50 giorni (330,25) e a 200 giorni (294,51), con lo stop a 325,03 attivo, quindi la tengo. MSFT passa i filtri di trend, ma la sua trimestrale è domani, quindi l'acquisto è bloccato. SPY supera la media a 50 giorni solo di circa 0,1% (767,55 contro 766,70) e domani c'è la Fed. Un ingresso così rischia di essere chiuso subito dall'uscita automatica, quindi nel dubbio non faccio nulla. QQQ, NVDA e IWM sono sotto la media a 50 giorni, mentre GLD e TLT sono sotto quella a 200 giorni. Voto: 3/3 risposte valide, 0 ordini con la maggioranza.",
+  "pianoProssima": "Dopo la Fed e la trimestrale MSFT del 28 ottobre, rivalutare MSFT se resta sopra le medie a 50 e 200 giorni con momentum120 forte. Controllare se SPY tiene la media a 50 giorni con un margine maggiore prima di considerarlo. Verificare che lo stop di AAPL a 325,03 sia ancora attivo e non vendere AAPL per piccoli cali. La trimestrale AAPL è il 2 novembre, quindi non comprare altro AAPL nei 2 giorni di borsa precedenti.",
+  "prossimaSveglia": "2026-10-27-18-30",
+  "allarmi": [],
+  "stopSuAlpaca": {
+    "attivi": [
+      "AAPL 50 @ 325.03"
+    ],
+    "piazzati": [],
+    "tolti": [],
+    "errori": []
+  },
+  "lezioniAttive": [],
+  "lezioniNuove": [],
+  "acquistiBloccati": null,
+  "confronto": {
+    "dal": "2026-10-25",
+    "conto": 0.00005419999999989322,
+    "spy": 0.00980134192869353,
+    "misto": {
+      "dal": "2026-10-26",
+      "conto": 0.00005419999999989322,
+      "rendimento": 0.0076522407581510075
+    }
+  },
+  "tradeChiusi": [],
+  "diario": {
+    "stato": "solo raccolta dati (osservazione fino al 2027-01-24, 0/30 trade chiusi): le statistiche non influenzano le scelte",
+    "statistiche": {
+      "trade": 0,
+      "vinti": 0,
+      "percVinti": null,
+      "mediaVincita": null,
+      "mediaPerdita": null,
+      "attesa": null,
+      "campione": "nessuno"
+    }
+  }
+}
