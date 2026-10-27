@@ -1,15 +1,15 @@
 {
   "versione": 1,
-  "sveglia": "2026-10-26-21-40",
-  "tipo": "Chiusura",
-  "iniziataAlle": "2026-10-26T20:40:17.092Z",
-  "finitaAlle": "2026-10-26T20:40:25.342Z",
+  "sveglia": "2026-10-27-09-00",
+  "tipo": "Briefing",
+  "iniziataAlle": "2026-10-27T08:00:08.927Z",
+  "finitaAlle": "2026-10-27T08:00:19.753Z",
   "esito": "completata",
-  "appunto": "Chiusura: 0 ordini inviati, 0 rifiutati. Prossima sveglia 2026-10-27 09:00 (Briefing): Alla prossima sveglia di apertura controllare che AAPL resti sopra la media a 50 giorni e che lo stop a 325,03 sia attivo. Dopo il 28 ottobre (Fed e trimestrale MSFT) rivalutare MSFT se è ancora sopra le medie a 50 e 200 giorni, con momentum120 forte. Verificare se QQQ, SPY, NVDA o IWM tornano sopra la media a 50 giorni. Non vendere AAPL per piccoli cali.",
+  "appunto": "Briefing: 0 ordini inviati, 0 rifiutati. Prossima sveglia 2026-10-27 15:40 (Apertura): Alla sveglia di apertura controllare che AAPL resti sopra la media a 50 giorni e che lo stop a 325,03 sia attivo. Dopo il 28 ottobre (Fed e trimestrale MSFT) rivalutare MSFT se è ancora sopra le medie a 50 e 200 giorni con momentum120 forte. Verificare se QQQ, SPY, NVDA o IWM tornano sopra la media a 50 giorni. Non vendere AAPL per piccoli cali.",
   "conto": {
-    "patrimonio": 99914.43,
-    "contanti": 82711.43,
-    "pnlGiorno": -85.57000000000698,
+    "patrimonio": 99861.42,
+    "contanti": 82711.42,
+    "pnlGiorno": -45.5,
     "aggiornato": true
   },
   "posizioni": [
@@ -17,8 +17,8 @@
       "simbolo": "AAPL",
       "quantita": 50,
       "prezzoCarico": 345.7714,
-      "prezzoAttuale": 344.06,
-      "variazione": "-0.49%"
+      "prezzoAttuale": 343,
+      "variazione": "-0.80%"
     }
   ],
   "ordiniInviati": [],
@@ -26,9 +26,9 @@
   "ordiniIncerti": [],
   "ordiniFalliti": [],
   "ordiniRifiutati": [],
-  "ragionamento": "Il mercato è chiuso e alla sveglia di chiusura non si fanno acquisti né ordini. AAPL è a circa 344, sopra le medie a 50 giorni (329,5) e a 200 giorni (294), con lo stop a 325,03 attivo. Il calo dal carico è di circa 0,5%, quindi non c'è motivo di vendere. QQQ, SPY, NVDA e IWM restano sotto la media a 50 giorni, mentre MSFT è bloccata dagli eventi del 28 ottobre. Nel dubbio non si fa nulla. Voto: 3/3 risposte valide, 0 ordini con la maggioranza.",
-  "pianoProssima": "Alla prossima sveglia di apertura controllare che AAPL resti sopra la media a 50 giorni e che lo stop a 325,03 sia attivo. Dopo il 28 ottobre (Fed e trimestrale MSFT) rivalutare MSFT se è ancora sopra le medie a 50 e 200 giorni, con momentum120 forte. Verificare se QQQ, SPY, NVDA o IWM tornano sopra la media a 50 giorni. Non vendere AAPL per piccoli cali.",
-  "prossimaSveglia": "2026-10-27-09-00",
+  "ragionamento": "È una sveglia di briefing e il mercato è chiuso, quindi non si può inviare nessun ordine. AAPL (343,93) è sopra la media a 50 giorni (330,25) e sopra quella a 200 giorni (294,51). Lo stop a 325,03 è ancora attivo, e il calo dal carico è di circa 0,5%, quindi non c'è motivo di vendere. MSFT passa i filtri di trend con momentum120 forte, ma domani ci sono Fed e trimestrale, quindi gli acquisti sono bloccati. QQQ, SPY, NVDA e IWM restano sotto la media a 50 giorni. Voto: 3/3 risposte valide, 0 ordini con la maggioranza.",
+  "pianoProssima": "Alla sveglia di apertura controllare che AAPL resti sopra la media a 50 giorni e che lo stop a 325,03 sia attivo. Dopo il 28 ottobre (Fed e trimestrale MSFT) rivalutare MSFT se è ancora sopra le medie a 50 e 200 giorni con momentum120 forte. Verificare se QQQ, SPY, NVDA o IWM tornano sopra la media a 50 giorni. Non vendere AAPL per piccoli cali.",
+  "prossimaSveglia": "2026-10-27-15-40",
   "allarmi": [],
   "stopSuAlpaca": null,
   "lezioniAttive": [],
@@ -36,11 +36,11 @@
   "acquistiBloccati": null,
   "confronto": {
     "dal": "2026-10-25",
-    "conto": -0.0008557000000000148,
+    "conto": -0.0013857999999999926,
     "spy": 0.006742533877121426,
     "misto": {
       "dal": "2026-10-26",
-      "conto": -0.0008557000000000148,
+      "conto": -0.0013857999999999926,
       "rendimento": 0.005989178832854191
     }
   },

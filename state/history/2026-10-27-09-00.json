@@ -1,0 +1,60 @@
+{
+  "versione": 1,
+  "sveglia": "2026-10-27-09-00",
+  "tipo": "Briefing",
+  "iniziataAlle": "2026-10-27T08:00:08.927Z",
+  "finitaAlle": "2026-10-27T08:00:19.753Z",
+  "esito": "completata",
+  "appunto": "Briefing: 0 ordini inviati, 0 rifiutati. Prossima sveglia 2026-10-27 15:40 (Apertura): Alla sveglia di apertura controllare che AAPL resti sopra la media a 50 giorni e che lo stop a 325,03 sia attivo. Dopo il 28 ottobre (Fed e trimestrale MSFT) rivalutare MSFT se è ancora sopra le medie a 50 e 200 giorni con momentum120 forte. Verificare se QQQ, SPY, NVDA o IWM tornano sopra la media a 50 giorni. Non vendere AAPL per piccoli cali.",
+  "conto": {
+    "patrimonio": 99861.42,
+    "contanti": 82711.42,
+    "pnlGiorno": -45.5,
+    "aggiornato": true
+  },
+  "posizioni": [
+    {
+      "simbolo": "AAPL",
+      "quantita": 50,
+      "prezzoCarico": 345.7714,
+      "prezzoAttuale": 343,
+      "variazione": "-0.80%"
+    }
+  ],
+  "ordiniInviati": [],
+  "ordiniGiaPresenti": [],
+  "ordiniIncerti": [],
+  "ordiniFalliti": [],
+  "ordiniRifiutati": [],
+  "ragionamento": "È una sveglia di briefing e il mercato è chiuso, quindi non si può inviare nessun ordine. AAPL (343,93) è sopra la media a 50 giorni (330,25) e sopra quella a 200 giorni (294,51). Lo stop a 325,03 è ancora attivo, e il calo dal carico è di circa 0,5%, quindi non c'è motivo di vendere. MSFT passa i filtri di trend con momentum120 forte, ma domani ci sono Fed e trimestrale, quindi gli acquisti sono bloccati. QQQ, SPY, NVDA e IWM restano sotto la media a 50 giorni. Voto: 3/3 risposte valide, 0 ordini con la maggioranza.",
+  "pianoProssima": "Alla sveglia di apertura controllare che AAPL resti sopra la media a 50 giorni e che lo stop a 325,03 sia attivo. Dopo il 28 ottobre (Fed e trimestrale MSFT) rivalutare MSFT se è ancora sopra le medie a 50 e 200 giorni con momentum120 forte. Verificare se QQQ, SPY, NVDA o IWM tornano sopra la media a 50 giorni. Non vendere AAPL per piccoli cali.",
+  "prossimaSveglia": "2026-10-27-15-40",
+  "allarmi": [],
+  "stopSuAlpaca": null,
+  "lezioniAttive": [],
+  "lezioniNuove": [],
+  "acquistiBloccati": null,
+  "confronto": {
+    "dal": "2026-10-25",
+    "conto": -0.0013857999999999926,
+    "spy": 0.006742533877121426,
+    "misto": {
+      "dal": "2026-10-26",
+      "conto": -0.0013857999999999926,
+      "rendimento": 0.005989178832854191
+    }
+  },
+  "tradeChiusi": [],
+  "diario": {
+    "stato": "solo raccolta dati (osservazione fino al 2027-01-24, 0/30 trade chiusi): le statistiche non influenzano le scelte",
+    "statistiche": {
+      "trade": 0,
+      "vinti": 0,
+      "percVinti": null,
+      "mediaVincita": null,
+      "mediaPerdita": null,
+      "attesa": null,
+      "campione": "nessuno"
+    }
+  }
+}
