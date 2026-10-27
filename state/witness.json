@@ -1,15 +1,15 @@
 {
   "versione": 1,
-  "sveglia": "2026-10-27-15-40",
-  "tipo": "Apertura",
-  "iniziataAlle": "2026-10-27T14:40:41.561Z",
-  "finitaAlle": "2026-10-27T14:40:59.468Z",
+  "sveglia": "2026-10-27-18-30",
+  "tipo": "Metà seduta",
+  "iniziataAlle": "2026-10-27T17:33:43.562Z",
+  "finitaAlle": "2026-10-27T17:33:49.989Z",
   "esito": "completata",
-  "appunto": "Apertura: 0 ordini inviati, 0 rifiutati. Prossima sveglia 2026-10-27 18:30 (Metà seduta): Dopo la Fed e la trimestrale MSFT del 28 ottobre, rivalutare MSFT se resta sopra le medie a 50 e 200 giorni con momentum120 forte. Controllare se SPY tiene la media a 50 giorni con un margine maggiore prima di considerarlo. Verificare che lo stop di AAPL a 325,03 sia ancora attivo e non vendere AAPL per piccoli cali. La trimestrale AAPL è il 2 novembre, quindi non comprare altro AAPL nei 2 giorni di borsa precedenti.",
+  "appunto": "Metà seduta: 0 ordini inviati, 0 rifiutati. Prossima sveglia 2026-10-27 21:40 (Chiusura): Alla prossima apertura, dopo Fed e trimestrale MSFT, rivalutare MSFT (sopra le medie, momentum120 circa 30%) e SPY se tiene la media a 50 giorni con margine maggiore. Verificare che lo stop AAPL a 325,03 sia ancora attivo. Non comprare altro AAPL nei 2 giorni di borsa prima del 2 novembre.",
   "conto": {
-    "patrimonio": 100005.42,
+    "patrimonio": 100003.92,
     "contanti": 82711.42,
-    "pnlGiorno": 98.5,
+    "pnlGiorno": 97,
     "aggiornato": true
   },
   "posizioni": [
@@ -17,8 +17,8 @@
       "simbolo": "AAPL",
       "quantita": 50,
       "prezzoCarico": 345.7714,
-      "prezzoAttuale": 345.88,
-      "variazione": "0.03%"
+      "prezzoAttuale": 345.85,
+      "variazione": "0.02%"
     }
   ],
   "ordiniInviati": [],
@@ -26,9 +26,9 @@
   "ordiniIncerti": [],
   "ordiniFalliti": [],
   "ordiniRifiutati": [],
-  "ragionamento": "AAPL è sopra la media a 50 giorni (330,25) e a 200 giorni (294,51), con lo stop a 325,03 attivo, quindi la tengo. MSFT passa i filtri di trend, ma la sua trimestrale è domani, quindi l'acquisto è bloccato. SPY supera la media a 50 giorni solo di circa 0,1% (767,55 contro 766,70) e domani c'è la Fed. Un ingresso così rischia di essere chiuso subito dall'uscita automatica, quindi nel dubbio non faccio nulla. QQQ, NVDA e IWM sono sotto la media a 50 giorni, mentre GLD e TLT sono sotto quella a 200 giorni. Voto: 3/3 risposte valide, 0 ordini con la maggioranza.",
-  "pianoProssima": "Dopo la Fed e la trimestrale MSFT del 28 ottobre, rivalutare MSFT se resta sopra le medie a 50 e 200 giorni con momentum120 forte. Controllare se SPY tiene la media a 50 giorni con un margine maggiore prima di considerarlo. Verificare che lo stop di AAPL a 325,03 sia ancora attivo e non vendere AAPL per piccoli cali. La trimestrale AAPL è il 2 novembre, quindi non comprare altro AAPL nei 2 giorni di borsa precedenti.",
-  "prossimaSveglia": "2026-10-27-18-30",
+  "ragionamento": "Metà seduta: gli acquisti sono permessi solo all'apertura, quindi non apro nuove posizioni. AAPL resta sopra le medie a 50 e 200 giorni, con momentum120 forte (+21%) e stop a 325,03 attivo, quindi la tengo. Domani ci sono la Fed e la trimestrale MSFT, perciò MSFT resta bloccata. SPY è sopra la media a 50 giorni solo dello 0,4%, margine ancora esiguo. Nel dubbio non faccio nulla. Voto: 3/3 risposte valide, 0 ordini con la maggioranza.",
+  "pianoProssima": "Alla prossima apertura, dopo Fed e trimestrale MSFT, rivalutare MSFT (sopra le medie, momentum120 circa 30%) e SPY se tiene la media a 50 giorni con margine maggiore. Verificare che lo stop AAPL a 325,03 sia ancora attivo. Non comprare altro AAPL nei 2 giorni di borsa prima del 2 novembre.",
+  "prossimaSveglia": "2026-10-27-21-40",
   "allarmi": [],
   "stopSuAlpaca": {
     "attivi": [
@@ -43,12 +43,12 @@
   "acquistiBloccati": null,
   "confronto": {
     "dal": "2026-10-25",
-    "conto": 0.00005419999999989322,
-    "spy": 0.00980134192869353,
+    "conto": 0.000039200000000017,
+    "spy": 0.012550980134192757,
     "misto": {
       "dal": "2026-10-26",
-      "conto": 0.00005419999999989322,
-      "rendimento": 0.0076522407581510075
+      "conto": 0.000039200000000017,
+      "rendimento": 0.00949884985933216
     }
   },
   "tradeChiusi": [],
