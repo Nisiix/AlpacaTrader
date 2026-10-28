@@ -1,15 +1,15 @@
 {
   "versione": 1,
-  "sveglia": "2026-10-28-15-40",
-  "tipo": "Apertura",
-  "iniziataAlle": "2026-10-28T14:40:09.056Z",
-  "finitaAlle": "2026-10-28T14:40:19.004Z",
+  "sveglia": "2026-10-28-18-30",
+  "tipo": "Metà seduta",
+  "iniziataAlle": "2026-10-28T17:33:44.627Z",
+  "finitaAlle": "2026-10-28T17:33:56.986Z",
   "esito": "completata",
-  "appunto": "Apertura: 0 ordini inviati, 0 rifiutati. Prossima sveglia 2026-10-28 18:30 (Metà seduta): Alla prossima sveglia controllare l'esito della Fed e della trimestrale MSFT. Se MSFT resta sopra le medie a 50 e 200 giorni, valutare un acquisto con peso ridotto dalla volatilità, tenendo conto del limite del 35% per la tecnologia. Valutare anche SPY se resta sopra la media a 50 giorni. Verificare che lo stop AAPL a 325,03 sia attivo e non comprare altro AAPL nei 2 giorni di borsa prima della trimestrale del 2 novembre.",
+  "appunto": "Metà seduta: 0 ordini inviati, 0 rifiutati. Prossima sveglia 2026-10-28 21:40 (Chiusura): Alla prossima sveglia di apertura controllo se MSFT e SPY restano sopra le medie a 50 e 200 giorni. Se è così, valuto un acquisto con peso ridotto dalla volatilità e rispetto il limite del 35% per la tecnologia. Verifico che lo stop AAPL a 328,48 sia ancora attivo. Non compro altro AAPL nei 2 giorni di borsa prima della trimestrale del 2 novembre.",
   "conto": {
-    "patrimonio": 99953.42,
+    "patrimonio": 99968.92,
     "contanti": 82711.42,
-    "pnlGiorno": -113,
+    "pnlGiorno": -97.5,
     "aggiornato": true
   },
   "posizioni": [
@@ -17,8 +17,8 @@
       "simbolo": "AAPL",
       "quantita": 50,
       "prezzoCarico": 345.7714,
-      "prezzoAttuale": 344.84,
-      "variazione": "-0.27%"
+      "prezzoAttuale": 345.15,
+      "variazione": "-0.18%"
     }
   ],
   "ordiniInviati": [],
@@ -26,20 +26,16 @@
   "ordiniIncerti": [],
   "ordiniFalliti": [],
   "ordiniRifiutati": [],
-  "ragionamento": "Oggi 28 ottobre c'è la decisione della Fed e la trimestrale MSFT, quindi gli acquisti sono vietati, MSFT compresa. AAPL resta sopra le medie a 50 e 200 giorni (344,84 contro 331 e 295) e lo stop a 325,03 è ancora attivo. Gli altri titoli sopra entrambe le medie sono SPY e MSFT, ma oggi non si possono comprare. Non c'è un motivo verificabile per vendere, quindi non faccio nulla. Voto: 3/3 risposte valide, 0 ordini con la maggioranza.",
-  "pianoProssima": "Alla prossima sveglia controllare l'esito della Fed e della trimestrale MSFT. Se MSFT resta sopra le medie a 50 e 200 giorni, valutare un acquisto con peso ridotto dalla volatilità, tenendo conto del limite del 35% per la tecnologia. Valutare anche SPY se resta sopra la media a 50 giorni. Verificare che lo stop AAPL a 325,03 sia attivo e non comprare altro AAPL nei 2 giorni di borsa prima della trimestrale del 2 novembre.",
-  "prossimaSveglia": "2026-10-28-18-30",
+  "ragionamento": "È una sveglia di metà seduta e gli acquisti sono permessi solo all'apertura, quindi non posso comprare nulla. Oggi ci sono anche la Fed e la trimestrale MSFT, che bloccano comunque gli acquisti. AAPL è sopra le medie a 50 e 200 giorni (345,15 contro 331 e 295) e lo stop a 328,48 è attivo su Alpaca. Non c'è un motivo chiaro e verificabile per vendere, e nel dubbio non faccio nulla. Voto: 3/3 risposte valide, 0 ordini con la maggioranza.",
+  "pianoProssima": "Alla prossima sveglia di apertura controllo se MSFT e SPY restano sopra le medie a 50 e 200 giorni. Se è così, valuto un acquisto con peso ridotto dalla volatilità e rispetto il limite del 35% per la tecnologia. Verifico che lo stop AAPL a 328,48 sia ancora attivo. Non compro altro AAPL nei 2 giorni di borsa prima della trimestrale del 2 novembre.",
+  "prossimaSveglia": "2026-10-28-21-40",
   "allarmi": [],
   "stopSuAlpaca": {
     "attivi": [
       "AAPL 50 @ 328.48"
     ],
-    "piazzati": [
-      "AAPL 50 @ 328.48"
-    ],
-    "tolti": [
-      "AAPL 50 @ 325.03"
-    ],
+    "piazzati": [],
+    "tolti": [],
     "errori": []
   },
   "lezioniAttive": [],
@@ -47,12 +43,12 @@
   "acquistiBloccati": null,
   "confronto": {
     "dal": "2026-10-25",
-    "conto": -0.0004658000000000717,
-    "spy": 0.013419286935929309,
+    "conto": -0.0003108000000000555,
+    "spy": 0.014248125246677956,
     "misto": {
       "dal": "2026-10-26",
-      "conto": -0.0004658000000000717,
-      "rendimento": 0.008642050695202519
+      "conto": -0.0003108000000000555,
+      "rendimento": 0.009631419126355878
     }
   },
   "tradeChiusi": [],
