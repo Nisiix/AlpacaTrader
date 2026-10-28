@@ -1,0 +1,71 @@
+{
+  "versione": 1,
+  "sveglia": "2026-10-28-15-40",
+  "tipo": "Apertura",
+  "iniziataAlle": "2026-10-28T14:40:09.056Z",
+  "finitaAlle": "2026-10-28T14:40:19.004Z",
+  "esito": "completata",
+  "appunto": "Apertura: 0 ordini inviati, 0 rifiutati. Prossima sveglia 2026-10-28 18:30 (Metà seduta): Alla prossima sveglia controllare l'esito della Fed e della trimestrale MSFT. Se MSFT resta sopra le medie a 50 e 200 giorni, valutare un acquisto con peso ridotto dalla volatilità, tenendo conto del limite del 35% per la tecnologia. Valutare anche SPY se resta sopra la media a 50 giorni. Verificare che lo stop AAPL a 325,03 sia attivo e non comprare altro AAPL nei 2 giorni di borsa prima della trimestrale del 2 novembre.",
+  "conto": {
+    "patrimonio": 99953.42,
+    "contanti": 82711.42,
+    "pnlGiorno": -113,
+    "aggiornato": true
+  },
+  "posizioni": [
+    {
+      "simbolo": "AAPL",
+      "quantita": 50,
+      "prezzoCarico": 345.7714,
+      "prezzoAttuale": 344.84,
+      "variazione": "-0.27%"
+    }
+  ],
+  "ordiniInviati": [],
+  "ordiniGiaPresenti": [],
+  "ordiniIncerti": [],
+  "ordiniFalliti": [],
+  "ordiniRifiutati": [],
+  "ragionamento": "Oggi 28 ottobre c'è la decisione della Fed e la trimestrale MSFT, quindi gli acquisti sono vietati, MSFT compresa. AAPL resta sopra le medie a 50 e 200 giorni (344,84 contro 331 e 295) e lo stop a 325,03 è ancora attivo. Gli altri titoli sopra entrambe le medie sono SPY e MSFT, ma oggi non si possono comprare. Non c'è un motivo verificabile per vendere, quindi non faccio nulla. Voto: 3/3 risposte valide, 0 ordini con la maggioranza.",
+  "pianoProssima": "Alla prossima sveglia controllare l'esito della Fed e della trimestrale MSFT. Se MSFT resta sopra le medie a 50 e 200 giorni, valutare un acquisto con peso ridotto dalla volatilità, tenendo conto del limite del 35% per la tecnologia. Valutare anche SPY se resta sopra la media a 50 giorni. Verificare che lo stop AAPL a 325,03 sia attivo e non comprare altro AAPL nei 2 giorni di borsa prima della trimestrale del 2 novembre.",
+  "prossimaSveglia": "2026-10-28-18-30",
+  "allarmi": [],
+  "stopSuAlpaca": {
+    "attivi": [
+      "AAPL 50 @ 328.48"
+    ],
+    "piazzati": [
+      "AAPL 50 @ 328.48"
+    ],
+    "tolti": [
+      "AAPL 50 @ 325.03"
+    ],
+    "errori": []
+  },
+  "lezioniAttive": [],
+  "lezioniNuove": [],
+  "acquistiBloccati": null,
+  "confronto": {
+    "dal": "2026-10-25",
+    "conto": -0.0004658000000000717,
+    "spy": 0.013419286935929309,
+    "misto": {
+      "dal": "2026-10-26",
+      "conto": -0.0004658000000000717,
+      "rendimento": 0.008642050695202519
+    }
+  },
+  "tradeChiusi": [],
+  "diario": {
+    "stato": "solo raccolta dati (osservazione fino al 2027-01-24, 0/30 trade chiusi): le statistiche non influenzano le scelte",
+    "statistiche": {
+      "trade": 0,
+      "vinti": 0,
+      "percVinti": null,
+      "mediaVincita": null,
+      "mediaPerdita": null,
+      "attesa": null,
+      "campione": "nessuno"
+    }
+  }
+}
