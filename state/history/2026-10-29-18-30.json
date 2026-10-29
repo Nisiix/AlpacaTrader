@@ -1,0 +1,83 @@
+{
+  "versione": 1,
+  "sveglia": "2026-10-29-18-30",
+  "tipo": "Metà seduta",
+  "iniziataAlle": "2026-10-29T17:33:39.502Z",
+  "finitaAlle": "2026-10-29T17:33:52.626Z",
+  "esito": "completata",
+  "appunto": "Metà seduta: 0 ordini inviati, 0 rifiutati. Prossima sveglia 2026-10-29 21:40 (Chiusura): Alla prossima apertura controllare che AAPL, MSFT e SPY restino sopra la media a 50 giorni. Tenere d'occhio la trimestrale AAPL del 2 novembre e il limite del 35% per il gruppo tecnologia. Rivalutare QQQ, NVDA e IWM solo se tornano sopra la media a 50 giorni.",
+  "conto": {
+    "patrimonio": 100298.29,
+    "contanti": 51690.64,
+    "pnlGiorno": 395.36999999999534,
+    "aggiornato": true
+  },
+  "posizioni": [
+    {
+      "simbolo": "AAPL",
+      "quantita": 50,
+      "prezzoCarico": 345.7714,
+      "prezzoAttuale": 349.655,
+      "variazione": "1.12%"
+    },
+    {
+      "simbolo": "MSFT",
+      "quantita": 30,
+      "prezzoCarico": 522.15,
+      "prezzoAttuale": 525.33,
+      "variazione": "0.61%"
+    },
+    {
+      "simbolo": "SPY",
+      "quantita": 20,
+      "prezzoCarico": 767.814,
+      "prezzoAttuale": 768.25,
+      "variazione": "0.06%"
+    }
+  ],
+  "ordiniInviati": [],
+  "ordiniGiaPresenti": [],
+  "ordiniIncerti": [],
+  "ordiniFalliti": [],
+  "ordiniRifiutati": [],
+  "ragionamento": "Gli acquisti sono consentiti solo alla sveglia di apertura, e questa è una sveglia di metà seduta. Gli ordini di MSFT e SPY sono stati eseguiti (30 e 20 azioni) e gli stop di protezione sono attivi per AAPL, MSFT e SPY. AAPL, MSFT e SPY restano sopra le medie a 50 e 200 giorni, quindi il trend è intatto e non c'è motivo di vendere. I pesi sono vicini agli obiettivi e ogni ordine ha un costo, quindi non faccio niente. Voto: 3/3 risposte valide, 0 ordini con la maggioranza.",
+  "pianoProssima": "Alla prossima apertura controllare che AAPL, MSFT e SPY restino sopra la media a 50 giorni. Tenere d'occhio la trimestrale AAPL del 2 novembre e il limite del 35% per il gruppo tecnologia. Rivalutare QQQ, NVDA e IWM solo se tornano sopra la media a 50 giorni.",
+  "prossimaSveglia": "2026-10-29-21-40",
+  "allarmi": [],
+  "stopSuAlpaca": {
+    "attivi": [
+      "AAPL 50 @ 328.48",
+      "MSFT 30 @ 488.21",
+      "SPY 20 @ 729.42"
+    ],
+    "piazzati": [],
+    "tolti": [],
+    "errori": []
+  },
+  "lezioniAttive": [],
+  "lezioniNuove": [],
+  "acquistiBloccati": null,
+  "confronto": {
+    "dal": "2026-10-25",
+    "conto": 0.0029828999999998995,
+    "spy": 0.010643336403104886,
+    "misto": {
+      "dal": "2026-10-26",
+      "conto": 0.0029828999999998995,
+      "rendimento": 0.006238382208451698
+    }
+  },
+  "tradeChiusi": [],
+  "diario": {
+    "stato": "solo raccolta dati (osservazione fino al 2027-01-24, 0/30 trade chiusi): le statistiche non influenzano le scelte",
+    "statistiche": {
+      "trade": 0,
+      "vinti": 0,
+      "percVinti": null,
+      "mediaVincita": null,
+      "mediaPerdita": null,
+      "attesa": null,
+      "campione": "nessuno"
+    }
+  }
+}

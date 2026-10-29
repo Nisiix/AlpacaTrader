@@ -1,15 +1,15 @@
 {
   "versione": 1,
-  "sveglia": "2026-10-29-15-40",
-  "tipo": "Apertura",
-  "iniziataAlle": "2026-10-29T14:49:24.272Z",
-  "finitaAlle": "2026-10-29T14:49:52.456Z",
+  "sveglia": "2026-10-29-18-30",
+  "tipo": "Metà seduta",
+  "iniziataAlle": "2026-10-29T17:33:39.502Z",
+  "finitaAlle": "2026-10-29T17:33:52.626Z",
   "esito": "completata",
-  "appunto": "Apertura: 2 ordini inviati, 0 rifiutati. Prossima sveglia 2026-10-29 18:30 (Metà seduta): Verificare che gli ordini siano stati eseguiti e che gli stop di protezione per MSFT e SPY siano attivi. Controllare che AAPL, MSFT e SPY restino sopra la media a 50 giorni e tenere d'occhio la trimestrale AAPL del 2 novembre. Non fare altri acquisti se non servono, e rivalutare QQQ, NVDA e IWM solo se tornano sopra la media a 50 giorni.",
+  "appunto": "Metà seduta: 0 ordini inviati, 0 rifiutati. Prossima sveglia 2026-10-29 21:40 (Chiusura): Alla prossima apertura controllare che AAPL, MSFT e SPY restino sopra la media a 50 giorni. Tenere d'occhio la trimestrale AAPL del 2 novembre e il limite del 35% per il gruppo tecnologia. Rivalutare QQQ, NVDA e IWM solo se tornano sopra la media a 50 giorni.",
   "conto": {
-    "patrimonio": 100152.94,
+    "patrimonio": 100298.29,
     "contanti": 51690.64,
-    "pnlGiorno": 250.02000000000407,
+    "pnlGiorno": 395.36999999999534,
     "aggiornato": true
   },
   "posizioni": [
@@ -17,51 +17,32 @@
       "simbolo": "AAPL",
       "quantita": 50,
       "prezzoCarico": 345.7714,
-      "prezzoAttuale": 348.91,
-      "variazione": "0.91%"
+      "prezzoAttuale": 349.655,
+      "variazione": "1.12%"
     },
     {
       "simbolo": "MSFT",
       "quantita": 30,
       "prezzoCarico": 522.15,
-      "prezzoAttuale": 522.02,
-      "variazione": "-0.02%"
+      "prezzoAttuale": 525.33,
+      "variazione": "0.61%"
     },
     {
       "simbolo": "SPY",
       "quantita": 20,
       "prezzoCarico": 767.814,
-      "prezzoAttuale": 767.81,
-      "variazione": "-0.00%"
+      "prezzoAttuale": 768.25,
+      "variazione": "0.06%"
     }
   ],
-  "ordiniInviati": [
-    {
-      "id": "2026-10-29-15-40-MSFT-buy",
-      "simbolo": "MSFT",
-      "lato": "buy",
-      "quantita": 30,
-      "origine": "modello",
-      "perche": "MSFT è sopra le medie a 50 e 200 giorni e ha il momentum120 più forte (27%); la quantità resta nel limite del 35% per la tecnologia insieme ad AAPL.",
-      "stato": "pending_new"
-    },
-    {
-      "id": "2026-10-29-15-40-SPY-buy",
-      "simbolo": "SPY",
-      "lato": "buy",
-      "quantita": 20,
-      "origine": "modello",
-      "perche": "SPY è sopra le medie a 50 e 200 giorni, ha bassa volatilità e dà diversificazione fuori dal gruppo tecnologia.",
-      "stato": "pending_new"
-    }
-  ],
+  "ordiniInviati": [],
   "ordiniGiaPresenti": [],
   "ordiniIncerti": [],
   "ordiniFalliti": [],
   "ordiniRifiutati": [],
-  "ragionamento": "Il piano del briefing prevede di comprare MSFT e SPY se restano sopra le medie a 50 e 200 giorni, e lo fanno entrambi. MSFT: 32 azioni (circa 16.700 dollari) portano la tecnologia a circa 34% del conto, sotto il limite del 35%, e restano sotto il 20% per titolo. SPY: 25 azioni (circa 19.200 dollari) rispettano il 20% e il limite di volatilità. QQQ, NVDA e IWM sono sotto la media a 50 giorni, GLD e TLT sotto la media a 200 giorni, quindi li escludo. AAPL non si compra perché la trimestrale è il 2 novembre, e lo stop a 328,48 è ancora attivo. Voto: 3/3 risposte valide, 2 ordini con la maggioranza.",
-  "pianoProssima": "Verificare che gli ordini siano stati eseguiti e che gli stop di protezione per MSFT e SPY siano attivi. Controllare che AAPL, MSFT e SPY restino sopra la media a 50 giorni e tenere d'occhio la trimestrale AAPL del 2 novembre. Non fare altri acquisti se non servono, e rivalutare QQQ, NVDA e IWM solo se tornano sopra la media a 50 giorni.",
-  "prossimaSveglia": "2026-10-29-18-30",
+  "ragionamento": "Gli acquisti sono consentiti solo alla sveglia di apertura, e questa è una sveglia di metà seduta. Gli ordini di MSFT e SPY sono stati eseguiti (30 e 20 azioni) e gli stop di protezione sono attivi per AAPL, MSFT e SPY. AAPL, MSFT e SPY restano sopra le medie a 50 e 200 giorni, quindi il trend è intatto e non c'è motivo di vendere. I pesi sono vicini agli obiettivi e ogni ordine ha un costo, quindi non faccio niente. Voto: 3/3 risposte valide, 0 ordini con la maggioranza.",
+  "pianoProssima": "Alla prossima apertura controllare che AAPL, MSFT e SPY restino sopra la media a 50 giorni. Tenere d'occhio la trimestrale AAPL del 2 novembre e il limite del 35% per il gruppo tecnologia. Rivalutare QQQ, NVDA e IWM solo se tornano sopra la media a 50 giorni.",
+  "prossimaSveglia": "2026-10-29-21-40",
   "allarmi": [],
   "stopSuAlpaca": {
     "attivi": [
@@ -69,10 +50,7 @@
       "MSFT 30 @ 488.21",
       "SPY 20 @ 729.42"
     ],
-    "piazzati": [
-      "MSFT 30 @ 488.21",
-      "SPY 20 @ 729.42"
-    ],
+    "piazzati": [],
     "tolti": [],
     "errori": []
   },
@@ -81,12 +59,12 @@
   "acquistiBloccati": null,
   "confronto": {
     "dal": "2026-10-25",
-    "conto": 0.001529400000000125,
-    "spy": 0.010538087093803439,
+    "conto": 0.0029828999999998995,
+    "spy": 0.010643336403104886,
     "misto": {
       "dal": "2026-10-26",
-      "conto": 0.001529400000000125,
-      "rendimento": 0.007651428956983208
+      "conto": 0.0029828999999998995,
+      "rendimento": 0.006238382208451698
     }
   },
   "tradeChiusi": [],
