@@ -1,0 +1,60 @@
+{
+  "versione": 1,
+  "sveglia": "2026-10-29-09-00",
+  "tipo": "Briefing",
+  "iniziataAlle": "2026-10-29T08:00:25.630Z",
+  "finitaAlle": "2026-10-29T08:00:36.432Z",
+  "esito": "completata",
+  "appunto": "Briefing: 0 ordini inviati, 0 rifiutati. Prossima sveglia 2026-10-29 15:40 (Apertura): Alla sveglia di apertura controllo se MSFT e SPY restano sopra le medie a 50 e 200 giorni. Se è così, valuto un acquisto di MSFT con peso ridotto dalla volatilità e nel limite del 35% per la tecnologia, tenendo conto di AAPL già in portafoglio. Eventualmente aggiungo SPY. Verifico che lo stop AAPL a 328,48 sia ancora attivo. Non compro altro AAPL, perché la trimestrale è il 2 novembre.",
+  "conto": {
+    "patrimonio": 100035.92,
+    "contanti": 82711.42,
+    "pnlGiorno": 133,
+    "aggiornato": true
+  },
+  "posizioni": [
+    {
+      "simbolo": "AAPL",
+      "quantita": 50,
+      "prezzoCarico": 345.7714,
+      "prezzoAttuale": 346.49,
+      "variazione": "0.21%"
+    }
+  ],
+  "ordiniInviati": [],
+  "ordiniGiaPresenti": [],
+  "ordiniIncerti": [],
+  "ordiniFalliti": [],
+  "ordiniRifiutati": [],
+  "ragionamento": "È una sveglia di briefing a mercato chiuso, quindi non posso inviare ordini, e gli acquisti sono permessi solo all'apertura. AAPL resta sopra le medie a 50 e 200 giorni (345,02 contro 331,76 e 295,38) e lo stop a 328,48 è attivo. Tra i candidati, MSFT (momentum120 27%) e SPY (6%) sono sopra entrambe le medie; QQQ, NVDA e IWM sono sotto la media a 50 giorni. Rimando la decisione sugli acquisti alla sveglia di apertura. Nel dubbio non faccio niente. Voto: 3/3 risposte valide, 0 ordini con la maggioranza.",
+  "pianoProssima": "Alla sveglia di apertura controllo se MSFT e SPY restano sopra le medie a 50 e 200 giorni. Se è così, valuto un acquisto di MSFT con peso ridotto dalla volatilità e nel limite del 35% per la tecnologia, tenendo conto di AAPL già in portafoglio. Eventualmente aggiungo SPY. Verifico che lo stop AAPL a 328,48 sia ancora attivo. Non compro altro AAPL, perché la trimestrale è il 2 novembre.",
+  "prossimaSveglia": "2026-10-29-15-40",
+  "allarmi": [],
+  "stopSuAlpaca": null,
+  "lezioniAttive": [],
+  "lezioniNuove": [],
+  "acquistiBloccati": null,
+  "confronto": {
+    "dal": "2026-10-25",
+    "conto": 0.00035919999999989294,
+    "spy": 0.012761478752795652,
+    "misto": {
+      "dal": "2026-10-26",
+      "conto": 0.00035919999999989294,
+      "rendimento": 0.006820375995680327
+    }
+  },
+  "tradeChiusi": [],
+  "diario": {
+    "stato": "solo raccolta dati (osservazione fino al 2027-01-24, 0/30 trade chiusi): le statistiche non influenzano le scelte",
+    "statistiche": {
+      "trade": 0,
+      "vinti": 0,
+      "percVinti": null,
+      "mediaVincita": null,
+      "mediaPerdita": null,
+      "attesa": null,
+      "campione": "nessuno"
+    }
+  }
+}
