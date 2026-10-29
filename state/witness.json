@@ -1,15 +1,15 @@
 {
   "versione": 1,
-  "sveglia": "2026-10-29-18-30",
-  "tipo": "Metà seduta",
-  "iniziataAlle": "2026-10-29T17:33:39.502Z",
-  "finitaAlle": "2026-10-29T17:33:52.626Z",
+  "sveglia": "2026-10-29-21-40",
+  "tipo": "Chiusura",
+  "iniziataAlle": "2026-10-29T20:40:06.250Z",
+  "finitaAlle": "2026-10-29T20:40:16.080Z",
   "esito": "completata",
-  "appunto": "Metà seduta: 0 ordini inviati, 0 rifiutati. Prossima sveglia 2026-10-29 21:40 (Chiusura): Alla prossima apertura controllare che AAPL, MSFT e SPY restino sopra la media a 50 giorni. Tenere d'occhio la trimestrale AAPL del 2 novembre e il limite del 35% per il gruppo tecnologia. Rivalutare QQQ, NVDA e IWM solo se tornano sopra la media a 50 giorni.",
+  "appunto": "Chiusura: 0 ordini inviati, 0 rifiutati. Prossima sveglia 2026-10-30 09:00 (Briefing): Alla prossima apertura controllare se SPY chiude di nuovo sotto la media a 50 giorni (766,82), perché in quel caso l'uscita automatica scatta. Verificare che AAPL e MSFT restino sopra la media a 50 giorni. Tenere d'occhio la trimestrale AAPL del 2 novembre e il limite del 35% per il gruppo tecnologia. QQQ, NVDA e IWM tornano in valutazione solo se risalgono sopra la media a 50 giorni.",
   "conto": {
-    "patrimonio": 100298.29,
+    "patrimonio": 100351.12,
     "contanti": 51690.64,
-    "pnlGiorno": 395.36999999999534,
+    "pnlGiorno": 448.1999999999971,
     "aggiornato": true
   },
   "posizioni": [
@@ -17,22 +17,22 @@
       "simbolo": "AAPL",
       "quantita": 50,
       "prezzoCarico": 345.7714,
-      "prezzoAttuale": 349.655,
-      "variazione": "1.12%"
+      "prezzoAttuale": 349.9769,
+      "variazione": "1.22%"
     },
     {
       "simbolo": "MSFT",
       "quantita": 30,
       "prezzoCarico": 522.15,
-      "prezzoAttuale": 525.33,
-      "variazione": "0.61%"
+      "prezzoAttuale": 528,
+      "variazione": "1.12%"
     },
     {
       "simbolo": "SPY",
       "quantita": 20,
       "prezzoCarico": 767.814,
-      "prezzoAttuale": 768.25,
-      "variazione": "0.06%"
+      "prezzoAttuale": 766.0817,
+      "variazione": "-0.23%"
     }
   ],
   "ordiniInviati": [],
@@ -40,31 +40,22 @@
   "ordiniIncerti": [],
   "ordiniFalliti": [],
   "ordiniRifiutati": [],
-  "ragionamento": "Gli acquisti sono consentiti solo alla sveglia di apertura, e questa è una sveglia di metà seduta. Gli ordini di MSFT e SPY sono stati eseguiti (30 e 20 azioni) e gli stop di protezione sono attivi per AAPL, MSFT e SPY. AAPL, MSFT e SPY restano sopra le medie a 50 e 200 giorni, quindi il trend è intatto e non c'è motivo di vendere. I pesi sono vicini agli obiettivi e ogni ordine ha un costo, quindi non faccio niente. Voto: 3/3 risposte valide, 0 ordini con la maggioranza.",
-  "pianoProssima": "Alla prossima apertura controllare che AAPL, MSFT e SPY restino sopra la media a 50 giorni. Tenere d'occhio la trimestrale AAPL del 2 novembre e il limite del 35% per il gruppo tecnologia. Rivalutare QQQ, NVDA e IWM solo se tornano sopra la media a 50 giorni.",
-  "prossimaSveglia": "2026-10-29-21-40",
+  "ragionamento": "Il mercato è chiuso e non si possono inviare ordini. AAPL e MSFT restano sopra le medie a 50 e 200 giorni e gli stop di protezione sono attivi, quindi non c'è motivo di vendere. SPY ha chiuso a 766,42, sotto la media a 50 giorni (766,82) per una distanza minima. La vendita normale la decide il codice alla prossima apertura, e io non vendo per un calo così piccolo. Nel dubbio non faccio niente. Voto: 3/3 risposte valide, 0 ordini con la maggioranza.",
+  "pianoProssima": "Alla prossima apertura controllare se SPY chiude di nuovo sotto la media a 50 giorni (766,82), perché in quel caso l'uscita automatica scatta. Verificare che AAPL e MSFT restino sopra la media a 50 giorni. Tenere d'occhio la trimestrale AAPL del 2 novembre e il limite del 35% per il gruppo tecnologia. QQQ, NVDA e IWM tornano in valutazione solo se risalgono sopra la media a 50 giorni.",
+  "prossimaSveglia": "2026-10-30-09-00",
   "allarmi": [],
-  "stopSuAlpaca": {
-    "attivi": [
-      "AAPL 50 @ 328.48",
-      "MSFT 30 @ 488.21",
-      "SPY 20 @ 729.42"
-    ],
-    "piazzati": [],
-    "tolti": [],
-    "errori": []
-  },
+  "stopSuAlpaca": null,
   "lezioniAttive": [],
   "lezioniNuove": [],
   "acquistiBloccati": null,
   "confronto": {
     "dal": "2026-10-25",
-    "conto": 0.0029828999999998995,
-    "spy": 0.010643336403104886,
+    "conto": 0.0035111999999999366,
+    "spy": 0.008314695434811226,
     "misto": {
       "dal": "2026-10-26",
-      "conto": 0.0029828999999998995,
-      "rendimento": 0.006238382208451698
+      "conto": 0.0035111999999999366,
+      "rendimento": 0.005923741605824562
     }
   },
   "tradeChiusi": [],
