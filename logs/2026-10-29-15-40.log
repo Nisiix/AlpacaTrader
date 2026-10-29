@@ -1,0 +1,3 @@
+2026-10-29T14:49:24.272Z [INFO] === sveglia 2026-10-29-15-40 (Apertura) pid 367, broker alpaca-paper, cervello claude -p × 3 (maggioranza 2)
+2026-10-29T14:49:25.850Z [INFO] conto: patrimonio 100161.42, contanti 82711.42, posizioni 1, ordini 48h 1, mercato aperto
+2026-10-29T14:49:25.910Z [INFO] diario: solo raccolta dati (osservazione fino al 2027-01-24, 0/30 trade chiusi): le statistiche non influenzano le scelte
