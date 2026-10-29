@@ -20,6 +20,46 @@
         "attesa": "AAPL resta sopra la media a 50 giorni (circa 329) nelle prossime settimane, senza far scattare lo stop tra il 5% e il 10% sotto il prezzo di carico.",
         "perche": "AAPL è sopra le medie a 50 e 200 giorni e ha momentum a 6 mesi di circa 26%. La trimestrale è il 2 novembre, fuori dalla finestra di blocco."
       }
+    },
+    {
+      "id": "2026-10-29-15-40-MSFT-buy",
+      "simbolo": "MSFT",
+      "stato": "aperto",
+      "apertoIl": "2026-10-29T14:49:50.269164816Z",
+      "comprate": 30,
+      "costo": 15664.5,
+      "vendute": 0,
+      "incassato": 0,
+      "quantita": 30,
+      "contesto": {
+        "setup": "momentum forte · volatilità bassa",
+        "momentum20": 0.03766742703398274,
+        "volGiornaliera": 0.012069108702460684,
+        "distanzaMedia": 0.022881015744636635,
+        "fiducia": "media",
+        "attesa": "MSFT resta sopra la media a 50 giorni (511,18) nelle prossime settimane e lo stop automatico non scatta.",
+        "perche": "MSFT è sopra le medie a 50 e 200 giorni e ha il momentum120 più forte (27%); la quantità resta nel limite del 35% per la tecnologia insieme ad AAPL."
+      }
+    },
+    {
+      "id": "2026-10-29-15-40-SPY-buy",
+      "simbolo": "SPY",
+      "stato": "aperto",
+      "apertoIl": "2026-10-29T14:49:50.979617614Z",
+      "comprate": 20,
+      "costo": 15356.279999999999,
+      "vendute": 0,
+      "incassato": 0,
+      "quantita": 20,
+      "contesto": {
+        "setup": "momentum debole · volatilità bassa",
+        "momentum20": 0.013038801584594806,
+        "volGiornaliera": 0.006293894151688893,
+        "distanzaMedia": 0.0016846235522320896,
+        "fiducia": "media",
+        "attesa": "SPY chiude sopra la media a 50 giorni (766,82) nelle prossime sessioni, senza far scattare lo stop.",
+        "perche": "SPY è sopra le medie a 50 e 200 giorni, ha bassa volatilità e dà diversificazione fuori dal gruppo tecnologia."
+      }
     }
   ],
   "intenzioni": [
@@ -38,12 +78,52 @@
         "attesa": "AAPL resta sopra la media a 50 giorni (circa 329) nelle prossime settimane, senza far scattare lo stop tra il 5% e il 10% sotto il prezzo di carico.",
         "perche": "AAPL è sopra le medie a 50 e 200 giorni e ha momentum a 6 mesi di circa 26%. La trimestrale è il 2 novembre, fuori dalla finestra di blocco."
       }
+    },
+    {
+      "id": "2026-10-29-15-40-MSFT-buy",
+      "simbolo": "MSFT",
+      "lato": "buy",
+      "origine": "modello",
+      "data": "2026-10-29",
+      "contesto": {
+        "setup": "momentum forte · volatilità bassa",
+        "momentum20": 0.03766742703398274,
+        "volGiornaliera": 0.012069108702460684,
+        "distanzaMedia": 0.022881015744636635,
+        "fiducia": "media",
+        "attesa": "MSFT resta sopra la media a 50 giorni (511,18) nelle prossime settimane e lo stop automatico non scatta.",
+        "perche": "MSFT è sopra le medie a 50 e 200 giorni e ha il momentum120 più forte (27%); la quantità resta nel limite del 35% per la tecnologia insieme ad AAPL."
+      }
+    },
+    {
+      "id": "2026-10-29-15-40-SPY-buy",
+      "simbolo": "SPY",
+      "lato": "buy",
+      "origine": "modello",
+      "data": "2026-10-29",
+      "contesto": {
+        "setup": "momentum debole · volatilità bassa",
+        "momentum20": 0.013038801584594806,
+        "volGiornaliera": 0.006293894151688893,
+        "distanzaMedia": 0.0016846235522320896,
+        "fiducia": "media",
+        "attesa": "SPY chiude sopra la media a 50 giorni (766,82) nelle prossime sessioni, senza far scattare lo stop.",
+        "perche": "SPY è sopra le medie a 50 e 200 giorni, ha bassa volatilità e dà diversificazione fuori dal gruppo tecnologia."
+      }
     }
   ],
   "ordiniVisti": [
     {
       "id": "3ae05773-0334-4c77-a245-6ba1ef7dd054",
       "data": "2026-10-26"
+    },
+    {
+      "id": "2047f696-2498-4d31-a3e1-b00064a51626",
+      "data": "2026-10-29"
+    },
+    {
+      "id": "599e4c10-e4e6-4717-bc27-387747f1ef98",
+      "data": "2026-10-29"
     }
   ]
 }
