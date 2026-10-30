@@ -1,0 +1,74 @@
+{
+  "versione": 1,
+  "sveglia": "2026-10-30-21-40",
+  "tipo": "Chiusura",
+  "iniziataAlle": "2026-10-30T20:40:10.854Z",
+  "finitaAlle": "2026-10-30T20:40:21.402Z",
+  "esito": "completata",
+  "appunto": "Chiusura: 0 ordini inviati, 0 rifiutati. Prossima sveglia 2026-11-02 09:00 (Briefing): Alla prossima apertura verificare che il codice venda SPY e annulli il suo stop a 729,42. Controllare che AAPL e MSFT restino sopra la media a 50 giorni e tenere d'occhio il limite del 35% per la tecnologia. Rivalutare AAPL dopo la trimestrale del 2 novembre. QQQ, NVDA e IWM tornano in valutazione solo se risalgono sopra la media a 50 giorni.",
+  "conto": {
+    "patrimonio": 99705.3,
+    "contanti": 51690.63,
+    "pnlGiorno": -722.2299999999959,
+    "aggiornato": true
+  },
+  "posizioni": [
+    {
+      "simbolo": "AAPL",
+      "quantita": 50,
+      "prezzoCarico": 345.7714,
+      "prezzoAttuale": 344.8433,
+      "variazione": "-0.27%"
+    },
+    {
+      "simbolo": "MSFT",
+      "quantita": 30,
+      "prezzoCarico": 522.15,
+      "prezzoAttuale": 521.75,
+      "variazione": "-0.08%"
+    },
+    {
+      "simbolo": "SPY",
+      "quantita": 20,
+      "prezzoCarico": 767.814,
+      "prezzoAttuale": 756,
+      "variazione": "-1.54%"
+    }
+  ],
+  "ordiniInviati": [],
+  "ordiniGiaPresenti": [],
+  "ordiniIncerti": [],
+  "ordiniFalliti": [],
+  "ordiniRifiutati": [],
+  "ragionamento": "Il mercato è chiuso, quindi nessun ordine può essere inviato. AAPL e MSFT restano sopra le medie a 50 e 200 giorni e il trend è intatto, quindi le tengo. SPY ha chiuso sotto la media a 50 giorni (756 contro 766,9): l'uscita spetta al codice alla prossima apertura. QQQ, NVDA e IWM sono sotto la media a 50 giorni, mentre GLD e TLT sono sotto la media a 200 giorni, quindi nessuno è candidato all'acquisto. Voto: 3/3 risposte valide, 0 ordini con la maggioranza.",
+  "pianoProssima": "Alla prossima apertura verificare che il codice venda SPY e annulli il suo stop a 729,42. Controllare che AAPL e MSFT restino sopra la media a 50 giorni e tenere d'occhio il limite del 35% per la tecnologia. Rivalutare AAPL dopo la trimestrale del 2 novembre. QQQ, NVDA e IWM tornano in valutazione solo se risalgono sopra la media a 50 giorni.",
+  "prossimaSveglia": "2026-11-02-09-00",
+  "allarmi": [],
+  "stopSuAlpaca": null,
+  "lezioniAttive": [],
+  "lezioniNuove": [],
+  "acquistiBloccati": null,
+  "confronto": {
+    "dal": "2026-10-25",
+    "conto": -0.002946999999999922,
+    "spy": -0.00539402710169723,
+    "misto": {
+      "dal": "2026-10-26",
+      "conto": -0.002946999999999922,
+      "rendimento": -0.0015633937490242998
+    }
+  },
+  "tradeChiusi": [],
+  "diario": {
+    "stato": "solo raccolta dati (osservazione fino al 2027-01-24, 0/30 trade chiusi): le statistiche non influenzano le scelte",
+    "statistiche": {
+      "trade": 0,
+      "vinti": 0,
+      "percVinti": null,
+      "mediaVincita": null,
+      "mediaPerdita": null,
+      "attesa": null,
+      "campione": "nessuno"
+    }
+  }
+}
