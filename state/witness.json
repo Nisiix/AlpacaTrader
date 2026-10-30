@@ -1,15 +1,15 @@
 {
   "versione": 1,
-  "sveglia": "2026-10-30-09-00",
-  "tipo": "Briefing",
-  "iniziataAlle": "2026-10-30T08:00:31.210Z",
-  "finitaAlle": "2026-10-30T08:00:43.917Z",
+  "sveglia": "2026-10-30-15-40",
+  "tipo": "Apertura",
+  "iniziataAlle": "2026-10-30T14:40:25.367Z",
+  "finitaAlle": "2026-10-30T14:40:43.081Z",
   "esito": "completata",
-  "appunto": "Briefing: 0 ordini inviati, 0 rifiutati. Prossima sveglia 2026-10-30 15:40 (Apertura): Alla sveglia di apertura controllare se il codice vende SPY, che è sotto la media a 50 giorni. Verificare che AAPL e MSFT restino sopra la media a 50 giorni. Tenere d'occhio la trimestrale AAPL del 2 novembre (nessun acquisto di AAPL nei 2 giorni prima) e il limite del 35% per il gruppo tecnologia. QQQ, NVDA e IWM tornano in valutazione solo se risalgono sopra la media a 50 giorni.",
+  "appunto": "Apertura: 0 ordini inviati, 0 rifiutati. Prossima sveglia 2026-10-30 18:30 (Metà seduta): Alla prossima sveglia controllare se il codice ha venduto SPY e se lo stop di SPY è stato annullato. Verificare che AAPL e MSFT restino sopra la media a 50 giorni e tenere d'occhio il limite del 35% per la tecnologia. Dopo la trimestrale AAPL del 2 novembre rivalutare AAPL. QQQ, NVDA e IWM tornano in valutazione solo se risalgono sopra la media a 50 giorni.",
   "conto": {
-    "patrimonio": 100244.03,
+    "patrimonio": 99991.53,
     "contanti": 51690.63,
-    "pnlGiorno": -183.5,
+    "pnlGiorno": -436,
     "aggiornato": true
   },
   "posizioni": [
@@ -17,22 +17,22 @@
       "simbolo": "AAPL",
       "quantita": 50,
       "prezzoCarico": 345.7714,
-      "prezzoAttuale": 351.6499,
-      "variazione": "1.70%"
+      "prezzoAttuale": 347.91,
+      "variazione": "0.62%"
     },
     {
       "simbolo": "MSFT",
       "quantita": 30,
       "prezzoCarico": 522.15,
-      "prezzoAttuale": 524.09,
-      "variazione": "0.37%"
+      "prezzoAttuale": 523.92,
+      "variazione": "0.34%"
     },
     {
       "simbolo": "SPY",
       "quantita": 20,
       "prezzoCarico": 767.814,
-      "prezzoAttuale": 762.41,
-      "variazione": "-0.70%"
+      "prezzoAttuale": 759.39,
+      "variazione": "-1.10%"
     }
   ],
   "ordiniInviati": [],
@@ -40,22 +40,35 @@
   "ordiniIncerti": [],
   "ordiniFalliti": [],
   "ordiniRifiutati": [],
-  "ragionamento": "È il briefing e il mercato è chiuso, quindi non si può inviare nessun ordine. AAPL e MSFT restano sopra le medie a 50 e a 200 giorni, con gli stop di protezione attivi. SPY è sotto la media a 50 giorni (766,86) per una distanza minima: l'uscita normale spetta al codice all'apertura e io non vendo per un calo così piccolo. Nel dubbio non faccio niente. Voto: 3/3 risposte valide, 0 ordini con la maggioranza.",
-  "pianoProssima": "Alla sveglia di apertura controllare se il codice vende SPY, che è sotto la media a 50 giorni. Verificare che AAPL e MSFT restino sopra la media a 50 giorni. Tenere d'occhio la trimestrale AAPL del 2 novembre (nessun acquisto di AAPL nei 2 giorni prima) e il limite del 35% per il gruppo tecnologia. QQQ, NVDA e IWM tornano in valutazione solo se risalgono sopra la media a 50 giorni.",
-  "prossimaSveglia": "2026-10-30-15-40",
+  "ragionamento": "Solo AAPL e MSFT hanno l'ultima chiusura sopra la media a 50 e a 200 giorni, e le abbiamo già in portafoglio. Il gruppo tecnologia pesa circa il 33% del conto (AAPL 17.383 e MSFT 15.708 su circa 100.000), quindi resta poco spazio sotto il limite del 35%. AAPL ha la trimestrale il 2 novembre, perciò non va comprata. SPY è sotto la media a 50 giorni (759 contro 767): l'uscita normale spetta al codice, quindi non invio un ordine che la duplicherebbe. QQQ, NVDA e IWM sono sotto la media a 50 giorni e non si comprano. Nel dubbio non faccio niente, perché ogni ordine ha un costo. Voto: 3/3 risposte valide, 0 ordini con la maggioranza.",
+  "pianoProssima": "Alla prossima sveglia controllare se il codice ha venduto SPY e se lo stop di SPY è stato annullato. Verificare che AAPL e MSFT restino sopra la media a 50 giorni e tenere d'occhio il limite del 35% per la tecnologia. Dopo la trimestrale AAPL del 2 novembre rivalutare AAPL. QQQ, NVDA e IWM tornano in valutazione solo se risalgono sopra la media a 50 giorni.",
+  "prossimaSveglia": "2026-10-30-18-30",
   "allarmi": [],
-  "stopSuAlpaca": null,
+  "stopSuAlpaca": {
+    "attivi": [
+      "AAPL 50 @ 328.48",
+      "SPY 20 @ 729.42",
+      "MSFT 30 @ 485.60"
+    ],
+    "piazzati": [
+      "MSFT 30 @ 485.60"
+    ],
+    "tolti": [
+      "MSFT 30 @ 488.21"
+    ],
+    "errori": []
+  },
   "lezioniAttive": [],
   "lezioniNuove": [],
   "acquistiBloccati": null,
   "confronto": {
     "dal": "2026-10-25",
-    "conto": 0.002440299999999951,
-    "spy": 0.006788580449940795,
+    "conto": -0.00008470000000004863,
+    "spy": -0.0012498355479543255,
     "misto": {
       "dal": "2026-10-26",
-      "conto": 0.002440299999999951,
-      "rendimento": 0.005008072614902304
+      "conto": -0.00008470000000004863,
+      "rendimento": 0.0007262950053398277
     }
   },
   "tradeChiusi": [],

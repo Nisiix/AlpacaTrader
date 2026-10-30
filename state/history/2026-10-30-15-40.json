@@ -1,0 +1,87 @@
+{
+  "versione": 1,
+  "sveglia": "2026-10-30-15-40",
+  "tipo": "Apertura",
+  "iniziataAlle": "2026-10-30T14:40:25.367Z",
+  "finitaAlle": "2026-10-30T14:40:43.081Z",
+  "esito": "completata",
+  "appunto": "Apertura: 0 ordini inviati, 0 rifiutati. Prossima sveglia 2026-10-30 18:30 (Metà seduta): Alla prossima sveglia controllare se il codice ha venduto SPY e se lo stop di SPY è stato annullato. Verificare che AAPL e MSFT restino sopra la media a 50 giorni e tenere d'occhio il limite del 35% per la tecnologia. Dopo la trimestrale AAPL del 2 novembre rivalutare AAPL. QQQ, NVDA e IWM tornano in valutazione solo se risalgono sopra la media a 50 giorni.",
+  "conto": {
+    "patrimonio": 99991.53,
+    "contanti": 51690.63,
+    "pnlGiorno": -436,
+    "aggiornato": true
+  },
+  "posizioni": [
+    {
+      "simbolo": "AAPL",
+      "quantita": 50,
+      "prezzoCarico": 345.7714,
+      "prezzoAttuale": 347.91,
+      "variazione": "0.62%"
+    },
+    {
+      "simbolo": "MSFT",
+      "quantita": 30,
+      "prezzoCarico": 522.15,
+      "prezzoAttuale": 523.92,
+      "variazione": "0.34%"
+    },
+    {
+      "simbolo": "SPY",
+      "quantita": 20,
+      "prezzoCarico": 767.814,
+      "prezzoAttuale": 759.39,
+      "variazione": "-1.10%"
+    }
+  ],
+  "ordiniInviati": [],
+  "ordiniGiaPresenti": [],
+  "ordiniIncerti": [],
+  "ordiniFalliti": [],
+  "ordiniRifiutati": [],
+  "ragionamento": "Solo AAPL e MSFT hanno l'ultima chiusura sopra la media a 50 e a 200 giorni, e le abbiamo già in portafoglio. Il gruppo tecnologia pesa circa il 33% del conto (AAPL 17.383 e MSFT 15.708 su circa 100.000), quindi resta poco spazio sotto il limite del 35%. AAPL ha la trimestrale il 2 novembre, perciò non va comprata. SPY è sotto la media a 50 giorni (759 contro 767): l'uscita normale spetta al codice, quindi non invio un ordine che la duplicherebbe. QQQ, NVDA e IWM sono sotto la media a 50 giorni e non si comprano. Nel dubbio non faccio niente, perché ogni ordine ha un costo. Voto: 3/3 risposte valide, 0 ordini con la maggioranza.",
+  "pianoProssima": "Alla prossima sveglia controllare se il codice ha venduto SPY e se lo stop di SPY è stato annullato. Verificare che AAPL e MSFT restino sopra la media a 50 giorni e tenere d'occhio il limite del 35% per la tecnologia. Dopo la trimestrale AAPL del 2 novembre rivalutare AAPL. QQQ, NVDA e IWM tornano in valutazione solo se risalgono sopra la media a 50 giorni.",
+  "prossimaSveglia": "2026-10-30-18-30",
+  "allarmi": [],
+  "stopSuAlpaca": {
+    "attivi": [
+      "AAPL 50 @ 328.48",
+      "SPY 20 @ 729.42",
+      "MSFT 30 @ 485.60"
+    ],
+    "piazzati": [
+      "MSFT 30 @ 485.60"
+    ],
+    "tolti": [
+      "MSFT 30 @ 488.21"
+    ],
+    "errori": []
+  },
+  "lezioniAttive": [],
+  "lezioniNuove": [],
+  "acquistiBloccati": null,
+  "confronto": {
+    "dal": "2026-10-25",
+    "conto": -0.00008470000000004863,
+    "spy": -0.0012498355479543255,
+    "misto": {
+      "dal": "2026-10-26",
+      "conto": -0.00008470000000004863,
+      "rendimento": 0.0007262950053398277
+    }
+  },
+  "tradeChiusi": [],
+  "diario": {
+    "stato": "solo raccolta dati (osservazione fino al 2027-01-24, 0/30 trade chiusi): le statistiche non influenzano le scelte",
+    "statistiche": {
+      "trade": 0,
+      "vinti": 0,
+      "percVinti": null,
+      "mediaVincita": null,
+      "mediaPerdita": null,
+      "attesa": null,
+      "campione": "nessuno"
+    }
+  }
+}
