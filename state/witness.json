@@ -1,15 +1,15 @@
 {
   "versione": 1,
-  "sveglia": "2026-10-29-21-40",
-  "tipo": "Chiusura",
-  "iniziataAlle": "2026-10-29T20:40:06.250Z",
-  "finitaAlle": "2026-10-29T20:40:16.080Z",
+  "sveglia": "2026-10-30-09-00",
+  "tipo": "Briefing",
+  "iniziataAlle": "2026-10-30T08:00:31.210Z",
+  "finitaAlle": "2026-10-30T08:00:43.917Z",
   "esito": "completata",
-  "appunto": "Chiusura: 0 ordini inviati, 0 rifiutati. Prossima sveglia 2026-10-30 09:00 (Briefing): Alla prossima apertura controllare se SPY chiude di nuovo sotto la media a 50 giorni (766,82), perché in quel caso l'uscita automatica scatta. Verificare che AAPL e MSFT restino sopra la media a 50 giorni. Tenere d'occhio la trimestrale AAPL del 2 novembre e il limite del 35% per il gruppo tecnologia. QQQ, NVDA e IWM tornano in valutazione solo se risalgono sopra la media a 50 giorni.",
+  "appunto": "Briefing: 0 ordini inviati, 0 rifiutati. Prossima sveglia 2026-10-30 15:40 (Apertura): Alla sveglia di apertura controllare se il codice vende SPY, che è sotto la media a 50 giorni. Verificare che AAPL e MSFT restino sopra la media a 50 giorni. Tenere d'occhio la trimestrale AAPL del 2 novembre (nessun acquisto di AAPL nei 2 giorni prima) e il limite del 35% per il gruppo tecnologia. QQQ, NVDA e IWM tornano in valutazione solo se risalgono sopra la media a 50 giorni.",
   "conto": {
-    "patrimonio": 100351.12,
-    "contanti": 51690.64,
-    "pnlGiorno": 448.1999999999971,
+    "patrimonio": 100244.03,
+    "contanti": 51690.63,
+    "pnlGiorno": -183.5,
     "aggiornato": true
   },
   "posizioni": [
@@ -17,22 +17,22 @@
       "simbolo": "AAPL",
       "quantita": 50,
       "prezzoCarico": 345.7714,
-      "prezzoAttuale": 349.9769,
-      "variazione": "1.22%"
+      "prezzoAttuale": 351.6499,
+      "variazione": "1.70%"
     },
     {
       "simbolo": "MSFT",
       "quantita": 30,
       "prezzoCarico": 522.15,
-      "prezzoAttuale": 528,
-      "variazione": "1.12%"
+      "prezzoAttuale": 524.09,
+      "variazione": "0.37%"
     },
     {
       "simbolo": "SPY",
       "quantita": 20,
       "prezzoCarico": 767.814,
-      "prezzoAttuale": 766.0817,
-      "variazione": "-0.23%"
+      "prezzoAttuale": 762.41,
+      "variazione": "-0.70%"
     }
   ],
   "ordiniInviati": [],
@@ -40,9 +40,9 @@
   "ordiniIncerti": [],
   "ordiniFalliti": [],
   "ordiniRifiutati": [],
-  "ragionamento": "Il mercato è chiuso e non si possono inviare ordini. AAPL e MSFT restano sopra le medie a 50 e 200 giorni e gli stop di protezione sono attivi, quindi non c'è motivo di vendere. SPY ha chiuso a 766,42, sotto la media a 50 giorni (766,82) per una distanza minima. La vendita normale la decide il codice alla prossima apertura, e io non vendo per un calo così piccolo. Nel dubbio non faccio niente. Voto: 3/3 risposte valide, 0 ordini con la maggioranza.",
-  "pianoProssima": "Alla prossima apertura controllare se SPY chiude di nuovo sotto la media a 50 giorni (766,82), perché in quel caso l'uscita automatica scatta. Verificare che AAPL e MSFT restino sopra la media a 50 giorni. Tenere d'occhio la trimestrale AAPL del 2 novembre e il limite del 35% per il gruppo tecnologia. QQQ, NVDA e IWM tornano in valutazione solo se risalgono sopra la media a 50 giorni.",
-  "prossimaSveglia": "2026-10-30-09-00",
+  "ragionamento": "È il briefing e il mercato è chiuso, quindi non si può inviare nessun ordine. AAPL e MSFT restano sopra le medie a 50 e a 200 giorni, con gli stop di protezione attivi. SPY è sotto la media a 50 giorni (766,86) per una distanza minima: l'uscita normale spetta al codice all'apertura e io non vendo per un calo così piccolo. Nel dubbio non faccio niente. Voto: 3/3 risposte valide, 0 ordini con la maggioranza.",
+  "pianoProssima": "Alla sveglia di apertura controllare se il codice vende SPY, che è sotto la media a 50 giorni. Verificare che AAPL e MSFT restino sopra la media a 50 giorni. Tenere d'occhio la trimestrale AAPL del 2 novembre (nessun acquisto di AAPL nei 2 giorni prima) e il limite del 35% per il gruppo tecnologia. QQQ, NVDA e IWM tornano in valutazione solo se risalgono sopra la media a 50 giorni.",
+  "prossimaSveglia": "2026-10-30-15-40",
   "allarmi": [],
   "stopSuAlpaca": null,
   "lezioniAttive": [],
@@ -50,12 +50,12 @@
   "acquistiBloccati": null,
   "confronto": {
     "dal": "2026-10-25",
-    "conto": 0.0035111999999999366,
-    "spy": 0.008314695434811226,
+    "conto": 0.002440299999999951,
+    "spy": 0.006788580449940795,
     "misto": {
       "dal": "2026-10-26",
-      "conto": 0.0035111999999999366,
-      "rendimento": 0.005923741605824562
+      "conto": 0.002440299999999951,
+      "rendimento": 0.005008072614902304
     }
   },
   "tradeChiusi": [],
