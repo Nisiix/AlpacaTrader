@@ -1,0 +1,4 @@
+2026-11-02T08:00:25.922Z [INFO] === sveglia 2026-11-02-09-00 (Briefing) pid 490, broker alpaca-paper, cervello claude -p × 3 (maggioranza 2)
+2026-11-02T08:00:26.752Z [INFO] conto: patrimonio 99737.23, contanti 51690.63, posizioni 3, ordini 48h 3, mercato chiuso
+2026-11-02T08:00:26.809Z [WARN] ALLARME Calendario eventi da aggiornare: In src/events.ts: nessuna trimestrale futura per MSFT. Senza la data il blocco degli acquisti prima di Fed e trimestrali non può scattare.
+2026-11-02T08:00:27.465Z [INFO] diario: solo raccolta dati (osservazione fino al 2027-01-24, 0/30 trade chiusi): le statistiche non influenzano le scelte
