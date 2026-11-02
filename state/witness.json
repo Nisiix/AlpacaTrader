@@ -1,15 +1,15 @@
 {
   "versione": 1,
-  "sveglia": "2026-10-30-21-40",
-  "tipo": "Chiusura",
-  "iniziataAlle": "2026-10-30T20:40:10.854Z",
-  "finitaAlle": "2026-10-30T20:40:21.402Z",
-  "esito": "completata",
-  "appunto": "Chiusura: 0 ordini inviati, 0 rifiutati. Prossima sveglia 2026-11-02 09:00 (Briefing): Alla prossima apertura verificare che il codice venda SPY e annulli il suo stop a 729,42. Controllare che AAPL e MSFT restino sopra la media a 50 giorni e tenere d'occhio il limite del 35% per la tecnologia. Rivalutare AAPL dopo la trimestrale del 2 novembre. QQQ, NVDA e IWM tornano in valutazione solo se risalgono sopra la media a 50 giorni.",
+  "sveglia": "2026-11-02-09-00",
+  "tipo": "Briefing",
+  "iniziataAlle": "2026-11-02T08:00:25.920Z",
+  "finitaAlle": "2026-11-02T08:00:45.598Z",
+  "esito": "completata con problemi",
+  "appunto": "Briefing: 0 ordini inviati, 0 rifiutati. Prossima sveglia 2026-11-02 15:40 (Apertura): Alla sveglia di apertura verificare che il codice venda SPY e annulli il suo stop a 729,42. Controllare la reazione di AAPL alla trimestrale del 2 novembre e che resti sopra la media a 50 giorni, e controllare che MSFT faccia lo stesso. Tenere d'occhio il limite del 35% per la tecnologia. Rivalutare nuovi acquisti solo per i titoli sopra le medie a 50 e 200 giorni.",
   "conto": {
-    "patrimonio": 99705.3,
+    "patrimonio": 99737.23,
     "contanti": 51690.63,
-    "pnlGiorno": -722.2299999999959,
+    "pnlGiorno": 43.39999999999418,
     "aggiornato": true
   },
   "posizioni": [
@@ -17,22 +17,22 @@
       "simbolo": "AAPL",
       "quantita": 50,
       "prezzoCarico": 345.7714,
-      "prezzoAttuale": 344.8433,
-      "variazione": "-0.27%"
+      "prezzoAttuale": 343.96,
+      "variazione": "-0.52%"
     },
     {
       "simbolo": "MSFT",
       "quantita": 30,
       "prezzoCarico": 522.15,
-      "prezzoAttuale": 521.75,
-      "variazione": "-0.08%"
+      "prezzoAttuale": 522.42,
+      "variazione": "0.05%"
     },
     {
       "simbolo": "SPY",
       "quantita": 20,
       "prezzoCarico": 767.814,
-      "prezzoAttuale": 756,
-      "variazione": "-1.54%"
+      "prezzoAttuale": 758.8,
+      "variazione": "-1.17%"
     }
   ],
   "ordiniInviati": [],
@@ -40,21 +40,23 @@
   "ordiniIncerti": [],
   "ordiniFalliti": [],
   "ordiniRifiutati": [],
-  "ragionamento": "Il mercato è chiuso, quindi nessun ordine può essere inviato. AAPL e MSFT restano sopra le medie a 50 e 200 giorni e il trend è intatto, quindi le tengo. SPY ha chiuso sotto la media a 50 giorni (756 contro 766,9): l'uscita spetta al codice alla prossima apertura. QQQ, NVDA e IWM sono sotto la media a 50 giorni, mentre GLD e TLT sono sotto la media a 200 giorni, quindi nessuno è candidato all'acquisto. Voto: 3/3 risposte valide, 0 ordini con la maggioranza.",
-  "pianoProssima": "Alla prossima apertura verificare che il codice venda SPY e annulli il suo stop a 729,42. Controllare che AAPL e MSFT restino sopra la media a 50 giorni e tenere d'occhio il limite del 35% per la tecnologia. Rivalutare AAPL dopo la trimestrale del 2 novembre. QQQ, NVDA e IWM tornano in valutazione solo se risalgono sopra la media a 50 giorni.",
-  "prossimaSveglia": "2026-11-02-09-00",
-  "allarmi": [],
+  "ragionamento": "È un briefing a mercato chiuso, quindi non si possono inviare ordini. AAPL e MSFT restano sopra le medie a 50 e 200 giorni e il trend è intatto, quindi le tengo. SPY è sotto la media a 50 giorni (756 contro 766,8) e il codice lo venderà all'apertura. Nessun titolo è un nuovo candidato all'acquisto: QQQ, NVDA, IWM e SPY sono sotto la media a 50 giorni, GLD è sotto entrambe le medie e TLT è sotto quella a 200 giorni. AAPL ha la trimestrale oggi, quindi gli acquisti su AAPL sono comunque esclusi. Voto: 3/3 risposte valide, 0 ordini con la maggioranza.",
+  "pianoProssima": "Alla sveglia di apertura verificare che il codice venda SPY e annulli il suo stop a 729,42. Controllare la reazione di AAPL alla trimestrale del 2 novembre e che resti sopra la media a 50 giorni, e controllare che MSFT faccia lo stesso. Tenere d'occhio il limite del 35% per la tecnologia. Rivalutare nuovi acquisti solo per i titoli sopra le medie a 50 e 200 giorni.",
+  "prossimaSveglia": "2026-11-02-15-40",
+  "allarmi": [
+    "Calendario eventi da aggiornare: In src/events.ts: nessuna trimestrale futura per MSFT. Senza la data il blocco degli acquisti prima di Fed e trimestrali non può scattare."
+  ],
   "stopSuAlpaca": null,
   "lezioniAttive": [],
   "lezioniNuove": [],
   "acquistiBloccati": null,
   "confronto": {
     "dal": "2026-10-25",
-    "conto": -0.002946999999999922,
+    "conto": -0.0026277000000000106,
     "spy": -0.00539402710169723,
     "misto": {
       "dal": "2026-10-26",
-      "conto": -0.002946999999999922,
+      "conto": -0.0026277000000000106,
       "rendimento": -0.0015633937490242998
     }
   },

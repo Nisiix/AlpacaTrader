@@ -1,0 +1,76 @@
+{
+  "versione": 1,
+  "sveglia": "2026-11-02-09-00",
+  "tipo": "Briefing",
+  "iniziataAlle": "2026-11-02T08:00:25.920Z",
+  "finitaAlle": "2026-11-02T08:00:45.598Z",
+  "esito": "completata con problemi",
+  "appunto": "Briefing: 0 ordini inviati, 0 rifiutati. Prossima sveglia 2026-11-02 15:40 (Apertura): Alla sveglia di apertura verificare che il codice venda SPY e annulli il suo stop a 729,42. Controllare la reazione di AAPL alla trimestrale del 2 novembre e che resti sopra la media a 50 giorni, e controllare che MSFT faccia lo stesso. Tenere d'occhio il limite del 35% per la tecnologia. Rivalutare nuovi acquisti solo per i titoli sopra le medie a 50 e 200 giorni.",
+  "conto": {
+    "patrimonio": 99737.23,
+    "contanti": 51690.63,
+    "pnlGiorno": 43.39999999999418,
+    "aggiornato": true
+  },
+  "posizioni": [
+    {
+      "simbolo": "AAPL",
+      "quantita": 50,
+      "prezzoCarico": 345.7714,
+      "prezzoAttuale": 343.96,
+      "variazione": "-0.52%"
+    },
+    {
+      "simbolo": "MSFT",
+      "quantita": 30,
+      "prezzoCarico": 522.15,
+      "prezzoAttuale": 522.42,
+      "variazione": "0.05%"
+    },
+    {
+      "simbolo": "SPY",
+      "quantita": 20,
+      "prezzoCarico": 767.814,
+      "prezzoAttuale": 758.8,
+      "variazione": "-1.17%"
+    }
+  ],
+  "ordiniInviati": [],
+  "ordiniGiaPresenti": [],
+  "ordiniIncerti": [],
+  "ordiniFalliti": [],
+  "ordiniRifiutati": [],
+  "ragionamento": "È un briefing a mercato chiuso, quindi non si possono inviare ordini. AAPL e MSFT restano sopra le medie a 50 e 200 giorni e il trend è intatto, quindi le tengo. SPY è sotto la media a 50 giorni (756 contro 766,8) e il codice lo venderà all'apertura. Nessun titolo è un nuovo candidato all'acquisto: QQQ, NVDA, IWM e SPY sono sotto la media a 50 giorni, GLD è sotto entrambe le medie e TLT è sotto quella a 200 giorni. AAPL ha la trimestrale oggi, quindi gli acquisti su AAPL sono comunque esclusi. Voto: 3/3 risposte valide, 0 ordini con la maggioranza.",
+  "pianoProssima": "Alla sveglia di apertura verificare che il codice venda SPY e annulli il suo stop a 729,42. Controllare la reazione di AAPL alla trimestrale del 2 novembre e che resti sopra la media a 50 giorni, e controllare che MSFT faccia lo stesso. Tenere d'occhio il limite del 35% per la tecnologia. Rivalutare nuovi acquisti solo per i titoli sopra le medie a 50 e 200 giorni.",
+  "prossimaSveglia": "2026-11-02-15-40",
+  "allarmi": [
+    "Calendario eventi da aggiornare: In src/events.ts: nessuna trimestrale futura per MSFT. Senza la data il blocco degli acquisti prima di Fed e trimestrali non può scattare."
+  ],
+  "stopSuAlpaca": null,
+  "lezioniAttive": [],
+  "lezioniNuove": [],
+  "acquistiBloccati": null,
+  "confronto": {
+    "dal": "2026-10-25",
+    "conto": -0.0026277000000000106,
+    "spy": -0.00539402710169723,
+    "misto": {
+      "dal": "2026-10-26",
+      "conto": -0.0026277000000000106,
+      "rendimento": -0.0015633937490242998
+    }
+  },
+  "tradeChiusi": [],
+  "diario": {
+    "stato": "solo raccolta dati (osservazione fino al 2027-01-24, 0/30 trade chiusi): le statistiche non influenzano le scelte",
+    "statistiche": {
+      "trade": 0,
+      "vinti": 0,
+      "percVinti": null,
+      "mediaVincita": null,
+      "mediaPerdita": null,
+      "attesa": null,
+      "campione": "nessuno"
+    }
+  }
+}
