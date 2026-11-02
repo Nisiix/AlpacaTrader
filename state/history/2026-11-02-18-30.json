@@ -1,0 +1,94 @@
+{
+  "versione": 1,
+  "sveglia": "2026-11-02-18-30",
+  "tipo": "Metà seduta",
+  "iniziataAlle": "2026-11-02T17:44:11.790Z",
+  "finitaAlle": "2026-11-02T17:44:31.994Z",
+  "esito": "completata con problemi",
+  "appunto": "Metà seduta: 1 ordini inviati, 0 rifiutati. Prossima sveglia 2026-11-02 21:40 (Chiusura): Controllare che SPY sia stato venduto e che il suo stop sia stato annullato. Vedere come AAPL reagisce alla trimestrale e se resta sopra la media a 50 giorni (333,07), con lo stop a 328,48 vicino. Controllare che MSFT resti sopra la media a 50 giorni (512,94). Rivalutare nuovi acquisti alla prossima sveglia di apertura, solo per titoli sopra entrambe le medie, e tenere d'occhio il limite del 35% per la tecnologia.",
+  "conto": {
+    "patrimonio": 99316.23,
+    "contanti": 66845.43,
+    "pnlGiorno": -377.6000000000058,
+    "aggiornato": true
+  },
+  "posizioni": [
+    {
+      "simbolo": "AAPL",
+      "quantita": 50,
+      "prezzoCarico": 345.7714,
+      "prezzoAttuale": 337.47,
+      "variazione": "-2.40%"
+    },
+    {
+      "simbolo": "MSFT",
+      "quantita": 30,
+      "prezzoCarico": 522.15,
+      "prezzoAttuale": 519.91,
+      "variazione": "-0.43%"
+    }
+  ],
+  "ordiniInviati": [
+    {
+      "id": "2026-11-02-18-30-SPY-sell",
+      "simbolo": "SPY",
+      "lato": "sell",
+      "quantita": 20,
+      "origine": "modello",
+      "perche": "SPY ha chiuso sotto la media a 50 giorni (757,84 contro 766,76) e la vendita di uscita prevista all'apertura non risulta eseguita: la posizione è ancora aperta.",
+      "stato": "pending_new"
+    }
+  ],
+  "ordiniGiaPresenti": [],
+  "ordiniIncerti": [],
+  "ordiniFalliti": [],
+  "ordiniRifiutati": [],
+  "ragionamento": "SPY è ancora in portafoglio nonostante sia sotto la media a 50 giorni, che è il segnale di uscita del metodo, quindi lo vendo. AAPL e MSFT restano sopra le medie a 50 e a 200 giorni e il trend è intatto, quindi le tengo. AAPL ha la trimestrale oggi e il prezzo è sceso a 337,5, ma resta sopra la media a 50 giorni (333,07) e sopra lo stop a 328,48. Non faccio acquisti, perché siamo a metà seduta e nessun altro titolo è sopra entrambe le medie. QQQ, NVDA e IWM sono sotto la media a 50 giorni, GLD è sotto entrambe e TLT è sotto la media a 200 giorni. Voto: 3/3 risposte valide, 1 ordini con la maggioranza.",
+  "pianoProssima": "Controllare che SPY sia stato venduto e che il suo stop sia stato annullato. Vedere come AAPL reagisce alla trimestrale e se resta sopra la media a 50 giorni (333,07), con lo stop a 328,48 vicino. Controllare che MSFT resti sopra la media a 50 giorni (512,94). Rivalutare nuovi acquisti alla prossima sveglia di apertura, solo per titoli sopra entrambe le medie, e tenere d'occhio il limite del 35% per la tecnologia.",
+  "prossimaSveglia": "2026-11-02-21-40",
+  "allarmi": [
+    "Sveglie saltate: 2026-11-02 15:40 (Apertura)\nMacchina spenta o offline? Non le recupero: un ordine di ore fa non ha più senso."
+  ],
+  "stopSuAlpaca": {
+    "attivi": [
+      "AAPL 50 @ 328.48",
+      "MSFT 30 @ 485.60"
+    ],
+    "piazzati": [],
+    "tolti": [],
+    "errori": []
+  },
+  "lezioniAttive": [],
+  "lezioniNuove": [],
+  "acquistiBloccati": null,
+  "confronto": {
+    "dal": "2026-10-25",
+    "conto": -0.006837700000000058,
+    "spy": -0.0029732929877647196,
+    "misto": {
+      "dal": "2026-10-26",
+      "conto": -0.006837700000000058,
+      "rendimento": 0.001955721587092652
+    }
+  },
+  "tradeChiusi": [
+    {
+      "simbolo": "SPY",
+      "risultato": -0.01312036508841985,
+      "giorni": 4,
+      "uscita": "scelta del modello"
+    }
+  ],
+  "diario": {
+    "stato": "solo raccolta dati (osservazione fino al 2027-01-24, 0/30 trade chiusi): le statistiche non influenzano le scelte",
+    "statistiche": {
+      "trade": 1,
+      "vinti": 0,
+      "percVinti": 0,
+      "mediaVincita": null,
+      "mediaPerdita": -0.01312036508841985,
+      "attesa": -0.01312036508841985,
+      "campione": "troppo piccolo"
+    }
+  }
+}
