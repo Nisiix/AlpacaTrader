@@ -1,0 +1,5 @@
+2026-11-02T17:44:11.790Z [INFO] === sveglia 2026-11-02-18-30 (Metà seduta) pid 334, broker alpaca-paper, cervello claude -p × 3 (maggioranza 2)
+2026-11-02T17:44:13.156Z [INFO] conto: patrimonio 99321.28, contanti 51690.63, posizioni 3, ordini 48h 3, mercato aperto
+2026-11-02T17:44:13.156Z [WARN] ALLARME Sveglie saltate: 2026-11-02 15:40 (Apertura)
+Macchina spenta o offline? Non le recupero: un ordine di ore fa non ha più senso.
+2026-11-02T17:44:13.855Z [INFO] diario: solo raccolta dati (osservazione fino al 2027-01-24, 0/30 trade chiusi): le statistiche non influenzano le scelte
