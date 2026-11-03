@@ -1,15 +1,15 @@
 {
   "versione": 1,
-  "sveglia": "2026-11-02-21-40",
-  "tipo": "Chiusura",
-  "iniziataAlle": "2026-11-02T20:40:53.207Z",
-  "finitaAlle": "2026-11-02T20:41:07.341Z",
+  "sveglia": "2026-11-03-09-00",
+  "tipo": "Briefing",
+  "iniziataAlle": "2026-11-03T08:00:29.429Z",
+  "finitaAlle": "2026-11-03T08:00:38.750Z",
   "esito": "completata",
-  "appunto": "Chiusura: 0 ordini inviati, 0 rifiutati. Prossima sveglia 2026-11-03 09:00 (Briefing): Alla sveglia di apertura controllare la reazione di AAPL alla trimestrale e se tiene la media a 50 giorni (333,07) e lo stop a 328,48. Verificare se MSFT ha chiuso sotto la media a 50 giorni (512,94): in quel caso il codice la vende. Valutare nuovi acquisti solo su titoli sopra entrambe le medie, tenendo il limite del 35% per la tecnologia.",
+  "appunto": "Briefing: 0 ordini inviati, 0 rifiutati. Prossima sveglia 2026-11-03 15:40 (Apertura): Alla sveglia di apertura controllare se AAPL tiene la media a 50 giorni (333,66) e lo stop a 328,48. Verificare se il codice vende MSFT sotto la media a 50 giorni (513,41). Valutare acquisti solo su titoli sopra entrambe le medie, rispettando il limite del 35% per la tecnologia. Tenere presente la trimestrale NVDA del 18/11.",
   "conto": {
-    "patrimonio": 98995.63,
+    "patrimonio": 98537.63,
     "contanti": 66845.43,
-    "pnlGiorno": -698.1999999999971,
+    "pnlGiorno": -1156.199999999997,
     "aggiornato": true
   },
   "posizioni": [
@@ -17,15 +17,15 @@
       "simbolo": "AAPL",
       "quantita": 50,
       "prezzoCarico": 345.7714,
-      "prezzoAttuale": 338.09,
-      "variazione": "-2.22%"
+      "prezzoAttuale": 330.55,
+      "variazione": "-4.40%"
     },
     {
       "simbolo": "MSFT",
       "quantita": 30,
       "prezzoCarico": 522.15,
-      "prezzoAttuale": 508.19,
-      "variazione": "-2.67%"
+      "prezzoAttuale": 505.49,
+      "variazione": "-3.19%"
     }
   ],
   "ordiniInviati": [],
@@ -33,30 +33,22 @@
   "ordiniIncerti": [],
   "ordiniFalliti": [],
   "ordiniRifiutati": [],
-  "ragionamento": "SPY è stato venduto (eseguito a 757,74) e non ci sono più posizioni su di esso. AAPL (338,09) resta sopra le medie a 50 e 200 giorni, con lo stop a 328,48 e la trimestrale uscita oggi. MSFT (508,28) è scesa sotto la media a 50 giorni (512,94), ma questa non è ancora una chiusura confermata. L'uscita normale spetta al codice alla prossima apertura, e lo stop a 485,60 protegge dai crolli. Gli acquisti non sono consentiti a questa sveglia e nessun altro titolo è sopra entrambe le medie, quindi non faccio ordini. Voto: 3/3 risposte valide, 0 ordini con la maggioranza.",
-  "pianoProssima": "Alla sveglia di apertura controllare la reazione di AAPL alla trimestrale e se tiene la media a 50 giorni (333,07) e lo stop a 328,48. Verificare se MSFT ha chiuso sotto la media a 50 giorni (512,94): in quel caso il codice la vende. Valutare nuovi acquisti solo su titoli sopra entrambe le medie, tenendo il limite del 35% per la tecnologia.",
-  "prossimaSveglia": "2026-11-03-09-00",
+  "ragionamento": "È la sveglia di briefing a mercato chiuso, quindi non si possono inviare ordini. AAPL (338,95) resta sopra le medie a 50 (333,66) e a 200 giorni, con lo stop a 328,48. MSFT (507,59) è sotto la media a 50 giorni (513,41): se la chiusura lo conferma, l'uscita la fa il codice all'apertura, e lo stop a 485,60 la protegge dai crolli. Nessun altro titolo è sopra entrambe le medie, quindi non ci sono acquisti candidati. Nel dubbio non si fa niente. Voto: 3/3 risposte valide, 0 ordini con la maggioranza.",
+  "pianoProssima": "Alla sveglia di apertura controllare se AAPL tiene la media a 50 giorni (333,66) e lo stop a 328,48. Verificare se il codice vende MSFT sotto la media a 50 giorni (513,41). Valutare acquisti solo su titoli sopra entrambe le medie, rispettando il limite del 35% per la tecnologia. Tenere presente la trimestrale NVDA del 18/11.",
+  "prossimaSveglia": "2026-11-03-15-40",
   "allarmi": [],
-  "stopSuAlpaca": {
-    "attivi": [
-      "AAPL 50 @ 328.48",
-      "MSFT 30 @ 485.60"
-    ],
-    "piazzati": [],
-    "tolti": [],
-    "errori": []
-  },
+  "stopSuAlpaca": null,
   "lezioniAttive": [],
   "lezioniNuove": [],
   "acquistiBloccati": null,
   "confronto": {
     "dal": "2026-10-25",
-    "conto": -0.010043699999999989,
-    "spy": -0.010445993948164811,
+    "conto": -0.014623699999999906,
+    "spy": -0.009117221418234567,
     "misto": {
       "dal": "2026-10-26",
-      "conto": -0.010043699999999989,
-      "rendimento": -0.0041763182289062725
+      "conto": -0.014623699999999906,
+      "rendimento": -0.00394492997235798
     }
   },
   "tradeChiusi": [],

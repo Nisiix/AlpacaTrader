@@ -1,0 +1,67 @@
+{
+  "versione": 1,
+  "sveglia": "2026-11-03-09-00",
+  "tipo": "Briefing",
+  "iniziataAlle": "2026-11-03T08:00:29.429Z",
+  "finitaAlle": "2026-11-03T08:00:38.750Z",
+  "esito": "completata",
+  "appunto": "Briefing: 0 ordini inviati, 0 rifiutati. Prossima sveglia 2026-11-03 15:40 (Apertura): Alla sveglia di apertura controllare se AAPL tiene la media a 50 giorni (333,66) e lo stop a 328,48. Verificare se il codice vende MSFT sotto la media a 50 giorni (513,41). Valutare acquisti solo su titoli sopra entrambe le medie, rispettando il limite del 35% per la tecnologia. Tenere presente la trimestrale NVDA del 18/11.",
+  "conto": {
+    "patrimonio": 98537.63,
+    "contanti": 66845.43,
+    "pnlGiorno": -1156.199999999997,
+    "aggiornato": true
+  },
+  "posizioni": [
+    {
+      "simbolo": "AAPL",
+      "quantita": 50,
+      "prezzoCarico": 345.7714,
+      "prezzoAttuale": 330.55,
+      "variazione": "-4.40%"
+    },
+    {
+      "simbolo": "MSFT",
+      "quantita": 30,
+      "prezzoCarico": 522.15,
+      "prezzoAttuale": 505.49,
+      "variazione": "-3.19%"
+    }
+  ],
+  "ordiniInviati": [],
+  "ordiniGiaPresenti": [],
+  "ordiniIncerti": [],
+  "ordiniFalliti": [],
+  "ordiniRifiutati": [],
+  "ragionamento": "È la sveglia di briefing a mercato chiuso, quindi non si possono inviare ordini. AAPL (338,95) resta sopra le medie a 50 (333,66) e a 200 giorni, con lo stop a 328,48. MSFT (507,59) è sotto la media a 50 giorni (513,41): se la chiusura lo conferma, l'uscita la fa il codice all'apertura, e lo stop a 485,60 la protegge dai crolli. Nessun altro titolo è sopra entrambe le medie, quindi non ci sono acquisti candidati. Nel dubbio non si fa niente. Voto: 3/3 risposte valide, 0 ordini con la maggioranza.",
+  "pianoProssima": "Alla sveglia di apertura controllare se AAPL tiene la media a 50 giorni (333,66) e lo stop a 328,48. Verificare se il codice vende MSFT sotto la media a 50 giorni (513,41). Valutare acquisti solo su titoli sopra entrambe le medie, rispettando il limite del 35% per la tecnologia. Tenere presente la trimestrale NVDA del 18/11.",
+  "prossimaSveglia": "2026-11-03-15-40",
+  "allarmi": [],
+  "stopSuAlpaca": null,
+  "lezioniAttive": [],
+  "lezioniNuove": [],
+  "acquistiBloccati": null,
+  "confronto": {
+    "dal": "2026-10-25",
+    "conto": -0.014623699999999906,
+    "spy": -0.009117221418234567,
+    "misto": {
+      "dal": "2026-10-26",
+      "conto": -0.014623699999999906,
+      "rendimento": -0.00394492997235798
+    }
+  },
+  "tradeChiusi": [],
+  "diario": {
+    "stato": "solo raccolta dati (osservazione fino al 2027-01-24, 1/30 trade chiusi): le statistiche non influenzano le scelte",
+    "statistiche": {
+      "trade": 1,
+      "vinti": 0,
+      "percVinti": 0,
+      "mediaVincita": null,
+      "mediaPerdita": -0.01312036508841985,
+      "attesa": -0.01312036508841985,
+      "campione": "troppo piccolo"
+    }
+  }
+}
