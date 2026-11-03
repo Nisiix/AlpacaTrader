@@ -4,13 +4,13 @@
     {
       "id": "2026-10-26-15-40-AAPL-buy",
       "simbolo": "AAPL",
-      "stato": "aperto",
+      "stato": "chiuso",
       "apertoIl": "2026-10-26T14:40:34.872724Z",
       "comprate": 50,
       "costo": 17288.57,
-      "vendute": 0,
-      "incassato": 0,
-      "quantita": 50,
+      "vendute": 50,
+      "incassato": 16375.5,
+      "quantita": 0,
       "contesto": {
         "setup": "momentum debole · volatilità bassa",
         "momentum20": 0.019558970148378485,
@@ -19,18 +19,24 @@
         "fiducia": "media",
         "attesa": "AAPL resta sopra la media a 50 giorni (circa 329) nelle prossime settimane, senza far scattare lo stop tra il 5% e il 10% sotto il prezzo di carico.",
         "perche": "AAPL è sopra le medie a 50 e 200 giorni e ha momentum a 6 mesi di circa 26%. La trimestrale è il 2 novembre, fuori dalla finestra di blocco."
-      }
+      },
+      "chiusoIl": "2026-11-03T14:32:42.736741Z",
+      "prezzoIngresso": 345.77139999999997,
+      "prezzoUscita": 327.51,
+      "risultato": -0.05281350626454351,
+      "giorni": 8,
+      "motivoUscita": "stop su Alpaca"
     },
     {
       "id": "2026-10-29-15-40-MSFT-buy",
       "simbolo": "MSFT",
-      "stato": "aperto",
+      "stato": "chiuso",
       "apertoIl": "2026-10-29T14:49:50.269164816Z",
       "comprate": 30,
       "costo": 15664.5,
-      "vendute": 0,
-      "incassato": 0,
-      "quantita": 30,
+      "vendute": 30,
+      "incassato": 15323.4,
+      "quantita": 0,
       "contesto": {
         "setup": "momentum forte · volatilità bassa",
         "momentum20": 0.03766742703398274,
@@ -39,7 +45,13 @@
         "fiducia": "media",
         "attesa": "MSFT resta sopra la media a 50 giorni (511,18) nelle prossime settimane e lo stop automatico non scatta.",
         "perche": "MSFT è sopra le medie a 50 e 200 giorni e ha il momentum120 più forte (27%); la quantità resta nel limite del 35% per la tecnologia insieme ad AAPL."
-      }
+      },
+      "chiusoIl": "2026-11-03T14:40:39.782531767Z",
+      "prezzoIngresso": 522.15,
+      "prezzoUscita": 510.78,
+      "risultato": -0.02177535191037061,
+      "giorni": 5,
+      "motivoUscita": "uscita di trend del codice"
     },
     {
       "id": "2026-10-29-15-40-SPY-buy",
@@ -132,6 +144,22 @@
         "attesa": "La vendita di 20 SPY viene eseguita a circa 758 e lo stop a 729,42 viene annullato, così la posizione SPY si chiude.",
         "perche": "SPY ha chiuso sotto la media a 50 giorni (757,84 contro 766,76) e la vendita di uscita prevista all'apertura non risulta eseguita: la posizione è ancora aperta."
       }
+    },
+    {
+      "id": "2026-11-03-15-40-MSFT-sell",
+      "simbolo": "MSFT",
+      "lato": "sell",
+      "origine": "uscita-trend",
+      "data": "2026-11-03",
+      "contesto": {
+        "setup": "momentum debole · volatilità bassa",
+        "momentum20": -0.03430410849317156,
+        "volGiornaliera": 0.013749381486674778,
+        "distanzaMedia": -0.007527903143278114,
+        "fiducia": null,
+        "attesa": "",
+        "perche": "uscita di trend: chiusura 507.00 sotto la media a 50 giorni (513.41)"
+      }
     }
   ],
   "ordiniVisti": [
@@ -150,6 +178,14 @@
     {
       "id": "d7fcc618-e3b2-47c6-b491-ec9c4f92aa2a",
       "data": "2026-11-02"
+    },
+    {
+      "id": "f58f0435-a84b-48b6-b988-db47a133d8ae",
+      "data": "2026-11-03"
+    },
+    {
+      "id": "3d560cc5-62cf-46ab-b686-4c6e13762043",
+      "data": "2026-11-03"
     }
   ]
 }
