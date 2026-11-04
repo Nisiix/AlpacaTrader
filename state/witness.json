@@ -1,41 +1,74 @@
 {
   "versione": 1,
-  "sveglia": "2026-11-04-09-00",
-  "tipo": "Briefing",
-  "iniziataAlle": "2026-11-04T08:00:20.987Z",
-  "finitaAlle": "2026-11-04T08:00:33.029Z",
-  "esito": "completata con problemi",
-  "appunto": "Briefing: 0 ordini inviati, 0 rifiutati. Prossima sveglia 2026-11-04 15:40 (Apertura): Alla sveglia di apertura controllare se MSFT chiude ancora sopra la media a 50 giorni (circa 514) e sopra quella a 200, e solo allora valutare un ingresso con peso ridotto per la volatilità. Controllare se SPY, QQQ, AAPL e IWM recuperano la media a 50 giorni. Tenere presente la trimestrale NVDA del 18/11.",
+  "sveglia": "2026-11-04-15-40",
+  "tipo": "Apertura",
+  "iniziataAlle": "2026-11-04T14:40:41.169Z",
+  "finitaAlle": "2026-11-04T14:41:03.793Z",
+  "esito": "completata",
+  "appunto": "Apertura: 1 ordini inviati, 1 rifiutati. Prossima sveglia 2026-11-04 18:30 (Metà seduta): Controllare che MSFT e AAPL restino sopra la media a 50 giorni e che gli stop siano attivi. Verificare se SPY, QQQ e IWM recuperano le medie per eventuali ingressi futuri. Ricordare la trimestrale NVDA del 18/11.",
   "conto": {
-    "patrimonio": 98544,
-    "contanti": 98544,
-    "pnlGiorno": -430.6999999999971,
+    "patrimonio": 98542.25,
+    "contanti": 83117.89,
+    "pnlGiorno": -1.0800000000017462,
     "aggiornato": true
   },
-  "posizioni": [],
-  "ordiniInviati": [],
+  "posizioni": [
+    {
+      "simbolo": "MSFT",
+      "quantita": 28,
+      "prezzoCarico": 550.908571,
+      "prezzoAttuale": 550.87,
+      "variazione": "-0.01%"
+    }
+  ],
+  "ordiniInviati": [
+    {
+      "id": "2026-11-04-15-40-MSFT-buy",
+      "simbolo": "MSFT",
+      "lato": "buy",
+      "quantita": 28,
+      "origine": "modello",
+      "perche": "Chiusura sopra la media a 50 giorni (514) e a 200 (437), con il momentum a 6 mesi più forte dell'universo (+29%).",
+      "stato": "pending_new"
+    }
+  ],
   "ordiniGiaPresenti": [],
   "ordiniIncerti": [],
   "ordiniFalliti": [],
-  "ordiniRifiutati": [],
-  "ragionamento": "È la sveglia di briefing con mercato chiuso, quindi non si possono dare ordini. Il conto è tutto in contanti e non ci sono posizioni. MSFT è tornata sopra la media a 50 e a 200 giorni (520,84 contro 514,08 e 437,43), ma il codice l'ha venduta ieri e la chiusura precedente era sotto la media. Nessun altro titolo ha entrambi i segnali: AAPL, QQQ, SPY, IWM e NVDA sono sotto la media a 50, TLT sotto quella a 200 e GLD sotto entrambe. Comprare adesso sarebbe un ingresso a ridosso di un'uscita, con ordini inutili e costi, quindi non faccio niente. Voto: 3/3 risposte valide, 0 ordini con la maggioranza.",
-  "pianoProssima": "Alla sveglia di apertura controllare se MSFT chiude ancora sopra la media a 50 giorni (circa 514) e sopra quella a 200, e solo allora valutare un ingresso con peso ridotto per la volatilità. Controllare se SPY, QQQ, AAPL e IWM recuperano la media a 50 giorni. Tenere presente la trimestrale NVDA del 18/11.",
-  "prossimaSveglia": "2026-11-04-15-40",
-  "allarmi": [
-    "Sveglie saltate: 2026-11-03 18:30 (Metà seduta)\n2026-11-03 21:40 (Chiusura)\nMacchina spenta o offline? Non le recupero: un ordine di ore fa non ha più senso."
+  "ordiniRifiutati": [
+    {
+      "simbolo": "AAPL",
+      "lato": "buy",
+      "quantita": 50,
+      "origine": "modello",
+      "motivo": "chiusura 331.70 sotto la media a 50 giorni (334.08): il metodo compra solo in trend"
+    }
   ],
-  "stopSuAlpaca": null,
+  "ragionamento": "Solo MSFT, AAPL e IWM sono sopra la media a 50 e a 200 giorni. IWM ha momentum a 6 mesi negativo, quindi la escludo. MSFT (+29%) e AAPL (+11%) hanno il momentum migliore. Dimensiono le posizioni sotto il tetto di volatilità dello 0,25% del conto e sotto il limite tecnologico del 35%: MSFT circa 14,9k e AAPL circa 17,4k, in tutto circa 33% del conto. MSFT è stata venduta ieri e ricomprata oggi, quindi c'è rischio di whipsaw: tengo la fiducia a media. Il diario ha solo 3 trade, troppo pochi per influenzare la scelta. Voto: 3/3 risposte valide, 2 ordini con la maggioranza.",
+  "pianoProssima": "Controllare che MSFT e AAPL restino sopra la media a 50 giorni e che gli stop siano attivi. Verificare se SPY, QQQ e IWM recuperano le medie per eventuali ingressi futuri. Ricordare la trimestrale NVDA del 18/11.",
+  "prossimaSveglia": "2026-11-04-18-30",
+  "allarmi": [],
+  "stopSuAlpaca": {
+    "attivi": [
+      "MSFT 28 @ 504.08"
+    ],
+    "piazzati": [
+      "MSFT 28 @ 504.08"
+    ],
+    "tolti": [],
+    "errori": []
+  },
   "lezioniAttive": [],
   "lezioniNuove": [],
   "acquistiBloccati": null,
   "confronto": {
     "dal": "2026-10-25",
-    "conto": -0.014560000000000017,
-    "spy": -0.00764373108801486,
+    "conto": -0.014577500000000021,
+    "spy": 0.007341139323773005,
     "misto": {
       "dal": "2026-10-26",
-      "conto": -0.014560000000000017,
-      "rendimento": -0.00559497281445247
+      "conto": -0.014577500000000021,
+      "rendimento": 0.004872145766732716
     }
   },
   "tradeChiusi": [],
