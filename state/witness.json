@@ -1,15 +1,15 @@
 {
   "versione": 1,
-  "sveglia": "2026-11-04-18-30",
-  "tipo": "Metà seduta",
-  "iniziataAlle": "2026-11-04T17:33:03.856Z",
-  "finitaAlle": "2026-11-04T17:33:17.367Z",
+  "sveglia": "2026-11-04-21-40",
+  "tipo": "Chiusura",
+  "iniziataAlle": "2026-11-04T20:40:50.279Z",
+  "finitaAlle": "2026-11-04T20:41:01.120Z",
   "esito": "completata",
-  "appunto": "Metà seduta: 0 ordini inviati, 0 rifiutati. Prossima sveglia 2026-11-04 21:40 (Chiusura): Alla prossima apertura controllare che MSFT resti sopra la media a 50 giorni e che lo stop sia attivo. Rivalutare AAPL, che ieri era sotto la media a 50 giorni ma ora tratta a 353 contro una media di 334. Rivalutare anche IWM e SPY, che sono sopra le medie, tenendo conto del momentum. Ricordare la trimestrale NVDA del 18/11.",
+  "appunto": "Chiusura: 0 ordini inviati, 0 rifiutati. Prossima sveglia 2026-11-05 09:00 (Briefing): Alla prossima apertura controllare che MSFT resti sopra la media a 50 giorni e che lo stop sia attivo. Valutare AAPL (351.7, sopra le medie a 50 e 200 giorni, momentum120 +11%), poi IWM e SPY, che sono sopra entrambe le medie ma con momentum debole. Escludere QQQ, NVDA, GLD e TLT, che non superano entrambe le medie. Ricordare la trimestrale NVDA del 18/11.",
   "conto": {
-    "patrimonio": 98670.35,
+    "patrimonio": 98742.31,
     "contanti": 83117.89,
-    "pnlGiorno": 127.02000000000407,
+    "pnlGiorno": 198.97999999999593,
     "aggiornato": true
   },
   "posizioni": [
@@ -17,8 +17,8 @@
       "simbolo": "MSFT",
       "quantita": 28,
       "prezzoCarico": 550.908571,
-      "prezzoAttuale": 555.4,
-      "variazione": "0.82%"
+      "prezzoAttuale": 558.015,
+      "variazione": "1.29%"
     }
   ],
   "ordiniInviati": [],
@@ -26,9 +26,9 @@
   "ordiniIncerti": [],
   "ordiniFalliti": [],
   "ordiniRifiutati": [],
-  "ragionamento": "È una sveglia di metà seduta e gli acquisti sono consentiti solo all'apertura, quindi non apro posizioni nuove. MSFT è l'unica posizione: vale 555 contro un carico di 550.9, è ben sopra la media a 50 giorni (514) e a 200 (437), e lo stop a 504.08 è attivo. Non c'è nessun motivo chiaro e verificabile per vendere o ribilanciare. Nel dubbio non faccio niente, perché ogni ordine ha un costo. Voto: 3/3 risposte valide, 0 ordini con la maggioranza.",
-  "pianoProssima": "Alla prossima apertura controllare che MSFT resti sopra la media a 50 giorni e che lo stop sia attivo. Rivalutare AAPL, che ieri era sotto la media a 50 giorni ma ora tratta a 353 contro una media di 334. Rivalutare anche IWM e SPY, che sono sopra le medie, tenendo conto del momentum. Ricordare la trimestrale NVDA del 18/11.",
-  "prossimaSveglia": "2026-11-04-21-40",
+  "ragionamento": "È la sveglia di chiusura e gli acquisti sono consentiti solo all'apertura, quindi non apro nuove posizioni. MSFT resta l'unica posizione: 558 contro un carico di 550.9, sopra la media a 50 giorni (514) e a 200 (437), con lo stop a 504.08 attivo. Non c'è un motivo chiaro e verificabile per vendere o ribilanciare. Nel dubbio non faccio niente, perché ogni ordine ha un costo. Voto: 3/3 risposte valide, 0 ordini con la maggioranza.",
+  "pianoProssima": "Alla prossima apertura controllare che MSFT resti sopra la media a 50 giorni e che lo stop sia attivo. Valutare AAPL (351.7, sopra le medie a 50 e 200 giorni, momentum120 +11%), poi IWM e SPY, che sono sopra entrambe le medie ma con momentum debole. Escludere QQQ, NVDA, GLD e TLT, che non superano entrambe le medie. Ricordare la trimestrale NVDA del 18/11.",
+  "prossimaSveglia": "2026-11-05-09-00",
   "allarmi": [],
   "stopSuAlpaca": {
     "attivi": [
@@ -43,12 +43,12 @@
   "acquistiBloccati": null,
   "confronto": {
     "dal": "2026-10-25",
-    "conto": -0.013296499999999933,
-    "spy": 0.010807788448888411,
+    "conto": -0.012576900000000002,
+    "spy": 0.009702670701223548,
     "misto": {
       "dal": "2026-10-26",
-      "conto": -0.013296499999999933,
-      "rendimento": 0.007887059586739876
+      "conto": -0.012576900000000002,
+      "rendimento": 0.007716054382845039
     }
   },
   "tradeChiusi": [],
