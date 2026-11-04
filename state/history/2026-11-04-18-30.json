@@ -1,0 +1,67 @@
+{
+  "versione": 1,
+  "sveglia": "2026-11-04-18-30",
+  "tipo": "Metà seduta",
+  "iniziataAlle": "2026-11-04T17:33:03.856Z",
+  "finitaAlle": "2026-11-04T17:33:17.367Z",
+  "esito": "completata",
+  "appunto": "Metà seduta: 0 ordini inviati, 0 rifiutati. Prossima sveglia 2026-11-04 21:40 (Chiusura): Alla prossima apertura controllare che MSFT resti sopra la media a 50 giorni e che lo stop sia attivo. Rivalutare AAPL, che ieri era sotto la media a 50 giorni ma ora tratta a 353 contro una media di 334. Rivalutare anche IWM e SPY, che sono sopra le medie, tenendo conto del momentum. Ricordare la trimestrale NVDA del 18/11.",
+  "conto": {
+    "patrimonio": 98670.35,
+    "contanti": 83117.89,
+    "pnlGiorno": 127.02000000000407,
+    "aggiornato": true
+  },
+  "posizioni": [
+    {
+      "simbolo": "MSFT",
+      "quantita": 28,
+      "prezzoCarico": 550.908571,
+      "prezzoAttuale": 555.4,
+      "variazione": "0.82%"
+    }
+  ],
+  "ordiniInviati": [],
+  "ordiniGiaPresenti": [],
+  "ordiniIncerti": [],
+  "ordiniFalliti": [],
+  "ordiniRifiutati": [],
+  "ragionamento": "È una sveglia di metà seduta e gli acquisti sono consentiti solo all'apertura, quindi non apro posizioni nuove. MSFT è l'unica posizione: vale 555 contro un carico di 550.9, è ben sopra la media a 50 giorni (514) e a 200 (437), e lo stop a 504.08 è attivo. Non c'è nessun motivo chiaro e verificabile per vendere o ribilanciare. Nel dubbio non faccio niente, perché ogni ordine ha un costo. Voto: 3/3 risposte valide, 0 ordini con la maggioranza.",
+  "pianoProssima": "Alla prossima apertura controllare che MSFT resti sopra la media a 50 giorni e che lo stop sia attivo. Rivalutare AAPL, che ieri era sotto la media a 50 giorni ma ora tratta a 353 contro una media di 334. Rivalutare anche IWM e SPY, che sono sopra le medie, tenendo conto del momentum. Ricordare la trimestrale NVDA del 18/11.",
+  "prossimaSveglia": "2026-11-04-21-40",
+  "allarmi": [],
+  "stopSuAlpaca": {
+    "attivi": [
+      "MSFT 28 @ 504.08"
+    ],
+    "piazzati": [],
+    "tolti": [],
+    "errori": []
+  },
+  "lezioniAttive": [],
+  "lezioniNuove": [],
+  "acquistiBloccati": null,
+  "confronto": {
+    "dal": "2026-10-25",
+    "conto": -0.013296499999999933,
+    "spy": 0.010807788448888411,
+    "misto": {
+      "dal": "2026-10-26",
+      "conto": -0.013296499999999933,
+      "rendimento": 0.007887059586739876
+    }
+  },
+  "tradeChiusi": [],
+  "diario": {
+    "stato": "solo raccolta dati (osservazione fino al 2027-01-24, 3/30 trade chiusi): le statistiche non influenzano le scelte",
+    "statistiche": {
+      "trade": 3,
+      "vinti": 0,
+      "percVinti": 0,
+      "mediaVincita": null,
+      "mediaPerdita": -0.029236407754444655,
+      "attesa": -0.029236407754444655,
+      "campione": "troppo piccolo"
+    }
+  }
+}
