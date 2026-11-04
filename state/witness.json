@@ -1,11 +1,11 @@
 {
   "versione": 1,
-  "sveglia": "2026-11-03-15-40",
-  "tipo": "Apertura",
-  "iniziataAlle": "2026-11-03T14:40:16.105Z",
-  "finitaAlle": "2026-11-03T14:40:41.554Z",
-  "esito": "completata",
-  "appunto": "Apertura: 1 ordini inviati, 0 rifiutati. Prossima sveglia 2026-11-03 18:30 (Metà seduta): Alla prossima sveglia controllare se il codice ha venduto MSFT e se lo stop a 485,60 è ancora attivo. Cercare titoli che tornano sopra entrambe le medie, in particolare SPY, QQQ e AAPL, e valutare acquisti solo in quel caso. Tenere presente la trimestrale NVDA del 18/11.",
+  "sveglia": "2026-11-04-09-00",
+  "tipo": "Briefing",
+  "iniziataAlle": "2026-11-04T08:00:20.987Z",
+  "finitaAlle": "2026-11-04T08:00:33.029Z",
+  "esito": "completata con problemi",
+  "appunto": "Briefing: 0 ordini inviati, 0 rifiutati. Prossima sveglia 2026-11-04 15:40 (Apertura): Alla sveglia di apertura controllare se MSFT chiude ancora sopra la media a 50 giorni (circa 514) e sopra quella a 200, e solo allora valutare un ingresso con peso ridotto per la volatilità. Controllare se SPY, QQQ, AAPL e IWM recuperano la media a 50 giorni. Tenere presente la trimestrale NVDA del 18/11.",
   "conto": {
     "patrimonio": 98544,
     "contanti": 98544,
@@ -13,60 +13,34 @@
     "aggiornato": true
   },
   "posizioni": [],
-  "ordiniInviati": [
-    {
-      "id": "2026-11-03-15-40-MSFT-sell",
-      "simbolo": "MSFT",
-      "lato": "sell",
-      "quantita": 30,
-      "origine": "uscita-trend",
-      "perche": "uscita di trend: chiusura 507.00 sotto la media a 50 giorni (513.41)",
-      "stato": "pending_new"
-    }
-  ],
+  "ordiniInviati": [],
   "ordiniGiaPresenti": [],
   "ordiniIncerti": [],
   "ordiniFalliti": [],
   "ordiniRifiutati": [],
-  "ragionamento": "Nessun titolo dell'universo ha l'ultima chiusura sopra la media a 50 giorni e sopra quella a 200 giorni. AAPL, che era in portafoglio, non c'è più tra le posizioni e ora è sotto la media a 50 giorni (330,05 contro 333,66). TLT è sopra la media a 50 giorni ma sotto quella a 200. MSFT è sotto la media a 50 giorni (509,5 contro 513,4), quindi l'uscita spetta al codice, e lo stop a 485,60 è già attivo. Non c'è un motivo verificabile per intervenire a mano: nel dubbio non faccio niente. Voto: 3/3 risposte valide, 0 ordini con la maggioranza.",
-  "pianoProssima": "Alla prossima sveglia controllare se il codice ha venduto MSFT e se lo stop a 485,60 è ancora attivo. Cercare titoli che tornano sopra entrambe le medie, in particolare SPY, QQQ e AAPL, e valutare acquisti solo in quel caso. Tenere presente la trimestrale NVDA del 18/11.",
-  "prossimaSveglia": "2026-11-03-18-30",
-  "allarmi": [],
-  "stopSuAlpaca": {
-    "attivi": [],
-    "piazzati": [],
-    "tolti": [],
-    "errori": []
-  },
+  "ragionamento": "È la sveglia di briefing con mercato chiuso, quindi non si possono dare ordini. Il conto è tutto in contanti e non ci sono posizioni. MSFT è tornata sopra la media a 50 e a 200 giorni (520,84 contro 514,08 e 437,43), ma il codice l'ha venduta ieri e la chiusura precedente era sotto la media. Nessun altro titolo ha entrambi i segnali: AAPL, QQQ, SPY, IWM e NVDA sono sotto la media a 50, TLT sotto quella a 200 e GLD sotto entrambe. Comprare adesso sarebbe un ingresso a ridosso di un'uscita, con ordini inutili e costi, quindi non faccio niente. Voto: 3/3 risposte valide, 0 ordini con la maggioranza.",
+  "pianoProssima": "Alla sveglia di apertura controllare se MSFT chiude ancora sopra la media a 50 giorni (circa 514) e sopra quella a 200, e solo allora valutare un ingresso con peso ridotto per la volatilità. Controllare se SPY, QQQ, AAPL e IWM recuperano la media a 50 giorni. Tenere presente la trimestrale NVDA del 18/11.",
+  "prossimaSveglia": "2026-11-04-15-40",
+  "allarmi": [
+    "Sveglie saltate: 2026-11-03 18:30 (Metà seduta)\n2026-11-03 21:40 (Chiusura)\nMacchina spenta o offline? Non le recupero: un ordine di ore fa non ha più senso."
+  ],
+  "stopSuAlpaca": null,
   "lezioniAttive": [],
   "lezioniNuove": [],
   "acquistiBloccati": null,
   "confronto": {
     "dal": "2026-10-25",
     "conto": -0.014560000000000017,
-    "spy": -0.008722536508354195,
+    "spy": -0.00764373108801486,
     "misto": {
       "dal": "2026-10-26",
       "conto": -0.014560000000000017,
-      "rendimento": -0.004790663004778861
+      "rendimento": -0.00559497281445247
     }
   },
-  "tradeChiusi": [
-    {
-      "simbolo": "AAPL",
-      "risultato": -0.05281350626454351,
-      "giorni": 8,
-      "uscita": "stop su Alpaca"
-    },
-    {
-      "simbolo": "MSFT",
-      "risultato": -0.02177535191037061,
-      "giorni": 5,
-      "uscita": "uscita di trend del codice"
-    }
-  ],
+  "tradeChiusi": [],
   "diario": {
-    "stato": "solo raccolta dati (osservazione fino al 2027-01-24, 1/30 trade chiusi): le statistiche non influenzano le scelte",
+    "stato": "solo raccolta dati (osservazione fino al 2027-01-24, 3/30 trade chiusi): le statistiche non influenzano le scelte",
     "statistiche": {
       "trade": 3,
       "vinti": 0,
