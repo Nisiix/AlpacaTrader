@@ -7,3 +7,4 @@
 2026-11-04T14:41:03.705Z [INFO] stop su Alpaca: MSFT 28 @ 504.08
 2026-11-04T14:41:03.749Z [INFO] diario: aperto trade MSFT (28 a 550.91)
 2026-11-04T14:41:03.795Z [INFO] testimone scritto: Apertura: 1 ordini inviati, 1 rifiutati. Prossima sveglia 2026-11-04 18:30 (Metà seduta): Controllare che MSFT e AAPL restino sopra la media a 50 giorni e che gli stop siano attivi. Verificare se SPY, QQQ e IWM recuperano le medie per eventuali ingressi futuri. Ricordare la trimestrale NVDA del 18/11.
+2026-11-04T14:41:04.252Z [INFO] === fine sveglia 2026-11-04-15-40
