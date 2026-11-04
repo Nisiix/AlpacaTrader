@@ -52,7 +52,11 @@ bun test                           # test con broker e cervello finti
 Ogni sveglia è una sessione cloud programmata che lancia `bun run cloud-wake`:
 lo stato (testimone, lock, registro, interruttore, log) vive sul branch `stato` di questo repo,
 la sveglia viene "prenotata" con un push (due sessioni insieme: ne lavora una sola) e lo stato
-si salva ogni 15 secondi e alla fine. Le chiavi arrivano come variabili d'ambiente:
+si salva appena il testimone è scritto, ogni 15 secondi e alla fine, anche su SIGTERM.
+Conta solo la prenotazione arrivata su GitHub, e scade 20 minuti dopo l'orario della sveglia.
+Ogni comando git ha un timeout: se GitHub non risponde la sveglia lavora lo stesso (gli ordini doppi
+li blocca l'id dell'ordine) e se lo stato non arriva su GitHub lo dice su Telegram.
+Nella routine il comando va lanciato con un timeout di almeno 25 minuti: aspetta l'orario e poi lavora. Le chiavi arrivano come variabili d'ambiente:
 `ALPACA_KEY_ID`, `ALPACA_SECRET_KEY`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`.
 L'ambiente cloud deve poter raggiungere `paper-api.alpaca.markets`, `data.alpaca.markets` e `api.telegram.org`.
 Il repo deve essere **privato**: il branch `stato` contiene conto e posizioni.

@@ -77,6 +77,10 @@ export const BRAIN_TIMEOUT_MS = 180_000;
 // Un lock più vecchio di così è considerato morto anche se il PID esiste (PID riciclato).
 export const LOCK_MAX_AGE_MS = 15 * 60_000;
 
+// Una prenotazione di sveglia cloud scade questi minuti dopo l'orario della sveglia: chi l'ha presa è morto o bloccato,
+// perché una sveglia viva lavora pochi minuti.
+export const CLAIM_TTL_MIN = 20;
+
 // Quanti tentativi di verifica per un ordine con esito incerto (timeout, rete).
 export const SUBMIT_VERIFY_DELAYS_MS = [2_000, 5_000, 10_000, 20_000];
 
