@@ -3,5 +3,12 @@
   "pid": 450,
   "host": "vm",
   "startedAt": "2026-11-05T14:40:35.190Z",
-  "intended": []
+  "intended": [
+    {
+      "clientOrderId": "2026-11-05-15-40-AAPL-buy",
+      "symbol": "AAPL",
+      "side": "buy",
+      "qty": 40
+    }
+  ]
 }

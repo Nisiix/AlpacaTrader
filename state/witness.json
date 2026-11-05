@@ -1,47 +1,77 @@
 {
   "versione": 1,
-  "sveglia": "2026-11-05-09-00",
-  "tipo": "Briefing",
-  "iniziataAlle": "2026-11-05T08:00:17.273Z",
-  "finitaAlle": "2026-11-05T08:00:27.804Z",
+  "sveglia": "2026-11-05-15-40",
+  "tipo": "Apertura",
+  "iniziataAlle": "2026-11-05T14:40:35.190Z",
+  "finitaAlle": "2026-11-05T14:40:59.700Z",
   "esito": "completata",
-  "appunto": "Briefing: 0 ordini inviati, 0 rifiutati. Prossima sveglia 2026-11-05 15:40 (Apertura): Alla sveglia di apertura verificare che MSFT resti sopra la media a 50 giorni e che lo stop sia attivo. Valutare l'acquisto di AAPL (sopra le medie a 50 e 200 giorni, momentum120 +17%), nei limiti di peso, volatilità e gruppo tecnologia (max 35% con MSFT). IWM e SPY sono sopra entrambe le medie ma con momentum debole. Escludere QQQ, NVDA, GLD e TLT, che non superano entrambe le medie. Ricordare la trimestrale NVDA del 18/11.",
+  "appunto": "Apertura: 1 ordini inviati, 0 rifiutati. Prossima sveglia 2026-11-05 18:30 (Metà seduta): Verificare che lo stop su AAPL sia stato creato e che MSFT e AAPL restino sopra la media a 50 giorni. Non comprare altro finché IWM e SPY non rientrano sopra la media a 50 con momentum migliore. Ricordare la trimestrale NVDA del 18/11.",
   "conto": {
-    "patrimonio": 98657.05,
-    "contanti": 83117.89,
-    "pnlGiorno": 113.72000000000116,
+    "patrimonio": 98565.44,
+    "contanti": 68990.68,
+    "pnlGiorno": -114.83999999999651,
     "aggiornato": true
   },
   "posizioni": [
     {
+      "simbolo": "AAPL",
+      "quantita": 40,
+      "prezzoCarico": 353.18,
+      "prezzoAttuale": 353.11,
+      "variazione": "-0.02%"
+    },
+    {
       "simbolo": "MSFT",
       "quantita": 28,
       "prezzoCarico": 550.908571,
-      "prezzoAttuale": 554.97,
-      "variazione": "0.74%"
+      "prezzoAttuale": 551.7987,
+      "variazione": "0.16%"
     }
   ],
-  "ordiniInviati": [],
+  "ordiniInviati": [
+    {
+      "id": "2026-11-05-15-40-AAPL-buy",
+      "simbolo": "AAPL",
+      "lato": "buy",
+      "quantita": 40,
+      "origine": "modello",
+      "perche": "AAPL è sopra le medie a 50 e 200 giorni con momentum120 +17%, l'unico candidato valido oltre a MSFT già in portafoglio.",
+      "stato": "pending_new"
+    }
+  ],
   "ordiniGiaPresenti": [],
   "ordiniIncerti": [],
   "ordiniFalliti": [],
   "ordiniRifiutati": [],
-  "ragionamento": "È la sveglia di briefing a mercato chiuso, quindi nessun ordine è consentito. MSFT resta l'unica posizione: 556 contro un carico di 550.9, sopra la media a 50 giorni (515) e a 200 (438), con lo stop a 504.08 attivo su Alpaca. AAPL è sopra entrambe le medie con momentum120 +17%, ed è il candidato principale per l'apertura. Nel dubbio non faccio niente. Voto: 3/3 risposte valide, 0 ordini con la maggioranza.",
-  "pianoProssima": "Alla sveglia di apertura verificare che MSFT resti sopra la media a 50 giorni e che lo stop sia attivo. Valutare l'acquisto di AAPL (sopra le medie a 50 e 200 giorni, momentum120 +17%), nei limiti di peso, volatilità e gruppo tecnologia (max 35% con MSFT). IWM e SPY sono sopra entrambe le medie ma con momentum debole. Escludere QQQ, NVDA, GLD e TLT, che non superano entrambe le medie. Ricordare la trimestrale NVDA del 18/11.",
-  "prossimaSveglia": "2026-11-05-15-40",
+  "ragionamento": "MSFT resta sopra le medie 50 e 200 e lo stop a 504.08 è attivo, quindi non faccio nulla su di essa. AAPL è l'unico altro titolo sopra entrambe le medie, con momentum120 +17%. Con 40 azioni (circa 14.100 dollari, 14% del conto) restano rispettati il limite di volatilità (circa 229 contro 246 consentiti), il 20% per titolo e il 35% del gruppo tecnologia (circa 30% con MSFT). SPY e IWM sono sotto la media a 50, mentre QQQ, NVDA, GLD e TLT non superano entrambe le medie. Il diario ha pochi trade e non influenza la scelta. Voto: 3/3 risposte valide, 1 ordini con la maggioranza.",
+  "pianoProssima": "Verificare che lo stop su AAPL sia stato creato e che MSFT e AAPL restino sopra la media a 50 giorni. Non comprare altro finché IWM e SPY non rientrano sopra la media a 50 con momentum migliore. Ricordare la trimestrale NVDA del 18/11.",
+  "prossimaSveglia": "2026-11-05-18-30",
   "allarmi": [],
-  "stopSuAlpaca": null,
+  "stopSuAlpaca": {
+    "attivi": [
+      "AAPL 40 @ 321.39",
+      "MSFT 28 @ 495.82"
+    ],
+    "piazzati": [
+      "AAPL 40 @ 321.39",
+      "MSFT 28 @ 495.82"
+    ],
+    "tolti": [
+      "MSFT 28 @ 504.08"
+    ],
+    "errori": []
+  },
   "lezioniAttive": [],
   "lezioniNuove": [],
   "acquistiBloccati": null,
   "confronto": {
     "dal": "2026-10-25",
-    "conto": -0.013429499999999983,
-    "spy": 0.008946191290619687,
+    "conto": -0.014345599999999958,
+    "spy": -0.0005920273648204466,
     "misto": {
       "dal": "2026-10-26",
-      "conto": -0.013429499999999983,
-      "rendimento": 0.007582009275540447
+      "conto": -0.014345599999999958,
+      "rendimento": 0.00168685517662992
     }
   },
   "tradeChiusi": [],

@@ -98,6 +98,26 @@
         "attesa": "MSFT resta sopra la media a 50 giorni (circa 514) nelle prossime settimane e non fa scattare lo stop.",
         "perche": "Chiusura sopra la media a 50 giorni (514) e a 200 (437), con il momentum a 6 mesi più forte dell'universo (+29%)."
       }
+    },
+    {
+      "id": "2026-11-05-15-40-AAPL-buy",
+      "simbolo": "AAPL",
+      "stato": "aperto",
+      "apertoIl": "2026-11-05T14:40:57.788236Z",
+      "comprate": 40,
+      "costo": 14127.2,
+      "vendute": 0,
+      "incassato": 0,
+      "quantita": 40,
+      "contesto": {
+        "setup": "momentum forte · volatilità alta",
+        "momentum20": 0.0385495276011647,
+        "volGiornaliera": 0.01618734851740091,
+        "distanzaMedia": 0.054376925155767086,
+        "fiducia": "media",
+        "attesa": "AAPL resta sopra la media a 50 giorni (circa 335) nelle prossime settimane e lo stop automatico non scatta.",
+        "perche": "AAPL è sopra le medie a 50 e 200 giorni con momentum120 +17%, l'unico candidato valido oltre a MSFT già in portafoglio."
+      }
     }
   ],
   "intenzioni": [
@@ -196,6 +216,22 @@
         "attesa": "MSFT resta sopra la media a 50 giorni (circa 514) nelle prossime settimane e non fa scattare lo stop.",
         "perche": "Chiusura sopra la media a 50 giorni (514) e a 200 (437), con il momentum a 6 mesi più forte dell'universo (+29%)."
       }
+    },
+    {
+      "id": "2026-11-05-15-40-AAPL-buy",
+      "simbolo": "AAPL",
+      "lato": "buy",
+      "origine": "modello",
+      "data": "2026-11-05",
+      "contesto": {
+        "setup": "momentum forte · volatilità alta",
+        "momentum20": 0.0385495276011647,
+        "volGiornaliera": 0.01618734851740091,
+        "distanzaMedia": 0.054376925155767086,
+        "fiducia": "media",
+        "attesa": "AAPL resta sopra la media a 50 giorni (circa 335) nelle prossime settimane e lo stop automatico non scatta.",
+        "perche": "AAPL è sopra le medie a 50 e 200 giorni con momentum120 +17%, l'unico candidato valido oltre a MSFT già in portafoglio."
+      }
     }
   ],
   "ordiniVisti": [
@@ -226,6 +262,10 @@
     {
       "id": "4198e5bc-d3ac-4e27-ad22-5f574942979e",
       "data": "2026-11-04"
+    },
+    {
+      "id": "b9dd6255-e6c1-4278-8cee-7851fbea8d2d",
+      "data": "2026-11-05"
     }
   ]
 }
