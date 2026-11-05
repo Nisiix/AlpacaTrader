@@ -1,0 +1,75 @@
+{
+  "versione": 1,
+  "sveglia": "2026-11-05-21-40",
+  "tipo": "Chiusura",
+  "iniziataAlle": "2026-11-05T20:40:47.828Z",
+  "finitaAlle": "2026-11-05T20:40:55.709Z",
+  "esito": "completata",
+  "appunto": "Chiusura: 0 ordini inviati, 0 rifiutati. Prossima sveglia 2026-11-06 09:00 (Briefing): Alla prossima apertura controllare che AAPL (sma50 ~335) e MSFT (sma50 ~515) chiudano sopra la media a 50 giorni. MSFT è vicina alla sua media, quindi guardarla con attenzione. Se chiudono sotto, l'uscita la fa il codice. Non comprare finché altri titoli non tornano sopra le medie a 50 e 200 giorni. Ricordare la trimestrale NVDA del 18/11.",
+  "conto": {
+    "patrimonio": 97762.62,
+    "contanti": 68990.68,
+    "pnlGiorno": -917.6600000000035,
+    "aggiornato": true
+  },
+  "posizioni": [
+    {
+      "simbolo": "AAPL",
+      "quantita": 40,
+      "prezzoCarico": 353.18,
+      "prezzoAttuale": 345.376,
+      "variazione": "-2.21%"
+    },
+    {
+      "simbolo": "MSFT",
+      "quantita": 28,
+      "prezzoCarico": 550.908571,
+      "prezzoAttuale": 534.175,
+      "variazione": "-3.04%"
+    }
+  ],
+  "ordiniInviati": [],
+  "ordiniGiaPresenti": [],
+  "ordiniIncerti": [],
+  "ordiniFalliti": [],
+  "ordiniRifiutati": [],
+  "ragionamento": "Sveglia di chiusura: gli acquisti sono consentiti solo all'apertura. AAPL e MSFT restano sopra le medie a 50 e 200 giorni, quindi il trend è intatto. I cali di oggi sono piccoli e gli stop di protezione sono attivi su Alpaca (AAPL 321.39, MSFT 495.82). Nessun altro titolo soddisfa i criteri: SPY, QQQ, IWM, NVDA e GLD sono sotto la media a 50 giorni. Non c'è un motivo verificabile per vendere o ribilanciare, quindi non faccio niente. Voto: 3/3 risposte valide, 0 ordini con la maggioranza.",
+  "pianoProssima": "Alla prossima apertura controllare che AAPL (sma50 ~335) e MSFT (sma50 ~515) chiudano sopra la media a 50 giorni. MSFT è vicina alla sua media, quindi guardarla con attenzione. Se chiudono sotto, l'uscita la fa il codice. Non comprare finché altri titoli non tornano sopra le medie a 50 e 200 giorni. Ricordare la trimestrale NVDA del 18/11.",
+  "prossimaSveglia": "2026-11-06-09-00",
+  "allarmi": [],
+  "stopSuAlpaca": {
+    "attivi": [
+      "AAPL 40 @ 321.39",
+      "MSFT 28 @ 495.82"
+    ],
+    "piazzati": [],
+    "tolti": [],
+    "errori": []
+  },
+  "lezioniAttive": [],
+  "lezioniNuove": [],
+  "acquistiBloccati": null,
+  "confronto": {
+    "dal": "2026-10-25",
+    "conto": -0.0223738,
+    "spy": -0.033403499539534254,
+    "misto": {
+      "dal": "2026-10-26",
+      "conto": -0.0223738,
+      "rendimento": -0.016228592527263476
+    }
+  },
+  "tradeChiusi": [],
+  "diario": {
+    "stato": "solo raccolta dati (osservazione fino al 2027-01-24, 3/30 trade chiusi): le statistiche non influenzano le scelte",
+    "statistiche": {
+      "trade": 3,
+      "vinti": 0,
+      "percVinti": 0,
+      "mediaVincita": null,
+      "mediaPerdita": -0.029236407754444655,
+      "attesa": -0.029236407754444655,
+      "campione": "troppo piccolo"
+    }
+  }
+}

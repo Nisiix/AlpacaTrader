@@ -1,15 +1,15 @@
 {
   "versione": 1,
-  "sveglia": "2026-11-05-18-30",
-  "tipo": "Metà seduta",
-  "iniziataAlle": "2026-11-05T17:32:56.251Z",
-  "finitaAlle": "2026-11-05T17:33:06.906Z",
+  "sveglia": "2026-11-05-21-40",
+  "tipo": "Chiusura",
+  "iniziataAlle": "2026-11-05T20:40:47.828Z",
+  "finitaAlle": "2026-11-05T20:40:55.709Z",
   "esito": "completata",
-  "appunto": "Metà seduta: 0 ordini inviati, 0 rifiutati. Prossima sveglia 2026-11-05 21:40 (Chiusura): Alla prossima apertura verificare che AAPL (sma50 ~335) e MSFT (sma50 ~515) chiudano sopra la media a 50 giorni; se chiudono sotto, l'uscita la fa il codice. Non comprare altro finché SPY e IWM non tornano sopra la media a 50 giorni. Ricordare la trimestrale NVDA del 18/11.",
+  "appunto": "Chiusura: 0 ordini inviati, 0 rifiutati. Prossima sveglia 2026-11-06 09:00 (Briefing): Alla prossima apertura controllare che AAPL (sma50 ~335) e MSFT (sma50 ~515) chiudano sopra la media a 50 giorni. MSFT è vicina alla sua media, quindi guardarla con attenzione. Se chiudono sotto, l'uscita la fa il codice. Non comprare finché altri titoli non tornano sopra le medie a 50 e 200 giorni. Ricordare la trimestrale NVDA del 18/11.",
   "conto": {
-    "patrimonio": 97885.6,
+    "patrimonio": 97762.62,
     "contanti": 68990.68,
-    "pnlGiorno": -794.679999999993,
+    "pnlGiorno": -917.6600000000035,
     "aggiornato": true
   },
   "posizioni": [
@@ -17,15 +17,15 @@
       "simbolo": "AAPL",
       "quantita": 40,
       "prezzoCarico": 353.18,
-      "prezzoAttuale": 344.1,
-      "variazione": "-2.57%"
+      "prezzoAttuale": 345.376,
+      "variazione": "-2.21%"
     },
     {
       "simbolo": "MSFT",
       "quantita": 28,
       "prezzoCarico": 550.908571,
-      "prezzoAttuale": 540.39,
-      "variazione": "-1.91%"
+      "prezzoAttuale": 534.175,
+      "variazione": "-3.04%"
     }
   ],
   "ordiniInviati": [],
@@ -33,9 +33,9 @@
   "ordiniIncerti": [],
   "ordiniFalliti": [],
   "ordiniRifiutati": [],
-  "ragionamento": "Metà seduta: acquisti consentiti solo all'apertura, quindi non si compra. AAPL e MSFT restano sopra le medie a 50 e 200 giorni, e gli stop su Alpaca sono attivi (AAPL 321.39, MSFT 495.82). Il calo di oggi (AAPL -2.6%, MSFT -2.1%) è piccolo e non rompe il trend, quindi lascio correre. Nessun motivo verificabile per vendere o ribilanciare. Voto: 3/3 risposte valide, 0 ordini con la maggioranza.",
-  "pianoProssima": "Alla prossima apertura verificare che AAPL (sma50 ~335) e MSFT (sma50 ~515) chiudano sopra la media a 50 giorni; se chiudono sotto, l'uscita la fa il codice. Non comprare altro finché SPY e IWM non tornano sopra la media a 50 giorni. Ricordare la trimestrale NVDA del 18/11.",
-  "prossimaSveglia": "2026-11-05-21-40",
+  "ragionamento": "Sveglia di chiusura: gli acquisti sono consentiti solo all'apertura. AAPL e MSFT restano sopra le medie a 50 e 200 giorni, quindi il trend è intatto. I cali di oggi sono piccoli e gli stop di protezione sono attivi su Alpaca (AAPL 321.39, MSFT 495.82). Nessun altro titolo soddisfa i criteri: SPY, QQQ, IWM, NVDA e GLD sono sotto la media a 50 giorni. Non c'è un motivo verificabile per vendere o ribilanciare, quindi non faccio niente. Voto: 3/3 risposte valide, 0 ordini con la maggioranza.",
+  "pianoProssima": "Alla prossima apertura controllare che AAPL (sma50 ~335) e MSFT (sma50 ~515) chiudano sopra la media a 50 giorni. MSFT è vicina alla sua media, quindi guardarla con attenzione. Se chiudono sotto, l'uscita la fa il codice. Non comprare finché altri titoli non tornano sopra le medie a 50 e 200 giorni. Ricordare la trimestrale NVDA del 18/11.",
+  "prossimaSveglia": "2026-11-06-09-00",
   "allarmi": [],
   "stopSuAlpaca": {
     "attivi": [
@@ -51,12 +51,12 @@
   "acquistiBloccati": null,
   "confronto": {
     "dal": "2026-10-25",
-    "conto": -0.02114399999999994,
-    "spy": -0.027785817655571643,
+    "conto": -0.0223738,
+    "spy": -0.033403499539534254,
     "misto": {
       "dal": "2026-10-26",
-      "conto": -0.02114399999999994,
-      "rendimento": -0.013177825935943544
+      "conto": -0.0223738,
+      "rendimento": -0.016228592527263476
     }
   },
   "tradeChiusi": [],
