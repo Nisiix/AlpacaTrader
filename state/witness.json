@@ -1,15 +1,15 @@
 {
   "versione": 1,
-  "sveglia": "2026-11-04-21-40",
-  "tipo": "Chiusura",
-  "iniziataAlle": "2026-11-04T20:40:50.279Z",
-  "finitaAlle": "2026-11-04T20:41:01.120Z",
+  "sveglia": "2026-11-05-09-00",
+  "tipo": "Briefing",
+  "iniziataAlle": "2026-11-05T08:00:17.273Z",
+  "finitaAlle": "2026-11-05T08:00:27.804Z",
   "esito": "completata",
-  "appunto": "Chiusura: 0 ordini inviati, 0 rifiutati. Prossima sveglia 2026-11-05 09:00 (Briefing): Alla prossima apertura controllare che MSFT resti sopra la media a 50 giorni e che lo stop sia attivo. Valutare AAPL (351.7, sopra le medie a 50 e 200 giorni, momentum120 +11%), poi IWM e SPY, che sono sopra entrambe le medie ma con momentum debole. Escludere QQQ, NVDA, GLD e TLT, che non superano entrambe le medie. Ricordare la trimestrale NVDA del 18/11.",
+  "appunto": "Briefing: 0 ordini inviati, 0 rifiutati. Prossima sveglia 2026-11-05 15:40 (Apertura): Alla sveglia di apertura verificare che MSFT resti sopra la media a 50 giorni e che lo stop sia attivo. Valutare l'acquisto di AAPL (sopra le medie a 50 e 200 giorni, momentum120 +17%), nei limiti di peso, volatilità e gruppo tecnologia (max 35% con MSFT). IWM e SPY sono sopra entrambe le medie ma con momentum debole. Escludere QQQ, NVDA, GLD e TLT, che non superano entrambe le medie. Ricordare la trimestrale NVDA del 18/11.",
   "conto": {
-    "patrimonio": 98742.31,
+    "patrimonio": 98657.05,
     "contanti": 83117.89,
-    "pnlGiorno": 198.97999999999593,
+    "pnlGiorno": 113.72000000000116,
     "aggiornato": true
   },
   "posizioni": [
@@ -17,8 +17,8 @@
       "simbolo": "MSFT",
       "quantita": 28,
       "prezzoCarico": 550.908571,
-      "prezzoAttuale": 558.015,
-      "variazione": "1.29%"
+      "prezzoAttuale": 554.97,
+      "variazione": "0.74%"
     }
   ],
   "ordiniInviati": [],
@@ -26,29 +26,22 @@
   "ordiniIncerti": [],
   "ordiniFalliti": [],
   "ordiniRifiutati": [],
-  "ragionamento": "È la sveglia di chiusura e gli acquisti sono consentiti solo all'apertura, quindi non apro nuove posizioni. MSFT resta l'unica posizione: 558 contro un carico di 550.9, sopra la media a 50 giorni (514) e a 200 (437), con lo stop a 504.08 attivo. Non c'è un motivo chiaro e verificabile per vendere o ribilanciare. Nel dubbio non faccio niente, perché ogni ordine ha un costo. Voto: 3/3 risposte valide, 0 ordini con la maggioranza.",
-  "pianoProssima": "Alla prossima apertura controllare che MSFT resti sopra la media a 50 giorni e che lo stop sia attivo. Valutare AAPL (351.7, sopra le medie a 50 e 200 giorni, momentum120 +11%), poi IWM e SPY, che sono sopra entrambe le medie ma con momentum debole. Escludere QQQ, NVDA, GLD e TLT, che non superano entrambe le medie. Ricordare la trimestrale NVDA del 18/11.",
-  "prossimaSveglia": "2026-11-05-09-00",
+  "ragionamento": "È la sveglia di briefing a mercato chiuso, quindi nessun ordine è consentito. MSFT resta l'unica posizione: 556 contro un carico di 550.9, sopra la media a 50 giorni (515) e a 200 (438), con lo stop a 504.08 attivo su Alpaca. AAPL è sopra entrambe le medie con momentum120 +17%, ed è il candidato principale per l'apertura. Nel dubbio non faccio niente. Voto: 3/3 risposte valide, 0 ordini con la maggioranza.",
+  "pianoProssima": "Alla sveglia di apertura verificare che MSFT resti sopra la media a 50 giorni e che lo stop sia attivo. Valutare l'acquisto di AAPL (sopra le medie a 50 e 200 giorni, momentum120 +17%), nei limiti di peso, volatilità e gruppo tecnologia (max 35% con MSFT). IWM e SPY sono sopra entrambe le medie ma con momentum debole. Escludere QQQ, NVDA, GLD e TLT, che non superano entrambe le medie. Ricordare la trimestrale NVDA del 18/11.",
+  "prossimaSveglia": "2026-11-05-15-40",
   "allarmi": [],
-  "stopSuAlpaca": {
-    "attivi": [
-      "MSFT 28 @ 504.08"
-    ],
-    "piazzati": [],
-    "tolti": [],
-    "errori": []
-  },
+  "stopSuAlpaca": null,
   "lezioniAttive": [],
   "lezioniNuove": [],
   "acquistiBloccati": null,
   "confronto": {
     "dal": "2026-10-25",
-    "conto": -0.012576900000000002,
-    "spy": 0.009702670701223548,
+    "conto": -0.013429499999999983,
+    "spy": 0.008946191290619687,
     "misto": {
       "dal": "2026-10-26",
-      "conto": -0.012576900000000002,
-      "rendimento": 0.007716054382845039
+      "conto": -0.013429499999999983,
+      "rendimento": 0.007582009275540447
     }
   },
   "tradeChiusi": [],

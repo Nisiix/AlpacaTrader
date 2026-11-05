@@ -1,0 +1,60 @@
+{
+  "versione": 1,
+  "sveglia": "2026-11-05-09-00",
+  "tipo": "Briefing",
+  "iniziataAlle": "2026-11-05T08:00:17.273Z",
+  "finitaAlle": "2026-11-05T08:00:27.804Z",
+  "esito": "completata",
+  "appunto": "Briefing: 0 ordini inviati, 0 rifiutati. Prossima sveglia 2026-11-05 15:40 (Apertura): Alla sveglia di apertura verificare che MSFT resti sopra la media a 50 giorni e che lo stop sia attivo. Valutare l'acquisto di AAPL (sopra le medie a 50 e 200 giorni, momentum120 +17%), nei limiti di peso, volatilità e gruppo tecnologia (max 35% con MSFT). IWM e SPY sono sopra entrambe le medie ma con momentum debole. Escludere QQQ, NVDA, GLD e TLT, che non superano entrambe le medie. Ricordare la trimestrale NVDA del 18/11.",
+  "conto": {
+    "patrimonio": 98657.05,
+    "contanti": 83117.89,
+    "pnlGiorno": 113.72000000000116,
+    "aggiornato": true
+  },
+  "posizioni": [
+    {
+      "simbolo": "MSFT",
+      "quantita": 28,
+      "prezzoCarico": 550.908571,
+      "prezzoAttuale": 554.97,
+      "variazione": "0.74%"
+    }
+  ],
+  "ordiniInviati": [],
+  "ordiniGiaPresenti": [],
+  "ordiniIncerti": [],
+  "ordiniFalliti": [],
+  "ordiniRifiutati": [],
+  "ragionamento": "È la sveglia di briefing a mercato chiuso, quindi nessun ordine è consentito. MSFT resta l'unica posizione: 556 contro un carico di 550.9, sopra la media a 50 giorni (515) e a 200 (438), con lo stop a 504.08 attivo su Alpaca. AAPL è sopra entrambe le medie con momentum120 +17%, ed è il candidato principale per l'apertura. Nel dubbio non faccio niente. Voto: 3/3 risposte valide, 0 ordini con la maggioranza.",
+  "pianoProssima": "Alla sveglia di apertura verificare che MSFT resti sopra la media a 50 giorni e che lo stop sia attivo. Valutare l'acquisto di AAPL (sopra le medie a 50 e 200 giorni, momentum120 +17%), nei limiti di peso, volatilità e gruppo tecnologia (max 35% con MSFT). IWM e SPY sono sopra entrambe le medie ma con momentum debole. Escludere QQQ, NVDA, GLD e TLT, che non superano entrambe le medie. Ricordare la trimestrale NVDA del 18/11.",
+  "prossimaSveglia": "2026-11-05-15-40",
+  "allarmi": [],
+  "stopSuAlpaca": null,
+  "lezioniAttive": [],
+  "lezioniNuove": [],
+  "acquistiBloccati": null,
+  "confronto": {
+    "dal": "2026-10-25",
+    "conto": -0.013429499999999983,
+    "spy": 0.008946191290619687,
+    "misto": {
+      "dal": "2026-10-26",
+      "conto": -0.013429499999999983,
+      "rendimento": 0.007582009275540447
+    }
+  },
+  "tradeChiusi": [],
+  "diario": {
+    "stato": "solo raccolta dati (osservazione fino al 2027-01-24, 3/30 trade chiusi): le statistiche non influenzano le scelte",
+    "statistiche": {
+      "trade": 3,
+      "vinti": 0,
+      "percVinti": 0,
+      "mediaVincita": null,
+      "mediaPerdita": -0.029236407754444655,
+      "attesa": -0.029236407754444655,
+      "campione": "troppo piccolo"
+    }
+  }
+}
