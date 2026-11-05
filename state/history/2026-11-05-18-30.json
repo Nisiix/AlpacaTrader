@@ -1,0 +1,75 @@
+{
+  "versione": 1,
+  "sveglia": "2026-11-05-18-30",
+  "tipo": "Metà seduta",
+  "iniziataAlle": "2026-11-05T17:32:56.251Z",
+  "finitaAlle": "2026-11-05T17:33:06.906Z",
+  "esito": "completata",
+  "appunto": "Metà seduta: 0 ordini inviati, 0 rifiutati. Prossima sveglia 2026-11-05 21:40 (Chiusura): Alla prossima apertura verificare che AAPL (sma50 ~335) e MSFT (sma50 ~515) chiudano sopra la media a 50 giorni; se chiudono sotto, l'uscita la fa il codice. Non comprare altro finché SPY e IWM non tornano sopra la media a 50 giorni. Ricordare la trimestrale NVDA del 18/11.",
+  "conto": {
+    "patrimonio": 97885.6,
+    "contanti": 68990.68,
+    "pnlGiorno": -794.679999999993,
+    "aggiornato": true
+  },
+  "posizioni": [
+    {
+      "simbolo": "AAPL",
+      "quantita": 40,
+      "prezzoCarico": 353.18,
+      "prezzoAttuale": 344.1,
+      "variazione": "-2.57%"
+    },
+    {
+      "simbolo": "MSFT",
+      "quantita": 28,
+      "prezzoCarico": 550.908571,
+      "prezzoAttuale": 540.39,
+      "variazione": "-1.91%"
+    }
+  ],
+  "ordiniInviati": [],
+  "ordiniGiaPresenti": [],
+  "ordiniIncerti": [],
+  "ordiniFalliti": [],
+  "ordiniRifiutati": [],
+  "ragionamento": "Metà seduta: acquisti consentiti solo all'apertura, quindi non si compra. AAPL e MSFT restano sopra le medie a 50 e 200 giorni, e gli stop su Alpaca sono attivi (AAPL 321.39, MSFT 495.82). Il calo di oggi (AAPL -2.6%, MSFT -2.1%) è piccolo e non rompe il trend, quindi lascio correre. Nessun motivo verificabile per vendere o ribilanciare. Voto: 3/3 risposte valide, 0 ordini con la maggioranza.",
+  "pianoProssima": "Alla prossima apertura verificare che AAPL (sma50 ~335) e MSFT (sma50 ~515) chiudano sopra la media a 50 giorni; se chiudono sotto, l'uscita la fa il codice. Non comprare altro finché SPY e IWM non tornano sopra la media a 50 giorni. Ricordare la trimestrale NVDA del 18/11.",
+  "prossimaSveglia": "2026-11-05-21-40",
+  "allarmi": [],
+  "stopSuAlpaca": {
+    "attivi": [
+      "AAPL 40 @ 321.39",
+      "MSFT 28 @ 495.82"
+    ],
+    "piazzati": [],
+    "tolti": [],
+    "errori": []
+  },
+  "lezioniAttive": [],
+  "lezioniNuove": [],
+  "acquistiBloccati": null,
+  "confronto": {
+    "dal": "2026-10-25",
+    "conto": -0.02114399999999994,
+    "spy": -0.027785817655571643,
+    "misto": {
+      "dal": "2026-10-26",
+      "conto": -0.02114399999999994,
+      "rendimento": -0.013177825935943544
+    }
+  },
+  "tradeChiusi": [],
+  "diario": {
+    "stato": "solo raccolta dati (osservazione fino al 2027-01-24, 3/30 trade chiusi): le statistiche non influenzano le scelte",
+    "statistiche": {
+      "trade": 3,
+      "vinti": 0,
+      "percVinti": 0,
+      "mediaVincita": null,
+      "mediaPerdita": -0.029236407754444655,
+      "attesa": -0.029236407754444655,
+      "campione": "troppo piccolo"
+    }
+  }
+}
