@@ -1,0 +1,75 @@
+{
+  "versione": 1,
+  "sveglia": "2026-11-06-15-40",
+  "tipo": "Apertura",
+  "iniziataAlle": "2026-11-06T14:40:52.411Z",
+  "finitaAlle": "2026-11-06T14:41:09.578Z",
+  "esito": "completata",
+  "appunto": "Apertura: 0 ordini inviati, 0 rifiutati. Prossima sveglia 2026-11-06 18:30 (Metà seduta): Alla prossima sveglia controllare che AAPL (sma50 ~335) e MSFT (sma50 ~516) restino sopra la media a 50 giorni. Se chiudono sotto, l'uscita la fa il codice. Comprare solo se altri titoli tornano sopra le medie a 50 e 200 giorni. Ricordare la trimestrale NVDA del 18/11.",
+  "conto": {
+    "patrimonio": 97470.75,
+    "contanti": 68990.67,
+    "pnlGiorno": -292.75999999999476,
+    "aggiornato": true
+  },
+  "posizioni": [
+    {
+      "simbolo": "AAPL",
+      "quantita": 40,
+      "prezzoCarico": 353.18,
+      "prezzoAttuale": 339.7,
+      "variazione": "-3.82%"
+    },
+    {
+      "simbolo": "MSFT",
+      "quantita": 28,
+      "prezzoCarico": 550.908571,
+      "prezzoAttuale": 531.86,
+      "variazione": "-3.46%"
+    }
+  ],
+  "ordiniInviati": [],
+  "ordiniGiaPresenti": [],
+  "ordiniIncerti": [],
+  "ordiniFalliti": [],
+  "ordiniRifiutati": [],
+  "ragionamento": "AAPL (339.7) e MSFT (531.8) restano sopra le medie a 50 e 200 giorni, quindi il trend è intatto e gli stop di protezione sono attivi. Gli altri titoli non hanno i requisiti: SPY, QQQ, IWM e NVDA sono sotto la media a 50 giorni, GLD è sotto entrambe le medie e TLT è sotto la media a 200 giorni. Non c'è nulla da comprare. Non c'è nemmeno un motivo verificabile per vendere o ribilanciare, perché i cali sono piccoli e le posizioni sono sopra le medie. Nel dubbio non faccio niente. Voto: 3/3 risposte valide, 0 ordini con la maggioranza.",
+  "pianoProssima": "Alla prossima sveglia controllare che AAPL (sma50 ~335) e MSFT (sma50 ~516) restino sopra la media a 50 giorni. Se chiudono sotto, l'uscita la fa il codice. Comprare solo se altri titoli tornano sopra le medie a 50 e 200 giorni. Ricordare la trimestrale NVDA del 18/11.",
+  "prossimaSveglia": "2026-11-06-18-30",
+  "allarmi": [],
+  "stopSuAlpaca": {
+    "attivi": [
+      "AAPL 40 @ 321.39",
+      "MSFT 28 @ 495.82"
+    ],
+    "piazzati": [],
+    "tolti": [],
+    "errori": []
+  },
+  "lezioniAttive": [],
+  "lezioniNuove": [],
+  "acquistiBloccati": null,
+  "confronto": {
+    "dal": "2026-10-25",
+    "conto": -0.02529250000000005,
+    "spy": -0.02869359294829632,
+    "misto": {
+      "dal": "2026-10-26",
+      "conto": -0.02529250000000005,
+      "rendimento": -0.014805035089927542
+    }
+  },
+  "tradeChiusi": [],
+  "diario": {
+    "stato": "solo raccolta dati (osservazione fino al 2027-01-24, 3/30 trade chiusi): le statistiche non influenzano le scelte",
+    "statistiche": {
+      "trade": 3,
+      "vinti": 0,
+      "percVinti": 0,
+      "mediaVincita": null,
+      "mediaPerdita": -0.029236407754444655,
+      "attesa": -0.029236407754444655,
+      "campione": "troppo piccolo"
+    }
+  }
+}
