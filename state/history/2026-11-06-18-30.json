@@ -1,0 +1,75 @@
+{
+  "versione": 1,
+  "sveglia": "2026-11-06-18-30",
+  "tipo": "Metà seduta",
+  "iniziataAlle": "2026-11-06T17:32:41.905Z",
+  "finitaAlle": "2026-11-06T17:32:51.488Z",
+  "esito": "completata",
+  "appunto": "Metà seduta: 0 ordini inviati, 0 rifiutati. Prossima sveglia 2026-11-06 21:40 (Chiusura): Alla prossima sveglia controllare che AAPL (sma50 ~335) e MSFT (sma50 ~516) restino sopra la media a 50 giorni; se chiudono sotto, l'uscita la fa il codice. Comprare solo alla sveglia di apertura e solo titoli sopra le medie a 50 e 200 giorni. Ricordare la trimestrale NVDA del 18/11.",
+  "conto": {
+    "patrimonio": 97683.59,
+    "contanti": 68990.67,
+    "pnlGiorno": -79.91999999999825,
+    "aggiornato": true
+  },
+  "posizioni": [
+    {
+      "simbolo": "AAPL",
+      "quantita": 40,
+      "prezzoCarico": 353.18,
+      "prezzoAttuale": 343.53,
+      "variazione": "-2.73%"
+    },
+    {
+      "simbolo": "MSFT",
+      "quantita": 28,
+      "prezzoCarico": 550.908571,
+      "prezzoAttuale": 533.99,
+      "variazione": "-3.07%"
+    }
+  ],
+  "ordiniInviati": [],
+  "ordiniGiaPresenti": [],
+  "ordiniIncerti": [],
+  "ordiniFalliti": [],
+  "ordiniRifiutati": [],
+  "ragionamento": "AAPL (343.5) e MSFT (533.9) restano sopra le medie a 50 e 200 giorni, quindi il trend è intatto e gli stop di protezione sono attivi (AAPL 321.39, MSFT 495.82). Gli altri titoli non hanno i requisiti: SPY, QQQ, IWM e NVDA sono sotto la media a 50 giorni, GLD è sotto entrambe le medie e TLT è sotto la media a 200 giorni. Gli acquisti si fanno solo alla sveglia di apertura, quindi oggi non si compra. Non c'è un motivo verificabile per vendere o ribilanciare. Nel dubbio non faccio niente. Voto: 3/3 risposte valide, 0 ordini con la maggioranza.",
+  "pianoProssima": "Alla prossima sveglia controllare che AAPL (sma50 ~335) e MSFT (sma50 ~516) restino sopra la media a 50 giorni; se chiudono sotto, l'uscita la fa il codice. Comprare solo alla sveglia di apertura e solo titoli sopra le medie a 50 e 200 giorni. Ricordare la trimestrale NVDA del 18/11.",
+  "prossimaSveglia": "2026-11-06-21-40",
+  "allarmi": [],
+  "stopSuAlpaca": {
+    "attivi": [
+      "AAPL 40 @ 321.39",
+      "MSFT 28 @ 495.82"
+    ],
+    "piazzati": [],
+    "tolti": [],
+    "errori": []
+  },
+  "lezioniAttive": [],
+  "lezioniNuove": [],
+  "acquistiBloccati": null,
+  "confronto": {
+    "dal": "2026-10-25",
+    "conto": -0.02316410000000002,
+    "spy": -0.028640968293645597,
+    "misto": {
+      "dal": "2026-10-26",
+      "conto": -0.02316410000000002,
+      "rendimento": -0.01300202469620213
+    }
+  },
+  "tradeChiusi": [],
+  "diario": {
+    "stato": "solo raccolta dati (osservazione fino al 2027-01-24, 3/30 trade chiusi): le statistiche non influenzano le scelte",
+    "statistiche": {
+      "trade": 3,
+      "vinti": 0,
+      "percVinti": 0,
+      "mediaVincita": null,
+      "mediaPerdita": -0.029236407754444655,
+      "attesa": -0.029236407754444655,
+      "campione": "troppo piccolo"
+    }
+  }
+}
