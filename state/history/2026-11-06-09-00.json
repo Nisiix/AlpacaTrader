@@ -1,0 +1,67 @@
+{
+  "versione": 1,
+  "sveglia": "2026-11-06-09-00",
+  "tipo": "Briefing",
+  "iniziataAlle": "2026-11-06T08:00:46.404Z",
+  "finitaAlle": "2026-11-06T08:01:04.275Z",
+  "esito": "completata",
+  "appunto": "Briefing: 0 ordini inviati, 0 rifiutati. Prossima sveglia 2026-11-06 15:40 (Apertura): Alla sveglia di apertura controllare che AAPL (sma50 ~335) e MSFT (sma50 ~516) chiudano sopra la media a 50 giorni. Se chiudono sotto, l'uscita la fa il codice. Non comprare finché altri titoli non tornano sopra le medie a 50 e 200 giorni. Ricordare la trimestrale NVDA del 18/11.",
+  "conto": {
+    "patrimonio": 97506.28,
+    "contanti": 68990.68,
+    "pnlGiorno": -1174,
+    "aggiornato": true
+  },
+  "posizioni": [
+    {
+      "simbolo": "AAPL",
+      "quantita": 40,
+      "prezzoCarico": 353.18,
+      "prezzoAttuale": 341.82,
+      "variazione": "-3.22%"
+    },
+    {
+      "simbolo": "MSFT",
+      "quantita": 28,
+      "prezzoCarico": 550.908571,
+      "prezzoAttuale": 530.1,
+      "variazione": "-3.78%"
+    }
+  ],
+  "ordiniInviati": [],
+  "ordiniGiaPresenti": [],
+  "ordiniIncerti": [],
+  "ordiniFalliti": [],
+  "ordiniRifiutati": [],
+  "ragionamento": "Sveglia di briefing a mercato chiuso: nessun ordine è consentito. AAPL e MSFT restano sopra le medie a 50 e 200 giorni (AAPL 344.6 contro sma50 335.5; MSFT 536.3 contro sma50 516.2), quindi il trend è intatto e gli stop su Alpaca sono attivi. Gli altri titoli (SPY, QQQ, IWM, NVDA, GLD) sono sotto la media a 50 giorni, quindi non c'è nulla da comprare. Non c'è un motivo verificabile per vendere o ribilanciare. Voto: 3/3 risposte valide, 0 ordini con la maggioranza.",
+  "pianoProssima": "Alla sveglia di apertura controllare che AAPL (sma50 ~335) e MSFT (sma50 ~516) chiudano sopra la media a 50 giorni. Se chiudono sotto, l'uscita la fa il codice. Non comprare finché altri titoli non tornano sopra le medie a 50 e 200 giorni. Ricordare la trimestrale NVDA del 18/11.",
+  "prossimaSveglia": "2026-11-06-15-40",
+  "allarmi": [],
+  "stopSuAlpaca": null,
+  "lezioniAttive": [],
+  "lezioniNuove": [],
+  "acquistiBloccati": null,
+  "confronto": {
+    "dal": "2026-10-25",
+    "conto": -0.024937199999999993,
+    "spy": -0.03891593211419553,
+    "misto": {
+      "dal": "2026-10-26",
+      "conto": -0.024937199999999993,
+      "rendimento": -0.02000351424452915
+    }
+  },
+  "tradeChiusi": [],
+  "diario": {
+    "stato": "solo raccolta dati (osservazione fino al 2027-01-24, 3/30 trade chiusi): le statistiche non influenzano le scelte",
+    "statistiche": {
+      "trade": 3,
+      "vinti": 0,
+      "percVinti": 0,
+      "mediaVincita": null,
+      "mediaPerdita": -0.029236407754444655,
+      "attesa": -0.029236407754444655,
+      "campione": "troppo piccolo"
+    }
+  }
+}
