@@ -578,6 +578,11 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
       const ctx = contextFor(indicators[o.symbol], snap.prices[o.symbol], o.source === "modello" ? (proposed?.confidence ?? null) : null, o.source === "modello" ? (proposed?.expect ?? "") : "", o.why);
       if (o.source === "modello" && sc) ctx.agenti = sc.agenti;
       if (view.previsioni?.[o.symbol] !== undefined) ctx.kronos = view.previsioni[o.symbol];
+      // Operazione intraday: i livelli decisi all'ingresso vanno nel diario con il trade (sopravvivono a un riavvio).
+      if (o.side === "buy" && proposed?.intraday) {
+        const lv = Object.values(reports).flatMap((r) => r.intraday ?? []).find((x) => x.simbolo === o.symbol && x.livelli)?.livelli;
+        if (lv) ctx.livelli = lv;
+      }
       recordIntent(journal, { id: clientOrderId(runIdFor(o.side), o.symbol, o.side), simbolo: o.symbol, lato: o.side, origine: o.source === "modello" ? "agenti" : o.source, data: today, contesto: ctx });
     }
     if (cage.orders.length) writeJournal(deps.stateDir, journal);

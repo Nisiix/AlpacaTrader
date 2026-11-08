@@ -6,6 +6,7 @@ import { erf, kronosProb } from "./fiducia.ts";
 import { prossimaTrimestrale } from "../events.ts";
 import { addTradingDays } from "../slots.ts";
 import type { Agent, AgentReport, AgentView, Signal } from "./types.ts";
+import type { LivelliIntraday } from "../journal.ts";
 
 // L'agente intraday: operazioni che nascono e muoiono nella stessa giornata, solo nel verso del trend giornaliero.
 // Sceglie da solo la candela dalla volatilità del titolo (nervoso → 5 minuti, medio → 15, calmo → 4 ore), entra su una
@@ -25,6 +26,7 @@ export interface IntradayStato {
   motivo: string;
   orizzonte?: string; // l'orizzonte di Kronos scelto per l'ingresso (es. "2 h")
   controllo?: string; // la candela più breve su cui si segue la posizione (e cosa dice Kronos lì)
+  livelli?: LivelliIntraday; // per un ingresso votato: i livelli che il motore salva nel diario con il trade
 }
 
 // La candela più breve su cui si segue una posizione (per decidere se tenere o vendere) e quella superiore (correttivo).
@@ -252,7 +254,7 @@ export class IntradayAgent implements Agent {
     const candTfs = new Map<string, string[]>();
     for (const s of candidates) candTfs.set(s, this.forecast ? TFS : [timeframeFor(v.closes[s])]);
     const tfOfMine = new Map<string, string>();
-    for (const s of mine) tfOfMine.set(s, this.operazioni.get(s)?.candela ?? timeframeFor(v.closes[s]));
+    for (const s of mine) tfOfMine.set(s, this.operazioni.get(s)?.candela ?? v.journal.trade.find((t) => t.simbolo === s && t.stato === "aperto")?.contesto?.livelli?.candela ?? timeframeFor(v.closes[s]));
     // Candele: per i candidati su ogni candela da valutare, per le posizioni sulla loro candela e su quella più breve
     // (si decide se tenere o vendere guardando più da vicino), più la candela superiore per il correttivo.
     const want = new Map<string, Set<string>>();
@@ -371,8 +373,15 @@ export class IntradayAgent implements Agent {
       const b = barsOf(s, tf) ?? [];
       const read = b.length ? readBars(b, price, isCrypto(s)) : null;
       let op = this.operazioni.get(s);
+      const salvati = v.journal.trade.find((t) => t.simbolo === s && t.stato === "aperto")?.contesto?.livelli;
+      if (!op && salvati) {
+        // Processo ripartito: l'operazione riprende con i livelli salvati nel diario all'ingresso.
+        const aperta = v.journal.trade.find((t) => t.simbolo === s && t.stato === "aperto")?.apertoIl;
+        op = { simbolo: s, candela: salvati.candela, giorno: v.today, ...(aperta ? { aperta } : {}), ingresso: p.avgEntryPrice, obiettivo: salvati.obiettivo, stop: salvati.stop, ...(salvati.orizzonteMin !== undefined ? { orizzonteMin: salvati.orizzonteMin } : {}), sopraMedia: salvati.sopraMedia ?? false, ...(salvati.sostegno ? { sostegno: { ...salvati.sostegno } } : {}) };
+        this.operazioni.set(s, op);
+      }
       if (!op) {
-        // Processo ripartito: livelli ricostruiti dal carico e dalle candele di adesso.
+        // Processo ripartito senza livelli salvati: ricostruiti dal carico e dalle candele di adesso.
         const entry = p.avgEntryPrice;
         const aperta = v.journal.trade.find((t) => t.simbolo === s && t.stato === "aperto")?.apertoIl;
         op = { simbolo: s, candela: tf, giorno: v.today, ...(aperta ? { aperta } : {}), sopraMedia: read?.ema20 ? entry > read.ema20 : true, ingresso: entry, obiettivo: entry * (1 + (read?.targetPct ?? (isCrypto(s) ? c.target.crypto : c.target.stocks))), stop: entry * (1 - (read?.stopPct ?? (isCrypto(s) ? c.minStopPct.crypto : c.minStopPct.stocks) * 2)) };
@@ -573,7 +582,8 @@ export class IntradayAgent implements Agent {
       const superiori = sup.letti.length ? `candele superiori: ${sup.letti.join(", ")}` : "";
       const tipo = trend ? `; trade di trend: le candele ${trend.tf} vedono ${pct(trend.k)} in ${etichetta(trend.h)} (probabilità ${Math.round(trend.pr * 100)}%), obiettivo finale ${num(obiettivoTrend!)}, stop della candela ${trend.tf}` : superiori ? "; trade breve: le candele superiori non sono contrarie ma non vedono un rialzo netto" : "";
       segnali.push({ agente: this.name, simbolo: s, lato: "buy", forza: 1, orizzonteSedute: 1, intraday: true, pesoMassimo: peso, ...(k !== undefined ? {} : fc !== undefined ? { kronos: fc } : {}), perche: `${s} intraday su candele ${tf}${valutate ? ` (scelta per probabilità netta dei costi: ${valutate})` : ""}: ${ingresso}${k !== undefined ? `; Kronos a ${etichetta(h!)} sulle candele ${tf} ${pct(k)} (probabilità ${Math.round((pr ?? 0) * 100)}%)` : fc !== undefined ? `; Kronos ${pct(fc)} a ${AGENTS.kronos.horizon} sedute` : ""}${superiori ? `; ${superiori}` : ""}${tipo}${correttivi.length ? `; in parte contrari: ${correttivi.join(" e ")}, taglia ridotta` : ""}${inSerie ? `; dopo ${perditeDiFila} perdite di fila, taglia ridotta` : ""}; obiettivo ${num(target)} (${pct(targetPct)}${k !== undefined ? `, da Kronos in ${etichetta(h!)}` : ""}), stop ${num(stop)} (${pct(-stopPct)}), poi controllo su candele ${LOWER[tf] ?? tf}, chiusura ${chiusuraDi(s)}` });
-      stati.push({ simbolo: s, candela: tf, ...(h !== undefined && k !== undefined ? { orizzonte: etichetta(trend ? trend.h : h) } : {}), controllo: [`poi candele ${LOWER[tf] ?? tf}`, superiori].filter(Boolean).join(" · "), fase: "cerca ingresso", ingresso: price, obiettivo: obiettivoTrend ?? target, stop, prezzo: price, motivo: `ingresso votato: ${ingresso}${trend ? ` · trade di trend sulle candele ${trend.tf}` : ""}${valutate ? ` · probabilità netta per candela: ${valutate}` : ""}` });
+      const opNuova = this.operazioni.get(s)!;
+      stati.push({ simbolo: s, candela: tf, livelli: { candela: tf, obiettivo: opNuova.obiettivo, stop: opNuova.stop, ...(opNuova.orizzonteMin !== undefined ? { orizzonteMin: opNuova.orizzonteMin } : {}), sopraMedia: !!opNuova.sopraMedia, ...(opNuova.sostegno ? { sostegno: opNuova.sostegno } : {}) }, ...(h !== undefined && k !== undefined ? { orizzonte: etichetta(trend ? trend.h : h) } : {}), controllo: [`poi candele ${LOWER[tf] ?? tf}`, superiori].filter(Boolean).join(" · "), fase: "cerca ingresso", ingresso: price, obiettivo: obiettivoTrend ?? target, stop, prezzo: price, motivo: `ingresso votato: ${ingresso}${trend ? ` · trade di trend sulle candele ${trend.tf}` : ""}${valutate ? ` · probabilità netta per candela: ${valutate}` : ""}` });
     }
     if (v.analisi === false) stati.push(...this.ultimeCandidate.filter((x) => !held.has(x.simbolo) && this.entrateOggi.get(x.simbolo) !== v.today));
     else this.ultimeCandidate = stati.filter((x) => x.fase !== "in posizione");

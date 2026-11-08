@@ -51,6 +51,11 @@ describe("intraday nel motore vero: candele da 5 minuti, Kronos, ordini", () => 
     const st = r1.status_file!.intraday.find((x) => x.simbolo === "BTC/USD")!;
     expect(st.orizzonte).toBe("15 min");
     const entrata = env.broker.load().positions["BTC/USD"]!.avgEntryPrice;
+    // I livelli decisi all'ingresso sono nel diario con il trade: dopo un riavvio l'operazione riparte con gli stessi.
+    const { readJournal } = await import("../src/journal.ts");
+    const lv = readJournal(d.stateDir, new Date(env.clock.t)).file.trade.find((t) => t.simbolo === "BTC/USD" && t.stato === "aperto")?.contesto?.livelli;
+    expect(lv?.candela).toBe("5Min");
+    expect(lv!.obiettivo).toBeGreaterThan(lv!.stop);
     expect(st.obiettivo! / entrata - 1).toBeCloseTo(0.015, 3);
 
     // Cinque minuti dopo (giro senza analisi d'ingresso): il prezzo è all'obiettivo, Kronos sulla candela breve non vede altro.
@@ -194,5 +199,19 @@ describe("intraday nel motore vero: candele da 5 minuti, Kronos, ordini", () => 
     bars.push({ ...bars.at(-1)!, t: new Date(Date.parse(bars.at(-1)!.t) + 300_000).toISOString() }); // candela nuova: Kronos si ricalcola
     const r3 = await agente.observe(dopo(45, 75_770));
     expect(r3.segnali.find((x) => x.lato === "sell")?.perche).toMatch(/orizzonte di Kronos scaduto|taglio della perdita/);
+  });
+
+  test("dopo un riavvio l'operazione intraday riparte con candela e livelli salvati nel diario, non ricalcolati", async () => {
+    setCryptoUniverse(["BTC/USD"]);
+    const now = new Date("2026-09-27T21:00:00+02:00");
+    const bars = salitaA5Minuti(76_000, now);
+    const journal: JournalFile = { ...emptyJournal(), trade: [{ id: "t1", simbolo: "BTC/USD", stato: "aperto", apertoIl: new Date(now.getTime() - 20 * 60_000).toISOString(), comprate: 0.1, costo: 7_600, vendute: 0, incassato: 0, quantita: 0.1, contesto: { setup: "", momentum20: null, volGiornaliera: null, distanzaMedia: null, fiducia: null, attesa: "", perche: "", agenti: ["intraday"], livelli: { candela: "15Min", obiettivo: 77_500, stop: 74_000, orizzonteMin: 240, sopraMedia: false } } } as any] };
+    const v = { today: "2026-09-27", now, prices: { "BTC/USD": 75_000 }, closes: { "BTC/USD": syntheticCloses(76_000, 0.02, 260) }, indicators: {}, positions: [{ symbol: "BTC/USD", qty: 0.1, avgEntryPrice: 76_000, currentPrice: 75_000, marketValue: 7_500 }], account: { equity: 100_000, lastEquity: 100_000, cash: 92_000, status: "ACTIVE" }, journal, mercatoAperto: false, analisi: false } as unknown as AgentView;
+    const r = await new IntradayAgent(async (syms) => Object.fromEntries(syms.map((x) => [x, bars])), null).observe(v);
+    const st = r.intraday!.find((x) => x.simbolo === "BTC/USD")!;
+    expect(st.candela).toBe("15Min");
+    expect(st.stop).toBe(74_000);
+    expect(st.obiettivo).toBe(77_500);
+    expect(r.segnali.filter((x) => x.lato === "sell")).toEqual([]);
   });
 });

@@ -25,6 +25,18 @@ export interface EntryContext {
   kronos?: number;
   // Operazione intraday promossa a posizione di più giorni (ISO del momento): da lì la seguono le regole di più giorni.
   promossa?: string;
+  // Livelli dell'operazione intraday decisi all'ingresso (candela, obiettivo, stop, orizzonte, sostegno delle candele
+  // superiori): dopo un riavvio del motore l'operazione riparte con gli stessi, non con livelli ricalcolati.
+  livelli?: LivelliIntraday;
+}
+
+export interface LivelliIntraday {
+  candela: string;
+  obiettivo: number;
+  stop: number;
+  orizzonteMin?: number;
+  sopraMedia?: boolean;
+  sostegno?: { tf: string; obiettivo: number; orizzonteMin: number };
 }
 
 export interface Intent {
