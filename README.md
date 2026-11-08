@@ -48,7 +48,7 @@ Il backtest applica 5 punti base di costi per lato e confronta con SPY, 60/40 e 
 
 Ogni cosa che succede finisce nel **registro eventi** `state/events/AAAA-MM-GG.jsonl` (prezzi, segnali, rischio,
 allocazione, ordini, rifiuti, stop, trade, allarmi) e nello stato `state/agents-status.json`. La **dashboard**
-(`src/dashboard/`) li legge: pavimento 3D dei mercati (altezza = peso in portafoglio, colore = guadagno/perdita), agenti in
+(`src/dashboard/`) li legge e risponde in italiano semplice a quattro domande, in ordine: va tutto bene (frase di stato: motore acceso, Alpaca raggiungibile, borsa aperta/chiusa, crypto), quanto guadagno oggi (patrimonio, conto del giorno realizzato e non), cosa ho in mano (posizioni) e cosa hanno deciso gli agenti e perché (ordini, rifiuti raggruppati per motivo, punteggi, agenti). Sotto, apribile, il pavimento 3D dei mercati (altezza = peso in portafoglio, colore = guadagno/perdita), agenti in
 orbita che lanciano i segnali verso i titoli, anello della gabbia, pannelli con posizioni, punteggi, ordini, rifiuti,
 stop, diario ed eventi in diretta via WebSocket. Three.js è servito dal pacchetto npm: funziona senza internet.
 Telegram riceve ogni ordine inviato, gli allarmi e un riepilogo dopo le 22:05 con il **conto di profitto e perdita della
@@ -64,7 +64,7 @@ Nel fine settimana il riepilogo parte solo se c'è stato movimento (crypto).
 
 `installa-windows.ps1` crea il progetto in `D:\Applicazioni\WebDev\Bot alpaca agents` (o nella cartella passata come
 argomento): controlla git e bun, clona il repo sul branch del motore, installa, crea `secrets.ts`, lancia i test e mette sul
-desktop il collegamento "Bot alpaca agents" che avvia `bun run agents`. Da PowerShell:
+desktop il collegamento "Bot alpaca agents" che avvia `bun run agents` (nella cartella c'è anche `avvia-bot.cmd`, stesso effetto con un doppio clic; `imposta-telegram.cmd` ricava e scrive il chat id). Da PowerShell:
 
 ```powershell
 irm https://raw.githubusercontent.com/Nisiix/AlpacaTrader/ccr-f218832d-solbom/installa-windows.ps1 -OutFile installa-windows.ps1

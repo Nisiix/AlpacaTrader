@@ -57,7 +57,7 @@ Write-Host ""
 Write-Host "Fatto. Prossimi passi:" -ForegroundColor Green
 Write-Host "  1. Compila '$Cartella\secrets.ts' (chiavi PAPER di Alpaca, bot Telegram)."
 Write-Host "  2. Prova a vuoto:   bun run agents --fake --once"
-Write-Host "  3. Avvia davvero:   doppio clic su 'Bot alpaca agents' sul desktop (o bun run agents)."
+Write-Host "  3. Avvia davvero:   doppio clic su 'Bot alpaca agents' sul desktop o su avvia-bot.cmd nella cartella (o bun run agents)."
 Write-Host "  4. Dashboard:       http://127.0.0.1:8787"
 Write-Host "  5. Per partire da solo all'accensione del PC: copia il collegamento in shell:startup (Win+R, shell:startup)."
 Write-Host "Nota: spegni le sveglie cloud programmate e non lanciare bun run schedule insieme al motore."
