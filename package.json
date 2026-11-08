@@ -14,7 +14,8 @@
     "cloud-wake": "bun src/cli/cloud-wake.ts",
     "agents": "bun src/cli/agents.ts",
     "dashboard": "bun src/cli/dashboard.ts",
-    "sweep": "bun src/cli/sweep.ts"
+    "sweep": "bun src/cli/sweep.ts",
+    "chiudi-posizioni": "bun src/cli/chiudi.ts"
   },
   "devDependencies": {
     "bun-types": "1.4.4",

@@ -28,7 +28,7 @@ il lock e gli ID deterministici evitano doppioni anche con le sveglie classiche.
 | `contesto` | **prima di ogni trade**: situazione economica generale e per settore (regole sui dati: SPY e media a 200, volatilità, oro e obbligazioni in salita con SPY in calo, titoli del settore sotto la 50, Fed nei prossimi 2 giorni; più, se c'è `claude -p`, una lettura con ricerca web ogni 6 ore in `state/macro.json`) | nessun ordine: esposizione × 0,75 (neutro) o × 0,5 (sfavorevole); con contesto sfavorevole nel settore **non si apre niente e si aspetta la candela successiva**; la proiezione di Kronos guida ingressi e uscite **solo** con contesto favorevole |
 | `uscite` | ogni posizione: perdita dal carico, massimo visto, proiezione di Kronos se il contesto si fida | **vincolante** (non si vota). Di serie (`mode: "trend"`): stop **scalato sulla volatilità** (2,5 × vol × √5, tra 5% e 10%, anche come stop GTC su Alpaca), nessun obiettivo (l'uscita normale è il trend della gabbia), proiezione negativa: esce subito. Opzioni: `trailAtr` per uscire anche a N ATR dal massimo; `mode: "obiettivo"` per la vecchia politica a +3%/+4% con stop fisso -3% |
 | `kronos` | previsioni del modello a 5 sedute (percorso giorno per giorno), calcolate una volta al giorno sulle barre giornaliere e salvate in `state/previsioni.json`; tenute solo il 25% più nette e nel verso del trend | compra/vende (0,5); le stesse proiezioni guidano `uscite` e disegnano gli scenari nella dashboard |
-| `custodi` | **un investitore per ogni crypto seguita**: nasce per le crypto in portafoglio e per le migliori candidate del trend (sopra le medie 50/200, slancio a 12 e 3 mesi positivo, le prime 5 per momentum a 6 mesi); ognuno dichiara tesi, piano e rischio e segue solo il suo titolo | entra (0,6; 0,8 sul rientro verso la media a 20; 0,25 se il prezzo è oltre il 15% sopra la 50), esce sotto la media a 50 (0,9) o con slancio a 3 mesi negativo (0,6); muore dopo 12 giri fuori dai criteri |
+| `custodi` | **un investitore per ogni crypto seguita**: nasce per le crypto in portafoglio e per le migliori candidate del trend (sopra le medie 50/200, slancio a 12 e 3 mesi positivo, le prime 5 per momentum a 6 mesi); ognuno dichiara tesi, piano e rischio e segue solo il suo titolo. Tra un giro e l'altro **studia un dossier**: lettura tecnica del grafico (struttura dei massimi/minimi, rotture, rientro sulla media a 20, eccessi, RSI, compressione di volatilità), probabilità di rialzo da Kronos (rendimento atteso / volatilità sull'orizzonte), tono delle notizie (Google News, ogni ora), contesto → **probabilità che il titolo sia favorevole** e **prossima azione** in chiaro | entra (0,6; 0,8 sul rientro verso la media a 20; 0,25 se il prezzo è oltre il 15% sopra la 50) con forza modulata dal dossier (50% → invariata, 80% → +30%), esce sotto la media a 50 (0,9) o con slancio a 3 mesi negativo (0,6); muore dopo 12 giri fuori dai criteri |
 | `profitto` | guadagno oltre +3% su un trade non ancora alleggerito | **vincolante**: vende metà e lascia correre il resto col trend (`AGENTS.takeProfit`: `fraction` 1 per vendere tutto, `enabled: false` per spegnerlo) |
 
 L'**allocatore** somma i segnali pesati (peso 1 per tutti finché il diario non ha un campione; poi 0,5 a chi perde,
@@ -111,11 +111,21 @@ arrivano da Hugging Face al primo avvio (1-2 minuti); il motore intanto lavora s
 
 ### Dashboard: scheda per titolo
 
-«Titolo per titolo»: scegli un titolo (posizioni e custodi per primi) e vedi le ultime 120 candele con medie 20/50/200, carico e
-stop del motore, le operazioni fatte (▲▼ dal diario), e lo **scenario di Kronos**: il percorso previsto per le prossime sedute con il
-cono d'incertezza (una volatilità e mezza). «Chiedi agli agenti adesso» fa valutare quel titolo a tutti gli agenti con i prezzi
-di quel momento (`/api/valuta`): voti, punteggio, cosa direbbe la gabbia, livelli, custode. È una prova a secco: nessun ordine
-parte dalla dashboard. Dati: `/api/bars`, `/api/previsioni`, `/api/journal`.
+«Titolo per titolo»: i titoli in tre gruppi — **in portafoglio** (verde), **sotto osservazione** (custodi, voti d'acquisto, in
+attesa del contesto; blu) e **nel radar** (grigio). Per il titolo scelto: le ultime 120 candele con medie 20/50/200, carico e stop del
+motore, le operazioni fatte (▲▼ dal diario), la **candela di oggi che si forma in diretta** con i prezzi letti dal motore a ogni giro,
+le **scelte di oggi** del motore sul titolo (puntini = voti, frecce = ordini, × = rifiuti) con il feed sotto il grafico, e lo
+**scenario di Kronos**: il percorso previsto per le prossime sedute con il cono d'incertezza (una volatilità e mezza), ricaricato da
+solo appena il motore calcola proiezioni nuove. «Chiedi agli agenti adesso» fa valutare quel titolo a tutti gli agenti con i prezzi
+di quel momento (`/api/valuta`): voti, punteggio, cosa direbbe la gabbia, livelli, custode con dossier. È una prova a secco: nessun
+ordine parte dalla dashboard. Dati: `/api/bars`, `/api/previsioni`, `/api/journal`.
+
+### Ripartire da zero
+
+`bun run chiudi-posizioni` (Windows: `chiudi-posizioni.cmd`) toglie gli stop e vende a mercato tutte le posizioni del conto paper
+(a borsa chiusa l'ordine sui titoli si esegue all'apertura; le crypto subito), avvisa su Telegram, e al giro successivo gli agenti
+ricominciano con i criteri di oggi. A ogni avvio il motore riparte da `state/` e dal conto Alpaca: niente da configurare, le
+posizioni le decide giorno per giorno (universo crypto rinnovato ogni giorno, custodi che nascono e muoiono, trend ricalcolato a ogni giro).
 
 ## Sveglie (modalità classica)
 
@@ -132,6 +142,7 @@ bun run schedule                   # resta acceso, ogni 30 s lancia la sveglia d
 bun run once [--slot 15:40] [--force]   # una sveglia subito (la più recente di oggi)
 bun run status                     # lock, ultimo testimone, conto
 bun run breaker-reset              # riarma l'interruttore sulla perdita (dopo che hai guardato cosa è successo)
+bun run chiudi-posizioni           # chiude tutte le posizioni paper per ripartire da zero (vedi «Ripartire da zero»)
 bun run backtest [--days 500] [--riarmo 5]   # rigioca sulle chiusure storiche la gabbia col metodo trend e poi il motore degli agenti (4 varianti)
 bun run cloud-wake                 # il comando delle sessioni cloud programmate (vedi sotto)
 bun test                           # test con broker e cervello finti

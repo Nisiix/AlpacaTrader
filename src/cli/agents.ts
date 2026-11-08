@@ -4,7 +4,7 @@
 // gabbia, invia, e aggiorna la dashboard locale. Kronos: il sidecar Python lo accende il motore da solo, se installato.
 import { HorizonAgent } from "../agents/horizon.ts";
 import { ClaudeMacro, ContextAgent } from "../agents/context.ts";
-import { CustodiAgent } from "../agents/custode.ts";
+import { CustodiAgent, googleNews } from "../agents/custode.ts";
 import { ExitAgent } from "../agents/exits.ts";
 import { spawnRunner } from "../brain/claude.ts";
 import { KronosAgent } from "../agents/kronos.ts";
@@ -20,6 +20,8 @@ import { AGENTS, enableCrypto } from "../config.ts";
 import { startDashboard } from "../dashboard/server.ts";
 import { ROOT, buildDeps } from "../deps.ts";
 import { ensureKronos, pathForecaster, type KronosLink } from "../kronos-sidecar.ts";
+import { appendFileSync, mkdirSync } from "node:fs";
+import { join } from "node:path";
 import { parseArgs } from "./args.ts";
 
 try {
@@ -35,13 +37,23 @@ try {
   // Il contesto economico: regole sui dati sempre; la lettura con claude e ricerca web solo nel vero, se abilitata.
   if (AGENTS.context.enabled) agents.push(new ContextAgent(AGENTS.context.useClaude && !args.fake ? new ClaudeMacro(deps.stateDir, spawnRunner, deps.now) : null));
   if (args.profitto || AGENTS.takeProfit.enabled) agents.push(new TakeProfitAgent());
-  if (!args.noCrypto && AGENTS.custodi.enabled) agents.push(new CustodiAgent());
+  // I custodi studiano il loro titolo tra un giro e l'altro: nel vero leggono anche le notizie (Google News), nel finto no.
+  if (!args.noCrypto && AGENTS.custodi.enabled) agents.push(new CustodiAgent(args.fake ? null : googleNews()));
 
   // Kronos: un sidecar già acceso (--kronos url o KRONOS_URL), altrimenti lo avvia il motore dal venv di tools/kronos.
   let kronos: KronosLink | null = null;
   if (!args.noKronos && !args.fake) {
     const url = args.kronos ?? process.env.KRONOS_URL;
-    kronos = url ? { url, ready: true, stato: `attivo su ${url} (indicato a mano)`, stop: () => {} } : await ensureKronos({ root: ROOT, log: (l) => console.log(`${new Date().toISOString()} ${l}`) });
+    // Le righe del sidecar finiscono anche in logs/kronos-AAAA-MM-GG.log, per capire cosa fa a finestra chiusa.
+    const kronosLog = (l: string) => {
+      const line = `${new Date().toISOString()} ${l}`;
+      console.log(line);
+      try {
+        mkdirSync(deps.logsDir, { recursive: true });
+        appendFileSync(join(deps.logsDir, `kronos-${new Date().toISOString().slice(0, 10)}.log`), line + "\n");
+      } catch {}
+    };
+    kronos = url ? { url, ready: true, stato: `attivo su ${url} (indicato a mano)`, stop: () => {} } : await ensureKronos({ root: ROOT, log: kronosLog });
     agents.push(new KronosAgent(async () => []));
   }
   const cache = emptyCache();

@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { agentWeights, allocate, scoreSignals } from "../src/agents/allocator.ts";
 import { runAgentsBacktest } from "../src/agents/backtest.ts";
 import { ClaudeMacro, ContextAgent } from "../src/agents/context.ts";
-import { CustodiAgent } from "../src/agents/custode.ts";
+import { CustodiAgent, newsScore } from "../src/agents/custode.ts";
 import { ExitAgent } from "../src/agents/exits.ts";
 import { selectPairs } from "../src/agents/universe.ts";
 import { EventBus, readEvents } from "../src/agents/bus.ts";
@@ -543,7 +543,7 @@ describe("universo crypto e custodi", () => {
     expect(noTop.coppie).toEqual(["BTC/USD", "ETH/USD", "SOL/USD", "DOGE/USD", "SHIB/USD", "BAT/USD"]);
   });
 
-  test("custodi: uno per crypto in trend o in portafoglio, con tesi, piano e rischio; vota l'ingresso e l'uscita sotto la media a 50", () => {
+  test("custodi: uno per crypto in trend o in portafoglio, con tesi, piano, rischio e dossier; vota l'ingresso e l'uscita sotto la media a 50", async () => {
     setCryptoUniverse(["BTC/USD", "ETH/USD", "SOL/USD"]);
     const a = new CustodiAgent();
     const closes: Record<string, number[]> = {};
@@ -552,7 +552,7 @@ describe("universo crypto e custodi", () => {
     closes["ETH/USD"] = Array.from({ length: 260 }, (_, i) => 3000 - i * 3); // in discesa: niente custode
     closes["SOL/USD"] = syntheticCloses(180, 0.01, 260);
     const prices = { ...PRICES, "BTC/USD": closes["BTC/USD"]!.at(-1)!, "ETH/USD": closes["ETH/USD"]!.at(-1)!, "SOL/USD": closes["SOL/USD"]!.at(-1)! };
-    const r = a.observe(view({ closes, prices, indicators: indicatorsFor(closes, prices, LIMITS.trendSmaDays, LIMITS.volLookbackDays, LIMITS.longSmaDays, LIMITS.rankMomentumDays) }));
+    const r = await a.observe(view({ closes, prices, indicators: indicatorsFor(closes, prices, LIMITS.trendSmaDays, LIMITS.volLookbackDays, LIMITS.longSmaDays, LIMITS.rankMomentumDays), previsioni: { "BTC/USD": 0.03 } }));
     expect(r.custodi!.map((c) => c.simbolo).sort()).toEqual(["BTC/USD", "SOL/USD"]);
     for (const c of r.custodi!) {
       expect(["pronto", "osserva"]).toContain(c.fase);
@@ -560,12 +560,24 @@ describe("universo crypto e custodi", () => {
       expect(c.piano.length).toBeGreaterThan(20);
       expect(c.rischio).toContain("Stop");
       expect(c.livelli.stop).not.toBeNull();
+      expect(c.dossier!.probabilita).toBeGreaterThan(0);
+      expect(c.dossier!.probabilita).toBeLessThanOrEqual(1);
+      expect(c.dossier!.tecnica.pattern.length).toBeGreaterThan(0);
+      expect(c.dossier!.prossimaAzione.length).toBeGreaterThan(10);
     }
+    // Kronos positivo su BTC: probabilità di rialzo sopra il 50% e dossier citato nel voto.
+    const btcD = r.custodi!.find((c) => c.simbolo === "BTC/USD")!.dossier!;
+    expect(btcD.kronos.punteggio!).toBeGreaterThan(0.5);
+    expect(r.segnali.find((s) => s.agente === "custode BTC/USD")!.perche).toContain("dossier");
+    // Notizie: il tono si legge dai titoli.
+    expect(newsScore([{ titolo: "Bitcoin ETF inflows hit record" }, { titolo: "Exchange hack drains funds" }, { titolo: "Quiet day" }])).toBeCloseTo(0.5, 6);
+    expect(newsScore([{ titolo: "Solana rally to all-time high" }])!).toBeGreaterThan(0.5);
+    expect(newsScore([])).toBeNull();
     expect(r.segnali.filter((s) => s.lato === "buy").map((s) => s.agente).sort()).toEqual(["custode BTC/USD", "custode SOL/USD"]);
     // In portafoglio e sotto la media a 50: il custode chiede di uscire.
     const down = { ...closes, "BTC/USD": [...closes["BTC/USD"]!.slice(0, -1), 60_000] };
     const p2 = { ...prices, "BTC/USD": 60_000 };
-    const r2 = a.observe(view({ closes: down, prices: p2, positions: [{ symbol: "BTC/USD", qty: 0.1, avgEntryPrice: 70_000, currentPrice: 60_000, marketValue: 6_000 }] }));
+    const r2 = await a.observe(view({ closes: down, prices: p2, positions: [{ symbol: "BTC/USD", qty: 0.1, avgEntryPrice: 70_000, currentPrice: 60_000, marketValue: 6_000 }] }));
     const btc = r2.custodi!.find((c) => c.simbolo === "BTC/USD")!;
     expect(btc.fase).toBe("in uscita");
     expect(r2.segnali.some((s) => s.agente === "custode BTC/USD" && s.lato === "sell")).toBe(true);

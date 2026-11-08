@@ -99,6 +99,13 @@
   .chip[aria-pressed="true"] { background:var(--ink); color:var(--card); border-color:var(--ink); }
   .chip[aria-pressed="true"] .up, .chip[aria-pressed="true"] .down { color:inherit; opacity:.85; }
   .chip .k { width:7px; height:7px; border-radius:50%; background:var(--agent); display:inline-block; }
+  .chip.held { border-color:var(--up); background:var(--up-bg); color:var(--up); font-weight:600; }
+  .chip.watch { border-color:var(--agent); color:var(--agent); background:var(--agent-bg); }
+  .chip.idle { color:var(--ink-3); background:transparent; }
+  .chip[aria-pressed="true"].held, .chip[aria-pressed="true"].watch, .chip[aria-pressed="true"].idle { background:var(--ink); color:var(--card); border-color:var(--ink); }
+  .chip-groups { display:grid; gap:8px; margin-bottom:14px; }
+  .chip-group { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  .chip-group .glab { font-size:13px; color:var(--ink-3); min-width:132px; }
   .chip:focus-visible { outline:2px solid var(--agent); outline-offset:2px; }
   .title-grid { display:grid; grid-template-columns: minmax(0, 1.7fr) minmax(300px, 1fr); gap:18px; }
   @media (max-width: 1000px) { .title-grid { grid-template-columns:1fr; } }
@@ -144,13 +151,14 @@
   </section>
 
   <section class="card" id="titoli">
-    <h2>Titolo per titolo <small>candele, livelli del motore, scenari di Kronos e il verdetto degli agenti</small></h2>
+    <h2>Titolo per titolo <small id="live-note"></small></h2>
     <div class="chips" id="chips" role="group" aria-label="scegli il titolo"></div>
     <div class="title-grid">
       <div>
         <div class="chart-wrap"><canvas id="chart" aria-label="grafico a candele"></canvas><div id="tip"></div></div>
         <div class="legend-row"><span><i style="border-color:#8a94a6"></i>media 20</span><span><i style="border-color:var(--agent)"></i>media 50</span><span><i style="border-color:#b08900"></i>media 200</span><span><i style="border-color:var(--ink); border-top-style:dashed"></i>carico</span><span><i style="border-color:var(--down); border-top-style:dashed"></i>stop</span><span><i style="border-color:var(--up); border-top-style:dotted"></i>scenario Kronos</span><span>▲▼ operazioni</span></div>
         <p class="why" id="chart-note" style="margin-top:8px"></p>
+        <div id="feed" style="margin-top:10px"></div>
       </div>
       <div class="stack" style="gap:12px">
         <div class="row" style="justify-content:space-between">
@@ -176,37 +184,37 @@
     </div>
     <div class="stack">
       <section class="card">
-        <h2>Cosa hanno fatto gli agenti nell'ultimo giro</h2>
-        <p class="why" id="context" style="margin-bottom:10px"></p>
+        <h2>Ultimo giro degli agenti</h2>
+        <div class="row" id="context" style="margin-bottom:10px"></div>
         <div id="decisions"></div>
       </section>
       <section class="card">
-        <h2>Chi vota cosa <small>punteggio netto dei segnali</small></h2>
+        <h2>Punteggi <small>sopra +0,5 si compra, sotto −0,5 si vende</small></h2>
         <div id="scores"></div>
       </section>
       <section class="card">
-        <h2>I custodi delle crypto <small>un investitore per ogni titolo seguito</small></h2>
+        <h2>Custodi</h2>
         <div class="custode-list" id="custodi"></div>
       </section>
       <section class="card">
-        <h2>Gli agenti</h2>
-        <div id="agents"></div>
+        <h2>Agenti</h2>
+        <div class="row" id="agents"></div>
         <p class="why" id="journal" style="margin-top:10px"></p>
       </section>
     </div>
   </div>
 
   <details class="scene" id="scene-box">
-    <summary>Vista 3D dei mercati <span class="hint">apri per vedere agenti, gabbia e titoli in movimento</span></summary>
+    <summary>Vista 3D <span class="hint">agenti, regole e titoli in movimento</span></summary>
     <div id="scene"></div>
-    <p class="legend">Ogni blocco è un titolo: più è alto, più pesa nel portafoglio; verde in guadagno, rosso in perdita. Le sfere sono gli agenti; i fili che lanciano verso un titolo sono i loro voti. L'anello è la gabbia delle regole. Trascina per ruotare.</p>
+    <p class="legend">Blocchi = titoli (altezza = peso, colore = guadagno/perdita); sfere = agenti; fili = voti; anello = regole.</p>
   </details>
 
   <section class="card">
     <div class="top" style="margin-bottom:10px">
       <h2 style="margin:0">Cronologia</h2>
       <div class="filters" role="group" aria-label="filtro eventi">
-        <button type="button" data-f="important" aria-pressed="true">Solo le cose importanti</button>
+        <button type="button" data-f="important" aria-pressed="true">Importanti</button>
         <button type="button" data-f="all" aria-pressed="false">Tutto</button>
       </div>
     </div>
@@ -352,20 +360,20 @@ function sayState() {
     say.className = 'say warn';
     say.textContent = lastTick ? 'Il motore è partito ma non ha ancora completato un giro.' : 'Il motore degli agenti non è acceso.';
     fix.hidden = false;
-    fix.textContent = lastTick ? `Primo giro iniziato ${ago(lastTick.t)}: se non cambia niente tra un paio di minuti, guarda la cronologia qui sotto.` : 'Avvialo con un doppio clic su avvia-bot.cmd nella cartella del progetto (oppure bun run agents). Questa pagina si aggiorna da sola.';
+    fix.textContent = lastTick ? `Primo giro iniziato ${ago(lastTick.t)}.` : 'Avvialo con avvia-bot.cmd.';
     return;
   }
   const stale = minutesAgo(last) > 12;
   if (stale) {
     say.className = 'say warn';
     say.textContent = `Il motore sembra fermo: l'ultimo giro è di ${ago(last)}.`;
-    fix.hidden = false; fix.textContent = 'Se hai chiuso la finestra del bot, riaprila con avvia-bot.cmd. I dati qui sotto sono quelli dell’ultimo giro riuscito.';
+    fix.hidden = false; fix.textContent = 'Riavvialo con avvia-bot.cmd.';
     return;
   }
   const crypto = Object.keys(status.prezzi || {}).some((s) => s.includes('/'));
   const parts = [];
-  if (status.mercatoAperto) parts.push(status.finestraIngressi ? 'la borsa è aperta e gli agenti possono comprare' : 'la borsa è aperta ma fuori dalla finestra degli acquisti: solo vendite e stop');
-  else parts.push(crypto ? 'la borsa è chiusa, le crypto restano operative' : 'la borsa è chiusa');
+  if (status.mercatoAperto) parts.push(status.finestraIngressi ? 'borsa aperta, finestra acquisti' : 'borsa aperta, solo vendite e stop');
+  else parts.push(crypto ? 'borsa chiusa, crypto operative' : 'borsa chiusa');
   if (status.allarmi?.length) {
     say.className = 'say warn';
     say.textContent = `Il motore gira, ma c'è un avviso: ${status.allarmi[0]}`;
@@ -377,7 +385,7 @@ function sayState() {
     say.textContent = `Il motore gira, acquisti sospesi: ${status.acquistiBloccati}`;
     return;
   }
-  say.textContent = `Tutto a posto: il motore gira, ${parts[0]}.`;
+  say.textContent = `Motore acceso · ${parts[0]}${status.kronos?.proiezioniDel ? ' · Kronos attivo' : ''}.`;
 }
 
 function paintMoney(st) {
@@ -399,7 +407,7 @@ function paintPositions(st) {
   $('#pos-n').textContent = pos.length ? `${pos.length}` : '';
   if (!pos.length) {
     const crypto = Object.keys(st.prezzi || {}).some((s) => s.includes('/'));
-    $('#positions').innerHTML = `<p class="empty">Nessuna posizione. Gli agenti comprano titoli solo nei giorni di borsa tra le 15:40 e le 17:30${crypto ? ', le crypto in qualunque momento' : ''}, e solo se il trend lo giustifica.</p>`;
+    $('#positions').innerHTML = `<p class="empty">Nessuna posizione aperta.</p>`;
     return;
   }
   const eq = st.conto?.patrimonio || 1;
@@ -411,7 +419,7 @@ function paintPositions(st) {
 
 function paintPnl(st) {
   const pl = st.pnlOggi;
-  if (!pl) { $('#pnl').innerHTML = '<p class="empty">Il conto del giorno arriva con il primo giro.</p>'; return; }
+  if (!pl) { $('#pnl').innerHTML = '<p class="empty">Nessun dato.</p>'; return; }
   const total = pl.realizzato + pl.nonRealizzato;
   let html = `<div class="pnl-line"><div><div class="lab">Incassato oggi</div><div class="val ${cls(pl.realizzato)}">${usd(pl.realizzato)}</div></div><div><div class="lab">Sulle posizioni aperte</div><div class="val ${cls(pl.nonRealizzato)}">${usd(pl.nonRealizzato)}</div></div><div><div class="lab">Totale giornata</div><div class="val ${cls(total)}">${usd(total)}</div></div></div>`;
   if (!pl.vendite.length && !pl.acquisti.length) html += `<p class="empty">Nessuna operazione oggi.</p>`;
@@ -428,8 +436,8 @@ function paintDecisions(st) {
   const cx = st.contesto;
   const tone = cx?.generale === 'favorevole' ? 'up' : cx?.generale === 'sfavorevole' ? 'down' : '';
   $('#context').innerHTML = cx
-    ? `Contesto economico <span class="pill ${tone}">${esc(cx.generale)}</span> ${esc(cx.motivo)}${(st.inAttesa || []).length ? ` In attesa della prossima candela: ${st.inAttesa.map((w) => `<b>${esc(w.simbolo)}</b>`).join(', ')}.` : ''}`
-    : `Giro ${esc(st.giro)}, ${hhmm(st.aggiornato)}.`;
+    ? `<span class="pill ${tone}" title="${esc(cx.motivo)}">contesto ${esc(cx.generale)}</span>${Object.entries(cx.settori || {}).filter(([, o]) => o !== 'favorevole').map(([k, o]) => `<span class="pill ${o === 'sfavorevole' ? 'down' : ''}">${esc(k)} ${esc(o)}</span>`).join('')}${(st.inAttesa || []).map((w) => `<span class="pill warn" title="${esc(w.motivo)}">${esc(w.simbolo)} in attesa</span>`).join('')}`
+    : '';
   const items = [];
   for (const o of st.ordini || []) {
     const ok = o.esito.startsWith('inviato');
@@ -446,12 +454,12 @@ function paintDecisions(st) {
   if (sp && (sp.placed.length || sp.cancelled.length || sp.errors.length)) {
     items.push(`<div class="decision"><div class="head"><span><span class="pill agent">Stop di protezione</span></span></div><div class="why">${sp.placed.length ? `Messi: ${sp.placed.map(esc).join(', ')}. ` : ''}${sp.cancelled.length ? `Tolti: ${sp.cancelled.map(esc).join(', ')}. ` : ''}${sp.errors.length ? `<span class="down">${sp.errors.map(esc).join('; ')}</span>` : ''}</div></div>`);
   }
-  $('#decisions').innerHTML = items.join('') || `<p class="empty">Nessun ordine nell'ultimo giro: ${(st.segnali || []).length ? 'i segnali c’erano ma non hanno superato la soglia o le regole' : 'nessun agente ha visto un’occasione'}. ${sp ? `Stop attivi su Alpaca: ${[...sp.ok, ...sp.placed].length || 'nessuno'}.` : ''}</p>`;
+  $('#decisions').innerHTML = items.join('') || `<p class="empty">Nessun ordine nell'ultimo giro.${sp ? ` Stop attivi: ${[...sp.ok, ...sp.placed].length || 'nessuno'}.` : ''}</p>`;
 }
 
 function paintScores(st) {
   const sc = (st.punteggi || []).slice().sort((a, b) => Math.abs(b.punteggio) - Math.abs(a.punteggio));
-  if (!sc.length) { $('#scores').innerHTML = '<p class="empty">Nessun segnale nell’ultimo giro: nessun titolo era nelle condizioni richieste.</p>'; return; }
+  if (!sc.length) { $('#scores').innerHTML = '<p class="empty">Nessun segnale.</p>'; return; }
   const max = Math.max(1, ...sc.map((s) => Math.abs(s.punteggio)));
   $('#scores').innerHTML = `<table><tbody>${sc.map((s) => {
     const w = Math.abs(s.punteggio) / max * 50;
@@ -462,9 +470,9 @@ function paintScores(st) {
 
 function paintAgents(st) {
   const rows = Object.entries(st.agenti || {});
-  $('#agents').innerHTML = rows.length ? `<table><tbody>${rows.map(([n, a]) => `<tr><td style="width:150px"><b>${agentName(n)}</b><br><span class="why">peso ${String(st.pesi?.[n] ?? 1).replace('.', ',')}</span></td><td>${a.errore ? `<span class="down">${esc(a.errore)}</span>` : `${a.segnali === 0 ? 'nessun segnale' : a.segnali === 1 ? '1 segnale' : `${a.segnali} segnali`}${a.note?.length ? `<br><span class="why">${a.note.map(esc).join(' ')}</span>` : ''}`}</td></tr>`).join('')}</tbody></table>` : '<p class="empty">Gli agenti compaiono dopo il primo giro.</p>';
+  $('#agents').innerHTML = rows.length ? rows.map(([n, a]) => `<span class="pill ${a.errore ? 'down' : a.segnali ? 'agent' : ''}" title="${esc(a.errore || (a.note || []).join(' · ') || 'nessuna nota')}">${agentName(n)} ${a.errore ? '!' : a.segnali}${st.pesi?.[n] && st.pesi[n] !== 1 ? ` · peso ${String(st.pesi[n]).replace('.', ',')}` : ''}</span>`).join('') : '<p class="empty">Nessun dato.</p>';
   const d = st.diario?.statistiche;
-  $('#journal').innerHTML = `${d ? `Diario dei trade: ${d.trade === 0 ? 'nessun trade chiuso finora' : `${d.trade} chiusi, ${d.vinti} in guadagno, risultato medio ${pct(d.attesa)}`}. ${esc(st.diario.stato)}` : ''}${st.kronos ? `<br>Kronos: ${esc(st.kronos.stato)}${st.kronos.proiezioniDel ? `, proiezioni del ${st.kronos.proiezioniDel} su ${st.kronos.simboli} titoli` : ''}.` : ''}${st.universo?.crypto?.length ? `<br>Universo crypto di oggi: ${st.universo.crypto.length} coppie${st.universo.fonteCrypto ? ` (${esc(st.universo.fonteCrypto)})` : ''}.` : ''}`;
+  $('#journal').innerHTML = `${d ? `Trade chiusi ${d.trade}${d.trade ? `, vinti ${d.vinti}, media ${pct(d.attesa)}` : ''}.` : ''}${st.kronos ? ` Kronos: ${esc(st.kronos.stato)}${st.kronos.proiezioniDel ? ` (${st.kronos.simboli} proiezioni)` : ''}.` : ''}${st.universo?.crypto?.length ? ` Crypto seguite: ${st.universo.crypto.length}.` : ''}`;
 }
 
 function paintScene(st) {
@@ -499,7 +507,7 @@ const FASI = { osserva: 'osserva', pronto: 'pronto a entrare', 'in posizione': '
 const faseCls = (f) => f === 'in posizione' || f === 'pronto' ? 'up' : f === 'in uscita' ? 'down' : f === 'attende' ? 'warn' : '';
 function paintCustodi(st) {
   const list = st.custodi || [];
-  $('#custodi').innerHTML = list.length ? list.map((c) => `<button type="button" data-sym="${esc(c.simbolo)}"><div class="row" style="justify-content:space-between"><b>${esc(c.simbolo)}</b><span class="pill ${faseCls(c.fase)}">${FASI[c.fase] || esc(c.fase)}</span></div><div class="why" style="margin-top:4px">${esc(c.stato)}</div></button>`).join('')
+  $('#custodi').innerHTML = list.length ? list.map((c) => { const p = c.dossier ? Math.round(c.dossier.probabilita * 100) : null; return `<button type="button" data-sym="${esc(c.simbolo)}"><div class="row" style="justify-content:space-between"><span><b>${esc(c.simbolo)}</b>${p !== null ? ` <b class="${p >= 60 ? 'up' : p < 45 ? 'down' : ''}">${p}%</b>` : ''}</span><span class="pill ${faseCls(c.fase)}">${FASI[c.fase] || esc(c.fase)}</span></div><div class="why" style="margin-top:4px">${esc(c.dossier?.prossimaAzione || c.stato)}</div></button>`; }).join('')
     : `<p class="empty">Nessun custode attivo: nasce uno per ogni crypto in trend (sopra le medie, slancio a 3 e 12 mesi positivo) o in portafoglio. ${st.universo?.crypto?.length ? `Universo di oggi: ${st.universo.crypto.length} coppie${st.universo.fonteCrypto ? ` (${esc(st.universo.fonteCrypto)})` : ''}.` : ''}</p>`;
   for (const b of $('#custodi').querySelectorAll('button')) b.addEventListener('click', () => { selectSymbol(b.dataset.sym); $('#titoli').scrollIntoView({ behavior: 'smooth', block: 'start' }); });
 }
@@ -518,9 +526,17 @@ function symbolsOf(st) {
 function paintChips(st) {
   const syms = symbolsOf(st);
   if (!selected || !syms.includes(selected)) { selected = (st.posizioni?.[0]?.simbolo) || (st.custodi?.[0]?.simbolo) || syms[0] || null; if (selected) loadSymbol(selected); }
+  // Tre gruppi: dove gli agenti hanno investito, cosa stanno osservando (custodi, voti d'acquisto, in attesa), il resto del radar.
   const held = new Map((st.posizioni || []).map((p) => [p.simbolo, p]));
-  const cust = new Set((st.custodi || []).map((c) => c.simbolo));
-  $('#chips').innerHTML = syms.map((s) => { const p = held.get(s); return `<button type="button" class="chip" data-sym="${esc(s)}" aria-pressed="${s === selected}">${cust.has(s) ? '<span class="k" title="ha un custode"></span>' : ''}${esc(s)}${p ? `<span class="${cls(p.variazione)}">${pct(p.variazione)}</span>` : ''}</button>`; }).join('');
+  const cust = new Map((st.custodi || []).map((c) => [c.simbolo, c]));
+  const voted = new Set((st.segnali || []).filter((x) => x.lato === 'buy').map((x) => x.simbolo));
+  const waiting = new Set((st.inAttesa || []).map((w) => w.simbolo));
+  const groups = { held: [], watch: [], idle: [] };
+  for (const s of syms) groups[held.has(s) ? 'held' : cust.has(s) || voted.has(s) || waiting.has(s) ? 'watch' : 'idle'].push(s);
+  const chip = (s, kind) => { const p = held.get(s), c = cust.get(s); const tag = p ? `<span>${pct(p.variazione)}</span>` : c?.dossier ? `<span>${Math.round(c.dossier.probabilita * 100)}%</span>` : waiting.has(s) ? '<span>in attesa</span>' : voted.has(s) ? '<span>votato</span>' : ''; return `<button type="button" class="chip ${kind}" data-sym="${esc(s)}" aria-pressed="${s === selected}" title="${p ? 'in portafoglio' : c ? `custode: ${FASI[c.fase] || c.fase}` : waiting.has(s) ? 'in attesa del contesto' : voted.has(s) ? 'votato dagli agenti nell\u2019ultimo giro' : 'nel radar, nessuna azione'}">${c ? '<span class="k"></span>' : ''}${esc(s)}${tag}</button>`; };
+  const labels = { held: `In portafoglio (${groups.held.length})`, watch: `Sotto osservazione (${groups.watch.length})`, idle: `Nel radar (${groups.idle.length})` };
+  $('#chips').className = 'chip-groups';
+  $('#chips').innerHTML = ['held', 'watch', 'idle'].filter((k) => groups[k].length).map((k) => `<div class="chip-group"><span class="glab">${labels[k]}</span>${groups[k].map((s) => chip(s, k)).join('')}</div>`).join('');
   for (const b of $('#chips').querySelectorAll('.chip')) b.addEventListener('click', () => selectSymbol(b.dataset.sym));
   if (selected) paintTitle();
 }
@@ -564,6 +580,24 @@ function dailyVolOf(closes, n = 20) {
   return Math.sqrt(r.reduce((a, b) => a + (b - m) ** 2, 0) / (r.length - 1));
 }
 const cssVar = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const romeDate = (iso) => new Date(iso).toLocaleDateString('sv-SE', { timeZone: 'Europe/Rome' });
+const todayRome = () => romeDate(new Date().toISOString());
+// La candela di oggi, viva: si forma con i prezzi letti dal motore a ogni giro (eventi "prezzi"), più l'ultimo prezzo dello stato.
+function liveBar(sym) {
+  const today = todayRome();
+  const ps = allEvents.filter((e) => e.tipo === 'prezzi' && romeDate(e.t) === today && e.prezzi?.[sym]).map((e) => e.prezzi[sym]).reverse();
+  const last = status?.prezzi?.[sym]; if (last && romeDate(status.aggiornato) === today) ps.push(last);
+  if (!ps.length) return null;
+  const prev = bars.at(-1)?.close;
+  if (bars.at(-1)?.date >= today) return null;
+  return { date: today, open: prev ?? ps[0], high: Math.max(prev ?? ps[0], ...ps), low: Math.min(prev ?? ps[0], ...ps), close: ps[ps.length - 1], live: true, letture: ps.length };
+}
+// Le scelte di oggi del motore su questo titolo: voti, ordini, rifiuti, stop, trade.
+const ACTION_KINDS = new Set(['segnale', 'ordine', 'rifiuto', 'trade', 'stop']);
+function actionsFor(sym) {
+  const today = todayRome();
+  return allEvents.filter((e) => romeDate(e.t) === today && ACTION_KINDS.has(e.tipo) && (e.simbolo === sym || (e.tipo === 'stop' && String(e.dettaglio || '').startsWith(sym + ' '))));
+}
 
 // Il grafico: ultime 120 candele, medie 20/50/200, carico e stop, il percorso previsto da Kronos con il cono di incertezza, le operazioni.
 let chartGeom = null;
@@ -575,15 +609,16 @@ function drawChart() {
   const all = bars; const N = Math.min(120, all.length);
   ctx.font = '12px Figtree, system-ui, sans-serif';
   if (!N) { ctx.fillStyle = cssVar('--ink-3'); ctx.fillText(status ? 'Le barre arrivano con il primo giro riuscito del motore.' : 'Nessun dato.', 16, 28); chartGeom = null; return; }
-  const view = all.slice(-N); const closesAll = all.map((b) => b.close);
+  const lb = liveBar(selected);
+  const view = [...all.slice(-(lb ? N - 1 : N)), ...(lb ? [lb] : [])]; const closesAll = all.map((b) => b.close);
   const fc = forecasts?.previsioni?.[selected]; const path = fc?.percorso || [];
   const vol = dailyVolOf(closesAll);
-  const last = view[view.length - 1].close;
+  const last = all[all.length - 1].close;
   const pos = (status?.posizioni || []).find((p) => p.simbolo === selected);
   const stopPct = valutazione?.livelli?.stopPct ?? Math.min(0.10, Math.max(0.05, Math.round(2.5 * vol * Math.sqrt(5) * 200) / 200));
   const carico = pos?.prezzoCarico ?? null;
   const stop = carico !== null ? carico * (1 - stopPct) : null;
-  const H_FC = path.length; const slots = N + H_FC + 1;
+  const H_FC = path.length; const slots = view.length + H_FC + 1;
   let lo = Math.min(...view.map((b) => b.low)), hi = Math.max(...view.map((b) => b.high));
   for (let k = 0; k < path.length; k++) { const band = vol * Math.sqrt(k + 1) * 1.65; lo = Math.min(lo, last * (1 + path[k] - band)); hi = Math.max(hi, last * (1 + path[k] + band)); }
   if (stop !== null) lo = Math.min(lo, stop); if (carico !== null) hi = Math.max(hi, carico);
@@ -596,15 +631,18 @@ function drawChart() {
   for (let g = 0; g <= 5; g++) { const v = lo + ((hi - lo) * g) / 5; const yy = y(v); ctx.beginPath(); ctx.moveTo(L, yy); ctx.lineTo(W - R, yy); ctx.stroke(); ctx.fillText(px(v), W - R + 6, yy + 4); }
   // date (ogni ~20 barre)
   ctx.textAlign = 'center';
-  for (let i = 0; i < N; i += Math.ceil(N / 6)) ctx.fillText(view[i].date.slice(5), x(i), H - 8);
+  for (let i = 0; i < view.length; i += Math.ceil(view.length / 6)) ctx.fillText(view[i].date.slice(5), x(i), H - 8);
   // zona futura
-  if (H_FC) { ctx.fillStyle = cssVar('--agent-bg'); ctx.globalAlpha = 0.35; ctx.fillRect(x(N - 0.5), T, x(slots - 0.5) - x(N - 0.5), ph); ctx.globalAlpha = 1; ctx.fillStyle = cssVar('--ink-3'); ctx.fillText(`prossime ${H_FC} sedute`, (x(N) + x(slots - 1)) / 2, H - 8); }
+  const F0 = view.length; // prima colonna del futuro
+  if (H_FC) { ctx.fillStyle = cssVar('--agent-bg'); ctx.globalAlpha = 0.35; ctx.fillRect(x(F0 - 0.5), T, x(slots - 0.5) - x(F0 - 0.5), ph); ctx.globalAlpha = 1; ctx.fillStyle = cssVar('--ink-3'); ctx.fillText(`prossime ${H_FC} sedute`, (x(F0) + x(slots - 1)) / 2, H - 8); }
   // medie
-  const line = (n, color, dash) => { ctx.beginPath(); ctx.strokeStyle = color; ctx.lineWidth = 1.5; ctx.setLineDash(dash || []); let started = false; for (let i = 0; i < N; i++) { const gi = all.length - N + i; const v = smaAt(closesAll, gi, n); if (v === null) continue; const xx = x(i), yy = y(v); if (!started) { ctx.moveTo(xx, yy); started = true; } else ctx.lineTo(xx, yy); } ctx.stroke(); ctx.setLineDash([]); };
+  const nClosed = view.length - (lb ? 1 : 0);
+  const line = (n, color, dash) => { ctx.beginPath(); ctx.strokeStyle = color; ctx.lineWidth = 1.5; ctx.setLineDash(dash || []); let started = false; for (let i = 0; i < nClosed; i++) { const gi = all.length - nClosed + i; const v = smaAt(closesAll, gi, n); if (v === null) continue; const xx = x(i), yy = y(v); if (!started) { ctx.moveTo(xx, yy); started = true; } else ctx.lineTo(xx, yy); } ctx.stroke(); ctx.setLineDash([]); };
   line(200, '#b08900'); line(50, cssVar('--agent')); line(20, '#8a94a6', [2, 3]);
   // candele
   const up = cssVar('--up'), down = cssVar('--down');
-  view.forEach((b, i) => { const c = b.close >= b.open ? up : down; ctx.strokeStyle = c; ctx.fillStyle = c; ctx.lineWidth = 1; const xx = x(i); ctx.beginPath(); ctx.moveTo(xx, y(b.high)); ctx.lineTo(xx, y(b.low)); ctx.stroke(); const top = y(Math.max(b.open, b.close)), bot = y(Math.min(b.open, b.close)); ctx.fillRect(xx - cw / 2, top, cw, Math.max(1, bot - top)); });
+  view.forEach((b, i) => { const c = b.close >= b.open ? up : down; ctx.strokeStyle = c; ctx.fillStyle = c; ctx.lineWidth = 1; const xx = x(i); ctx.beginPath(); ctx.moveTo(xx, y(b.high)); ctx.lineTo(xx, y(b.low)); ctx.stroke(); const top = y(Math.max(b.open, b.close)), bot = y(Math.min(b.open, b.close)); if (b.live) { ctx.lineWidth = 1.5; ctx.strokeRect(xx - cw / 2, top, cw, Math.max(1, bot - top)); ctx.globalAlpha = 0.35; ctx.fillRect(xx - cw / 2, top, cw, Math.max(1, bot - top)); ctx.globalAlpha = 1; } else ctx.fillRect(xx - cw / 2, top, cw, Math.max(1, bot - top)); });
+  if (lb) { ctx.fillStyle = cssVar('--ink-3'); ctx.textAlign = 'center'; ctx.fillText('oggi', x(view.length - 1), T + 10); ctx.beginPath(); ctx.strokeStyle = cssVar('--line'); ctx.setLineDash([2, 3]); ctx.moveTo(x(view.length - 1), T + 14); ctx.lineTo(x(view.length - 1), T + ph); ctx.stroke(); ctx.setLineDash([]); }
   // livelli
   const hline = (v, color, dash, label) => { if (v === null || v === undefined) return; ctx.beginPath(); ctx.strokeStyle = color; ctx.lineWidth = 1.2; ctx.setLineDash(dash); ctx.moveTo(L, y(v)); ctx.lineTo(W - R, y(v)); ctx.stroke(); ctx.setLineDash([]); ctx.fillStyle = color; ctx.textAlign = 'left'; ctx.fillText(label, L + 6, y(v) - 4); };
   hline(carico, cssVar('--ink'), [6, 4], `carico ${px(carico)}`);
@@ -612,19 +650,34 @@ function drawChart() {
   // scenario Kronos: percorso previsto e cono
   if (H_FC) {
     ctx.beginPath(); ctx.fillStyle = up; ctx.globalAlpha = 0.12;
-    ctx.moveTo(x(N - 1), y(last));
-    for (let k = 0; k < H_FC; k++) ctx.lineTo(x(N + k), y(last * (1 + path[k] + vol * Math.sqrt(k + 1) * 1.65)));
-    for (let k = H_FC - 1; k >= 0; k--) ctx.lineTo(x(N + k), y(last * (1 + path[k] - vol * Math.sqrt(k + 1) * 1.65)));
+    const x0 = x(F0 - 1 - (lb ? 1 : 0));
+    ctx.moveTo(x0, y(last));
+    for (let k = 0; k < H_FC; k++) ctx.lineTo(x(F0 + k), y(last * (1 + path[k] + vol * Math.sqrt(k + 1) * 1.65)));
+    for (let k = H_FC - 1; k >= 0; k--) ctx.lineTo(x(F0 + k), y(last * (1 + path[k] - vol * Math.sqrt(k + 1) * 1.65)));
     ctx.closePath(); ctx.fill(); ctx.globalAlpha = 1;
-    ctx.beginPath(); ctx.strokeStyle = fc.rendimentoPrevisto >= 0 ? up : down; ctx.lineWidth = 2; ctx.setLineDash([3, 4]); ctx.moveTo(x(N - 1), y(last));
-    for (let k = 0; k < H_FC; k++) ctx.lineTo(x(N + k), y(last * (1 + path[k])));
+    ctx.beginPath(); ctx.strokeStyle = fc.rendimentoPrevisto >= 0 ? up : down; ctx.lineWidth = 2; ctx.setLineDash([3, 4]); ctx.moveTo(x0, y(last));
+    for (let k = 0; k < H_FC; k++) ctx.lineTo(x(F0 + k), y(last * (1 + path[k])));
     ctx.stroke(); ctx.setLineDash([]);
-    for (let k = 0; k < H_FC; k++) { ctx.beginPath(); ctx.fillStyle = fc.rendimentoPrevisto >= 0 ? up : down; ctx.arc(x(N + k), y(last * (1 + path[k])), 3, 0, Math.PI * 2); ctx.fill(); }
+    for (let k = 0; k < H_FC; k++) { ctx.beginPath(); ctx.fillStyle = fc.rendimentoPrevisto >= 0 ? up : down; ctx.arc(x(F0 + k), y(last * (1 + path[k])), 3, 0, Math.PI * 2); ctx.fill(); }
     ctx.fillStyle = fc.rendimentoPrevisto >= 0 ? up : down; ctx.textAlign = 'right'; ctx.fillText(`Kronos ${pct(fc.rendimentoPrevisto)} → ${px(last * (1 + fc.rendimentoPrevisto))}`, x(slots - 1) + cw, y(last * (1 + path[H_FC - 1])) - 10);
   }
   // operazioni
-  for (const t of tradesFor(selected)) { let i = view.findIndex((b) => b.date >= t.date); if (i < 0 && t.date > view[N - 1].date) i = N - 1; if (i < 0) continue; ctx.fillStyle = t.side === 'buy' ? up : down; ctx.textAlign = 'center'; ctx.font = 'bold 14px Figtree, system-ui, sans-serif'; ctx.fillText(t.side === 'buy' ? '▲' : '▼', x(i), t.side === 'buy' ? y(view[i].low) + 16 : y(view[i].high) - 6); ctx.font = '12px Figtree, system-ui, sans-serif'; }
-  chartGeom = { x, y, N, slots, view, path, last, vol, L, R, W, H, T, ph };
+  for (const t of tradesFor(selected)) { let i = view.findIndex((b) => b.date >= t.date); if (i < 0 && t.date > view[view.length - 1].date) i = view.length - 1; if (i < 0 || (lb && i === view.length - 1)) continue; ctx.fillStyle = t.side === 'buy' ? up : down; ctx.textAlign = 'center'; ctx.font = 'bold 14px Figtree, system-ui, sans-serif'; ctx.fillText(t.side === 'buy' ? '▲' : '▼', x(i), t.side === 'buy' ? y(view[i].low) + 16 : y(view[i].high) - 6); ctx.font = '12px Figtree, system-ui, sans-serif'; }
+  // Le scelte di oggi sul titolo: voti (puntini), ordini (frecce piene), rifiuti (×), vicino alla candela di oggi.
+  const acts = actionsFor(selected);
+  if (acts.length) {
+    const xi = x(view.length - 1); const bTop = y(view[view.length - 1].high), bBot = y(view[view.length - 1].low);
+    let upK = 0, downK = 0;
+    for (const e of acts) {
+      const buy = e.lato === 'buy' || e.stato === 'aperto'; const col = e.tipo === 'rifiuto' ? cssVar('--warn') : buy ? up : down;
+      ctx.fillStyle = col; ctx.textAlign = 'center';
+      if (e.tipo === 'ordine' || e.tipo === 'trade') { ctx.font = 'bold 15px Figtree, system-ui, sans-serif'; ctx.fillText(buy ? '▲' : '▼', xi, buy ? bBot + 16 + 14 * downK++ : bTop - 6 - 14 * upK++); }
+      else if (e.tipo === 'rifiuto') { ctx.font = 'bold 13px Figtree, system-ui, sans-serif'; ctx.fillText('×', xi, bTop - 6 - 14 * upK++); }
+      else if (e.tipo === 'segnale') { ctx.beginPath(); ctx.arc(xi, buy ? bBot + 10 + 10 * downK++ : bTop - 10 - 10 * upK++, 3, 0, Math.PI * 2); ctx.fill(); }
+    }
+    ctx.font = '12px Figtree, system-ui, sans-serif';
+  }
+  chartGeom = { x, y, N: view.length, slots, view, path, last, vol, L, R, W, H, T, ph, lb };
 }
 $('#chart').addEventListener('mousemove', (ev) => {
   const g = chartGeom; const tip = $('#tip'); if (!g) { tip.style.display = 'none'; return; }
@@ -632,7 +685,7 @@ $('#chart').addEventListener('mousemove', (ev) => {
   const i = Math.floor(((mx - g.L) / (g.W - g.L - g.R)) * g.slots);
   if (i < 0 || i >= g.slots) { tip.style.display = 'none'; return; }
   let html;
-  if (i < g.N) { const b = g.view[i]; html = `<b>${b.date}</b><br>apertura ${px(b.open)} · massimo ${px(b.high)}<br>minimo ${px(b.low)} · chiusura ${px(b.close)} <span class="${cls(b.close - b.open)}">${pct(b.close / b.open - 1)}</span>`; }
+  if (i < g.N) { const b = g.view[i]; const acts = b.live ? actionsFor(selected) : []; html = `<b>${b.date}${b.live ? ` · in formazione (${b.letture} letture)` : ''}</b><br>apertura ${px(b.open)} · massimo ${px(b.high)}<br>minimo ${px(b.low)} · ${b.live ? 'ultimo' : 'chiusura'} ${px(b.close)} <span class="${cls(b.close - b.open)}">${pct(b.close / b.open - 1)}</span>${acts.length ? `<br>${acts.length} azioni oggi: vedi sotto il grafico` : ''}`; }
   else { const k = i - g.N; if (k >= g.path.length) { tip.style.display = 'none'; return; } const band = g.vol * Math.sqrt(k + 1) * 1.65; html = `<b>Scenario Kronos, seduta +${k + 1}</b><br>atteso ${px(g.last * (1 + g.path[k]))} (${pct(g.path[k])})<br>fascia ${px(g.last * (1 + g.path[k] - band))} – ${px(g.last * (1 + g.path[k] + band))}`; }
   tip.innerHTML = html; tip.style.display = 'block';
   tip.style.left = `${Math.min(mx + 14, g.W - 230)}px`; tip.style.top = `${Math.max(4, my - 60)}px`;
@@ -646,10 +699,9 @@ function paintTitle() {
   $('#t-price').textContent = price !== null ? `${px(price)} $` : '–';
   drawChart();
   const fc = forecasts?.previsioni?.[selected];
-  const note = [];
-  if (bars.length) note.push(`${Math.min(120, bars.length)} sedute fino al ${bars.at(-1).date}.`);
-  note.push(fc ? `Kronos (${forecasts.giorno}): ${pct(fc.rendimentoPrevisto)} in ${forecasts.orizzonte} sedute; il cono è la fascia di una volatilità e mezza attorno al percorso previsto.` : `Scenario Kronos non disponibile${st?.kronos?.stato ? ` (${st.kronos.stato})` : ''}.`);
-  $('#chart-note').textContent = note.join(' ');
+  $('#chart-note').textContent = fc ? `Kronos: ${pct(fc.rendimentoPrevisto)} in ${forecasts.orizzonte} sedute (proiezione del ${forecasts.giorno}).` : `Kronos: ${st?.kronos?.stato || 'nessuna proiezione'}.`;
+  $('#live-note').textContent = lastTick ? `in diretta · giro ${hhmm(lastTick.t)}` : '';
+  renderFeed();
   if (valutazione) return paintVerdict(valutazione);
   // Prima della richiesta: cosa dicono lo stato dell'ultimo giro e il custode.
   const votes = (st?.segnali || []).filter((s) => s.simbolo === selected);
@@ -658,10 +710,24 @@ function paintTitle() {
   const pos = (st?.posizioni || []).find((p) => p.simbolo === selected);
   const v = $('#verdict'); v.className = 'verdict';
   v.textContent = pos ? `In portafoglio: ${qty(pos.quantita)} a ${px(pos.prezzoCarico)}, ${pct(pos.variazione)}.` : votes.length ? `Nell'ultimo giro ${votes.length === 1 ? 'un agente ha votato' : `${votes.length} agenti hanno votato`} su ${selected}${score ? ` (punteggio ${score.punteggio >= 0 ? '+' : ''}${score.punteggio.toFixed(2)})` : ''}.` : `Nessun voto su ${selected} nell'ultimo giro.`;
-  $('#verdict-body').innerHTML = `${votes.map((s) => `<div class="vote"><span class="pill agent">${agentName(s.agente)}</span> <span class="${s.lato === 'buy' ? 'up' : 'down'}"><b>${s.lato === 'buy' ? 'compra' : 'vendi'}</b></span> forza ${s.forza.toFixed(2).replace('.', ',')}<br><span class="why">${esc(s.perche)}</span></div>`).join('')}${cust ? custodeCard(cust) : ''}<p class="why" style="margin-top:10px">Il pulsante chiede a tutti gli agenti di guardare ${selected} adesso, con i prezzi di questo momento: nessun ordine parte da qui.</p>`;
+  $('#verdict-body').innerHTML = `${votes.map((s) => `<div class="vote"><span class="pill agent">${agentName(s.agente)}</span> <span class="${s.lato === 'buy' ? 'up' : 'down'}"><b>${s.lato === 'buy' ? 'compra' : 'vendi'}</b></span> forza ${s.forza.toFixed(2).replace('.', ',')}<br><span class="why">${esc(s.perche)}</span></div>`).join('')}${cust ? custodeCard(cust) : ''}`;
+}
+// Il feed del titolo: cosa ha fatto il motore oggi su questo titolo, dal più recente, aggiornato in diretta.
+function renderFeed() {
+  if (!selected) return;
+  const acts = actionsFor(selected);
+  $('#feed').innerHTML = acts.length ? `<div id="feed-list">${acts.slice(0, 30).map((e) => `<div class="ev ${e.tipo === 'rifiuto' ? '' : ''}" style="display:grid; grid-template-columns:58px 1fr; gap:10px; padding:6px 0; border-top:1px solid var(--line); font-size:14px"><time style="color:var(--ink-3); font-size:13px">${hhmm(e.t)}</time><div>${describe(e)}</div></div>`).join('')}</div>` : `<p class="why">Nessuna azione del motore su ${esc(selected)} oggi.</p>`;
 }
 function custodeCard(c) {
-  return `<div class="custode-card"><div class="h"><b>Custode di ${esc(c.simbolo)}</b><span class="pill ${faseCls(c.fase)}">${FASI[c.fase] || esc(c.fase)}</span></div><div><span class="why">Tesi.</span> ${esc(c.tesi)}</div><div><span class="why">Piano.</span> ${esc(c.piano)}</div><div><span class="why">Rischio.</span> ${esc(c.rischio)}</div><div class="why">${esc(c.stato)}</div></div>`;
+  const d = c.dossier;
+  const p = d ? Math.round(d.probabilita * 100) : null;
+  const src = (lab, x, nota) => `<div class="row" style="gap:6px"><span class="why" style="min-width:64px">${lab}</span><div class="bar" style="flex:1; max-width:140px"><i class="${x === null ? '' : x >= 0.5 ? '' : 'down'}" style="left:0; width:${x === null ? 0 : Math.round(x * 100)}%; background:${x === null ? 'transparent' : x >= 0.6 ? 'var(--up)' : x <= 0.4 ? 'var(--down)' : 'var(--ink-3)'}"></i></div><span class="why">${x === null ? 'n.d.' : `${Math.round(x * 100)}%`}${nota ? ` · ${esc(nota)}` : ''}</span></div>`;
+  return `<div class="custode-card"><div class="h"><b>Custode di ${esc(c.simbolo)}</b><span class="pill ${faseCls(c.fase)}">${FASI[c.fase] || esc(c.fase)}</span></div>
+    ${d ? `<div class="h"><span><b class="${p >= 60 ? 'up' : p < 45 ? 'down' : ''}" style="font-size:22px">${p}%</b> <span class="why">favorevole</span></span><span class="why">dossier delle ${hhmm(d.aggiornato)}</span></div>
+    <div><b>Prossima azione.</b> ${esc(d.prossimaAzione)}</div>
+    ${src('Grafico', d.tecnica.punteggio, d.tecnica.pattern.join(', '))}${src('Kronos', d.kronos.punteggio, d.kronos.nota)}${src('Notizie', d.notizie.punteggio, d.notizie.nota)}${src('Contesto', d.contesto.punteggio, d.contesto.nota)}
+    ${d.notizie.titoli.length ? `<details><summary class="why" style="cursor:pointer">Titoli letti (${d.notizie.titoli.length})</summary>${d.notizie.titoli.map((t) => `<div class="why">• ${esc(t.titolo)}${t.fonte ? ` — ${esc(t.fonte)}` : ''}</div>`).join('')}</details>` : ''}` : ''}
+    <div><span class="why">Tesi.</span> ${esc(c.tesi)}</div><div><span class="why">Piano.</span> ${esc(c.piano)}</div><div><span class="why">Rischio.</span> ${esc(c.rischio)}</div><div class="why">${esc(c.stato)}</div></div>`;
 }
 function paintVerdict(v) {
   const el = $('#verdict');
@@ -683,7 +749,7 @@ function paintVerdict(v) {
     ${v.voti.length ? v.voti.map((s) => `<div class="vote"><span class="pill agent">${agentName(s.agente)}</span> <span class="${s.lato === 'buy' ? 'up' : 'down'}"><b>${s.lato === 'buy' ? 'compra' : 'vendi'}</b></span> forza ${s.forza.toFixed(2).replace('.', ',')}${s.vincolante ? ' <span class="pill warn">regola vincolante</span>' : ''}<br><span class="why">${esc(s.perche)}</span></div>`).join('') : '<p class="why">Nessun agente ha votato su questo titolo adesso.</p>'}
     ${v.custode ? custodeCard(v.custode) : ''}
     ${v.note.length ? `<p class="why">${v.note.map(esc).join(' · ')}</p>` : ''}
-    <p class="why">Valutato alle ${hhmm(v.quando)} con i prezzi di quel momento. Nessun ordine inviato.</p>`;
+    <p class="why">Valutazione a secco delle ${hhmm(v.quando)}: nessun ordine inviato.</p>`;
   drawChart();
 }
 $('#ask').addEventListener('click', async () => {
@@ -752,6 +818,8 @@ function addEvent(e, live) {
   if (e.tipo === 'agente') { const a = agents.get(e.agente); if (a) a.pulse = 0.4; }
   if (e.tipo === 'ordine' && e.esito === 'inviato') pulse(e.simbolo, e.lato === 'buy' ? 0x3fb950 : 0xf85149);
   if (e.tipo === 'rifiuto') { const s = symbols.get(e.simbolo); if (s) beam(new THREE.Vector3(s.pos.x * 1.9, 0.3, s.pos.z * 1.9), s.pos, 0xf85149, 1200); }
+  if (e.tipo === 'nota' && /proiezioni/.test(e.testo || '')) { forecasts = null; if (selected) loadSymbol(selected); }
+  if (e.tipo === 'prezzi' || e.simbolo === selected || (e.tipo === 'stop' && String(e.dettaglio || '').startsWith(selected + ' '))) { drawChart(); if (e.tipo !== 'prezzi') renderFeed(); }
   if (e.tipo === 'tick' || e.tipo === 'allocazione' || e.tipo === 'allarme') loadStatus(); else sayState();
 }
 async function loadEvents() {
