@@ -111,6 +111,16 @@ ordinati per proiezione.
 - Peso massimo 10% del conto per operazione, al massimo 3 operazioni aperte, un ingresso per titolo al giorno. Se il
   processo riparte, le operazioni aperte si ricostruiscono dal diario e dal carico.
 
+## Il capo ufficio
+
+A ogni giro, prima che i voti vengano sommati, il capo ufficio rilegge il diario: per ogni agente (generali e custodi)
+conta i trade chiusi, i vinti, il risultato medio e la proiezione di Kronos che c'era all'ingresso. Con meno di 3 trade
+l'agente è «nuovo»; in attivo con almeno il 55% di vinti è «bene» o «ottimo»; in attivo ma con pochi vinti è «da seguire»
+(consiglio: la soglia di Kronos che nell'ufficio ha reso di più); in perdita è **richiamato**: finché non migliora i suoi voti
+d'acquisto sotto una soglia minima di Kronos (la maggiore tra 1%, la soglia migliore dell'ufficio e la proiezione media dei suoi
+trade vinti) non contano, gli altri pesano il 60%; riceve consigli presi da chi ha avuto successo (tipo d'ingresso migliore,
+troppe uscite dallo stop). Le vendite non si toccano. Il capo non fa ordini.
+
 ## 3. Cosa impara il motore
 
 - **Pesi degli agenti**: dal diario, dopo il periodo di osservazione (30 trade chiusi): chi ha votato ingressi che perdono

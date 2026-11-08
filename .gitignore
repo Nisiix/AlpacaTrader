@@ -7,3 +7,4 @@ tools/kronos/kronos-src/
 tools/kronos/venv/
 tools/kronos/data/
 __pycache__/
+.pages/

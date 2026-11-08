@@ -327,7 +327,7 @@ describe("motore", () => {
   });
 
   test("il riepilogo elenca il profitto e la perdita di ogni vendita del giorno, il totale e il conto per agente", () => {
-    const base = { versione: 1 as const, aggiornato: "2026-09-24T20:10:00.000Z", giro: "g", mercatoAperto: false, finestraIngressi: false, conto: null, posizioni: [], prezzi: {}, rischio: 1, pesi: {}, agenti: {}, segnali: [], punteggi: [], ordini: [], rifiuti: [], contesto: null, inAttesa: [], stopSuAlpaca: null, acquistiBloccati: null, lezioniAttive: [], allarmi: [], diario: { stato: "x", statistiche: { trade: 0, vinti: 0, percVinti: null, mediaVincita: null, mediaPerdita: null, attesa: null, campione: "nessuno" as const } }, confronto: null, ultimoRiepilogo: null, tradeChiusiOggi: [], custodi: [], intraday: [], universo: { titoli: [], crypto: [], fonteCrypto: null, aggiornatoCrypto: null }, kronos: { stato: "non configurato", proiezioniDel: null, simboli: 0 }, giornata: { pnlPct: 0, obiettivoPct: 0.01, perditaMaxPct: 0.02, obiettivoRaggiunto: false, perditaOltre: false }, simulazioni: [] };
+    const base = { versione: 1 as const, aggiornato: "2026-09-24T20:10:00.000Z", giro: "g", mercatoAperto: false, finestraIngressi: false, conto: null, posizioni: [], prezzi: {}, rischio: 1, pesi: {}, agenti: {}, segnali: [], punteggi: [], ordini: [], rifiuti: [], contesto: null, inAttesa: [], stopSuAlpaca: null, acquistiBloccati: null, lezioniAttive: [], allarmi: [], diario: { stato: "x", statistiche: { trade: 0, vinti: 0, percVinti: null, mediaVincita: null, mediaPerdita: null, attesa: null, campione: "nessuno" as const } }, confronto: null, ultimoRiepilogo: null, tradeChiusiOggi: [], custodi: [], intraday: [], universo: { titoli: [], crypto: [], fonteCrypto: null, aggiornatoCrypto: null }, kronos: { stato: "non configurato", proiezioniDel: null, simboli: 0 }, giornata: { pnlPct: 0, obiettivoPct: 0.01, perditaMaxPct: 0.02, obiettivoRaggiunto: false, perditaOltre: false }, simulazioni: [] , capo: { aggiornato: "", sintesi: "", migliori: [], valutazioni: [], sogliaKronos: null, ingressoMigliore: null } };
     const st: AgentsStatus = {
       ...base,
       pnlOggi: {
@@ -739,6 +739,30 @@ describe("intraday", () => {
     const sol = applyCage({ ...base, closes: c2, prices: { ...v.prices, "SOL/USD": 180 }, proposals: [{ symbol: "SOL/USD", side: "buy", qty: 1, why: "trend" }] });
     expect(sol.rejected.find((r) => r.symbol === "SOL/USD")?.reason).not.toBe("fuori universo");
     setCryptoUniverse(["BTC/USD", "ETH/USD"]);
+  });
+});
+
+describe("capo ufficio", () => {
+  test("loda chi vince, richiama chi perde con soglia di Kronos dai trade vincenti, e i richiami filtrano i voti", async () => {
+    const { review, applyGuidance } = await import("../src/agents/capo.ts");
+    const j = emptyJournal();
+    const add = (sym: string, agenti: string[], r: number, kronos: number, i: number) => j.trade.push({ id: `k${i}`, simbolo: sym, stato: "chiuso", apertoIl: `2026-10-${String(i + 1).padStart(2, "0")}T14:00:00Z`, comprate: 1, costo: 100, vendute: 1, incassato: 100 * (1 + r), quantita: 0, contesto: { setup: "", momentum20: null, volGiornaliera: null, distanzaMedia: null, fiducia: null, attesa: "", perche: "vicino alla media a 20", agenti, kronos }, chiusoIl: `2026-10-${String(i + 1).padStart(2, "0")}T18:00:00Z`, prezzoIngresso: 100, prezzoUscita: 100 * (1 + r), risultato: r, giorni: 2, motivoUscita: r < 0 ? "stop su Alpaca" : "trend" });
+    // "custode SOL/USD" vince con Kronos alto; "trend" perde con Kronos basso.
+    [0.04, 0.03, 0.05, 0.02].forEach((r, i) => add("SOL/USD", ["custode SOL/USD"], r, 0.03, i));
+    [-0.03, -0.02, 0.01, -0.04].forEach((r, i) => add("NVDA", ["trend"], r, 0.002, i + 10));
+    const rep = review(j, new Date("2026-11-08T12:00:00Z"));
+    const sol = rep.valutazioni.find((v) => v.agente === "custode SOL/USD")!;
+    const tr = rep.valutazioni.find((v) => v.agente === "trend")!;
+    expect(sol.giudizio).toBe("ottimo");
+    expect(tr.giudizio).toBe("richiamato");
+    expect(tr.kronosMin!).toBeGreaterThanOrEqual(0.01);
+    expect(tr.consigli.join(" ")).toContain("Kronos");
+    expect(rep.sintesi).toContain("Richiamati: trend");
+    const reports = { trend: { segnali: [{ agente: "trend", simbolo: "NVDA", lato: "buy" as const, forza: 1, orizzonteSedute: 20, perche: "x" }, { agente: "trend", simbolo: "QQQ", lato: "buy" as const, forza: 1, orizzonteSedute: 20, perche: "y" }, { agente: "trend", simbolo: "AAPL", lato: "sell" as const, forza: 1, orizzonteSedute: 20, perche: "z" }] } };
+    const note = applyGuidance(reports, rep, { NVDA: 0.002, QQQ: 0.05 });
+    expect(reports.trend.segnali.map((s) => `${s.lato} ${s.simbolo}`)).toEqual(["buy QQQ", "sell AAPL"]);
+    expect(reports.trend.segnali[0]!.forza).toBe(0.6);
+    expect(note[0]).toContain("scartato");
   });
 });
 

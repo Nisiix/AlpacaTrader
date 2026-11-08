@@ -140,6 +140,9 @@ export const AGENTS = {
   // per oggi; continuano a girare in simulazione (le operazioni che avrebbero fatto, con esito virtuale, in
   // state/simulazioni/) per imparare, e si riparte domani con i criteri del motore. Nessun tetto alla perdita (0).
   daily: { enabled: true, targetPct: 0.1, maxLossPct: 0 },
+  // Pagina pubblica su GitHub Pages: istantanea in sola lettura spinta sul ramo gh-pages ogni everyMinutes minuti.
+  // Spenta di serie: la pagina è visibile a chiunque abbia il link (conto, posizioni, operazioni). remote vuoto = origin.
+  pages: { enabled: false, everyMinutes: 10, branch: "gh-pages", remote: "" },
   // Taglia proporzionale alla fiducia: la probabilità che la proiezione di Kronos si avveri (rendimento atteso diviso la
   // volatilità sull'orizzonte) porta il peso da minFactor (fiducia 50%) a 1 (fiducia ≥ fullAt); senza proiezione vale noForecast.
   sizing: { byKronos: true, minFactor: 0.4, fullAt: 0.8, noForecast: 0.6 },

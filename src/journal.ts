@@ -21,6 +21,8 @@ export interface EntryContext {
   perche: string;
   // Motore degli agenti: quali agenti hanno votato l'ingresso (serve a pesarli sui risultati).
   agenti?: string[];
+  // Proiezione di Kronos all'ingresso: il capo ufficio la confronta con l'esito per consigliare la soglia giusta.
+  kronos?: number;
 }
 
 export interface Intent {

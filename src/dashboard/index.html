@@ -84,10 +84,20 @@
   details.scene summary::-webkit-details-marker { display:none; }
   details.scene summary span.hint { color:var(--ink-3); font-weight:400; font-size:14px; }
   details.scene summary:focus-visible { outline:2px solid var(--agent); outline-offset:-2px; }
-  #scene { position:relative; height:480px; background:#0b0f16; }
+  #scene { position:relative; height:480px; background:#dfe5ec; }
   #scene canvas { display:block; }
   .lbl { color:#e6edf3; font-size:11px; background:rgba(11,15,22,.7); padding:2px 5px; border-radius:4px; white-space:nowrap; pointer-events:none; }
   .lbl.agent { color:#8fb0ff; }
+  .lbl.desk-lbl { background:rgba(255,255,255,.88); color:#1f2937; font-size:11px; line-height:1.2; text-align:center; border:1px solid #d1d5db; }
+  .lbl.desk-lbl span { color:#6b7280; }
+  .lbl.dept-lbl { background:#1f2937; color:#fff; font-size:13px; font-weight:600; padding:4px 10px; }
+  .office-card { position:absolute; top:12px; right:12px; width:340px; max-height:calc(100% - 24px); overflow:auto; background:var(--card); color:var(--ink); border:1px solid var(--line); border-radius:14px; padding:14px 16px; box-shadow:0 8px 30px rgba(0,0,0,.18); z-index:5; font-size:14px; }
+  .office-card h3 { margin:4px 0 2px; font-size:17px; } .office-card p { margin:8px 0; } .office-card ul { margin:4px 0; padding-left:18px; }
+  .office-card .portrait { width:150px; height:170px; margin:0 auto; background:linear-gradient(#eef2f7,#dfe5ec); border-radius:12px; overflow:hidden; }
+  .office-card .x { position:absolute; top:8px; right:8px; border:0; background:var(--card-2); border-radius:999px; width:28px; height:28px; cursor:pointer; color:var(--ink); }
+  .office-card td { padding:4px 4px; font-size:13px; } .office-card .agent-c { color:var(--agent); font-weight:600; }
+  @media (max-width: 700px) { .office-card { left:8px; right:8px; width:auto; } }
+  .lbl.bubble { background:#fff; font-weight:700; font-size:12px; border:1px solid #d1d5db; box-shadow:0 2px 6px rgba(0,0,0,.15); }
   .legend { padding:10px 20px 14px; color:var(--ink-3); font-size:13px; }
 
   .filters { display:flex; gap:6px; }
@@ -151,7 +161,7 @@
   .scheda .msg { font-size:13px; color:var(--ink-2); min-height:1em; }
   @media (prefers-reduced-motion: reduce) { * { transition:none !important; } }
 </style>
-<script type="importmap">{ "imports": { "three": "/vendor/three.module.js", "three/addons/": "/vendor/addons/" } }</script>
+<script type="importmap">{ "imports": { "three": "./vendor/three.module.js", "three/addons/": "./vendor/addons/" } }</script>
 </head>
 <body>
 <main>
@@ -162,7 +172,7 @@
       <a href="#titoli" data-page="titoli">Titoli</a>
       <a href="#agenti" data-page="agenti">Agenti</a>
       <a href="#cronologia" data-page="cronologia">Cronologia</a>
-      <a href="#3d" data-page="3d">Vista 3D</a>
+      <a href="#3d" data-page="3d">Ufficio 3D</a>
       <a href="#impostazioni" data-page="impostazioni">Impostazioni</a>
       <a href="#guida" data-page="guida">Guida</a>
     </nav>
@@ -241,6 +251,10 @@
     <div class="cols">
       <div class="stack">
         <section class="card">
+          <h2>Capo ufficio <small>controlla risultati, richiama e consiglia</small></h2>
+          <div id="capo"></div>
+        </section>
+        <section class="card">
           <h2>Custodi <small>un investitore per ogni titolo in trend</small></h2>
           <div class="custode-list" id="custodi"></div>
         </section>
@@ -317,7 +331,9 @@
         <li><b>Titoli</b>: i titoli in tre gruppi (in portafoglio, sotto osservazione, nel radar). Per ciascuno: candele, medie 20/50/200, carico e stop, la candela di oggi in formazione, le scelte del motore di oggi (puntini voti, frecce ordini, × rifiuti) e lo scenario di Kronos con il cono d'incertezza. «Chiedi agli agenti adesso» fa una valutazione a secco: nessun ordine parte dalla pagina.</li>
         <li><b>Agenti</b>: i custodi con dossier (probabilità favorevole, prossima azione, grafico, Kronos, notizie, contesto, memoria del titolo), gli agenti dell'ultimo giro, punteggi e voti, e le <b>schede</b> per regolare i parametri di ogni agente.</li>
         <li><b>Cronologia</b>: il registro degli eventi del giorno («Importanti» mostra ordini, posizioni, rifiuti, stop e avvisi).</li>
-        <li><b>Vista 3D</b>: i titoli come blocchi (altezza = peso, colore = guadagno), gli agenti come sfere, i voti come fili.</li>
+        <li><b>Capo ufficio</b> (pagina Agenti e nell'ufficio, nella stanza di vetro): rivede i trade chiusi di ogni agente, loda chi vince, richiama chi perde e gli impone una soglia minima di Kronos e voti più deboli finché i risultati non tornano buoni; i consigli vengono dai trade vincenti degli altri.</li>
+        <li><b>Pagina pubblica</b>: dalle schede (Motore e gabbia) si può pubblicare ogni N minuti un'istantanea in sola lettura su GitHub Pages, per seguire gli agenti da fuori casa. È visibile a chiunque abbia il link.</li>
+        <li><b>Ufficio 3D</b>: gli agenti come impiegati alle loro postazioni. In fondo la Direzione (gli agenti generali) e la lavagna con successi e insuccessi di ogni agente; poi i Custodi (una scrivania per titolo seguito, la camicia dice la fase: blu pronto, verde in posizione, rosso in uscita, grigio in attesa) e la Sala intraday (arancione). Chi vota alza la mano, chi compra o vende si alza e lo schermo lampeggia. Mouse sopra per leggere, clic per aprire.</li>
       </ul>
       <h3>4. Gli agenti in breve</h3>
       <ul>
@@ -350,16 +366,44 @@
     </section>
   </div>
 
-  <!-- Vista 3D: pagina a sé. -->
+  <!-- Ufficio 3D: pagina a sé. -->
   <div class="page" data-page="3d">
     <details class="scene" id="scene-box" open>
-      <summary>Vista 3D <span class="hint">agenti, regole e titoli in movimento</span></summary>
+      <summary>Ufficio degli agenti <span class="hint">trascina per girare, rotella per avvicinarti</span></summary>
       <div id="scene"></div>
-      <p class="legend">La sala operativa: ogni blocco è un titolo (altezza = peso in portafoglio, verde in guadagno, rosso in perdita, grigio fuori). Accanto a ogni titolo seguito c'è il suo <b>custode</b> (blu pronto a entrare, verde in posizione, rosso in uscita, grigio in attesa) e, se lavora, l'operatore <b>intraday</b> (arancione). Le sfere in orbita sono gli agenti generali: i fili sono i loro voti, l'anello la gabbia delle regole. Passa il mouse per leggere, clicca per aprire la scheda, trascina per ruotare.</p>
+      <p class="legend">In fondo la <b>Direzione</b> (gli agenti generali) davanti alla <b>lavagna dei risultati</b>; poi i <b>Custodi</b>, una scrivania per titolo seguito, con la camicia del colore della fase (blu pronto, verde in posizione, rosso in uscita, grigio in attesa) e lo schermo con prezzo e andamento; infine la <b>Sala intraday</b> (arancione). Chi vota alza la mano, chi compra o vende si alza e lo schermo lampeggia. Mouse sopra per leggere, clic per aprire.</p>
     </details>
   </div>
 </main>
 
+<script>
+// Modalità statica (GitHub Pages): la pagina legge l'istantanea che il motore pubblica in data/*.json. Sola lettura.
+window.STATIC_MODE = !!window.__STATIC__ || /github\.io$/.test(location.hostname);
+if (window.STATIC_MODE) {
+  const realFetch = window.fetch.bind(window);
+  const cache = {};
+  const get = (f) => (cache[f] ??= realFetch(`data/${f}?t=${Math.floor(Date.now() / 60000)}`).then((r) => r.json()));
+  setInterval(() => { for (const k of Object.keys(cache)) delete cache[k]; }, 55_000);
+  const json = (v, status = 200) => new Response(JSON.stringify(v), { status, headers: { 'content-type': 'application/json' } });
+  window.fetch = async (url, init) => {
+    const u = new URL(String(url), location.href);
+    const i = u.pathname.indexOf('/api/');
+    if (i < 0) return realFetch(url, init);
+    const path = u.pathname.slice(i);
+    if (init?.method && init.method !== 'GET') return json({ ok: false, errore: 'pagina pubblica in sola lettura: modifiche e prove si fanno dalla dashboard sul PC' }, 403);
+    if (path === '/api/status') return json(await get('status.json'));
+    if (path === '/api/events') return json(await get('events.json'));
+    if (path === '/api/previsioni') return json(await get('previsioni.json'));
+    if (path === '/api/journal') return json(await get('journal.json'));
+    if (path === '/api/agenti/schede') return json(await get('schede.json'));
+    if (path === '/api/bars') {
+      const b = await get('bars.json'); const sym = u.searchParams.get('simbolo');
+      return json(sym ? { aggiornato: b.aggiornato, simbolo: sym, barre: b.barre[sym] ?? [] } : { aggiornato: b.aggiornato, barre: b.barre });
+    }
+    return json({ errore: 'non disponibile nella pagina pubblica' }, 404);
+  };
+}
+</script>
 <script type="module">
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -367,6 +411,16 @@ import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer
 
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+// Messaggi d'errore di Alpaca salvati prima della correzione lato motore: il JSON diventa una frase leggibile.
+const ERR_IT = [[/qty must be (>|\u003e) 0/i, () => 'quantità troppo piccola (resto frazionario)'], [/insufficient balance for (\w+)(?: \(requested: ([\d.]+), available: ([\d.]+)\))?/i, (m) => `saldo insufficiente di ${m[1]}${m[2] ? ` (chiesti ${m[2]}, disponibili ${m[3]})` : ''}`], [/insufficient buying power/i, () => 'liquidità insufficiente'], [/unauthorized|forbidden/i, () => 'chiavi rifiutate'], [/market is closed/i, () => 'mercato chiuso']];
+function cleanErr(t) {
+  return String(t ?? '').replace(/Alpaca (\d{3}) su \S+: (\{.*?\})(?=\n|$|\s*·|\s*;)/gs, (all, code, json) => {
+    let msg = json, num = '';
+    try { const j = JSON.parse(json); msg = j.message ?? json; num = j.code ? ` (codice ${j.code})` : ''; } catch { const m = json.match(/"message":"([^"]*)/); if (m) msg = m[1]; }
+    for (const [re, f] of ERR_IT) { const m = String(msg).match(re); if (m) { msg = f(m); break; } }
+    return `Alpaca ${code}: ${msg}${num}`;
+  }).replace(/\n/g, ' · ');
+}
 const fmt = (x, d = 2) => (x === null || x === undefined || Number.isNaN(x)) ? '–' : Number(x).toLocaleString('it-IT', { minimumFractionDigits: d, maximumFractionDigits: d });
 const pct = (x) => (x === null || x === undefined) ? '–' : `${x >= 0 ? '+' : ''}${(x * 100).toFixed(2).replace('.', ',')}%`;
 const usd = (x) => (x === null || x === undefined) ? '–' : `${x >= 0 ? '+' : ''}${fmt(x)} $`;
@@ -379,123 +433,344 @@ const DEFAULT_SYMBOLS = ['SPY', 'QQQ', 'AAPL', 'MSFT', 'NVDA', 'GLD', 'BTC/USD',
 const AGENT_NAMES = { trend: 'Trend', rientro: 'Rientro', regime: 'Regime', orizzonte: 'Orizzonte', uscite: 'Uscite', contesto: 'Contesto', profitto: 'Presa di profitto', kronos: 'Kronos', custodi: 'Custodi', intraday: 'Intraday' };
 const agentName = (n) => AGENT_NAMES[n] ?? n;
 
-// ---------- scena 3D (pannello apribile) ----------
+// ---------- ufficio 3D: gli agenti come impiegati alle loro postazioni ----------
+// Tre reparti: la Direzione (gli agenti generali, vicino alla lavagna), i Custodi (una scrivania per titolo seguito, lo
+// schermo mostra titolo, prezzo e andamento) e la Sala intraday (operatori in arancione). La lavagna sul muro riassume
+// successi e insuccessi di ogni agente dal diario dei trade. Mouse sopra una postazione per leggere, clic per aprirla.
 const host = $('#scene');
-const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(2, window.devicePixelRatio));
+renderer.shadowMap.enabled = true;
 host.appendChild(renderer.domElement);
 const labels = new CSS2DRenderer();
-labels.domElement.style.position = 'absolute'; labels.domElement.style.top = '0'; labels.domElement.style.pointerEvents = 'none';
+labels.domElement.style.position = 'absolute'; labels.domElement.style.top = '0'; labels.domElement.style.pointerEvents = 'none'; labels.domElement.style.zIndex = '1';
 host.appendChild(labels.domElement);
 const scene = new THREE.Scene();
-scene.fog = new THREE.Fog(0x0b0f16, 18, 40);
-const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
-camera.position.set(0, 12, 19);
+scene.background = new THREE.Color(0xdfe5ec);
+const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 200);
 const controls = new OrbitControls(camera, renderer.domElement);
-controls.target.set(0, 1, 0); controls.enableDamping = true; controls.maxPolarAngle = Math.PI / 2.05;
-scene.add(new THREE.HemisphereLight(0xaaccff, 0x223344, 1.1));
-const sun = new THREE.DirectionalLight(0xffffff, 1.2); sun.position.set(6, 12, 8); scene.add(sun);
-scene.add(new THREE.GridHelper(24, 24, 0x1f2a3a, 0x16202c));
-const cage = new THREE.Mesh(new THREE.TorusGeometry(6.2, 0.04, 8, 120), new THREE.MeshBasicMaterial({ color: 0x58a6ff, transparent: true, opacity: 0.55 }));
-cage.rotation.x = Math.PI / 2; cage.position.y = 0.05; scene.add(cage);
-const cageLbl = new CSS2DObject(Object.assign(document.createElement('div'), { className: 'lbl agent', textContent: 'gabbia delle regole' })); cageLbl.position.set(0, 0.2, 6.4); scene.add(cageLbl);
+controls.enableDamping = true; controls.maxPolarAngle = Math.PI / 2.15; controls.minDistance = 4; controls.maxDistance = 60;
+scene.add(new THREE.HemisphereLight(0xffffff, 0xb8a990, 1.4));
+const sun = new THREE.DirectionalLight(0xffffff, 1.6); sun.position.set(-8, 16, 10); sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048); Object.assign(sun.shadow.camera, { left: -30, right: 30, top: 30, bottom: -30 }); scene.add(sun);
+const mat = (color, o = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.75, ...o });
+const box = (w, h, d, m) => { const x = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m); x.castShadow = true; x.receiveShadow = true; return x; };
+const M = { floor: mat(0xcbb79a), wall: mat(0xf3f1ec), desk: mat(0xe9e4da), leg: mat(0x6b7280), chair: mat(0x374151), skin: mat(0xe8c4a2), hair: mat(0x3b2a20), pants: mat(0x2f3b52), screenFrame: mat(0x1f2937), board: mat(0xffffff), boardFrame: mat(0x9ca3af), plant: mat(0x3f8f5a), pot: mat(0xc9c3b8) };
+const room = new THREE.Group(); scene.add(room);
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), M.floor); floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; room.add(floor);
+const backWall = box(1, 4.2, 0.2, M.wall); room.add(backWall);
+const sideWall = box(0.2, 4.2, 1, M.wall); room.add(sideWall);
 
-const symbols = new Map();
-function placeSymbols(list) {
-  const all = [...new Set([...DEFAULT_SYMBOLS.filter((s) => list.includes(s)), ...list])];
-  if ([...symbols.keys()].join() === all.join()) return;
-  for (const s of symbols.values()) { scene.remove(s.mesh); scene.remove(s.label); }
-  symbols.clear();
-  const perRow = Math.ceil(all.length / 2);
-  all.forEach((s, i) => {
-    const col = i % perRow, row = Math.floor(i / perRow);
-    const pos = new THREE.Vector3((col - (perRow - 1) / 2) * 2.2, 0, (row - 0.5) * 2.6);
-    const mesh = new THREE.Mesh(new THREE.BoxGeometry(1.3, 1, 1.3), new THREE.MeshStandardMaterial({ color: 0x3a4657, roughness: 0.5, metalness: 0.1 }));
-    mesh.userData.sym = s;
-    mesh.position.copy(pos); mesh.scale.y = 0.2; mesh.position.y = 0.1; scene.add(mesh);
-    const el = document.createElement('div'); el.className = 'lbl'; el.textContent = s;
-    const label = new CSS2DObject(el); label.position.set(pos.x, 0.6, pos.z); scene.add(label);
-    symbols.set(s, { mesh, label, el, pos, targetH: 0.2 });
+// La lavagna: una texture disegnata su canvas, ridisegnata a ogni stato.
+const boardCanvas = document.createElement('canvas'); boardCanvas.width = 1400; boardCanvas.height = 760;
+const boardTex = new THREE.CanvasTexture(boardCanvas); boardTex.colorSpace = THREE.SRGBColorSpace;
+const board = new THREE.Group();
+const boardFace = new THREE.Mesh(new THREE.PlaneGeometry(7, 3.8), new THREE.MeshBasicMaterial({ map: boardTex }));
+boardFace.position.z = 0.045; board.add(box(7.3, 4.1, 0.06, M.boardFrame)); board.add(boardFace);
+board.userData.kind = 'lavagna'; boardFace.userData.kind = 'lavagna';
+room.add(board);
+
+function drawBoard(st, journal) {
+  const c = boardCanvas.getContext('2d'); const W = boardCanvas.width, H = boardCanvas.height;
+  c.fillStyle = '#fbfbf8'; c.fillRect(0, 0, W, H);
+  c.fillStyle = '#1f3a8a'; c.font = 'bold 54px "Comic Sans MS", "Segoe Print", Figtree, sans-serif'; c.fillText('Lavagna dei risultati', 40, 76);
+  const day = st?.pnlOggi; const tot = day ? day.realizzato + day.nonRealizzato : 0;
+  c.font = '34px "Segoe Print", Figtree, sans-serif'; c.fillStyle = tot >= 0 ? '#15803d' : '#b91c1c';
+  c.fillText(`Oggi ${tot >= 0 ? '+' : ''}${tot.toFixed(2)} $`, W - 420, 72);
+  // Per agente: trade chiusi vinti/persi e risultato in $, dal diario (gli agenti che avevano votato l'ingresso).
+  const per = new Map();
+  for (const t of journal?.trade || []) {
+    if (t.stato !== 'chiuso') continue;
+    const pnl = (t.incassato ?? 0) - (t.costo ?? 0);
+    for (const a of (t.contesto?.agenti?.length ? t.contesto.agenti : ['senza agente'])) {
+      const g = per.get(a) ?? { v: 0, p: 0, pnl: 0 }; if (pnl > 0) g.v++; else g.p++; g.pnl += pnl; per.set(a, g);
+    }
+  }
+  for (const [a, g] of Object.entries(day?.perAgente || {})) if (!per.has(a)) per.set(a, { v: 0, p: 0, pnl: 0, oggi: g.pnl });
+  const rows = [...per.entries()].sort((a, b) => b[1].pnl - a[1].pnl).slice(0, 11);
+  c.strokeStyle = '#94a3b8'; c.lineWidth = 2; c.beginPath(); c.moveTo(40, 100); c.lineTo(W - 40, 100); c.stroke();
+  c.fillStyle = '#475569'; c.font = '28px "Segoe Print", Figtree, sans-serif';
+  const cols = [40, 560, 730, 900, 1080];
+  ['Agente', 'Vinti', 'Persi', '% vinti', 'Risultato'].forEach((h, i) => c.fillText(h, cols[i], 140));
+  if (!rows.length) { c.fillStyle = '#64748b'; c.font = '32px "Segoe Print", Figtree, sans-serif'; c.fillText('Nessun trade chiuso ancora: la lavagna si riempie', 40, 230); c.fillText('man mano che gli agenti chiudono le operazioni.', 40, 280); }
+  rows.forEach(([a, g], i) => {
+    const y = 192 + i * 50; const n = g.v + g.p;
+    c.fillStyle = '#0f172a'; c.font = '32px "Segoe Print", Figtree, sans-serif';
+    c.fillText(a.replace(/^custode /, '◆ '), cols[0], y);
+    c.fillStyle = '#15803d'; c.fillText(String(g.v), cols[1], y);
+    c.fillStyle = '#b91c1c'; c.fillText(String(g.p), cols[2], y);
+    c.fillStyle = '#0f172a'; c.fillText(n ? `${Math.round((g.v / n) * 100)}%` : '–', cols[3], y);
+    c.fillStyle = g.pnl >= 0 ? '#15803d' : '#b91c1c'; c.fillText(`${g.pnl >= 0 ? '+' : ''}${g.pnl.toFixed(2)} $`, cols[4], y);
+    // barretta vinti/persi
+    if (n) { c.fillStyle = '#16a34a'; c.fillRect(cols[1] - 120, y - 22, (g.v / n) * 100, 10); c.fillStyle = '#dc2626'; c.fillRect(cols[1] - 120 + (g.v / n) * 100, y - 22, (g.p / n) * 100, 10); }
   });
+  boardTex.needsUpdate = true;
 }
-placeSymbols(DEFAULT_SYMBOLS.slice(0, 8));
-const agents = new Map();
-function placeAgents(names) {
-  names.forEach((n, i) => {
-    if (agents.has(n)) return;
-    const a = (i / Math.max(1, names.length)) * Math.PI * 2;
-    const pos = new THREE.Vector3(Math.cos(a) * 8, 1.2, Math.sin(a) * 8);
-    const mesh = new THREE.Mesh(new THREE.SphereGeometry(0.45, 24, 16), new THREE.MeshStandardMaterial({ color: 0x58a6ff, emissive: 0x1b3a66, roughness: 0.3 }));
-    mesh.position.copy(pos); scene.add(mesh);
-    const el = document.createElement('div'); el.className = 'lbl agent'; el.textContent = agentName(n);
-    const label = new CSS2DObject(el); label.position.set(pos.x, pos.y + 0.8, pos.z); scene.add(label);
-    agents.set(n, { mesh, pos, el, pulse: 0 });
-  });
-}
-placeAgents(['trend', 'rientro', 'regime', 'orizzonte']);
-// I custodi in sala: una figura accanto al proprio titolo, colorata dalla fase; arancione l'operatore intraday.
-const FASE_COLOR = { pronto: 0x2a55c7, 'in posizione': 0x2ecc71, 'in uscita': 0xe74c3c, attende: 0x7c889b, osserva: 0x8fb0ff };
-const figures = new Map(); // simbolo -> { group, kind }
-function makeFigure(color) {
+
+// Un impiegato seduto, rivolto verso chi guarda: volto (occhi, sopracciglia, naso, bocca, orecchie), capelli, busto con la
+// camicia del colore del suo stato, braccia verso la tastiera. L'aspetto (pelle, capelli, occhiali) dipende dal nome.
+const SKINS = [0xf1c9a5, 0xe0ac86, 0xc68b62, 0x8d5a3b, 0xf5d6c0];
+const HAIRS = [0x2b1d16, 0x5a3a22, 0x8a5a2b, 0xc8a165, 0x1a1a1a, 0x7d7d7d];
+const hashOf = (s) => [...String(s)].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 7);
+function makeHead(look) {
   const g = new THREE.Group();
-  const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.6 });
-  const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.16, 0.45, 4, 10), mat); body.position.y = 0.5; g.add(body);
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.15, 14, 12), new THREE.MeshStandardMaterial({ color: 0xf1d2b6, roughness: 0.8 })); head.position.y = 0.98; g.add(head);
-  g.userData.mat = mat; g.userData.bob = Math.random() * Math.PI * 2;
+  const skinM = mat(SKINS[look % SKINS.length]);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.15, 22, 18), skinM); head.scale.set(1, 1.12, 1); head.castShadow = true; g.add(head);
+  const hairM = mat(HAIRS[(look >> 3) % HAIRS.length]);
+  const hair = new THREE.Mesh(new THREE.SphereGeometry(0.158, 22, 18, 0, Math.PI * 2, 0, Math.PI / 2.1), hairM); hair.scale.set(1, 1.12, 1); hair.rotation.x = -0.45; g.add(hair);
+  const dark = mat(0x1f2937), white = mat(0xffffff);
+  for (const sx of [-1, 1]) {
+    const eyeW = new THREE.Mesh(new THREE.SphereGeometry(0.028, 12, 10), white); eyeW.position.set(0.052 * sx, 0.03, 0.128); eyeW.scale.z = 0.5; g.add(eyeW);
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.015, 10, 8), dark); eye.position.set(0.052 * sx, 0.03, 0.141); g.add(eye);
+    const brow = box(0.055, 0.012, 0.012, hairM); brow.castShadow = false; brow.position.set(0.052 * sx, 0.07, 0.138); brow.rotation.z = 0.12 * sx; g.add(brow);
+    const ear = new THREE.Mesh(new THREE.SphereGeometry(0.032, 10, 8), skinM); ear.position.set(0.148 * sx, 0.0, 0.0); ear.scale.set(0.5, 1, 0.8); g.add(ear);
+  }
+  const nose = new THREE.Mesh(new THREE.ConeGeometry(0.02, 0.06, 8), skinM); nose.rotation.x = Math.PI / 2; nose.position.set(0, -0.005, 0.155); g.add(nose);
+  const mouth = new THREE.Mesh(new THREE.TorusGeometry(0.035, 0.008, 6, 12, Math.PI), mat(0xa0453f)); mouth.rotation.z = Math.PI; mouth.position.set(0, -0.06, 0.137); g.add(mouth);
+  if (look % 4 === 1) { // occhiali
+    const frame = mat(0x111827);
+    for (const sx of [-1, 1]) { const lens = new THREE.Mesh(new THREE.TorusGeometry(0.03, 0.005, 6, 16), frame); lens.position.set(0.052 * sx, 0.03, 0.15); g.add(lens); }
+    const bridge = box(0.04, 0.006, 0.006, frame); bridge.castShadow = false; bridge.position.set(0, 0.035, 0.152); g.add(bridge);
+  }
+  g.userData = { mouth, brows: g.children.filter((c) => c.geometry?.type === 'BoxGeometry') };
   return g;
 }
-function placeFigures(st) {
-  const want = new Map();
-  for (const c of st.custodi || []) want.set(`c:${c.simbolo}`, { sym: c.simbolo, color: FASE_COLOR[c.fase] ?? 0x8fb0ff, side: -1, info: c });
-  for (const x of st.intraday || []) if (x.fase === 'in posizione' || x.fase === 'cerca ingresso') want.set(`i:${x.simbolo}`, { sym: x.simbolo, color: 0xf39c12, side: 1, info: x });
-  for (const [k, f] of figures) if (!want.has(k)) { scene.remove(f.group); figures.delete(k); }
-  for (const [k, w] of want) {
-    const s = symbols.get(w.sym); if (!s) continue;
-    let f = figures.get(k);
-    if (!f) { f = { group: makeFigure(w.color) }; scene.add(f.group); figures.set(k, f); }
-    f.group.position.set(s.pos.x + 0.95 * w.side, 0, s.pos.z + 0.75);
-    f.group.userData.mat.color.set(w.color);
-    f.group.userData.info = w.info; f.group.userData.sym = w.sym;
+function makeEmployee(shirt, look = 0, suit = false) {
+  const g = new THREE.Group();
+  const shirtM = mat(shirt);
+  const torso = box(0.42, 0.55, 0.26, suit ? mat(0x1f2937) : shirtM); torso.position.set(0, 0.95, 0); g.add(torso);
+  if (suit) { // giacca scura, camicia bianca e cravatta del colore di stato
+    const shirtFront = box(0.12, 0.4, 0.02, mat(0xffffff)); shirtFront.position.set(0, 1.0, 0.135); g.add(shirtFront);
+    const tie = box(0.05, 0.32, 0.02, shirtM); tie.position.set(0, 0.98, 0.15); g.add(tie);
   }
+  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.06, 0.1, 10), M.skin); neck.position.set(0, 1.26, 0); g.add(neck);
+  const headG = makeHead(look); headG.position.set(0, 1.4, 0); g.add(headG);
+  const head = headG;
+  const thighs = box(0.4, 0.14, 0.42, M.pants); thighs.position.set(0, 0.64, 0.17); g.add(thighs);
+  const shins = box(0.36, 0.5, 0.13, M.pants); shins.position.set(0, 0.36, 0.38); g.add(shins);
+  const arms = [];
+  for (const sx of [-1, 1]) {
+    const upper = box(0.1, 0.34, 0.1, suit ? mat(0x1f2937) : shirtM); upper.position.set(0.26 * sx, 1.0, 0.04); upper.rotation.x = -0.5; g.add(upper);
+    const fore = box(0.09, 0.09, 0.34, M.skin); fore.position.set(0.24 * sx, 0.84, 0.3); g.add(fore);
+    arms.push(fore);
+  }
+  g.userData = { shirtM, head, arms, torso, t: Math.random() * 10, raise: 0, stand: 0, bow: 0 };
+  return g;
 }
-// Mouse sulla sala: passando sopra un titolo si legge tutto; cliccando si apre la sua scheda.
+function makeChair() {
+  const g = new THREE.Group();
+  const seat = box(0.5, 0.08, 0.5, M.chair); seat.position.y = 0.55; g.add(seat);
+  const back = box(0.5, 0.6, 0.07, M.chair); back.position.set(0, 0.9, -0.24); g.add(back);
+  const post = box(0.06, 0.5, 0.06, M.leg); post.position.y = 0.28; g.add(post);
+  return g;
+}
+// Lo schermo: titolo, prezzo, variazione e una piccola linea del prezzo, disegnati su canvas.
+function makeScreen() {
+  const cv = document.createElement('canvas'); cv.width = 256; cv.height = 160;
+  const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace;
+  const g = new THREE.Group();
+  const frame = box(0.9, 0.58, 0.05, M.screenFrame); g.add(frame);
+  const face = new THREE.Mesh(new THREE.PlaneGeometry(0.84, 0.52), new THREE.MeshBasicMaterial({ map: tex })); face.position.z = 0.028; g.add(face);
+  // anche il retro mostra lo schermo: dall'alto si legge senza girare attorno alla scrivania
+  const back = new THREE.Mesh(new THREE.PlaneGeometry(0.84, 0.52), new THREE.MeshBasicMaterial({ map: tex })); back.position.z = -0.028; back.rotation.y = Math.PI; g.add(back);
+  const stand = box(0.06, 0.25, 0.06, M.screenFrame); stand.position.y = -0.4; g.add(stand);
+  g.userData = { cv, tex, flash: 0 };
+  return g;
+}
+function drawScreen(scr, title, line2, change, series, accent) {
+  const c = scr.userData.cv.getContext('2d');
+  const flash = scr.userData.flash;
+  c.fillStyle = flash > 0.05 ? (scr.userData.flashColor || '#14532d') : '#0b1220'; c.fillRect(0, 0, 256, 160);
+  c.fillStyle = '#e5edf7'; c.font = 'bold 26px Figtree, sans-serif'; c.fillText(title, 12, 32);
+  c.fillStyle = '#93a4ba'; c.font = '18px Figtree, sans-serif'; c.fillText(line2 || '', 12, 56);
+  if (change !== null && change !== undefined) { c.fillStyle = change >= 0 ? '#4ade80' : '#f87171'; c.font = 'bold 20px Figtree, sans-serif'; c.fillText(`${change >= 0 ? '+' : ''}${(change * 100).toFixed(2)}%`, 160, 32); }
+  if (series && series.length > 1) {
+    const lo = Math.min(...series), hi = Math.max(...series), span = hi - lo || 1;
+    c.strokeStyle = accent || (series.at(-1) >= series[0] ? '#4ade80' : '#f87171'); c.lineWidth = 3; c.beginPath();
+    series.forEach((v, i) => { const x = 12 + (i / (series.length - 1)) * 232, y = 148 - ((v - lo) / span) * 76; i ? c.lineTo(x, y) : c.moveTo(x, y); });
+    c.stroke();
+  }
+  scr.userData.tex.needsUpdate = true;
+}
+// Una postazione completa: scrivania, schermo, sedia, impiegato, targhetta.
+function makeDesk(key, big = false) {
+  const g = new THREE.Group();
+  const look = hashOf(key);
+  const top = box(big ? 2.0 : 1.5, 0.06, big ? 1.0 : 0.8, big ? mat(0x8b5e3c) : M.desk); top.position.y = 0.76; g.add(top);
+  for (const [x, z] of [[-0.7, -0.35], [0.7, -0.35], [-0.7, 0.35], [0.7, 0.35]]) { const l = box(0.05, 0.74, 0.05, M.leg); l.position.set(x * (big ? 1.3 : 1), 0.37, z * (big ? 1.2 : 1)); g.add(l); }
+  const kb = box(0.5, 0.03, 0.16, M.screenFrame); kb.position.set(0, 0.8, -0.12); g.add(kb);
+  const scr = makeScreen(); scr.position.set(0, 1.18, 0.22); scr.rotation.y = Math.PI; g.add(scr);
+  if (look % 5 === 2 || big) { const pot = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.06, 0.14, 12), M.pot); pot.position.set(0.6, 0.86, 0.25); g.add(pot); const leaf = new THREE.Mesh(new THREE.SphereGeometry(0.14, 10, 8), M.plant); leaf.position.set(0.6, 1.02, 0.25); g.add(leaf); }
+  if (look % 3 === 0) { const mug = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.09, 12), mat(0xf8fafc)); mug.position.set(-0.55, 0.84, -0.1); g.add(mug); }
+  const chair = makeChair(); chair.position.set(0, 0, -0.85); g.add(chair);
+  const emp = makeEmployee(0x2a55c7, look, big); emp.position.set(0, 0, -0.85); g.add(emp);
+  // il busto guarda lo schermo davanti a sé (verso +z): braccia sulla tastiera
+  for (const a of emp.userData.arms) a.position.z = 0.3;
+  const el = document.createElement('div'); el.className = 'lbl desk-lbl';
+  const tag = new CSS2DObject(el); tag.position.set(0, 2.05, -0.6); g.add(tag);
+  g.userData = { scr, emp, el, tag };
+  return g;
+}
+
+const desks = new Map(); // chiave -> { group, info }
+const deptLabels = [];
+function deptLabel(text, x, z) { const el = document.createElement('div'); el.className = 'lbl dept-lbl'; el.textContent = text; const o = new CSS2DObject(el); o.position.set(x, 2.6, z); scene.add(o); deptLabels.push(o); }
+const SPX = 2.2, SPZ = 2.6;
+let roomSize = { w: 10, d: 10 };
+function layout(groups) {
+  // groups: [{ name, items: [{ key, ... }] }] → righe di scrivanie, un reparto dopo l'altro, dalla lavagna verso la finestra.
+  for (const o of deptLabels) scene.remove(o); deptLabels.length = 0;
+  const cols = Math.max(4, Math.min(10, Math.ceil(Math.sqrt(groups.reduce((a, g) => a + g.items.length, 0) * 1.5))));
+  let z = 0; const placed = new Map();
+  for (const g of groups) {
+    if (!g.items.length) continue;
+    const rows = Math.ceil(g.items.length / cols);
+    deptLabel(g.name, -((cols - 1) * SPX) / 2 - 1.6, z);
+    g.items.forEach((it, i) => { const c = i % cols, r = Math.floor(i / cols); placed.set(it.key, new THREE.Vector3((c - (cols - 1) / 2) * SPX, 0, z + r * SPZ)); });
+    z += rows * SPZ + 1.4;
+  }
+  const w = cols * SPX + 4, d = z + 3;
+  roomSize = { w, d };
+  floor.scale.set(w + 4, d + 8, 1); floor.position.set(0, 0, d / 2 - 3);
+  backWall.scale.x = w + 4; backWall.position.set(0, 2.1, -4.3);
+  sideWall.scale.z = d + 8; sideWall.position.set(-(w + 4) / 2, 2.1, d / 2 - 3);
+  board.position.set(0, 2.25, -4.17);
+  // l'ufficio del capo: a destra della lavagna, con pareti di vetro
+  placed.set('capo', new THREE.Vector3(w / 2 - 1.2, 0, -2.7));
+  glass.position.set(w / 2 - 1.2, 1.1, -2.7);
+  deptLabel('Capo ufficio', w / 2 - 1.2, -2.0);
+  return placed;
+}
+const glass = new THREE.Group(); scene.add(glass);
+{ const gm = new THREE.MeshStandardMaterial({ color: 0xbfe3ff, transparent: true, opacity: 0.22, roughness: 0.1 });
+  const fr = mat(0x9ca3af);
+  const front = new THREE.Mesh(new THREE.BoxGeometry(2.8, 2.2, 0.04), gm); front.position.set(0, 0, 1.45); glass.add(front);
+  const side = new THREE.Mesh(new THREE.BoxGeometry(0.04, 2.2, 2.9), gm); side.position.set(-1.4, 0, 0); glass.add(side);
+  const rail = box(2.8, 0.05, 0.06, fr); rail.position.set(0, 1.1, 1.45); glass.add(rail); }
+let lastLayoutKey = '';
+function fitCamera() {
+  const { w, d } = roomSize;
+  controls.target.set(0, 1, d / 2 - 2);
+  camera.position.set(w * 0.25, Math.max(7, Math.max(w, d) * 0.6), d + Math.max(4, w * 0.3));
+}
+
+const histOf = (sym) => (window.__bars?.[sym] || []).slice(-30);
+const FASE_SHIRT = { pronto: 0x2a55c7, 'in posizione': 0x16a34a, 'in uscita': 0xdc2626, attende: 0x94a3b8, osserva: 0x60a5fa };
+const ROLE = { trend: 'trend', rientro: 'rientro', regime: 'clima di mercato', orizzonte: 'orizzonte', uscite: 'uscite e stop', contesto: 'contesto economico', profitto: 'presa di profitto', kronos: 'previsioni Kronos' };
+
+function paintScene(st) {
+  const general = Object.keys(st.agenti || {}).filter((n) => n !== 'custodi' && n !== 'intraday');
+  const cust = st.custodi || [];
+  const intra = (st.intraday || []).filter((x) => x.fase === 'in posizione' || x.fase === 'cerca ingresso').slice(0, 20);
+  const groups = [
+    { name: 'Direzione', items: general.map((n) => ({ key: `a:${n}`, kind: 'agente', n })) },
+    { name: 'Custodi', items: cust.map((c) => ({ key: `c:${c.simbolo}`, kind: 'custode', c })) },
+    { name: 'Sala intraday', items: intra.map((x) => ({ key: `i:${x.simbolo}`, kind: 'intraday', x })) },
+  ];
+  const keys = groups.flatMap((g) => g.items.map((i) => i.key)).join('|') + '|capo';
+  let pos = null;
+  if (keys !== lastLayoutKey) {
+    pos = layout(groups);
+    for (const [k, d] of desks) if (!pos.has(k)) { scene.remove(d.group); desks.delete(k); }
+    for (const [k, p] of pos) { let d = desks.get(k); if (!d) { d = { group: makeDesk(k, k === 'capo') }; scene.add(d.group); desks.set(k, d); } d.group.position.copy(p); }
+    if (!lastLayoutKey) fitCamera();
+    lastLayoutKey = keys;
+  }
+  const held = new Map((st.posizioni || []).map((p) => [p.simbolo, p]));
+  for (const g of groups) for (const it of g.items) {
+    const d = desks.get(it.key); if (!d) continue; const u = d.group.userData; d.info = it;
+    if (it.kind === 'agente') {
+      const a = st.agenti[it.n]; const err = !!a.errore;
+      u.emp.userData.shirtM.color.set(err ? 0xdc2626 : a.segnali ? 0x1d4ed8 : 0x64748b);
+      drawScreen(u.scr, agentName(it.n), err ? 'errore' : `${a.segnali} segnali`, null, null);
+      u.el.innerHTML = `<b>${esc(agentName(it.n))}</b>`;
+    } else if (it.kind === 'custode') {
+      const c = it.c; const p = held.get(c.simbolo); const prob = c.dossier ? Math.round(c.dossier.probabilita * 100) : null;
+      u.emp.userData.shirtM.color.set(FASE_SHIRT[c.fase] ?? 0x60a5fa);
+      drawScreen(u.scr, c.simbolo, `${px(st.prezzi?.[c.simbolo])}${prob !== null ? ` · ${prob}%` : ''}`, p ? p.variazione : null, histOf(c.simbolo).map((b) => b.close));
+      u.el.innerHTML = `<b>${esc(c.simbolo)}</b>${prob !== null ? ` <span>${prob}%</span>` : ''}`;
+    } else {
+      const x = it.x;
+      u.emp.userData.shirtM.color.set(0xf59e0b);
+      drawScreen(u.scr, x.simbolo, `${x.candela} · ${x.fase}`, x.ingresso && x.prezzo ? x.prezzo / x.ingresso - 1 : null, histOf(x.simbolo).map((b) => b.close), '#fbbf24');
+      u.el.innerHTML = `<b>${esc(x.simbolo)}</b> <span>${esc(x.candela)}</span>`;
+    }
+  }
+  const cd = desks.get('capo');
+  if (cd) {
+    cd.info = { kind: 'capo' }; const u = cd.group.userData; const cp = st.capo; const rich = (cp?.valutazioni || []).filter((v) => v.giudizio === 'richiamato');
+    u.emp.userData.shirtM.color.set(rich.length ? 0xdc2626 : 0x15803d);
+    drawScreen(u.scr, 'Capo ufficio', rich.length ? `${rich.length} richiami` : 'tutti in regola', null, null);
+    u.el.innerHTML = `<b>Capo ufficio</b><br><span>${rich.length ? `richiama ${esc(rich.map((v) => v.agente).join(', ')).slice(0, 40)}` : 'controlla il lavoro'}</span>`;
+  }
+  drawBoard(st, journal);
+  if (cardKey) renderCard();
+}
+
+// Mouse: sopra una postazione si legge cosa fa; clic → scheda del titolo o pagina Agenti.
 const ray = new THREE.Raycaster(); const mouse = new THREE.Vector2();
-const hoverEl = document.createElement('div'); hoverEl.className = 'lbl'; hoverEl.style.display = 'none'; hoverEl.style.position = 'absolute'; hoverEl.style.maxWidth = '280px'; hoverEl.style.whiteSpace = 'normal'; hoverEl.style.fontSize = '12px'; host.appendChild(hoverEl);
-let hovered = null;
-function pickSymbol(ev) {
+const hoverEl = document.createElement('div'); hoverEl.className = 'lbl'; Object.assign(hoverEl.style, { display: 'none', position: 'absolute', maxWidth: '300px', whiteSpace: 'normal', fontSize: '12px', zIndex: 3 }); host.appendChild(hoverEl);
+function pickDesk(ev) {
   const r = renderer.domElement.getBoundingClientRect();
   mouse.set(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1);
   ray.setFromCamera(mouse, camera);
-  const hits = ray.intersectObjects([...symbols.values()].map((s) => s.mesh).concat([...figures.values()].map((f) => f.group)), true);
-  if (!hits.length) return null;
-  let o = hits[0].object; while (o && !o.userData.sym && o.parent) o = o.parent;
-  if (o?.userData?.sym) return o.userData.sym;
-  for (const [sym, s] of symbols) if (s.mesh === hits[0].object) return sym;
+  const hits = ray.intersectObjects([...[...desks.values()].map((d) => d.group), board], true);
+  for (const h of hits) { let o = h.object; while (o) { if (o === board) return { board: true }; for (const d of desks.values()) if (d.group === o) return d; o = o.parent; } }
   return null;
 }
+let hoveredDesk = null;
 renderer.domElement.addEventListener('mousemove', (ev) => {
-  const sym = pickSymbol(ev); hovered = sym;
-  if (!sym) { hoverEl.style.display = 'none'; return; }
-  const st = status || {}; const p = (st.posizioni || []).find((x) => x.simbolo === sym); const c = (st.custodi || []).find((x) => x.simbolo === sym); const i = (st.intraday || []).find((x) => x.simbolo === sym);
-  hoverEl.innerHTML = `<b>${esc(sym)}</b> ${st.prezzi?.[sym] ? px(st.prezzi[sym]) : ''}${p ? `<br>in portafoglio: ${qty(p.quantita)} · <span class="${cls(p.variazione)}">${pct(p.variazione)}</span>` : '<br>non in portafoglio'}${c ? `<br>custode: ${FASI[c.fase] || c.fase}${c.dossier ? ` · ${Math.round(c.dossier.probabilita * 100)}% favorevole` : ''}<br><span style="opacity:.8">${esc(c.dossier?.prossimaAzione || c.piano).slice(0, 160)}</span>` : ''}${i ? `<br>intraday (${esc(i.candela)}): ${esc(i.fase)} — ${esc(i.motivo).slice(0, 120)}` : ''}<br><span style="opacity:.7">clic: apri la scheda</span>`;
+  const d = pickDesk(ev); hoveredDesk = d && !d.board ? d : null;
+  if (!d) { hoverEl.style.display = 'none'; return; }
+  let html;
+  if (d.board) html = '<b>Lavagna dei risultati</b><br>trade chiusi vinti e persi per agente, dal diario; in alto il risultato di oggi';
+  else if (d.info?.kind === 'capo') html = `<b>Capo ufficio</b><br>${esc(status?.capo?.sintesi || 'controlla il lavoro degli agenti')}<br><span style="opacity:.7">clic: apri la scheda</span>`;
+  else if (d.info.kind === 'agente') { const a = status?.agenti?.[d.info.n] || {}; html = `<b>${esc(agentName(d.info.n))}</b> · ${esc(ROLE[d.info.n] || '')}<br>${a.errore ? `<span class="down">${esc(a.errore)}</span>` : `${a.segnali} segnali nell'ultimo giro`}${a.note?.length ? `<br><span style="opacity:.8">${esc(a.note.join(' · ')).slice(0, 220)}</span>` : ''}<br><span style="opacity:.7">clic: pagina Agenti</span>`; }
+  else if (d.info.kind === 'custode') { const c = d.info.c; html = `<b>Custode di ${esc(c.simbolo)}</b> · ${esc(FASI[c.fase] || c.fase)}${c.dossier ? ` · ${Math.round(c.dossier.probabilita * 100)}% favorevole` : ''}<br>${esc(c.dossier?.prossimaAzione || c.piano).slice(0, 220)}<br><span style="opacity:.7">clic: apri il titolo</span>`; }
+  else { const x = d.info.x; html = `<b>Operatore intraday ${esc(x.simbolo)}</b> · candele ${esc(x.candela)}<br>${esc(x.fase)}: ${esc(x.motivo).slice(0, 200)}<br><span style="opacity:.7">clic: apri il titolo</span>`; }
+  hoverEl.innerHTML = html;
   const r = host.getBoundingClientRect();
-  hoverEl.style.left = `${Math.min(ev.clientX - r.left + 14, r.width - 300)}px`; hoverEl.style.top = `${ev.clientY - r.top + 14}px`; hoverEl.style.display = 'block';
+  hoverEl.style.left = `${Math.min(ev.clientX - r.left + 14, r.width - 320)}px`; hoverEl.style.top = `${ev.clientY - r.top + 14}px`; hoverEl.style.display = 'block';
 });
-renderer.domElement.addEventListener('mouseleave', () => { hoverEl.style.display = 'none'; hovered = null; });
-renderer.domElement.addEventListener('click', (ev) => { const sym = pickSymbol(ev); if (sym) { selectSymbol(sym); location.hash = 'titoli'; } });
+renderer.domElement.addEventListener('mouseleave', () => { hoverEl.style.display = 'none'; hoveredDesk = null; });
+renderer.domElement.addEventListener('click', (ev) => {
+  const d = pickDesk(ev); if (!d || d.board) return;
+  for (const [k, x] of desks) if (x === d) openCard(k);
+});
 
-const beams = [];
-function beam(from, to, color, ttl = 2500) {
-  const geo = new THREE.BufferGeometry().setFromPoints([from.clone(), to.clone().setY(0.8)]);
-  const line = new THREE.Line(geo, new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.9 }));
-  scene.add(line); beams.push({ line, born: performance.now(), ttl });
+// Gli eventi in diretta muovono le persone: chi vota alza la mano, chi compra o vende si alza e lo schermo lampeggia.
+function deskFor(e) {
+  if (e.agente && desks.has(`a:${e.agente}`)) return desks.get(`a:${e.agente}`);
+  if (e.agente?.startsWith('custode ')) return desks.get(`c:${e.agente.slice(8)}`);
+  if (e.agente === 'intraday') return desks.get(`i:${e.simbolo}`);
+  return desks.get(`c:${e.simbolo}`) || desks.get(`i:${e.simbolo}`);
 }
-function pulse(symbol, color) {
-  const s = symbols.get(symbol); if (!s) return;
-  const ring = new THREE.Mesh(new THREE.RingGeometry(0.9, 1.0, 48), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.9, side: THREE.DoubleSide }));
-  ring.rotation.x = -Math.PI / 2; ring.position.set(s.pos.x, 0.06, s.pos.z); scene.add(ring);
-  beams.push({ line: ring, born: performance.now(), ttl: 1800, grow: true });
+function bubble(d, text, color) {
+  const el = document.createElement('div'); el.className = 'lbl bubble'; el.textContent = text; el.style.color = color;
+  const o = new CSS2DObject(el); o.position.set(0, 2.3, 0); d.group.add(o);
+  bubbles.push({ o, d, born: performance.now() });
 }
+const bubbles = [];
+function sceneEvent(e) {
+  if (e.tipo === 'segnale') { const d = deskFor(e); if (d) { d.group.userData.emp.userData.raise = 1; bubble(d, e.lato === 'buy' ? 'compra!' : 'vendi!', e.lato === 'buy' ? '#15803d' : '#b91c1c'); } }
+  if (e.tipo === 'ordine' && e.esito === 'inviato') { for (const d of desks.values()) if (d.info?.c?.simbolo === e.simbolo || d.info?.x?.simbolo === e.simbolo) { d.group.userData.emp.userData.stand = 1; const s = d.group.userData.scr; s.userData.flash = 1; s.userData.flashColor = e.lato === 'buy' ? '#14532d' : '#7f1d1d'; bubble(d, `${e.lato === 'buy' ? 'COMPRATO' : 'VENDUTO'} ${e.simbolo}`, e.lato === 'buy' ? '#15803d' : '#b91c1c'); } }
+  if (e.tipo === 'rifiuto') { const d = deskFor(e); if (d) bubble(d, 'fermato dalle regole', '#a16207'); }
+  if (e.tipo === 'capo') {
+    const cd = desks.get('capo'); if (cd) { cd.group.userData.emp.userData.stand = 1; bubble(cd, (e.richiamati || []).length ? `Richiamo a ${e.richiamati.map((r) => r.agente).join(', ')}!` : 'Bravi tutti!', (e.richiamati || []).length ? '#b91c1c' : '#15803d'); }
+    for (const r of e.richiamati || []) { const d = desks.get(`a:${r.agente}`) || (r.agente.startsWith('custode ') ? desks.get(`c:${r.agente.slice(8)}`) : null); if (d) { d.group.userData.emp.userData.bow = 1; bubble(d, 'ricevuto, capo', '#334155'); } }
+  }
+}
+
+// Dati per schermi e lavagna: le ultime 30 chiusure di ogni titolo e il diario dei trade.
+async function loadOfficeData() {
+  try {
+    const [b, j] = await Promise.all([fetch('/api/bars?ultime=30').then((r) => r.json()), fetch('/api/journal').then((r) => r.json())]);
+    window.__bars = b.barre || {}; journal = j;
+    if (status) paintScene(status);
+  } catch {}
+}
+setInterval(() => { if (currentPage === '3d') loadOfficeData(); }, 120_000);
+
 function resize() {
   const w = host.clientWidth, h = host.clientHeight;
   if (!w || !h) return;
@@ -505,24 +780,78 @@ new ResizeObserver(resize).observe(host); resize();
 const sceneBox = $('#scene-box');
 sceneBox.addEventListener('toggle', resize);
 let currentPage = 'panoramica';
+const clock = new THREE.Clock();
 function animate() {
   requestAnimationFrame(animate);
   if (currentPage !== '3d' || !sceneBox.open) return;
-  const now = performance.now();
-  for (const s of symbols.values()) {
-    s.mesh.scale.y += (s.targetH - s.mesh.scale.y) * 0.08; s.mesh.position.y = s.mesh.scale.y / 2;
-    s.label.position.y = s.mesh.scale.y + 0.5;
+  const dt = Math.min(0.05, clock.getDelta()); const now = performance.now();
+  for (const d of desks.values()) {
+    const e = d.group.userData.emp.userData; e.t += dt;
+    // digitare: gli avambracci si alzano e abbassano a turno; la testa guarda lo schermo e ogni tanto si gira
+    e.arms[0].position.y = 0.84 + Math.max(0, Math.sin(e.t * 9)) * 0.03;
+    e.arms[1].position.y = 0.84 + Math.max(0, Math.sin(e.t * 9 + 1.6)) * 0.03;
+    e.head.rotation.y = Math.sin(e.t * 0.4) * 0.25;
+    if (e.raise > 0) { e.arms[1].position.y = 0.84 + e.raise * 0.55; e.arms[1].position.z = 0.3 - e.raise * 0.2; e.raise = Math.max(0, e.raise - dt * 0.6); }
+    if (e.bow > 0) { e.head.rotation.x = e.bow * 0.5; e.bow = Math.max(0, e.bow - dt * 0.4); } else e.head.rotation.x = 0;
+    if (e.stand > 0) { d.group.userData.emp.position.y = e.stand * 0.35; e.stand = Math.max(0, e.stand - dt * 0.5); } else d.group.userData.emp.position.y = 0;
+    e.torso.material.emissive?.setHex(d === hoveredDesk ? 0x333333 : 0x000000);
+    const s = d.group.userData.scr; if (s.userData.flash > 0) { s.userData.flash = Math.max(0, s.userData.flash - dt * 0.5); if (s.userData.flash === 0 && status) paintScene(status); }
   }
-  for (const a of agents.values()) { a.pulse *= 0.95; a.mesh.scale.setScalar(1 + a.pulse); }
-  for (const f of figures.values()) { f.group.userData.bob += 0.04; f.group.position.y = Math.abs(Math.sin(f.group.userData.bob)) * 0.06; f.group.rotation.y = Math.sin(f.group.userData.bob * 0.5) * 0.3; }
-  for (const [sym, s] of symbols) s.mesh.material.emissiveIntensity = sym === hovered ? 1.6 : 1;
-  for (let i = beams.length - 1; i >= 0; i--) {
-    const b = beams[i]; const k = (now - b.born) / b.ttl;
-    if (k >= 1) { scene.remove(b.line); beams.splice(i, 1); continue; }
-    b.line.material.opacity = 0.9 * (1 - k); if (b.grow) b.line.scale.setScalar(1 + k * 1.5);
-  }
-  cage.rotation.z += 0.0015;
+  for (let i = bubbles.length - 1; i >= 0; i--) { const b = bubbles[i]; const k = (now - b.born) / 2500; if (k >= 1) { b.d.group.remove(b.o); b.o.element.remove(); bubbles.splice(i, 1); continue; } b.o.position.y = 2.3 + k * 0.6; b.o.element.style.opacity = String(1 - k); }
+  if (fly) { const k = Math.min(1, (now - fly.t0) / 900); const ease = k * (2 - k); controls.target.lerpVectors(fly.fromT, fly.toT, ease); camera.position.lerpVectors(fly.fromP, fly.toP, ease); if (k >= 1) fly = null; }
+  if (portrait.on) { portrait.model.rotation.y += dt * 0.8; portrait.renderer.render(portrait.scene, portrait.camera); }
   controls.update(); renderer.render(scene, camera); labels.render(scene, camera);
+}
+let fly = null;
+function flyTo(group) {
+  const p = group.position;
+  fly = { t0: performance.now(), fromT: controls.target.clone(), toT: new THREE.Vector3(p.x, 1.1, p.z), fromP: camera.position.clone(), toP: new THREE.Vector3(p.x + 1.6, 2.6, p.z + 3.2) };
+}
+
+// La scheda dell'agente nell'ufficio: un ritratto 3D che gira, ruolo, come decide, parametri, risultati e giudizio del capo.
+const card = document.createElement('aside'); card.className = 'office-card'; card.hidden = true; host.appendChild(card);
+const portrait = { on: false, renderer: new THREE.WebGLRenderer({ antialias: true, alpha: true }), scene: new THREE.Scene(), camera: new THREE.PerspectiveCamera(30, 1, 0.1, 20), model: null };
+portrait.renderer.setPixelRatio(Math.min(2, window.devicePixelRatio)); portrait.renderer.setSize(150, 170);
+portrait.scene.add(new THREE.HemisphereLight(0xffffff, 0xb8a990, 1.6)); { const l = new THREE.DirectionalLight(0xffffff, 1.4); l.position.set(2, 3, 4); portrait.scene.add(l); }
+portrait.camera.position.set(0, 1.25, 2.6); portrait.camera.lookAt(0, 1.05, 0);
+let cardKey = null; let cards = null;
+async function openCard(key) {
+  cardKey = key; const d = desks.get(key); if (d) flyTo(d.group);
+  if (!cards) { try { cards = (await (await fetch('/api/agenti/schede')).json()).schede; } catch { cards = []; } }
+  const u = d?.group.userData;
+  if (portrait.model) portrait.scene.remove(portrait.model);
+  portrait.model = makeEmployee(u ? u.emp.userData.shirtM.color.getHex() : 0x2a55c7, hashOf(key), key === 'capo');
+  portrait.scene.add(portrait.model); portrait.on = true;
+  card.hidden = false; renderCard();
+}
+function closeCard() { cardKey = null; card.hidden = true; portrait.on = false; }
+function renderCard() {
+  const d = desks.get(cardKey); if (!d) return closeCard();
+  const st = status || {}; const it = d.info || {}; const capo = st.capo;
+  const sched = (name) => (cards || []).find((c) => c.agente === name);
+  const val = (name) => (capo?.valutazioni || []).find((v) => v.agente === name);
+  const fmtP = (p) => (p.tipo === 'percento' ? `${(p.attuale * 100).toFixed(2).replace(/\.?0+$/, '')}%` : p.tipo === 'bool' ? (p.attuale ? 'sì' : 'no') : String(p.attuale));
+  let title, sub, body = '', name;
+  if (it.kind === 'capo') {
+    title = 'Capo ufficio'; sub = 'controlla il lavoro degli agenti';
+    body = `<p>${esc(capo?.sintesi || '')}</p>${capo?.sogliaKronos !== null && capo?.sogliaKronos !== undefined ? `<p class="why">Lezione per tutti: Kronos ≥ ${pct(capo.sogliaKronos)}${capo.ingressoMigliore ? ` · ingresso migliore: ${esc(capo.ingressoMigliore)}` : ''}</p>` : ''}
+      ${(capo?.valutazioni || []).map((v) => `<div class="vote"><b>${esc(v.agente)}</b> <span class="pill ${v.giudizio === 'richiamato' ? 'down' : v.giudizio === 'ottimo' || v.giudizio === 'bene' ? 'up' : ''}">${esc(v.giudizio)}</span> <span class="why">${v.vinti}/${v.trade} vinti · ${usd(v.risultato)}</span><br><span class="why">${esc(v.messaggio)}</span>${v.consigli.length ? `<ul>${v.consigli.map((c) => `<li class="why">${esc(c)}</li>`).join('')}</ul>` : ''}</div>`).join('') || '<p class="why">Nessun trade chiuso ancora.</p>'}`;
+  } else {
+    let who;
+    if (it.kind === 'agente') { name = it.n; who = it.n; const a = st.agenti?.[it.n] || {}; title = agentName(it.n); sub = ROLE[it.n] || ''; body = `<p class="why">${a.errore ? `<span class="down">${esc(a.errore)}</span>` : `${a.segnali ?? 0} segnali nell'ultimo giro`}${a.note?.length ? ` · ${esc(a.note.join(' · ')).slice(0, 260)}` : ''}</p>`; }
+    else if (it.kind === 'custode') { name = 'custodi'; who = `custode ${it.c.simbolo}`; const c = it.c; title = `Custode di ${c.simbolo}`; sub = FASI[c.fase] || c.fase; body = `${c.dossier ? `<p><b class="${c.dossier.probabilita >= 0.6 ? 'up' : c.dossier.probabilita < 0.45 ? 'down' : ''}">${Math.round(c.dossier.probabilita * 100)}% favorevole</b> · ${esc(c.dossier.prossimaAzione)}</p>` : ''}<p class="why"><b>Tesi.</b> ${esc(c.tesi)}</p><p class="why"><b>Piano.</b> ${esc(c.piano)}</p><p class="why"><b>Rischio.</b> ${esc(c.rischio)}</p>${c.dossier?.memoria?.trade ? `<p class="why"><b>Memoria.</b> ${esc(c.dossier.memoria.lezione)}</p>` : ''}`; }
+    else { name = 'intraday'; who = 'intraday'; const x = it.x; title = `Operatore intraday ${x.simbolo}`; sub = `candele ${x.candela} · ${x.fase}`; body = `<p class="why">${esc(x.motivo)}</p>${x.obiettivo ? `<p class="why">Ingresso ${px(x.ingresso)} · obiettivo <span class="up">${px(x.obiettivo)}</span> · stop <span class="down">${px(x.stop)}</span></p>` : ''}`; }
+    const v = val(who);
+    if (v) body += `<div class="vote"><b>Giudizio del capo:</b> <span class="pill ${v.giudizio === 'richiamato' ? 'down' : v.giudizio === 'ottimo' || v.giudizio === 'bene' ? 'up' : ''}">${esc(v.giudizio)}</span> <span class="why">${v.vinti}/${v.trade} vinti · ${usd(v.risultato)}</span><br><span class="why">${esc(v.messaggio)}</span>${v.consigli.length ? `<ul>${v.consigli.map((c) => `<li class="why">${esc(c)}</li>`).join('')}</ul>` : ''}</div>`;
+    const sc = sched(name);
+    if (sc) body += `<details open><summary>Impostazioni (${sc.parametri.length})</summary><p class="why">${esc(sc.come)}</p><table>${sc.parametri.map((p) => `<tr><td class="why">${esc(p.etichetta)}</td><td class="n ${p.cambiato ? 'agent-c' : ''}">${esc(fmtP(p))}</td></tr>`).join('')}</table></details>`;
+  }
+  card.innerHTML = `<button type="button" class="x" aria-label="chiudi">✕</button><div class="portrait"></div><h3>${esc(title)}</h3><div class="why">${esc(sub)}</div>${body}
+    <div class="row" style="margin-top:10px">${it.kind === 'custode' || it.kind === 'intraday' ? '<button type="button" class="btn" data-go="titolo">Apri il grafico</button>' : ''}${name || it.kind === 'capo' ? '<button type="button" class="btn ghost" data-go="schede">Modifica le impostazioni</button>' : ''}</div>`;
+  card.querySelector('.portrait').appendChild(portrait.renderer.domElement);
+  card.querySelector('.x').addEventListener('click', closeCard);
+  card.querySelector('[data-go="titolo"]')?.addEventListener('click', () => { selectSymbol(it.kind === 'custode' ? it.c.simbolo : it.x.simbolo); location.hash = 'titoli'; });
+  card.querySelector('[data-go="schede"]')?.addEventListener('click', () => { location.hash = 'agenti'; setTimeout(() => $('#schede')?.scrollIntoView({ behavior: 'smooth' }), 300); });
 }
 animate();
 
@@ -544,7 +873,7 @@ function sayState() {
     fix.hidden = false;
     fix.textContent = unauthorized
       ? `Controlla alpacaKeyId e alpacaSecretKey in secrets.ts (chiavi del conto paper, iniziano con PK) e riavvia il motore. Ultimo tentativo ${ago(lastAlarm.t)}.`
-      : `Il motore riprova da solo a ogni giro. Dettaglio: ${lastAlarm.dettaglio}`;
+      : `Il motore riprova da solo a ogni giro. Dettaglio: ${cleanErr(lastAlarm.dettaglio)}`;
     return;
   }
   const last = status?.aggiornato ?? lastTick?.t;
@@ -569,8 +898,9 @@ function sayState() {
   if (crypto) parts[0] += ' · crypto: sempre operative';
   if (status.allarmi?.length) {
     say.className = 'say warn';
-    say.textContent = `Il motore gira, ma c'è un avviso: ${status.allarmi[0]}`;
-    if (status.allarmi.length > 1) { fix.hidden = false; fix.textContent = status.allarmi.slice(1).join(' · '); }
+    say.textContent = `Il motore gira, ma c'è un avviso: ${cleanErr(status.allarmi[0]).split(' · ')[0]}`;
+    const rest = [...cleanErr(status.allarmi[0]).split(' · ').slice(1), ...status.allarmi.slice(1).map(cleanErr)];
+    if (rest.length) { fix.hidden = false; fix.textContent = rest.join(' · '); }
     return;
   }
   if (status.giornata?.obiettivoRaggiunto) {
@@ -639,7 +969,7 @@ function paintDecisions(st) {
   const items = [];
   for (const o of st.ordini || []) {
     const ok = o.esito.startsWith('inviato');
-    items.push(`<div class="decision"><div class="head"><span><span class="pill ${o.lato === 'buy' ? 'up' : 'down'}">${o.lato === 'buy' ? 'Comprato' : 'Venduto'}</span> <b>${qty(o.quantita)} ${esc(o.simbolo)}</b></span><span class="pill ${ok ? '' : 'warn'}">${ok ? 'ordine inviato' : esc(o.esito)}</span></div><div class="why">${esc(o.perche)}</div></div>`);
+    items.push(`<div class="decision"><div class="head"><span><span class="pill ${o.lato === 'buy' ? 'up' : 'down'}">${o.lato === 'buy' ? 'Comprato' : 'Venduto'}</span> <b>${qty(o.quantita)} ${esc(o.simbolo)}</b></span><span class="pill ${ok ? '' : 'warn'}">${ok ? 'ordine inviato' : esc(cleanErr(o.esito))}</span></div><div class="why">${esc(o.perche)}</div></div>`);
   }
   // I rifiuti con lo stesso motivo stanno su una riga sola: "mercato chiuso" per cinque titoli è una notizia, non cinque.
   const byReason = new Map();
@@ -650,7 +980,7 @@ function paintDecisions(st) {
   }
   const sp = st.stopSuAlpaca;
   if (sp && (sp.placed.length || sp.cancelled.length || sp.errors.length)) {
-    items.push(`<div class="decision"><div class="head"><span><span class="pill agent">Stop di protezione</span></span></div><div class="why">${sp.placed.length ? `Messi: ${sp.placed.map(esc).join(', ')}. ` : ''}${sp.cancelled.length ? `Tolti: ${sp.cancelled.map(esc).join(', ')}. ` : ''}${sp.errors.length ? `<span class="down">${sp.errors.map(esc).join('; ')}</span>` : ''}</div></div>`);
+    items.push(`<div class="decision"><div class="head"><span><span class="pill agent">Stop di protezione</span></span></div><div class="why">${sp.placed.length ? `Messi: ${sp.placed.map(esc).join(', ')}. ` : ''}${sp.cancelled.length ? `Tolti: ${sp.cancelled.map(esc).join(', ')}. ` : ''}${sp.errors.length ? `<span class="down">${sp.errors.map((x) => esc(cleanErr(x))).join('; ')}</span>` : ''}</div></div>`);
   }
   $('#decisions').innerHTML = items.join('') || `<p class="empty">Nessun ordine nell'ultimo giro.${sp ? ` Stop attivi: ${[...sp.ok, ...sp.placed].length || 'nessuno'}.` : ''}</p>`;
 }
@@ -673,29 +1003,13 @@ function paintAgents(st) {
   $('#journal').innerHTML = `${d ? `Trade chiusi ${d.trade}${d.trade ? `, vinti ${d.vinti}, media ${pct(d.attesa)}` : ''}.` : ''}${st.kronos ? ` Kronos: ${esc(st.kronos.stato)}${st.kronos.proiezioniDel ? ` (${st.kronos.simboli} proiezioni)` : ''}.` : ''}${st.universo?.crypto?.length ? ` Crypto seguite: ${st.universo.crypto.length}.` : ''}`;
 }
 
-function paintScene(st) {
-  const eq = st.conto?.patrimonio || 1;
-  const held = new Map((st.posizioni || []).map((p) => [p.simbolo, p]));
-  placeSymbols([...new Set([...Object.keys(st.prezzi || {}), ...held.keys()])]);
-  for (const [sym, s] of symbols) {
-    const p = held.get(sym);
-    const share = p ? p.valore / eq : 0;
-    s.targetH = Math.max(0.2, share * 18);
-    s.mesh.material.color.set(p ? (p.variazione >= 0 ? 0x2ecc71 : 0xe74c3c) : 0x3a4657);
-    s.mesh.material.emissive?.set(p ? (p.variazione >= 0 ? 0x0f3d22 : 0x4a1510) : 0x000000);
-    const price = st.prezzi?.[sym];
-    s.el.innerHTML = `<b>${esc(sym)}</b> ${price ? fmt(price) : ''}${p ? ` · ${(share * 100).toFixed(1)}% · <span class="${cls(p.variazione)}">${pct(p.variazione)}</span>` : ''}`;
-  }
-  placeAgents(Object.keys(st.agenti || {}).filter((n) => n !== 'custodi' && n !== 'intraday'));
-  placeFigures(st);
-}
 
 function paint(st) {
   status = st && st.versione === 1 ? st : null;
   sayState();
   if (!status) { $('#when').textContent = lastTick ? `ultimo giro iniziato ${hhmm(lastTick.t)}` : 'nessuno stato'; return; }
   $('#when').textContent = `ultimo giro ${hhmm(status.aggiornato)} (${ago(status.aggiornato)})`;
-  paintMoney(status); paintPositions(status); paintPnl(status); paintDecisions(status); paintScores(status); paintAgents(status); paintScene(status); paintCustodi(status); paintChips(status); paintIntraday(status); paintVotes(status); paintSimulazioni(status);
+  paintMoney(status); paintPositions(status); paintPnl(status); paintDecisions(status); paintScores(status); paintAgents(status); paintScene(status); paintCustodi(status); paintChips(status); paintIntraday(status); paintVotes(status); paintSimulazioni(status); paintCapo(status);
 }
 async function loadStatus() {
   try { paint(await (await fetch('/api/status')).json()); } catch (e) { $('#say').textContent = 'La dashboard non riesce a leggere lo stato.'; $('#fix').hidden = false; $('#fix').textContent = e.message; }
@@ -970,7 +1284,7 @@ function showPage() {
   for (const el of document.querySelectorAll('.page')) el.classList.toggle('on', el.dataset.page === currentPage);
   for (const a of document.querySelectorAll('.nav a')) { if (a.dataset.page === currentPage) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); }
   if (currentPage === 'titoli') { drawChart(); }
-  if (currentPage === '3d') resize();
+  if (currentPage === '3d') { resize(); loadOfficeData(); }
   if (currentPage === 'impostazioni') loadSettings();
   if (currentPage === 'agenti' && !$('#schede').children.length) loadCards();
   try { localStorage.setItem('agenti.pagina', currentPage); } catch {}
@@ -992,6 +1306,11 @@ function paintSimulazioni(st) {
   if (!list.length) { $('#simulazioni').innerHTML = '<p class="empty">Nessuna simulazione ancora: gli agenti osservano e votano, gli acquisti che proporrebbero compaiono qui.</p>'; return; }
   const tot = list.reduce((a, x) => a + (x.virtuale ?? 0), 0);
   $('#simulazioni').innerHTML = `<p class="why" style="margin-bottom:8px">Esito virtuale complessivo <b class="${cls(tot)}">${usd(tot)}</b> su ${list.length} operazioni simulate (nessun ordine inviato).</p><table><thead><tr><th>Titolo</th><th class="n">Quantità</th><th class="n">Prezzo simulato</th><th class="n">Ora</th><th class="n">Virtuale</th><th>Agenti</th></tr></thead><tbody>${list.map((x) => `<tr><td><b>${esc(x.simbolo)}</b><br><span class="why">${hhmm(x.quando)}</span></td><td class="n">${qty(x.quantita)}</td><td class="n">${px(x.prezzo)}</td><td class="n">${x.prezzoOra !== null ? px(x.prezzoOra) : '–'}</td><td class="n ${cls(x.virtuale ?? 0)}">${x.virtuale !== null ? `${usd(x.virtuale)}<br><span class="why">${pct(x.risultato)}</span>` : '–'}</td><td class="why">${(x.agenti || []).map(agentName).join(', ')}</td></tr>`).join('')}</tbody></table>`;
+}
+function paintCapo(st) {
+  const c = st.capo;
+  if (!c) { $('#capo').innerHTML = '<p class="empty">Nessun dato.</p>'; return; }
+  $('#capo').innerHTML = `<p>${esc(c.sintesi)}</p>${(c.valutazioni || []).map((v) => `<div class="vote"><b>${esc(agentName(v.agente))}</b> <span class="pill ${v.giudizio === 'richiamato' ? 'down' : v.giudizio === 'ottimo' || v.giudizio === 'bene' ? 'up' : ''}">${esc(v.giudizio)}</span> <span class="why">${v.vinti}/${v.trade} vinti · ${usd(v.risultato)}</span><br><span class="why">${esc(v.messaggio)}</span>${v.consigli.length ? `<ul style="margin:4px 0; padding-left:18px">${v.consigli.map((x) => `<li class="why">${esc(x)}</li>`).join('')}</ul>` : ''}</div>`).join('')}`;
 }
 function paintVotes(st) {
   const sig = st.segnali || [];
@@ -1082,18 +1401,19 @@ function describe(e) {
     case 'tick': return `Nuovo giro ${esc(e.giro)}`;
     case 'conto': return `Patrimonio ${money(e.patrimonio)}, oggi ${usd(e.pnlGiorno)}, borsa ${e.mercatoAperto ? 'aperta' : 'chiusa'}`;
     case 'prezzi': return `Prezzi letti: ${Object.entries(e.prezzi || {}).map(([k, v]) => `${esc(k)} ${fmt(v)}`).join(', ')}`;
-    case 'agente': return `<span class="pill agent">${agentName(e.agente)}</span> ${e.errore ? `<span class="down">${esc(e.errore)}</span>` : `${e.segnali === 0 ? 'nessun segnale' : `${e.segnali} segnali`}${e.rischio !== null && e.rischio !== undefined ? `, rischio ammesso ${Math.round(e.rischio * 100)}%` : ''}${e.note?.length ? `. ${e.note.map(esc).join(' ')}` : ''}`}`;
+    case 'agente': return `<span class="pill agent">${agentName(e.agente)}</span> ${e.errore ? `<span class="down">${esc(cleanErr(e.errore))}</span>` : `${e.segnali === 0 ? 'nessun segnale' : `${e.segnali} segnali`}${e.rischio !== null && e.rischio !== undefined ? `, rischio ammesso ${Math.round(e.rischio * 100)}%` : ''}${e.note?.length ? `. ${e.note.map(esc).join(' ')}` : ''}`}`;
     case 'segnale': return `<span class="pill agent">${agentName(e.agente)}</span> vota <span class="${e.lato === 'buy' ? 'up' : 'down'}"><b>${side(e.lato)} ${esc(e.simbolo)}</b></span> con forza ${Number(e.forza).toFixed(2).replace('.', ',')}: ${esc(e.perche)}`;
     case 'contesto': return `Contesto economico <b>${esc(e.generale)}</b>: ${esc(e.motivo)}${Object.keys(e.attendi || {}).length ? `. In attesa: ${Object.keys(e.attendi).map(esc).join(', ')}` : ''}`;
     case 'rischio': return `Rischio ammesso ${Math.round(e.rischio * 100)}%${(e.note || []).length ? `: ${e.note.map(esc).join(' ')}` : ''}`;
     case 'allocazione': return `Proposte: ${(e.proposte || []).map((p) => `${side(p.side)} ${qty(p.qty)} ${esc(p.symbol)}`).join(', ') || 'nessuna'}`;
-    case 'ordine': return `<span class="pill ${e.lato === 'buy' ? 'up' : 'down'}">${e.lato === 'buy' ? 'Comprato' : 'Venduto'}</span> <b>${qty(e.quantita)} ${esc(e.simbolo)}</b> — ${esc(e.esito)}${e.stato ? ` (${esc(e.stato)})` : ''}${e.errore ? ` <span class="down">${esc(e.errore)}</span>` : ''}`;
+    case 'ordine': return `<span class="pill ${e.lato === 'buy' ? 'up' : 'down'}">${e.lato === 'buy' ? 'Comprato' : 'Venduto'}</span> <b>${qty(e.quantita)} ${esc(e.simbolo)}</b> — ${esc(e.esito)}${e.stato ? ` (${esc(e.stato)})` : ''}${e.errore ? ` <span class="down">${esc(cleanErr(e.errore))}</span>` : ''}`;
     case 'rifiuto': return `<span class="pill">Fermato dalle regole</span> ${side(e.lato)} ${qty(e.quantita)} <b>${esc(e.simbolo)}</b>: ${esc(e.motivo)}`;
-    case 'stop': return `Stop di protezione ${e.azione === 'piazzato' ? 'messo' : 'tolto'}: ${esc(e.dettaglio)}`;
+    case 'stop': return `Stop di protezione ${e.azione === 'piazzato' ? 'messo' : 'tolto'}: ${esc(cleanErr(e.dettaglio))}`;
     case 'trade': return e.stato === 'aperto'
       ? `<span class="pill up">Posizione aperta</span> <b>${esc(e.simbolo)}</b> ${qty(e.quantita)} a ${fmt(e.prezzo)}${(e.agenti || []).length ? ` su voto di ${e.agenti.map(agentName).join(', ')}` : ''}`
       : `<span class="pill ${cls(e.risultato)}">Posizione chiusa</span> <b>${esc(e.simbolo)}</b> <span class="${cls(e.risultato)}"><b>${e.pnl !== undefined ? usd(e.pnl) : ''}</b> (${pct(e.risultato)})</span> dopo ${e.giorni} giorni: ${esc(e.uscita)}`;
-    case 'allarme': return `<b>${esc(e.titolo)}</b>: ${esc(e.dettaglio)}`;
+    case 'capo': return `<span class="pill agent">Capo ufficio</span> ${esc(e.sintesi)}${(e.richiamati || []).length ? ` <span class="down">Richiamati: ${e.richiamati.map((r) => esc(r.agente)).join(', ')}</span>` : ''}`;
+    case 'allarme': return `<b>${esc(e.titolo)}</b>: ${esc(cleanErr(e.dettaglio))}`;
     default: return esc(e.testo ?? JSON.stringify(e));
   }
 }
@@ -1121,10 +1441,7 @@ function addEvent(e, live) {
   if (allEvents.length > 2000) allEvents.length = 2000;
   if (!live) return;
   renderEvents();
-  if (e.tipo === 'segnale') { const a = agents.get(e.agente), s = symbols.get(e.simbolo); if (a && s) { beam(a.pos, s.pos, e.lato === 'buy' ? 0x3fb950 : 0xf85149); a.pulse = 0.6; } }
-  if (e.tipo === 'agente') { const a = agents.get(e.agente); if (a) a.pulse = 0.4; }
-  if (e.tipo === 'ordine' && e.esito === 'inviato') { pulse(e.simbolo, e.lato === 'buy' ? 0x3fb950 : 0xf85149); for (const f of figures.values()) if (f.group.userData.sym === e.simbolo) f.group.userData.bob = Math.PI / 2; }
-  if (e.tipo === 'rifiuto') { const s = symbols.get(e.simbolo); if (s) beam(new THREE.Vector3(s.pos.x * 1.9, 0.3, s.pos.z * 1.9), s.pos, 0xf85149, 1200); }
+  sceneEvent(e);
   if (e.tipo === 'nota' && /proiezioni/.test(e.testo || '')) { forecasts = null; if (selected) loadSymbol(selected); }
   if (e.tipo === 'prezzi' || e.simbolo === selected || (e.tipo === 'stop' && String(e.dettaglio || '').startsWith(selected + ' '))) { drawChart(); if (e.tipo !== 'prezzi') renderFeed(); }
   if (e.tipo === 'tick' || e.tipo === 'allocazione' || e.tipo === 'allarme') loadStatus(); else sayState();
@@ -1138,10 +1455,20 @@ async function loadEvents() {
   } catch {}
 }
 function connect() {
+  if (window.STATIC_MODE) { // niente websocket: si rilegge l'istantanea ogni minuto
+    $('#live').classList.add('on'); $('#live').title = 'pagina pubblica: istantanea aggiornata dal motore';
+    setInterval(async () => { await loadEvents(); await loadStatus(); }, 60_000);
+    return;
+  }
   const ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`);
   ws.onopen = () => { $('#live').classList.add('on'); $('#live').title = 'collegato al motore in diretta'; };
   ws.onmessage = (m) => { try { addEvent(JSON.parse(m.data), true); } catch {} };
   ws.onclose = () => { $('#live').classList.remove('on'); $('#live').title = 'collegamento interrotto, riprovo'; setTimeout(connect, 3000); };
+}
+if (window.STATIC_MODE) {
+  // pagina pubblica: niente chiavi, niente modifiche, niente valutazioni in diretta
+  document.querySelector('.page[data-page="impostazioni"]').innerHTML = '<section class="card"><h2>Impostazioni</h2><p class="why">Questa è la pagina pubblica, in sola lettura: chiavi, schede e riavvio si gestiscono dalla dashboard sul PC (http://127.0.0.1:8787).</p></section>';
+  $('#ask').disabled = true; $('#ask').title = 'disponibile solo sulla dashboard del PC';
 }
 (async () => { await loadEvents(); await loadStatus(); connect(); })();
 setInterval(loadStatus, 15000);

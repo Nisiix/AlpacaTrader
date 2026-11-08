@@ -25,6 +25,7 @@ import { romeTime } from "../slots.ts";
 import { manageStops, type StopsReport } from "../stops.ts";
 import type { Notifier } from "../telegram.ts";
 import { agentWeights, allocate, openedToday, type Score } from "./allocator.ts";
+import { applyGuidance, review, type CapoReport } from "./capo.ts";
 import type { EventBus } from "./bus.ts";
 import { ContextAgent } from "./context.ts";
 import type { Agent, AgentReport, AgentView, MarketContext, Signal } from "./types.ts";
@@ -86,6 +87,8 @@ export interface AgentsStatus {
   giornata: { pnlPct: number; obiettivoPct: number; perditaMaxPct: number; obiettivoRaggiunto: boolean; perditaOltre: boolean };
   // Operazioni simulate di oggi (dopo il tetto del giorno), con l'esito virtuale ai prezzi correnti.
   simulazioni: Simulazione[];
+  // Il capo ufficio: sintesi, migliori, giudizio e consigli per ogni agente.
+  capo: CapoReport;
 }
 
 export const statusPath = (stateDir: string) => join(stateDir, "agents-status.json");
@@ -110,6 +113,7 @@ export interface EngineCache {
   previsioni?: { date: string; data: Record<string, KronosForecastPath> };
   // Avviso Telegram dell'obiettivo/perdita del giorno: una volta sola al giorno.
   giornataAvvisata?: string;
+  capoSintesi?: string;
 }
 
 export const emptyCache = (): EngineCache => ({ closes: {}, bars: {}, ultimoRiepilogo: null });
@@ -375,6 +379,16 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
         }
       }),
     );
+    // Il capo ufficio: rivede i risultati di ciascun agente sul diario e applica i suoi richiami ai voti di oggi.
+    const capo = review(journal, startedAt);
+    for (const n of applyGuidance(reports, capo, view.previsioni)) {
+      log.info(n);
+      bus.emit("nota", { testo: n });
+    }
+    if (cache.capoSintesi !== capo.sintesi) {
+      cache.capoSintesi = capo.sintesi;
+      bus.emit("capo", { sintesi: capo.sintesi, richiamati: capo.valutazioni.filter((v) => v.giudizio === "richiamato").map((v) => ({ agente: v.agente, messaggio: v.messaggio, consigli: v.consigli })) });
+    }
     const weights = agentWeights(journal, today, deps.agents.map((a) => a.name));
     const alloc = allocate(view, reports, weights);
     for (const w of alloc.inAttesa) bus.emit("rifiuto", { simbolo: w.simbolo, lato: "buy", quantita: 0, origine: "contesto", motivo: w.motivo });
@@ -407,6 +421,7 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
       const proposed = alloc.proposte.find((p) => p.symbol === o.symbol && p.side === o.side);
       const ctx = contextFor(indicators[o.symbol], snap.prices[o.symbol], o.source === "modello" ? (proposed?.confidence ?? null) : null, o.source === "modello" ? (proposed?.expect ?? "") : "", o.why);
       if (o.source === "modello" && sc) ctx.agenti = sc.agenti;
+      if (view.previsioni?.[o.symbol] !== undefined) ctx.kronos = view.previsioni[o.symbol];
       recordIntent(journal, { id: clientOrderId(runIdFor(o.side), o.symbol, o.side), simbolo: o.symbol, lato: o.side, origine: o.source === "modello" ? "agenti" : o.source, data: today, contesto: ctx });
     }
     if (cage.orders.length) writeJournal(deps.stateDir, journal);
@@ -512,6 +527,7 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
       kronos: { stato: deps.kronosStato?.() ?? (deps.forecaster ? "attivo" : "non configurato"), proiezioniDel: cache.previsioni?.date ?? null, simboli: Object.keys(cache.previsioni?.data ?? {}).length },
       giornata: { pnlPct, obiettivoPct: AGENTS.daily.targetPct, perditaMaxPct: AGENTS.daily.maxLossPct, obiettivoRaggiunto: giornata.obiettivoRaggiunto, perditaOltre: giornata.perditaOltre },
       simulazioni,
+      capo,
     };
     writeJsonAtomic(statusPath(deps.stateDir), status);
     log.info(`giro ${giro}: ${status.segnali.length} segnali, ${alloc.proposte.length} proposte, ${outcomes.length} ordini, ${cage.rejected.length} rifiuti, rischio ${alloc.rischio}`);

@@ -25,6 +25,7 @@ import { ensureKronos, pathForecaster, type KronosLink } from "../kronos-sidecar
 import { appendFileSync, existsSync, mkdirSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { parseArgs } from "./args.ts";
+import { publishPages } from "../pages.ts";
 
 // Codice di uscita che chiede ad avvia-bot.cmd di rilanciare il motore.
 const RESTART_CODE = 75;
@@ -115,6 +116,18 @@ try {
     quit(RESTART_CODE);
   }, 5_000);
   watcher.unref();
+  // GitHub Pages (se acceso nelle schede): istantanea in sola lettura pubblicata ogni N minuti con il git del PC.
+  if (!args.fake) {
+    let lastPages = 0;
+    const pagesTimer = setInterval(async () => {
+      if (!AGENTS.pages.enabled || Date.now() - lastPages < AGENTS.pages.everyMinutes * 60_000) return;
+      lastPages = Date.now();
+      const r = await publishPages(ROOT, deps.stateDir);
+      console.log(`${new Date().toISOString()} pagina pubblica: ${r.messaggio}`);
+      bus.emit("nota", { testo: `pagina pubblica: ${r.messaggio}` });
+    }, 30_000);
+    pagesTimer.unref();
+  }
   await runEngine(engine, (args.tick ?? AGENTS.tickMinutes) * 60_000, () => stop, cache);
   kronos?.stop();
   process.exit(exitCode);

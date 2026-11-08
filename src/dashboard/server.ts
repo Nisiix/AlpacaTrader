@@ -62,6 +62,8 @@ export function startDashboard(o: DashboardOptions) {
         const r = readJson(barsPath(o.stateDir), isObject) as { kind: string; value?: any };
         if (r.kind !== "ok") return Response.json({ aggiornato: null, barre: sym ? [] : {} , nota: "barre non ancora scaricate: arrivano col primo giro" });
         const all = (r.value.barre ?? {}) as Record<string, unknown[]>;
+        const ultime = Number(url.searchParams.get("ultime") ?? 0);
+        if (!sym && ultime > 0) return Response.json({ aggiornato: r.value.aggiornato, barre: Object.fromEntries(Object.entries(all).map(([k, v]) => [k, v.slice(-Math.min(ultime, 120))])) });
         return Response.json(sym ? { aggiornato: r.value.aggiornato, simbolo: sym, barre: all[sym] ?? [] } : { aggiornato: r.value.aggiornato, simboli: Object.keys(all) });
       }
       if (url.pathname === "/api/previsioni") {
