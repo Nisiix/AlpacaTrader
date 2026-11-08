@@ -11,6 +11,7 @@ import { HorizonAgent } from "../src/agents/horizon.ts";
 import { KronosAgent } from "../src/agents/kronos.ts";
 import { PullbackAgent } from "../src/agents/pullback.ts";
 import { RegimeAgent } from "../src/agents/regime.ts";
+import { TakeProfitAgent } from "../src/agents/takeprofit.ts";
 import { TrendAgent } from "../src/agents/trend.ts";
 import type { Agent, AgentView } from "../src/agents/types.ts";
 import { evaluateBreaker } from "../src/breaker.ts";
@@ -563,5 +564,24 @@ describe("contesto economico", () => {
     // Proiezioni negative su tutto, ma senza fiducia (Fed vicina) non fanno uscire: nessuna vendita vincolante.
     expect(r.status_file!.ordini.filter((o) => o.lato === "sell")).toEqual([]);
     expect(readEvents(env.stateDir, "2026-09-24").some((e) => e.tipo === "contesto")).toBe(true);
+  });
+});
+
+describe("presa di profitto parziale", () => {
+  test("a +5% vende metà una volta sola (vincolante); il resto resta col trend", () => {
+    const j = emptyJournal();
+    j.trade.push({ id: "t", simbolo: "SPY", stato: "aperto", apertoIl: "2026-09-01T14:00:00Z", comprate: 20, costo: 12_000, vendute: 0, incassato: 0, quantita: 20, contesto: null });
+    const v = view({ positions: [{ symbol: "SPY", qty: 20, avgEntryPrice: 600, currentPrice: 631, marketValue: 12_620 }], journal: j });
+    v.prices.SPY = 631;
+    const r = new TakeProfitAgent(0.05, 0.5).observe(v);
+    expect(r.segnali[0]!.frazione).toBe(0.5);
+    expect(r.segnali[0]!.vincolante).toBe(true);
+    const a = allocate(v, { profitto: r, trend: { segnali: [{ agente: "trend", simbolo: "SPY", lato: "buy", forza: 1, orizzonteSedute: 60, perche: "" }] } }, { profitto: 1, trend: 1 });
+    expect(a.proposte).toEqual([{ symbol: "SPY", side: "sell", qty: 10, why: expect.stringContaining("il resto corre col trend"), confidence: "alta", expect: "presa di profitto parziale" }]);
+    // Già alleggerito: niente seconda vendita.
+    j.trade[0]!.quantita = 10;
+    j.trade[0]!.vendute = 10;
+    v.positions[0]!.qty = 10;
+    expect(new TakeProfitAgent(0.05, 0.5).observe(v).segnali).toEqual([]);
   });
 });

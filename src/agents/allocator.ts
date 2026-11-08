@@ -88,7 +88,9 @@ export function allocate(view: AgentView, reports: Record<string, AgentReport>, 
     const p = held.get(s.simbolo);
     if (!p) continue;
     forced.add(s.simbolo);
-    proposte.push({ symbol: s.simbolo, side: "sell", qty: p.qty, why: `${s.agente}: ${s.perche}`, confidence: "alta", expect: "regola di rischio" });
+    const qty = s.frazione && s.frazione < 1 ? roundQty(s.simbolo, p.qty * s.frazione) : p.qty;
+    if (qty <= 0) continue;
+    proposte.push({ symbol: s.simbolo, side: "sell", qty, why: `${s.agente}: ${s.perche}`, confidence: "alta", expect: s.frazione && s.frazione < 1 ? "presa di profitto parziale" : "regola di rischio" });
   }
   for (const sc of punteggi) {
     const p = held.get(sc.simbolo);

@@ -63,10 +63,10 @@ try {
   const base = () => [new TrendAgent(), new PullbackAgent(), new RegimeAgent(), new HorizonAgent(), new ContextAgent(null, [])];
   const ex = AGENTS.exit;
   const variants: [string, () => ReturnType<typeof runAgentsBacktest>][] = [
-    [`DI SERIE: trend con momentum assoluto a 12 mesi, rientro RSI(2) a taglia ridotta, regime, orizzonte ${AGENTS.horizonSessions} sedute, contesto, volatilità di portafoglio ${(AGENTS.volTarget.annual * 100).toFixed(0)}%, stop sulla volatilità, uscita di trend della gabbia`, () => runAgentsBacktest(closes, 100_000, undefined, [...base(), new ExitAgent()])],
-    ["come sopra + trailing a 3 ATR dal massimo", () => runAgentsBacktest(closes, 100_000, undefined, [...base(), new ExitAgent({ ...ex, trailAtr: 3 })])],
+    [`DI SERIE: trend con momentum assoluto a 12 mesi, rientro RSI(2) a taglia ridotta, regime, orizzonte ${AGENTS.horizonSessions} sedute, contesto, volatilità di portafoglio ${(AGENTS.volTarget.annual * 100).toFixed(0)}%, stop sulla volatilità, uscita di trend della gabbia${AGENTS.takeProfit.enabled ? `, presa di profitto ${AGENTS.takeProfit.fraction < 1 ? `parziale (${(AGENTS.takeProfit.fraction * 100).toFixed(0)}%)` : "totale"} a +${(AGENTS.takeProfit.pct * 100).toFixed(0)}%` : ""}`, () => runAgentsBacktest(closes, 100_000, undefined, [...base(), new ExitAgent(), ...(AGENTS.takeProfit.enabled ? [new TakeProfitAgent()] : [])])],
+    ["senza presa di profitto (trend puro)", () => runAgentsBacktest(closes, 100_000, undefined, [...base(), new ExitAgent()])],
+    ["presa di profitto totale a +5%", () => runAgentsBacktest(closes, 100_000, undefined, [...base(), new ExitAgent(), new TakeProfitAgent(0.05, 1)])],
     [`vecchia politica: uscite a obiettivo +${(ex.targetPct * 100).toFixed(0)}% (+4% GLD/MSFT/QQQ), stop fisso -${(ex.stopPct * 100).toFixed(0)}%`, () => runAgentsBacktest(closes, 100_000, undefined, [...base(), new ExitAgent({ ...ex, mode: "obiettivo", stopMode: "fisso" })])],
-    [`presa di profitto secca a +${(AGENTS.takeProfit.pct * 100).toFixed(0)}% con stop sulla volatilità`, () => runAgentsBacktest(closes, 100_000, undefined, [...base(), new TakeProfitAgent(), new ExitAgent({ ...ex, mode: "trend" })])],
   ];
   for (const [label, run] of variants) {
   const a = run();
@@ -75,6 +75,11 @@ try {
   console.log(`Acquisti ${a.buys} · vendite ${a.sells} (dagli agenti ${a.agentSells}, di cui regole di uscita ${a.exitRuleSells}; uscite di trend ${a.trendExits}; stop della gabbia ${a.stopOuts}) · interruttore scattato ${a.breakerTrips} volte · durata media ${a.avgHoldDays.toFixed(0)} giorni`);
   console.log(`Trade chiusi: ${st(a.stats)}${a.learningFrom ? ` · il diario pesa gli agenti dal ${a.learningFrom}` : " · diario mai attivo (troppo pochi trade)"}`);
   for (const [k, v] of Object.entries(a.perAgent)) console.log(`  ${k}: ${st(v)} · peso finale ${a.finalWeights[k] ?? 1}`);
+  const dd = a.daily;
+  const pc = (x: number, n: number) => (n ? `${((x / n) * 100).toFixed(0)}%` : "–");
+  console.log(`Complessivo: trade chiusi ${dd.profittoTrade >= 0 ? "+" : ""}${dd.profittoTrade.toFixed(0)} $ (vinti +${dd.profittoTradeVinti.toFixed(0)} $, persi ${dd.perditaTradePersi.toFixed(0)} $) su 100.000 $ iniziali`);
+  console.log(`Giorno per giorno: ${dd.giorniPositivi} positivi, ${dd.giorniNegativi} negativi, ${dd.giorniPiatti} piatti su ${dd.giorni} (positivi ${pc(dd.giorniPositivi, dd.giorniPositivi + dd.giorniNegativi)} dei giorni mossi) · media ${p(dd.mediaGiornaliera)} al giorno · giorno positivo medio ${p(dd.mediaGiornoPositivo)}, negativo medio ${p(dd.mediaGiornoNegativo)} · peggior giorno ${p(dd.peggiorGiorno)}, migliore ${p(dd.migliorGiorno)} · serie negativa più lunga ${dd.serieNegativaMassima} giorni`);
+  console.log(`Settimane positive ${dd.settimanePositive} su ${dd.settimane} (${pc(dd.settimanePositive, dd.settimane)}) · mesi positivi ${dd.mesiPositivi} su ${dd.mesi} (${pc(dd.mesiPositivi, dd.mesi)})`);
   console.log("Rifiuti della gabbia per motivo:");
   for (const [k, v] of Object.entries(a.rejectedByCage).sort((x, y) => y[1] - x[1])) console.log(`  ${v} × ${k}`);
   }

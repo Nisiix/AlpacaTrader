@@ -15,6 +15,8 @@ export interface Signal {
   vincolante?: boolean;
   // Comparto a taglia ridotta (es. il rientro): peso massimo del titolo se lo votano solo segnali con questo limite.
   pesoMassimo?: number;
+  // Vendita vincolante parziale: quota della posizione da vendere (1 = tutta).
+  frazione?: number;
 }
 
 export interface AgentView {

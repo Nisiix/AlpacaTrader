@@ -28,7 +28,7 @@ il lock e gli ID deterministici evitano doppioni anche con le sveglie classiche.
 | `contesto` | **prima di ogni trade**: situazione economica generale e per settore (regole sui dati: SPY e media a 200, volatilità, oro e obbligazioni in salita con SPY in calo, titoli del settore sotto la 50, Fed nei prossimi 2 giorni; più, se c'è `claude -p`, una lettura con ricerca web ogni 6 ore in `state/macro.json`) | nessun ordine: esposizione × 0,75 (neutro) o × 0,5 (sfavorevole); con contesto sfavorevole nel settore **non si apre niente e si aspetta la candela successiva**; la proiezione di Kronos guida ingressi e uscite **solo** con contesto favorevole |
 | `uscite` | ogni posizione: perdita dal carico, massimo visto, proiezione di Kronos se il contesto si fida | **vincolante** (non si vota). Di serie (`mode: "trend"`): stop **scalato sulla volatilità** (2,5 × vol × √5, tra 5% e 10%, anche come stop GTC su Alpaca), nessun obiettivo (l'uscita normale è il trend della gabbia), proiezione negativa: esce subito. Opzioni: `trailAtr` per uscire anche a N ATR dal massimo; `mode: "obiettivo"` per la vecchia politica a +3%/+4% con stop fisso -3% |
 | `kronos` (opzionale) | previsioni del modello a 5 sedute, solo il 25% più nette e nel verso del trend | compra/vende (0,5); le stesse proiezioni guidano `uscite` |
-| `profitto` (opzionale, `--profitto`) | guadagno oltre +2% | vende (1) |
+| `profitto` | guadagno oltre +3% su un trade non ancora alleggerito | **vincolante**: vende metà e lascia correre il resto col trend (`AGENTS.takeProfit`: `fraction` 1 per vendere tutto, `enabled: false` per spegnerlo) |
 
 L'**allocatore** somma i segnali pesati (peso 1 per tutti finché il diario non ha un campione; poi 0,5 a chi perde,
 1,2 a chi vince con campione affidabile), compra sopra 0,5 e vende sotto -0,5; il peso obiettivo di un titolo è il massimo
@@ -69,23 +69,27 @@ powershell -ExecutionPolicy Bypass -File installa-windows.ps1
 ### Backtest del motore (dati Alpaca, esecuzione alla chiusura, costi 5 punti base per lato)
 
 Configurazione di serie: momentum assoluto a 12 mesi, rientro RSI(2) a taglia ridotta, regime, orizzonte 60 sedute, contesto
-economico (regole), volatilità di portafoglio 12%, stop sulla volatilità, uscita di trend della gabbia.
+economico (regole), volatilità di portafoglio 12%, stop sulla volatilità, uscita di trend della gabbia, presa di profitto
+parziale (metà a +3%, scelta con `bun run sweep`, walk-forward 2021-2023 → 2024-2026).
 
-| Periodo | Variante | Rendimento | Perdita max | Trade | Vinti | Attesa/trade |
-|---|---|---|---|---|---|---|
-| 2024-2026 (497 sedute) | **di serie** | **+17,6%** | **-5,6%** | 66 | 30% | +1,36% |
-| | SPY / 60-40 / GTAA Faber | +26,0% / +15,5% / +15,6% | | | | |
-| | + trailing a 3 ATR dal massimo | -1,2% | -7,7% | 76 | 29% | -0,42% |
-| | vecchia politica: obiettivo +3%/+4%, stop fisso -3% | +10,5% | -7,9% | 170 | 46% | +0,44% |
-| | presa di profitto secca +2% | +11,7% | -5,5% | 82 | 41% | +0,71% |
-| 2021-2026 (1327 sedute) | **di serie** | **+66,2%** | **-7,9%** | 165 | 40% | +2,06% |
-| | SPY / 60-40 / GTAA Faber | +79,8% / +34,3% / +84,7% | SPY -25% nel 2022 | | | |
-| | + trailing a 3 ATR | +30,6% | -9,5% | 230 | 40% | +0,89% |
-| | vecchia politica: obiettivo +3%/+4%, stop fisso -3% | +44,5% | -7,4% | 431 | 51% | +0,69% |
-| | presa di profitto secca +2% | +50,1% | -7,4% | 200 | 44% | +1,51% |
+| Periodo | Variante | Rendimento | Perdita max | Trade | Vinti | Attesa/trade | Giorni + | Mesi + |
+|---|---|---|---|---|---|---|---|---|
+| 2021-2026 (1327 sedute) | **di serie** | **+65,1%** | **-7,6%** | 162 | 43% | +1,35% | 53% | 55% |
+| | trend puro (senza presa di profitto) | +66,2% | -7,9% | 165 | 40% | +2,06% | 52% | 55% |
+| | presa di profitto totale +5% | +42,1% | -7,4% | 281 | 49% | +0,96% | 52% | 56% |
+| | vecchia politica: obiettivo +3%/+4%, stop fisso -3% | +44,5% | -7,4% | 431 | 51% | +0,69% | 53% | 53% |
+| | SPY / 60-40 / GTAA Faber | +79,8% / +34,3% / +84,7% | SPY -25% nel 2022 | | | | | |
+| 2024-2026 (497 sedute) | **di serie** | +12,8% | -6,1% | 70 | 36% | +0,18% | 54% | 65% |
+| | trend puro | +17,6% | -5,6% | 66 | 30% | +1,36% | 54% | 74% |
+| | SPY / 60-40 / GTAA Faber | +26,0% / +15,5% / +15,6% | | | | | | |
 
-Qualunque vantaggio di backtest va tagliato del 25-50% (McLean-Pontiff). Le crypto (`--crypto`) restano fuori di serie:
-nel loro periodo (2025-2026) tolgono rendimento in ogni variante.
+Il complessivo è positivo in tutti i periodi (2021-2026: +69.500 $ dai trade chiusi su 100.000 $, vinti +104.300 $,
+persi -34.700 $). Giorno per giorno si chiude in positivo il 53-54% delle volte: nessuna strategia pubblicata fa meglio di
+così con costanza, il guadagno sta nel fatto che i giorni buoni valgono più dei cattivi. Qualunque vantaggio di backtest
+va tagliato del 25-50% (McLean-Pontiff). Le crypto (`--crypto`) restano fuori di serie.
+
+`bun run sweep [--days 2600]` ripete l'ottimizzazione prudente: 40 combinazioni (presa di profitto, trailing, stop,
+finestra del momentum), scelte sul primo 60% dello storico e verificate sul resto.
 
 ## Sveglie (modalità classica)
 

@@ -13,7 +13,8 @@
     "backtest": "bun src/cli/backtest.ts",
     "cloud-wake": "bun src/cli/cloud-wake.ts",
     "agents": "bun src/cli/agents.ts",
-    "dashboard": "bun src/cli/dashboard.ts"
+    "dashboard": "bun src/cli/dashboard.ts",
+    "sweep": "bun src/cli/sweep.ts"
   },
   "devDependencies": {
     "bun-types": "1.4.4",

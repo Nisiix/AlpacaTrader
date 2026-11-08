@@ -612,3 +612,45 @@ della richiesta "3-4% a trade costante", ma è l'unico profilo che i dati e la l
 
 `installa-windows.ps1` (nel repo) crea il progetto in `D:\Applicazioni\WebDev\Bot alpaca agents`, aggiorna il branch se la
 cartella esiste già, installa, crea `secrets.ts`, lancia i test e mette il collegamento sul desktop. Vedi README.
+
+
+---
+
+## Addendum (8 novembre, notte): verifica del complessivo e ottimizzazione prudente dei vinti
+
+### Il complessivo è positivo? Sì, e così si distribuisce
+
+| Periodo (di serie) | Profitto dai trade chiusi | Giorni positivi / negativi / piatti | Media al giorno | Peggior giorno | Serie negativa max | Settimane + | Mesi + |
+|---|---|---|---|---|---|---|---|
+| 2021-2026 | +69.542 $ (vinti +104.288 $, persi -34.746 $) | 596 / 526 / 204 (53% dei giorni mossi) | +0,04% | -3,08% | 7 giorni | 138 su 266 (52%) | 34 su 62 (55%) |
+| 2024-2026 | +15.126 $ (vinti +29.910 $, persi -14.784 $) | 259 / 224 / 13 (54%) | +0,03% | -2,79% | 7 giorni | 58 su 100 (58%) | 15 su 23 (65%) |
+
+Il "complessivo giornaliero positivo" inteso come ogni giorno in utile non esiste in nessuna strategia; quello che si può
+chiedere, e qui c'è, è che la somma sia positiva, che i giorni buoni superino i cattivi (53-54%) e valgano un po' di più
+(+0,41% contro -0,37%), che le serie negative restino corte (massimo 7 giorni) e che i mesi positivi siano la maggioranza.
+
+### Ottimizzazione prudente della quota di vinti (`bun run sweep`)
+
+Metodo: 40 combinazioni di quattro parametri robusti (presa di profitto: nessuna, totale a +5%, metà a +3/+5/+8%;
+trailing 0 o 5 ATR; stop ×2,5 o ×3,5; momentum assoluto a 6 o 12 mesi), **scelte sul 2021-2023 e verificate sul
+2024-2026**, mai sullo stesso periodo. Costi inclusi.
+
+| Configurazione | Addestramento: vinti / rendimento | Prova: vinti / attesa / rendimento / perdita max |
+|---|---|---|
+| base (trend puro) | 49% / +34,2% | 32% / +1,6% / +26,5% / -7,1% |
+| **metà a +3%** (adottata) | 53% / +33,1% | **37% / +0,8% / +25,7% / -6,3%** |
+| metà a +5% | 55% / +33,7% | 35% / +0,6% / +21,7% / -7,1% |
+| totale a +5% | 57% / +20,0% | 45% / +0,7% / +17,4% / -6,3% |
+| trailing 5 ATR (senza presa di profitto) | 49% / +35,3% | 32% / +1,5% / +25,4% / -6,6% |
+
+Lezioni: (1) la quota di vinti in addestramento è sempre più alta che in prova, di 5-12 punti: è il motivo per cui si
+verifica fuori campione; (2) stop ×2,5 o ×3,5 cambiano nulla (il tetto del 10% li rende uguali); (3) il momentum a 6 mesi
+rende di più in addestramento ma con meno vinti, e in prova è pari: resta il 12 mesi; (4) la presa di profitto totale
+compra 13 punti di vinti con 9 punti di rendimento: non è "sicura"; (5) **vendere metà a +3%** è l'unica leva che alza i
+vinti (+5 punti) senza pagare in rendimento né in perdita massima nella prova. Sul 2021-2026 completo costa 1 punto
+(+65,1% contro +66,2%) e abbassa la perdita massima; sul solo 2024-2026 costa 5 punti (+12,8% contro +17,6%): il prezzo
+della costanza è una fetta delle corse più lunghe. Si spegne con `AGENTS.takeProfit.enabled = false`.
+
+Limite onesto: oltre il 40-45% di vinti non si va senza tagliare il rendimento, perché il motore è trend following:
+guadagna con pochi trade grandi. Chi vuole il 60% di vinti deve accettare attese per trade sotto l'1% e rendimenti
+dimezzati, come mostrano la presa di profitto totale e la vecchia politica a obiettivo fisso.

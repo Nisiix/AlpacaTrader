@@ -146,8 +146,10 @@ export const AGENTS = {
   kronos: { topShare: 0.25, horizon: 5, timeoutMs: 90_000 },
   // Riepilogo su Telegram una volta al giorno, alla prima passata dopo quest'ora di Roma.
   summaryAfter: "22:05",
-  // Presa di profitto secca (agente "profitto"): spenta di serie, si accende con --profitto; il backtest la misura.
-  takeProfit: { enabled: false, pct: 0.02 },
+  // Presa di profitto parziale (agente "profitto"): a +3% vende metà e lascia correre il resto col trend. Scelta col
+  // walk-forward (bun run sweep): in prova alza i vinti dal 32% al 37% con rendimento quasi uguale e perdita massima minore.
+  // La presa di profitto totale a +5% arriva al 45% di vinti ma costa 5-9 punti di rendimento.
+  takeProfit: { enabled: true, pct: 0.03, fraction: 0.5 },
   // Politica di uscita (agente "uscite", segnali vincolanti che la gabbia non può votare via):
   // stop a -3% dal carico (anche come stop GTC su Alpaca); a +3% (o +4% per titolo) si incassa, a meno che la proiezione (Kronos) dica
   // che c'è altro da prendere: allora si lascia correre con uno stop che segue il massimo e non restituisce più del
