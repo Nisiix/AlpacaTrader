@@ -5,7 +5,7 @@ import { isObject, readJson, writeJsonAtomic } from "../fsutil.ts";
 import { momentum, sma } from "../indicators.ts";
 import type { Presenza } from "./caffe.ts";
 import { technicalRead } from "./custode.ts";
-import { controTendenza, pesoControTendenza } from "./fiducia.ts";
+import { controTendenza, pesoControTendenza, plausibile } from "./fiducia.ts";
 import type { AgentReport, AgentView, Signal } from "./types.ts";
 
 // L'esplorazione: gli agenti in sala caffè non pensano solo al loro titolo. A turno passano in rassegna il radar (azioni e
@@ -154,7 +154,7 @@ export async function explore(input: {
   for (const s of passa) {
     const fc = previsioni[s];
     if (fc === undefined || !Number.isFinite(fc)) scartati.push({ simbolo: s, motivo: "nessuna proiezione" });
-    else if (Math.abs(fc) > AGENTS.kronos.maxAbs) scartati.push({ simbolo: s, motivo: `proiezione fuori misura (${pct(fc)})` });
+    else if (!plausibile(fc, bars[s]?.map((b) => b.close))) scartati.push({ simbolo: s, motivo: `proiezione fuori misura (${pct(fc)}): oltre ${AGENTS.kronos.zMax} volte la volatilità del titolo` });
     else if (fc < AGENTS.kronos.anticipaSoglia) scartati.push({ simbolo: s, motivo: `Kronos ${pct(fc)}: nessun rialzo oltre la soglia` });
     else if (technicalGate(bars[s]!.map((b) => b.close)).contro && !controTendenza(bars[s]!.map((b) => b.close), fc).ok) scartati.push({ simbolo: s, motivo: `sotto la media a 200: ${controTendenza(bars[s]!.map((b) => b.close), fc).motivo}` });
     else {

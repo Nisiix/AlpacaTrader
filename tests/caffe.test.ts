@@ -120,7 +120,7 @@ describe("sala caffè", () => {
 });
 
 describe("esplorazione dalla sala caffè", () => {
-  const rising = (base: number, n = 300) => Array.from({ length: n }, (_, i) => base * (1 + 0.003 * i + 0.01 * Math.sin(i / 7)));
+  const rising = (base: number, n = 300) => Array.from({ length: n }, (_, i) => base * (1 + 0.003 * i + 0.01 * Math.sin(i / 7)) * (1 + (i % 2 ? 0.006 : -0.006)));
   const barsOf = (closes: number[]) => closes.map((c, i) => ({ date: `d${i}`, open: c, high: c * 1.01, low: c * 0.99, close: c, volume: 1 }));
   const presenti = [{ chiave: "c:BTC/USD", nome: "custode BTC/USD", perche: "aspetta" }, { chiave: "c:AAPL", nome: "custode AAPL", perche: "aspetta" }, { chiave: "a:orizzonte", nome: "orizzonte", perche: "nessun voto" }];
 

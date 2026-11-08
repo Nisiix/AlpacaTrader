@@ -156,7 +156,7 @@ export const AGENTS = {
   // maxAbs: proiezioni oltre questa misura (in valore assoluto) sono rumore del modello e non si usano.
   // controTendenza: sotto la media a 200 si entra solo se Kronos anticipa almeno minRendimento con probabilità di successo
   // (Φ del rendimento atteso sulla volatilità) almeno minFiducia; peso massimo ridotto a pesoFattore × 10%.
-  kronos: { topShare: 1, horizon: 5, timeoutMs: 900_000, port: 8765, model: "small" as "mini" | "small" | "base", lookback: 400, samples: 3, anticipaSoglia: 0.01, maxAbs: 0.25, controTendenza: { enabled: true, minRendimento: 0.02, minFiducia: 0.6, pesoFattore: 0.5 },
+  kronos: { topShare: 1, horizon: 5, timeoutMs: 900_000, port: 8765, model: "small" as "mini" | "small" | "base", lookback: 400, samples: 3, anticipaSoglia: 0.01, maxAbs: 0.25, zMax: 4, controTendenza: { enabled: true, minRendimento: 0.02, minFiducia: 0.6, pesoFattore: 0.5 },
     // Il cervello delle previsioni: il sidecar fa girare accanto a Kronos altri modelli gratuiti (Chronos-2 di Amazon e
     // TimesFM 2.5 di Google, Apache 2.0; quelli non installati si saltano). Peso di un modello = affidabilità × risultato
     // misurato. Affidabilità (scala 0-1, metà dai dati finanziari dell'addestramento, metà dalle prove pubblicate sui

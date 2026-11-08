@@ -1,4 +1,5 @@
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
+import { homedir } from "node:os";
 import { join } from "node:path";
 import { AGENTS } from "./config.ts";
 import type { Bar, IntradayBar } from "./broker/types.ts";
@@ -62,6 +63,21 @@ const modelliDi = (f: { modelli?: Record<string, unknown> }): Record<string, num
   return Object.keys(out).length ? out : undefined;
 };
 
+// La cache di Hugging Face (come la cerca huggingface_hub): HF_HUB_CACHE, poi HF_HOME/hub, poi ~/.cache/huggingface/hub.
+const cacheHF = () => process.env.HF_HUB_CACHE ?? join(process.env.HF_HOME ?? join(homedir(), ".cache", "huggingface"), "hub");
+const REPO_MODELLI: Record<string, string> = { chronos2: "amazon/chronos-2", timesfm: "google/timesfm-2.5-200m-pytorch" };
+export const reposPer = (model: string, modelli: string[]) => [model === "mini" ? "NeoQuasar/Kronos-Tokenizer-2k" : "NeoQuasar/Kronos-Tokenizer-base", `NeoQuasar/Kronos-${model}`, ...modelli.map((m) => REPO_MODELLI[m]).filter((x): x is string => !!x)];
+export function pesiInCache(repos: string[], dir = cacheHF()): boolean {
+  return repos.every((r) => {
+    const snap = join(dir, `models--${r.replace("/", "--")}`, "snapshots");
+    try {
+      return existsSync(snap) && readdirSync(snap).length > 0;
+    } catch {
+      return false;
+    }
+  });
+}
+
 const pythonFor = (dir: string) => {
   const win = join(dir, "venv", "Scripts", "python.exe");
   const nix = join(dir, "venv", "bin", "python");
@@ -105,15 +121,11 @@ export async function ensureKronos(o: SidecarOptions): Promise<KronosLink> {
     return link;
   }
   const model = o.model ?? AGENTS.kronos.model;
-  const child = Bun.spawn([py, "server.py", "--model", model, "--port", String(port), "--lookback", String(AGENTS.kronos.lookback), "--samples", String(AGENTS.kronos.samples), "--modelli", AGENTS.kronos.modelli.join(",")], {
-    cwd: dir,
-    stdout: "pipe",
-    stderr: "pipe",
-    env: { ...process.env, PYTHONUNBUFFERED: "1", HF_HUB_DISABLE_TELEMETRY: "1" },
-  });
-  link.child = child;
-  link.stato = `in avvio (Kronos-${model}, pid ${child.pid}): carico i pesi del modello`;
-  log(`kronos: ${link.stato}`);
+  // Pesi già scaricati: il sidecar parte senza rete (HF_HUB_OFFLINE), più in fretta e senza l'avviso di Hugging Face
+  // sulle richieste non autenticate. Se manca qualcosa o l'avvio offline fallisce, si riparte normalmente (scarica).
+  const offline = pesiInCache(reposPer(model, AGENTS.kronos.modelli));
+  let stopped = false;
+  let child: ReturnType<typeof Bun.spawn>;
   const pipe = async (stream: ReadableStream<Uint8Array> | null, tag: string) => {
     if (!stream) return;
     const reader = stream.getReader();
@@ -131,22 +143,38 @@ export async function ensureKronos(o: SidecarOptions): Promise<KronosLink> {
       }
     }
   };
-  void pipe(child.stdout as ReadableStream<Uint8Array>, "out");
-  void pipe(child.stderr as ReadableStream<Uint8Array>, "err");
-  let stopped = false;
+  const avvia = (senzaRete: boolean) => {
+    child = Bun.spawn([py, "server.py", "--model", model, "--port", String(port), "--lookback", String(AGENTS.kronos.lookback), "--samples", String(AGENTS.kronos.samples), "--modelli", AGENTS.kronos.modelli.join(",")], {
+      cwd: dir,
+      stdout: "pipe",
+      stderr: "pipe",
+      env: { ...process.env, PYTHONUNBUFFERED: "1", HF_HUB_DISABLE_TELEMETRY: "1", ...(senzaRete ? { HF_HUB_OFFLINE: "1", TRANSFORMERS_OFFLINE: "1" } : {}) },
+    });
+    link.child = child;
+    link.stato = `in avvio (Kronos-${model}, pid ${child.pid}${senzaRete ? ", pesi già scaricati, senza rete" : ""}): carico i pesi del modello`;
+    log(`kronos: ${link.stato}`);
+    void pipe(child.stdout as ReadableStream<Uint8Array>, "out");
+    void pipe(child.stderr as ReadableStream<Uint8Array>, "err");
+    void child.exited.then((code) => {
+      if (stopped) return;
+      const eraPronto = link.ready;
+      link.ready = false;
+      if (senzaRete && !eraPronto) {
+        log(`kronos: avvio senza rete non riuscito (codice ${code}): riprovo scaricando da Hugging Face`);
+        avvia(false);
+        return;
+      }
+      link.stato = `fermo: il sidecar è uscito con codice ${code}; riavvia il motore per riprovare`;
+      log(`kronos: ${link.stato}`);
+    });
+  };
+  avvia(offline);
   link.stop = () => {
     stopped = true;
     try {
       child.kill();
     } catch {}
   };
-  void child.exited.then((code) => {
-    if (!stopped) {
-      link.ready = false;
-      link.stato = `fermo: il sidecar è uscito con codice ${code}; riavvia il motore per riprovare`;
-      log(`kronos: ${link.stato}`);
-    }
-  });
   // Pronto quando risponde: alla prima installazione i pesi si scaricano da Hugging Face (minuti).
   const deadline = Date.now() + (o.readyTimeoutMs ?? 20 * 60_000);
   void (async () => {

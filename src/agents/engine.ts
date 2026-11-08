@@ -33,6 +33,7 @@ import { applyGuidance, review, type CapoReport } from "./capo.ts";
 import { simboliIntraday } from "./posizioni.ts";
 import type { Cervello, RigaCervello } from "./cervello.ts";
 import { BIBLIOTECA, perditaDelMese, type Principio } from "./biblioteca.ts";
+import { plausibile } from "./fiducia.ts";
 import { refreshEarnings, type EarningsFetcher } from "../earnings.ts";
 import { addEarnings } from "../events.ts";
 import type { EventBus } from "./bus.ts";
@@ -164,12 +165,12 @@ export const forecastsPath = (stateDir: string) => join(stateDir, "previsioni.js
 
 // Le proiezioni oltre ±maxAbs sono rumore del modello (un −46% in 5 sedute non è una previsione): il motore le toglie
 // per tutti gli agenti, la gabbia e il contesto, non solo per l'agente Kronos. Restano nel file e sul grafico, segnate.
-export function usableForecasts(p: Record<string, number> | undefined): { usabili: Record<string, number> | undefined; scartate: string[] } {
+export function usableForecasts(p: Record<string, number> | undefined, closes?: Record<string, number[]>): { usabili: Record<string, number> | undefined; scartate: string[] } {
   if (!p) return { usabili: undefined, scartate: [] };
   const usabili: Record<string, number> = {};
   const scartate: string[] = [];
   for (const [s, f] of Object.entries(p)) {
-    if (Number.isFinite(f) && Math.abs(f) <= AGENTS.kronos.maxAbs) usabili[s] = f;
+    if (plausibile(f, closes?.[s])) usabili[s] = f;
     else scartate.push(s);
   }
   return { usabili, scartate };
@@ -465,13 +466,14 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
         log.info(m);
         bus.emit("nota", { testo: m });
       }),
+      closes,
     );
     // Dalla chiusura su cui le ha calcolate Kronos al prezzo di adesso: è da qui che si compra o si vende.
     const previsioni = riallinea(previsioniGrezze, cache.previsioni?.data, snap.prices);
     const scartateKey = `${today}:${scartate.join(",")}`;
     if (scartate.length && cache.scartateNota !== scartateKey) {
       cache.scartateNota = scartateKey;
-      const m = `Kronos: proiezioni oltre ±${(AGENTS.kronos.maxAbs * 100).toFixed(0)}% non usate (rumore del modello): ${scartate.join(", ")}`;
+      const m = `Kronos: proiezioni fuori misura non usate (oltre ±${(AGENTS.kronos.maxAbs * 100).toFixed(0)}% o oltre ${AGENTS.kronos.zMax} volte la volatilità del titolo: rumore del modello): ${scartate.join(", ")}`;
       log.info(m);
       bus.emit("nota", { testo: m });
     }
@@ -774,7 +776,7 @@ export async function valutaTitolo(deps: EngineDeps, cache: EngineCache, symbol:
   const br = readBreaker(deps.stateDir);
   const buyBlock = !LIMITS.breakerEnabled ? null : br.kind === "corrupt" ? "interruttore illeggibile" : evaluateBreaker(br.file, account.equity, account.lastEquity, now.toISOString()).buyBlock;
   const journal = readJournal(deps.stateDir, now).file;
-  const previsioniNum = riallinea(usableForecasts(cache.previsioni ? Object.fromEntries(Object.entries(cache.previsioni.data).map(([k, v]) => [k, v.rendimentoPrevisto])) : undefined).usabili, cache.previsioni?.data, prices);
+  const previsioniNum = riallinea(usableForecasts(cache.previsioni ? Object.fromEntries(Object.entries(cache.previsioni.data).map(([k, v]) => [k, v.rendimentoPrevisto])) : undefined, closes).usabili, cache.previsioni?.data, prices);
   const view: AgentView = { today, now, prices, closes, indicators, positions, account, journal, previsioni: previsioniNum, previsioniKronos: previsioniNum, mercatoAperto: clock.isOpen, chiusuraBorsa: clock.nextClose, finestraIngressi: stockEntryOpen(clock, now) };
   const ctxAgent = deps.agents.find((a): a is ContextAgent => a instanceof ContextAgent);
   let contesto: MarketContext | null = null;

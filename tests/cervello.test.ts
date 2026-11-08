@@ -171,3 +171,19 @@ describe("Kronos e i prezzi minuscoli", () => {
     expect(scalaSerie([{ t: "0", o: 600, h: 601, l: 599, c: 600, v: 1 }]).k).toBe(1);
   });
 });
+
+describe("sidecar e cache di Hugging Face", () => {
+  test("con tutti i pesi già scaricati il sidecar parte senza rete; se ne manca uno, scarica", async () => {
+    const { pesiInCache, reposPer } = await import("../src/kronos-sidecar.ts");
+    const { mkdirSync, mkdtempSync, writeFileSync } = await import("node:fs");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const dir = mkdtempSync(join(tmpdir(), "hf-"));
+    const repos = reposPer("small", ["kronos", "chronos2", "timesfm"]);
+    expect(repos).toEqual(["NeoQuasar/Kronos-Tokenizer-base", "NeoQuasar/Kronos-small", "amazon/chronos-2", "google/timesfm-2.5-200m-pytorch"]);
+    for (const r of repos.slice(0, 3)) { const d = join(dir, `models--${r.replace("/", "--")}`, "snapshots", "abc"); mkdirSync(d, { recursive: true }); writeFileSync(join(d, "x"), ""); }
+    expect(pesiInCache(repos, dir)).toBe(false);
+    const d = join(dir, "models--google--timesfm-2.5-200m-pytorch", "snapshots", "abc"); mkdirSync(d, { recursive: true });
+    expect(pesiInCache(repos, dir)).toBe(true);
+  });
+});

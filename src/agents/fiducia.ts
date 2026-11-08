@@ -40,3 +40,11 @@ export const sotto200 = (closes: number[] | undefined, price: number | undefined
 
 // Il peso massimo di un ingresso contro tendenza.
 export const pesoControTendenza = () => LIMITS.maxPositionPct * AGENTS.kronos.controTendenza.pesoFattore;
+
+// Anche entro ±maxAbs una proiezione può essere fuori misura per quel titolo: −20% in 5 sedute su Visa (volatilità
+// giornaliera 1,3%) sono quasi 7 deviazioni standard. Oltre kronos.zMax volte la volatilità sull'orizzonte è rumore.
+export function plausibile(f: number, closes: number[] | undefined): boolean {
+  if (!Number.isFinite(f) || Math.abs(f) > AGENTS.kronos.maxAbs) return false;
+  const vol = closes && closes.length > 21 ? dailyVol(closes, LIMITS.volLookbackDays) : null;
+  return vol === null || vol <= 0 || Math.abs(f) / (vol * Math.sqrt(AGENTS.kronos.horizon)) <= AGENTS.kronos.zMax;
+}

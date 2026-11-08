@@ -953,6 +953,11 @@ describe("contesto economico", () => {
     expect(r.usabili).toEqual({ NVDA: 0.03 });
     expect(r.scartate.sort()).toEqual(["BAD", "PEPE/USD"]);
     expect(usableForecasts(undefined).usabili).toBeUndefined();
+    // Entro ±25% ma fuori misura per il titolo: −20% in 5 sedute con volatilità giornaliera dell'1% (quasi 9 deviazioni standard).
+    const calmo = Array.from({ length: 60 }, (_, k) => 100 * (1 + (k % 2 ? 0.01 : -0.01)));
+    const z = usableForecasts({ V: -0.2, MA: 0.03 }, { V: calmo, MA: calmo });
+    expect(z.scartate).toEqual(["V"]);
+    expect(z.usabili).toEqual({ MA: 0.03 });
   });
 
   test("claude in errore: motivo leggibile e nessun nuovo tentativo per un'ora (valgono le regole)", async () => {
