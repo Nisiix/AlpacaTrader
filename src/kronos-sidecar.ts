@@ -20,6 +20,8 @@ export interface KronosForecastPath {
   ultimaChiusura: number | null;
   // Il percorso di ogni modello che il sidecar ha fatto girare (kronos, chronos2, timesfm...), prima della combinazione.
   modelli?: Record<string, number[]>;
+  // Fin dove arrivavano le giornate concluse quando è stata calcolata (limite di src/sedute.ts per la sua classe).
+  del?: string;
 }
 
 const modelliDi = (f: { modelli?: Record<string, unknown> }): Record<string, number[]> | undefined => {

@@ -1,3 +1,4 @@
+import { limitiSedute } from "../sedute.ts";
 import { CRYPTO_STOP_LIMIT_GAP, HTTP_TIMEOUT_MS, MARKET_DATA_URL, PAPER_TRADING_URL, isCrypto } from "../config.ts";
 import { assertPaperUrl } from "../guard.ts";
 import type { Account, Bar, Broker, IntradayBar, MarketClock, Order, OrderRequest, Position, StopOrderRequest } from "./types.ts";
@@ -203,13 +204,12 @@ export class AlpacaBroker implements Broker {
     const out: Record<string, Bar[]> = {};
     if (symbols.length === 0) return out;
     const start = new Date(Date.now() - days * 1.6 * 86_400_000).toISOString().slice(0, 10);
-    const todayNy = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date());
-    const todayUtc = new Date().toISOString().slice(0, 10);
+    // Solo giornate concluse (src/sedute.ts): la seduta di oggi entra dopo la chiusura di New York, la candela crypto a mezzanotte UTC.
+    const limiti = limitiSedute(new Date());
     const fetchAll = async (path: string, today: string) => {
       let token = "";
       for (let page = 0; page < 20; page++) {
         const data = await this.request(MARKET_DATA_URL, `${path}${token ? `&page_token=${encodeURIComponent(token)}` : ""}`);
-        // Solo giornate chiuse: la barra di oggi, ancora in corso, è un prezzo provvisorio.
         for (const [sym, bars] of Object.entries<any[]>(data?.bars ?? {})) (out[sym] ??= []).push(...bars.filter((b) => String(b.t).slice(0, 10) < today).map((b) => ({ date: String(b.t).slice(0, 10), open: Number(b.o), high: Number(b.h), low: Number(b.l), close: Number(b.c), volume: Number(b.v ?? 0) })));
         token = data?.next_page_token ?? "";
         if (!token) break;
@@ -217,8 +217,8 @@ export class AlpacaBroker implements Broker {
     };
     const stocks = symbols.filter((s) => !isCrypto(s));
     const crypto = symbols.filter(isCrypto);
-    if (stocks.length) await fetchAll(`/v2/stocks/bars?timeframe=1Day&adjustment=all&feed=iex&limit=10000&start=${start}&symbols=${stocks.map(encodeURIComponent).join(",")}`, todayNy);
-    if (crypto.length) await fetchAll(`/v1beta3/crypto/us/bars?timeframe=1Day&limit=10000&start=${start}T00:00:00Z&symbols=${crypto.map(encodeURIComponent).join(",")}`, todayUtc);
+    if (stocks.length) await fetchAll(`/v2/stocks/bars?timeframe=1Day&adjustment=all&feed=iex&limit=10000&start=${start}&symbols=${stocks.map(encodeURIComponent).join(",")}`, limiti.azioni);
+    if (crypto.length) await fetchAll(`/v1beta3/crypto/us/bars?timeframe=1Day&limit=10000&start=${start}T00:00:00Z&symbols=${crypto.map(encodeURIComponent).join(",")}`, limiti.crypto);
     // Le crypto hanno 7 barre a settimana: per coprire gli stessi giorni di borsa ne servono di più.
     for (const sym of Object.keys(out)) out[sym] = out[sym]!.sort((a, b) => a.date.localeCompare(b.date)).slice(isCrypto(sym) ? -Math.ceil(days * 1.55) : -days);
     return out;

@@ -116,12 +116,22 @@ describe("confronto con il 60/40", () => {
 });
 
 
-describe("solo giornate chiuse", () => {
-  test("Alpaca: la barra di oggi, ancora in corso, non entra nello storico", async () => {
+describe("solo giornate concluse", () => {
+  test("la seduta di New York è conclusa dalle 16:15 locali, la candela crypto a mezzanotte UTC", async () => {
+    const { limitiSedute } = await import("../src/sedute.ts");
+    // Martedì 00:05 a Roma = lunedì 18:05 a New York: la seduta di lunedì è conclusa ed entra (prima restava fuori fino a mercoledì).
+    expect(limitiSedute(new Date("2026-11-10T00:05:00+01:00"))).toEqual({ azioni: "2026-11-10", crypto: "2026-11-09", chiave: "2026-11-10|2026-11-09" });
+    // Lunedì 21:00 a Roma = 15:00 a New York: seduta in corso, l'ultima conclusa è venerdì (il limite è lunedì, escluso).
+    expect(limitiSedute(new Date("2026-11-09T21:00:00+01:00")).azioni).toBe("2026-11-09");
+    // Alle 01:05 di Roma la candela crypto di ieri (UTC) è conclusa: la chiave cambia e Kronos ricalcola le crypto.
+    expect(limitiSedute(new Date("2026-11-10T01:05:00+01:00")).crypto).toBe("2026-11-10");
+  });
+  test("Alpaca: la barra non ancora conclusa non entra nello storico", async () => {
     const { AlpacaBroker } = await import("../src/broker/alpaca.ts");
-    const today = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date());
+    const { limitiSedute } = await import("../src/sedute.ts");
+    const inCorso = limitiSedute(new Date()).azioni;
     const real = globalThis.fetch;
-    globalThis.fetch = (async () => new Response(JSON.stringify({ bars: { SPY: [{ t: "2020-01-02T05:00:00Z", c: 100 }, { t: "2020-01-03T05:00:00Z", c: 101 }, { t: `${today}T04:00:00Z`, c: 90 }] } }), { status: 200 })) as unknown as typeof fetch;
+    globalThis.fetch = (async () => new Response(JSON.stringify({ bars: { SPY: [{ t: "2020-01-02T05:00:00Z", c: 100 }, { t: "2020-01-03T05:00:00Z", c: 101 }, { t: `${inCorso}T04:00:00Z`, c: 90 }] } }), { status: 200 })) as unknown as typeof fetch;
     try {
       expect(await new AlpacaBroker("k", "s").getDailyCloses(["SPY"], 10)).toEqual({ SPY: [100, 101] });
     } finally {

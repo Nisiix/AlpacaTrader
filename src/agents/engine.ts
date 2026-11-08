@@ -25,6 +25,7 @@ import { activeLessons, learnFromBrokerReject, learnFromStopLoss, pruneLessons, 
 import { acquireLock, inspectLock, releaseLock, type LockData } from "../lock.ts";
 import { Logger, type Redactor } from "../log.ts";
 import { romeTime } from "../slots.ts";
+import { limitiSedute } from "../sedute.ts";
 import { manageStops, type StopsReport } from "../stops.ts";
 import type { Notifier } from "../telegram.ts";
 import { allocate, openedToday, type Score } from "./allocator.ts";
@@ -138,7 +139,8 @@ export interface EngineCache {
   universeDate?: string;
   universeInfo?: { fonte: string; aggiornato: string; coppie: string[] };
   // Proiezioni del giorno (Kronos): si calcolano una volta sulle barre giornaliere e si riusano a ogni giro.
-  previsioni?: { date: string; data: Record<string, KronosForecastPath> };
+  // date = chiave delle giornate concluse (src/sedute.ts) su cui sono state calcolate; giorno = data italiana, per la dashboard.
+  previsioni?: { date: string; giorno?: string; data: Record<string, KronosForecastPath> };
   // Avviso Telegram dell'obiettivo/perdita del giorno: una volta sola al giorno.
   giornataAvvisata?: string;
   capoSintesi?: string;
@@ -186,14 +188,15 @@ export function cleanPositions(positions: Position[]): Position[] {
 
 const normalizeForecast = (v: number | KronosForecastPath): KronosForecastPath => (typeof v === "number" ? { rendimentoPrevisto: v, percorso: [v], ultimaChiusura: null } : v);
 
-// Le barre giornaliere di tutto l'universo, una volta al giorno; da qui le chiusure per gli indicatori e il file per i grafici.
-async function loadBars(deps: EngineDeps, cache: EngineCache, today: string, symbols: string[], warn: (m: string) => void) {
-  if (cache.closesDate === today && symbols.every((s) => cache.bars[s] || !isCrypto(s))) return;
+// Le barre giornaliere di tutto l'universo, solo giornate concluse; si riscaricano quando ne arriva una nuova (chiave di
+// src/sedute.ts: dopo la chiusura di New York per le azioni, a mezzanotte UTC per le crypto). Da qui gli indicatori e i grafici.
+async function loadBars(deps: EngineDeps, cache: EngineCache, chiave: string, symbols: string[], warn: (m: string) => void) {
+  if (cache.closesDate === chiave && symbols.every((s) => cache.bars[s] || !isCrypto(s))) return;
   try {
     const bars = await retry(() => deps.broker.getDailyBars(symbols, DAILY_BARS_DAYS), deps.sleep);
     cache.bars = bars;
     cache.closes = Object.fromEntries(Object.entries(bars).map(([s, b]) => [s, b.map((x) => x.close)]));
-    cache.closesDate = today;
+    cache.closesDate = chiave;
     writeJsonAtomic(barsPath(deps.stateDir), { versione: 1, aggiornato: deps.now().toISOString(), barre: bars });
   } catch (e) {
     warn(`storico non disponibile: ${(e as Error).message}. Senza storico niente acquisti.`);
@@ -218,29 +221,43 @@ async function loadUniverse(deps: EngineDeps, cache: EngineCache, today: string,
   }
 }
 
-// Le proiezioni di Kronos del giorno: una chiamata sulle barre giornaliere, poi riuso. Se il sidecar non è pronto si riprova al giro dopo.
-async function loadForecasts(deps: EngineDeps, cache: EngineCache, today: string, symbols: string[], note: (m: string) => void): Promise<Record<string, number> | undefined> {
+// Kronos prevede il rendimento dall'ultima chiusura conclusa; le decisioni si prendono al prezzo di adesso. Se oggi il
+// titolo è già salito del 2,5% e Kronos vedeva +2% dalla chiusura, da qui l'attesa è circa -0,5%: senza questo
+// riallineamento il motore comprerebbe dopo il rialzo e venderebbe dopo il calo già avvenuto.
+export const daAdesso = (r: number, chiusura: number | null | undefined, prezzo: number | undefined) => (chiusura && chiusura > 0 && prezzo && prezzo > 0 ? ((1 + r) * chiusura) / prezzo - 1 : r);
+export const percorsoDaAdesso = (p: KronosForecastPath, prezzo: number | undefined) => p.percorso.map((x) => daAdesso(x, p.ultimaChiusura, prezzo));
+export function riallinea(previsioni: Record<string, number> | undefined, data: Record<string, KronosForecastPath> | undefined, prezzi: Record<string, number>): Record<string, number> | undefined {
+  if (!previsioni) return undefined;
+  return Object.fromEntries(Object.entries(previsioni).map(([s, r]) => [s, daAdesso(r, data?.[s]?.ultimaChiusura, prezzi[s])]));
+}
+
+// Il limite delle giornate concluse per la classe del titolo, e se una proiezione è calcolata su quello attuale.
+const limiteDi = (s: string, chiave: string) => chiave.split("|")[isCrypto(s) ? 1 : 0]!;
+const aggiornata = (p: KronosForecastPath | undefined, s: string, chiave: string) => !!p && p.del === limiteDi(s, chiave);
+
+// Le proiezioni di Kronos: si calcolano sulle giornate concluse e si ricalcolano quando ne arriva una nuova (per le sole
+// azioni dopo la chiusura di New York, per le sole crypto a mezzanotte UTC); tra un ricalcolo e l'altro si riusano.
+// Se il sidecar non risponde si tengono le ultime (meglio una proiezione di qualche ora fa che nessuna: senza, le
+// posizioni tenute per Kronos perderebbero il loro motivo). Le crypto nuove dell'universo si aggiungono quando servono.
+async function loadForecasts(deps: EngineDeps, cache: EngineCache, chiave: string, today: string, symbols: string[], note: (m: string) => void): Promise<Record<string, number> | undefined> {
   if (!deps.forecaster) return undefined;
-  // Dopo un riavvio le proiezioni di oggi già calcolate si riprendono dal file: senza, al primo giro (sidecar ancora in
-  // caricamento) le posizioni aperte per Kronos perderebbero il loro motivo e verrebbero vendute.
   if (!cache.previsioni) {
     try {
-      const f = JSON.parse(readFileSync(forecastsPath(deps.stateDir), "utf8")) as { giorno?: string; previsioni?: Record<string, KronosForecastPath> };
-      if (f.giorno === today && f.previsioni) cache.previsioni = { date: today, data: f.previsioni };
+      const f = JSON.parse(readFileSync(forecastsPath(deps.stateDir), "utf8")) as { chiave?: string; giorno?: string; previsioni?: Record<string, KronosForecastPath> };
+      if (f.previsioni) cache.previsioni = { date: f.chiave ?? "", giorno: f.giorno, data: f.previsioni };
     } catch {}
   }
-  const missing = symbols.filter((s) => !cache.previsioni?.data[s] && cache.bars[s]);
-  if (!cache.previsioni || cache.previsioni.date !== today || missing.length) {
+  const need = symbols.filter((s) => cache.bars[s] && !aggiornata(cache.previsioni?.data[s], s, chiave));
+  if (need.length) {
     try {
-      const raw = await deps.forecaster(cache.previsioni?.date === today ? missing : symbols, cache.bars);
-      const data = { ...(cache.previsioni?.date === today ? cache.previsioni.data : {}) };
-      for (const [s, v] of Object.entries(raw)) data[s] = normalizeForecast(v);
-      cache.previsioni = { date: today, data };
-      writeJsonAtomic(forecastsPath(deps.stateDir), { versione: 1, aggiornato: deps.now().toISOString(), giorno: today, orizzonte: AGENTS.kronos.horizon, previsioni: data });
-      note(`proiezioni (${Object.keys(raw).length} nuove): ${Object.entries(data).map(([k, v]) => `${k} ${(v.rendimentoPrevisto * 100).toFixed(1)}%`).join(", ")}`);
+      const raw = await deps.forecaster(need, cache.bars);
+      const data = { ...(cache.previsioni?.data ?? {}) };
+      for (const [s, v] of Object.entries(raw)) data[s] = { ...normalizeForecast(v), del: limiteDi(s, chiave) };
+      cache.previsioni = { date: chiave, giorno: today, data };
+      writeJsonAtomic(forecastsPath(deps.stateDir), { versione: 1, aggiornato: deps.now().toISOString(), giorno: today, chiave, orizzonte: AGENTS.kronos.horizon, previsioni: data });
+      note(`proiezioni (${Object.keys(raw).length} nuove su giornate concluse ${chiave.replace("|", " / ")}): ${Object.entries(raw).map(([k, v]) => `${k} ${((typeof v === "number" ? v : v.rendimentoPrevisto) * 100).toFixed(1)}%`).join(", ")}`);
     } catch (e) {
-      note(`proiezioni non disponibili: ${(e as Error).message}`);
-      if (cache.previsioni?.date !== today) return undefined;
+      note(`proiezioni non ricalcolate: ${(e as Error).message}${cache.previsioni ? "; restano le ultime" : ""}`);
     }
   }
   return cache.previsioni ? Object.fromEntries(Object.entries(cache.previsioni.data).map(([k, v]) => [k, v.rendimentoPrevisto])) : undefined;
@@ -370,7 +387,8 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
     } catch (e) {
       log.warn(`cervello: ${(e as Error).message}`);
     }
-    await loadBars(deps, cache, today, [...new Set([...UNIVERSE, ...AGENTS.universe, ...snap.positions.map((p) => p.symbol)])], (m) => log.warn(m));
+    const dati = limitiSedute(startedAt);
+    await loadBars(deps, cache, dati.chiave, [...new Set([...UNIVERSE, ...AGENTS.universe, ...snap.positions.map((p) => p.symbol)])], (m) => log.warn(m));
     const closes = cache.closes;
     const indicators = indicatorsFor(closes, snap.prices, LIMITS.trendSmaDays, LIMITS.volLookbackDays, LIMITS.longSmaDays, LIMITS.rankMomentumDays);
 
@@ -427,12 +445,14 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
       const price = snap.prices[t.simbolo];
       if (price) t.massimo = Math.max(t.massimo ?? 0, price);
     }
-    const { usabili: previsioni, scartate } = usableForecasts(
-      await loadForecasts(deps, cache, today, [...new Set([...AGENTS.universe, ...snap.positions.map((p) => p.symbol)])], (m) => {
+    const { usabili: previsioniGrezze, scartate } = usableForecasts(
+      await loadForecasts(deps, cache, dati.chiave, today, [...new Set([...AGENTS.universe, ...snap.positions.map((p) => p.symbol)])], (m) => {
         log.info(m);
         bus.emit("nota", { testo: m });
       }),
     );
+    // Dalla chiusura su cui le ha calcolate Kronos al prezzo di adesso: è da qui che si compra o si vende.
+    const previsioni = riallinea(previsioniGrezze, cache.previsioni?.data, snap.prices);
     const scartateKey = `${today}:${scartate.join(",")}`;
     if (scartate.length && cache.scartateNota !== scartateKey) {
       cache.scartateNota = scartateKey;
@@ -444,7 +464,7 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
     try {
       fonti = deps.fonti ? await deps.fonti.read() : undefined;
     } catch {}
-    const percorsi = previsioni && cache.previsioni ? Object.fromEntries(Object.keys(previsioni).filter((k) => cache.previsioni!.data[k]?.percorso?.length).map((k) => [k, cache.previsioni!.data[k]!.percorso])) : undefined;
+    const percorsi = previsioni && cache.previsioni ? Object.fromEntries(Object.keys(previsioni).filter((k) => cache.previsioni!.data[k]?.percorso?.length).map((k) => [k, percorsoDaAdesso(cache.previsioni!.data[k]!, snap.prices[k])])) : undefined;
     const cashImpegnato = snap.recentOrders.filter((o) => isOpenOrder(o) && !isProtectiveStop(o) && o.side === "buy").reduce((a, o) => a + (o.qty - o.filledQty) * (snap.prices[o.symbol] ?? 0), 0);
     const view: AgentView = { today, now: startedAt, prices: snap.prices, closes, indicators, positions: snap.positions, account: snap.account, cashImpegnato, journal, previsioni, previsioniKronos: previsioni, percorsi, mercatoAperto: snap.clock.isOpen, chiusuraBorsa: snap.clock.nextClose, finestraIngressi: stockEntryOpen(snap.clock, startedAt), giornata, fonti };
     const reports: Record<string, AgentReport> = {};
@@ -646,7 +666,7 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
       custodi: Object.values(reports).flatMap((r) => r.custodi ?? []),
       intraday: Object.values(reports).flatMap((r) => r.intraday ?? []),
       universo: { titoli: AGENTS.universe.filter((s) => !isCrypto(s)), crypto: AGENTS.universe.filter(isCrypto), fonteCrypto: cache.universeInfo?.fonte ?? null, aggiornatoCrypto: cache.universeInfo?.aggiornato ?? null },
-      kronos: { stato: deps.kronosStato?.() ?? (deps.forecaster ? "attivo" : "non configurato"), proiezioniDel: cache.previsioni?.date ?? null, simboli: Object.keys(cache.previsioni?.data ?? {}).length, scartate },
+      kronos: { stato: deps.kronosStato?.() ?? (deps.forecaster ? "attivo" : "non configurato"), proiezioniDel: cache.previsioni?.giorno ?? null, simboli: Object.keys(cache.previsioni?.data ?? {}).length, scartate },
       giornata: { pnlPct, obiettivoPct: AGENTS.daily.targetPct, perditaMaxPct: AGENTS.daily.maxLossPct, obiettivoRaggiunto: giornata.obiettivoRaggiunto, perditaOltre: giornata.perditaOltre },
       simulazioni,
       capo,
@@ -722,14 +742,14 @@ export async function valutaTitolo(deps: EngineDeps, cache: EngineCache, symbol:
   const symbols = [...new Set([...UNIVERSE, ...AGENTS.universe, symbol, ...positions.map((p) => p.symbol)])];
   const prices = await deps.broker.getLatestPrices(symbols);
   for (const p of positions) if (!prices[p.symbol] && p.currentPrice > 0) prices[p.symbol] = p.currentPrice;
-  await loadBars(deps, cache, today, symbols, (m) => note.push(m));
+  await loadBars(deps, cache, limitiSedute(now).chiave, symbols, (m) => note.push(m));
   const closes = cache.closes;
   const indicators = indicatorsFor(closes, prices, LIMITS.trendSmaDays, LIMITS.volLookbackDays, LIMITS.longSmaDays, LIMITS.rankMomentumDays);
   const lessonsFile = readLessons(deps.stateDir, now).file;
   const br = readBreaker(deps.stateDir);
   const buyBlock = !LIMITS.breakerEnabled ? null : br.kind === "corrupt" ? "interruttore illeggibile" : evaluateBreaker(br.file, account.equity, account.lastEquity, now.toISOString()).buyBlock;
   const journal = readJournal(deps.stateDir, now).file;
-  const previsioniNum = usableForecasts(cache.previsioni?.date === today ? Object.fromEntries(Object.entries(cache.previsioni.data).map(([k, v]) => [k, v.rendimentoPrevisto])) : undefined).usabili;
+  const previsioniNum = riallinea(usableForecasts(cache.previsioni ? Object.fromEntries(Object.entries(cache.previsioni.data).map(([k, v]) => [k, v.rendimentoPrevisto])) : undefined).usabili, cache.previsioni?.data, prices);
   const view: AgentView = { today, now, prices, closes, indicators, positions, account, journal, previsioni: previsioniNum, previsioniKronos: previsioniNum, mercatoAperto: clock.isOpen, chiusuraBorsa: clock.nextClose, finestraIngressi: stockEntryOpen(clock, now) };
   const ctxAgent = deps.agents.find((a): a is ContextAgent => a instanceof ContextAgent);
   let contesto: MarketContext | null = null;
@@ -857,19 +877,20 @@ async function exploreRound(deps: EngineDeps, cache: EngineCache, today: string,
       getBars: (syms) => retry(() => deps.broker.getDailyBars(syms, DAILY_BARS_DAYS), deps.sleep),
       forecast: deps.forecaster
         ? async (syms, bars) => {
-            // Kronos una volta al giorno per titolo: quelli già proiettati oggi non si richiedono al sidecar.
+            // Kronos una volta per giornata conclusa: i titoli già proiettati sull'ultima non si richiedono al sidecar.
             const out: Record<string, number> = {};
-            const known = cache.previsioni?.date === today ? cache.previsioni.data : {};
-            for (const k of syms) if (known[k]) out[k] = known[k]!.rendimentoPrevisto;
+            const known = cache.previsioni?.data ?? {};
+            const chiave = limitiSedute(deps.now()).chiave;
+            for (const k of syms) if (aggiornata(known[k], k, chiave)) out[k] = known[k]!.rendimentoPrevisto;
             const need = syms.filter((k) => out[k] === undefined);
             if (!need.length) return out;
             const raw = await deps.forecaster!(need, bars);
             for (const [k, v] of Object.entries(raw)) {
-              const fp = normalizeForecast(v);
+              const fp = { ...normalizeForecast(v), del: limiteDi(k, chiave) };
               out[k] = fp.rendimentoPrevisto;
-              if (cache.previsioni?.date === today) cache.previsioni.data[k] = fp;
+              if (cache.previsioni) cache.previsioni.data[k] = fp;
             }
-            if (cache.previsioni?.date === today) writeJsonAtomic(forecastsPath(deps.stateDir), { versione: 1, aggiornato: deps.now().toISOString(), giorno: today, orizzonte: AGENTS.kronos.horizon, previsioni: cache.previsioni.data });
+            if (cache.previsioni) writeJsonAtomic(forecastsPath(deps.stateDir), { versione: 1, aggiornato: deps.now().toISOString(), giorno: cache.previsioni.giorno ?? today, chiave: cache.previsioni.date, orizzonte: AGENTS.kronos.horizon, previsioni: cache.previsioni.data });
             return out;
           }
         : null,

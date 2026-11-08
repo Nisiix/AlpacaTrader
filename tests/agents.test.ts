@@ -1056,18 +1056,26 @@ describe("costi e taglia minima", () => {
 
 describe("riparto del capitale", () => {
   test("senza un numero fisso di titoli: se i contanti non bastano si dividono per qualità, senza superare i contanti", () => {
-    const v = view({ previsioni: { NVDA: 0.03, AAPL: 0.01, MSFT: 0.02 } });
+    const v = view({ previsioni: { NVDA: 0.03, GLD: 0.01, SPY: 0.02 } });
     v.account = { ...v.account, cash: 5_000 };
-    const votes = { trend: { segnali: ["NVDA", "AAPL", "MSFT"].map((s, i) => ({ agente: "trend", simbolo: s, lato: "buy" as const, forza: 1 - i * 0.2, orizzonteSedute: 20, perche: "" })) } };
+    const votes = { trend: { segnali: ["NVDA", "GLD", "SPY"].map((s, i) => ({ agente: "trend", simbolo: s, lato: "buy" as const, forza: 1 - i * 0.2, orizzonteSedute: 20, perche: "" })) } };
     const a = allocate(v, votes, { trend: 1 });
     const buys = a.proposte.filter((p) => p.side === "buy");
-    expect(buys.map((p) => p.symbol).sort()).toEqual(["AAPL", "MSFT", "NVDA"]);
+    expect(buys.map((p) => p.symbol).sort()).toEqual(["GLD", "NVDA", "SPY"]);
     const spent = buys.reduce((t, p) => t + p.qty * v.prices[p.symbol]!, 0);
     expect(spent).toBeLessThanOrEqual(5_000);
     expect(buys.every((p) => (p.expect ?? "").includes("riparto del capitale"))).toBe(true);
-    // NVDA (voto più forte, Kronos più netto) riceve più di AAPL.
+    // NVDA (voto più forte, Kronos più netto) riceve più di GLD.
     const val = (s: string) => buys.find((p) => p.symbol === s)!.qty * v.prices[s]!;
-    expect(val("NVDA")).toBeGreaterThan(val("AAPL"));
+    expect(val("NVDA")).toBeGreaterThan(val("GLD"));
+  });
+
+  test("il tetto per settore si applica già nel riparto: il terzo titolo tecnologico non riceve contanti che la gabbia rifiuterebbe", () => {
+    const v = view({ previsioni: { NVDA: 0.03, AAPL: 0.02, MSFT: 0.02 } });
+    const votes = { trend: { segnali: ["NVDA", "AAPL", "MSFT"].map((s, i) => ({ agente: "trend", simbolo: s, lato: "buy" as const, forza: 1 - i * 0.1, orizzonteSedute: 20, perche: "" })) } };
+    const buys = allocate(v, votes, { trend: 1 }).proposte.filter((p) => p.side === "buy");
+    const tech = buys.reduce((t, p) => t + p.qty * v.prices[p.symbol]!, 0);
+    expect(tech).toBeLessThanOrEqual(LIMITS.groupMaxPct * v.account.equity);
   });
 });
 

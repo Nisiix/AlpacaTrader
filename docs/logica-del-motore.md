@@ -256,6 +256,21 @@ trend non si rimanda se una vendita è già in corso. Non ci sono sveglie: acqui
 Gli ordini hanno un ID per giro: più acquisti dello stesso titolo nella giornata (un'aggiunta, un'operazione intraday)
 sono ammessi; le quantità crypto si troncano al milionesimo (mai per eccesso) e le briciole non ricevono stop.
 
+## Dati e previsioni sempre allineati al momento giusto
+
+- **Giornate concluse**: lo storico giornaliero contiene solo giornate finite. La seduta di un giorno di New York entra
+  dalle 16:15 locali (22:15 italiane); la candela crypto di un giorno UTC a mezzanotte UTC (01:00 italiane). Storico e
+  proiezioni di Kronos si rinnovano appena ne arriva una nuova: le azioni dopo la chiusura americana, le crypto dopo la
+  mezzanotte UTC. (Prima si rinnovavano alla mezzanotte italiana, quando a New York il giorno non era ancora cambiato:
+  medie, uscite di trend e Kronos lavoravano ogni giorno con una seduta di ritardo.)
+- **Proiezioni dal prezzo di adesso**: Kronos prevede il rendimento dall'ultima chiusura; ogni proiezione e ogni percorso
+  si riportano al prezzo del momento prima di decidere. Un rialzo previsto e già avvenuto in giornata non si compra due
+  volte; un calo previsto e già avvenuto non fa vendere sul fondo.
+- Se il sidecar non risponde al ricalcolo, restano le ultime proiezioni (con la giornata su cui sono state calcolate).
+- **Tetto per settore già nel riparto**: i contanti si dividono rispettando il 35% per settore in ordine di punteggio, così
+  non restano fermi su un titolo che la gabbia rifiuterebbe.
+- **Rientro (RSI a 2 giorni)**: le chiusure concluse più il prezzo di adesso (a borsa aperta; le crypto sempre).
+
 ## Regole del primo motore riviste
 
 - **Rischio ammesso per classe**: il regime guarda lo SPY per le azioni e il BTC per le crypto (sotto la media a 200 o con
@@ -267,8 +282,7 @@ sono ammessi; le quantità crypto si troncano al milionesimo (mai per eccesso) e
 - **Imparare dai risultati**: lo fanno capo ufficio e sala caffè. Del registro degli errori restano le regole di
   sicurezza (dopo uno stop, dopo due rifiuti di Alpaca); le lezioni statistiche e i pesi degli agenti dopo 90 giorni
   sono tolti, per non punire due volte lo stesso errore. Tutti gli agenti votano con lo stesso peso.
-- **Sveglie classiche** (con `claude -p` a voto, anche nel cloud): tolte. Il ciclo `wake.ts` resta solo come banco di
-  prova nei test per gabbia, diario e stop, che il motore condivide.
+- **Sveglie classiche** (con `claude -p` a voto, anche nel cloud), testimone, riconciliazione e backtest: tolti dal codice.
 
 ## Sala caffè: gli agenti imparano gli uni dagli altri
 

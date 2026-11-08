@@ -11,6 +11,7 @@ import { AGENTS, LIMITS } from "../src/config.ts";
 import { refreshEarnings } from "../src/earnings.ts";
 import { EVENTS, addEarnings, eventBlockFor } from "../src/events.ts";
 import { emptyJournal } from "../src/journal.ts";
+import { daAdesso, riallinea } from "../src/agents/engine.ts";
 
 const account = { equity: 100_000, lastEquity: 100_000, cash: 100_000, status: "ACTIVE" };
 const salita = (p: number) => syntheticCloses(p, 0.01, 260);
@@ -55,5 +56,13 @@ describe("regole del primo motore riviste", () => {
     expect(eventBlockFor("AMD", "2026-11-10")).toContain("trimestrale AMD");
     const giu = await refreshEarnings(mkdtempSync(join(tmpdir(), "trim-")), "2026-11-09", ["AMD"], async () => { throw new Error("403"); }, 3);
     expect(giu.problema).toContain("non disponibile");
+  });
+
+  test("le proiezioni si riallineano al prezzo di adesso: un rialzo già avvenuto non si compra due volte", () => {
+    // Kronos +2% dalla chiusura di 100; il titolo oggi è già a 102,5: da qui l'attesa è circa -0,5%.
+    expect(daAdesso(0.02, 100, 102.5)).toBeCloseTo(-0.00488, 4);
+    // Calo previsto del 3% già avvenuto in giornata: da qui niente più ribasso.
+    expect(daAdesso(-0.03, 100, 97)).toBeCloseTo(0, 9);
+    expect(riallinea({ SPY: 0.02, X: 0.01 }, { SPY: { rendimentoPrevisto: 0.02, percorso: [0.02], ultimaChiusura: 100 } } as any, { SPY: 101 })).toEqual({ SPY: (1.02 * 100) / 101 - 1, X: 0.01 });
   });
 });

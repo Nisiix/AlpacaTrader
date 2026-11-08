@@ -101,9 +101,10 @@ def forecast(symbols, horizon, series=None, step_minutes=None):
     out = {}
     for s in symbols:
         bs = data.get(s, [])
-        if not step_minutes:
+        if not step_minutes and series is None:
+            # Barre scaricate qui: solo sedute finite. Quelle mandate dal motore sono già solo giornate concluse.
             today = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%d")
-            bs = [b for b in bs if str(b["t"])[:10] < today]  # solo sedute finite
+            bs = [b for b in bs if str(b["t"])[:10] < today]
         if len(bs) < 60: continue
         df = to_df(bs[-a.lookback:])
         last_ts = df["timestamps"].iloc[-1]

@@ -1,7 +1,7 @@
 import type { ProposedOrder } from "../ordini.ts";
 import { maxWeightFor } from "../cage.ts";
 import { pesoControTendenza, sotto200 } from "./fiducia.ts";
-import { AGENTS, CRYPTO_MIN_NOTIONAL, LIMITS, isCrypto } from "../config.ts";
+import { AGENTS, CRYPTO_MIN_NOTIONAL, LIMITS, isCrypto, sectorOf } from "../config.ts";
 import { dailyVol } from "../indicators.ts";
 import { romeTime } from "../slots.ts";
 import { roundQty } from "../broker/types.ts";
@@ -215,6 +215,17 @@ export function allocate(view: AgentView, reports: Record<string, AgentReport>, 
     const q = Math.max(0.05, (x.sc.fiducia ?? 0.6) * (x.sc.evidenza ?? 0.6) * Math.min(2, Math.max(0.1, x.sc.punteggio)));
     return { ...x, price, have, chiesto: Math.max(0, x.w * scale * equity - have), q, dato: 0 };
   });
+  // Tetto per settore (lo stesso della gabbia): si riempie in ordine di punteggio, così i contanti non vanno a un titolo
+  // che la gabbia poi rifiuterebbe per settore pieno, lasciando fermi soldi che altri avrebbero usato.
+  const usato = new Map<string, number>();
+  for (const p of held.values()) usato.set(sectorOf(p.symbol), (usato.get(sectorOf(p.symbol)) ?? 0) + p.qty * (view.prices[p.symbol] ?? p.currentPrice));
+  for (const x of asks) {
+    const sec = sectorOf(x.sc.simbolo);
+    if (sec === "altro") continue;
+    const spazio = Math.max(0, (LIMITS.groupMaxBySector[sec] ?? LIMITS.groupMaxPct) * equity * 0.999 - (usato.get(sec) ?? 0));
+    x.chiesto = Math.min(x.chiesto, spazio);
+    usato.set(sec, (usato.get(sec) ?? 0) + x.chiesto);
+  }
   const avail = Math.max(0, view.account.cash - (view.cashImpegnato ?? 0) - equity * AGENTS.riservaContanti);
   const totale = asks.reduce((a, x) => a + x.chiesto, 0);
   let riparto = false;
