@@ -1,7 +1,7 @@
 import type { ProposedOrder } from "./brain/types.ts";
 import type { Account, Order, Position, Side } from "./broker/types.ts";
 import { isOpenOrder, isProtectiveStop } from "./broker/types.ts";
-import { ENTRY_SLOT, LIMITS, MAX_LATENESS_MIN, UNIVERSE, type SlotKind } from "./config.ts";
+import { CRYPTO, CRYPTO_MIN_NOTIONAL, ENTRY_SLOT, LIMITS, MAX_LATENESS_MIN, UNIVERSE, isCrypto, type SlotKind } from "./config.ts";
 import { EVENTS, eventBlockFor, type MarketEvent } from "./events.ts";
 import { dailyVol, indicatorsFor, sma, trendOf } from "./indicators.ts";
 import { setupOf } from "./journal.ts";
@@ -59,11 +59,13 @@ export function lossPct(p: Position): number {
   return p.avgEntryPrice > 0 ? (p.currentPrice - p.avgEntryPrice) / p.avgEntryPrice : 0;
 }
 
-export function tradingBlockReason(i: Pick<CageInput, "slotKind" | "marketOpen" | "latenessMin" | "account">): string | null {
+export function tradingBlockReason(i: Pick<CageInput, "slotKind" | "marketOpen" | "latenessMin" | "account">, symbol?: string): string | null {
   if (i.slotKind === "briefing") return "briefing: nessun ordine";
+  if (i.account.equity <= 0) return "conto senza patrimonio";
+  // Le crypto trattano 24 ore su 24: l'orario di borsa non conta.
+  if (symbol && isCrypto(symbol)) return null;
   if (!i.marketOpen) return "mercato chiuso";
   if (i.latenessMin > MAX_LATENESS_MIN) return `sveglia in ritardo di ${i.latenessMin} minuti: l'ordine non ha più senso`;
-  if (i.account.equity <= 0) return "conto senza patrimonio";
   return null;
 }
 
@@ -78,29 +80,36 @@ export function maxWeightFor(closes: number[] | undefined): { max: number; vol: 
 export function applyCage(i: CageInput): CageResult {
   const orders: PlannedOrder[] = [];
   const rejected: Rejection[] = [];
-  const universe = new Set<string>(UNIVERSE);
+  const universe = new Set<string>([...UNIVERSE, ...CRYPTO]);
   const held = new Map(i.positions.filter((p) => p.qty > 0).map((p) => [p.symbol, p]));
   const stopLoss = i.positions.filter((p) => p.qty > 0 && lossPct(p) <= -stopPctFor(i.closes[p.symbol]));
 
-  const block = tradingBlockReason(i);
-  if (block) {
-    for (const p of stopLoss) rejected.push({ symbol: p.symbol, side: "sell", qty: p.qty, source: "stop-loss", reason: `stop loss scattato (${pct(lossPct(p))}) ma ${block}: vendo alla prossima sveglia utile` });
+  // Il blocco di orario vale per i titoli; le crypto passano sempre (salvo conto vuoto o briefing).
+  const blockFor = (symbol: string) => tradingBlockReason(i, symbol);
+  const seen = new Set<string>();
+  const stopped = new Set<string>();
+  for (const p of stopLoss) {
+    const block = blockFor(p.symbol);
+    if (block) {
+      rejected.push({ symbol: p.symbol, side: "sell", qty: p.qty, source: "stop-loss", reason: `stop loss scattato (${pct(lossPct(p))}) ma ${block}: vendo alla prossima sveglia utile` });
+      continue;
+    }
+    orders.push({ symbol: p.symbol, side: "sell", qty: p.qty, source: "stop-loss", why: `stop loss: ${pct(lossPct(p))} dal prezzo di carico` });
+    seen.add(`${p.symbol}-sell`);
+    stopped.add(p.symbol);
+  }
+  if (tradingBlockReason(i) && !i.proposals.some((p) => isCrypto(p.symbol)) && !i.positions.some((p) => isCrypto(p.symbol))) {
+    const block = tradingBlockReason(i)!;
     for (const p of i.proposals) rejected.push({ symbol: p.symbol, side: p.side, qty: p.qty, source: "modello", reason: block });
     return { orders, rejected };
   }
 
-  const seen = new Set<string>();
-  for (const p of stopLoss) {
-    orders.push({ symbol: p.symbol, side: "sell", qty: p.qty, source: "stop-loss", why: `stop loss: ${pct(lossPct(p))} dal prezzo di carico` });
-    seen.add(`${p.symbol}-sell`);
-  }
-  const stopped = new Set(stopLoss.map((p) => p.symbol));
-
-  // Uscita di trend: alla sveglia di apertura, chi ha chiuso ieri sotto la media a 50 giorni esce tutto.
+  // Uscita di trend: alla sveglia di apertura (per le crypto a ogni passata), chi ha chiuso ieri sotto la media a 50 giorni esce tutto.
   // È il codice a farla, come lo stop: il metodo non dipende dal modello che se ne ricordi.
-  if (i.slotKind === ENTRY_SLOT) {
+  {
     for (const p of i.positions) {
-      if (p.qty <= 0 || stopped.has(p.symbol)) continue;
+      if (p.qty <= 0 || stopped.has(p.symbol) || blockFor(p.symbol)) continue;
+      if (i.slotKind !== ENTRY_SLOT && !isCrypto(p.symbol)) continue;
       const c = i.closes[p.symbol];
       const m = c ? sma(c, LIMITS.trendSmaDays) : null;
       const last = c?.[c.length - 1];
@@ -124,7 +133,12 @@ export function applyCage(i: CageInput): CageResult {
     const reject = (reason: string) => rejected.push({ symbol: p.symbol, side: p.side, qty: p.qty, source: "modello", reason });
     if (p.side !== "buy" && p.side !== "sell") { reject(`lato non valido "${p.side}"`); continue; }
     if (!universe.has(p.symbol)) { reject("fuori universo"); continue; }
-    if (!Number.isInteger(p.qty) || p.qty < 1) { reject("solo azioni intere e quantità positiva"); continue; }
+    const block = blockFor(p.symbol);
+    if (block) { reject(block); continue; }
+    if (isCrypto(p.symbol)) {
+      if (!(p.qty > 0)) { reject("quantità positiva"); continue; }
+      if (p.side === "buy" && p.qty * (i.prices[p.symbol] ?? 0) < CRYPTO_MIN_NOTIONAL) { reject(`ordine crypto sotto il minimo di ${CRYPTO_MIN_NOTIONAL} $`); continue; }
+    } else if (!Number.isInteger(p.qty) || p.qty < 1) { reject("solo azioni intere e quantità positiva"); continue; }
     const key = `${p.symbol}-${p.side}`;
     if (seen.has(key)) { reject(stopped.has(p.symbol) && p.side === "sell" ? "già venduto dal codice (stop o uscita di trend)" : "doppione nella stessa sveglia"); continue; }
     if (p.side === "buy" && stopped.has(p.symbol)) { reject("in uscita in questa sveglia (stop o trend)"); continue; }
@@ -137,7 +151,7 @@ export function applyCage(i: CageInput): CageResult {
       if (p.qty > q) { reject(`niente short: in portafoglio ce ne sono ${q}`); continue; }
     } else {
       if (i.buyBlock) { reject(i.buyBlock); continue; }
-      if (i.slotKind !== ENTRY_SLOT) { reject("gli acquisti si fanno solo alla sveglia di apertura, sulle chiusure di ieri"); continue; }
+      if (i.slotKind !== ENTRY_SLOT && !isCrypto(p.symbol)) { reject("gli acquisti si fanno solo alla sveglia di apertura, sulle chiusure di ieri"); continue; }
       const ev = eventBlockFor(p.symbol, i.today, i.events ?? EVENTS);
       if (ev) { reject(ev); continue; }
       const price = i.prices[p.symbol];

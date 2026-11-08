@@ -1,6 +1,7 @@
 import type { ProposedOrder } from "../brain/types.ts";
 import { maxWeightFor } from "../cage.ts";
-import { AGENTS, LIMITS } from "../config.ts";
+import { AGENTS, CRYPTO_MIN_NOTIONAL, LIMITS, isCrypto } from "../config.ts";
+import { roundQty } from "../broker/types.ts";
 import { learningStatus, statsOf, type JournalFile } from "../journal.ts";
 import type { AgentReport, AgentView, Signal } from "./types.ts";
 
@@ -18,6 +19,8 @@ export interface Allocation {
   punteggi: Score[];
   rischio: number;
   pesi: Record<string, number>;
+  // Titoli che avrebbero un punteggio da acquisto ma il contesto dice di aspettare la candela successiva.
+  inAttesa: { simbolo: string; motivo: string }[];
 }
 
 // Peso di ogni agente dai risultati del diario: parte da 1; scende se l'agente ha votato ingressi che perdono
@@ -58,6 +61,7 @@ export function allocate(view: AgentView, reports: Record<string, AgentReport>, 
   const rischio = Object.values(reports).reduce((a, r) => a * (r.rischio ?? 1), 1);
   const punteggi = scoreSignals(signals, weights);
   const proposte: ProposedOrder[] = [];
+  const inAttesa: { simbolo: string; motivo: string }[] = [];
   const held = new Map(view.positions.filter((p) => p.qty > 0).map((p) => [p.symbol, p]));
   const equity = view.account.equity;
   const conf = (x: number) => (x >= 1 ? "alta" : x >= 0.7 ? "media" : "bassa");
@@ -82,6 +86,11 @@ export function allocate(view: AgentView, reports: Record<string, AgentReport>, 
   for (const sc of punteggi) {
     if (sc.punteggio < AGENTS.buyScore) break;
     if (forced.has(sc.simbolo)) continue;
+    const wait = view.contesto?.attendi[sc.simbolo];
+    if (wait && !held.has(sc.simbolo)) {
+      inAttesa.push({ simbolo: sc.simbolo, motivo: wait });
+      continue;
+    }
     const price = view.prices[sc.simbolo];
     if (!price || price <= 0) continue;
     const p = held.get(sc.simbolo);
@@ -91,10 +100,10 @@ export function allocate(view: AgentView, reports: Record<string, AgentReport>, 
     const have = p ? p.qty * price : 0;
     const delta = target - have;
     if (delta / equity < AGENTS.minAddPct) continue;
-    const qty = Math.floor(delta / price);
-    if (qty < 1) continue;
+    const qty = roundQty(sc.simbolo, delta / price);
+    if (qty <= 0 || (isCrypto(sc.simbolo) && qty * price < CRYPTO_MIN_NOTIONAL)) continue;
     if (!p) slots--;
     proposte.push({ symbol: sc.simbolo, side: "buy", qty, why: sc.perche.join(" · "), confidence: conf(sc.punteggio), expect: `tenere circa ${AGENTS.horizonSessions} sedute; peso obiettivo ${(w * 100).toFixed(1)}% del conto` });
   }
-  return { proposte, punteggi, rischio, pesi: weights };
+  return { proposte, punteggi, rischio, pesi: weights, inAttesa };
 }

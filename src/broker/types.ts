@@ -67,6 +67,8 @@ export interface Broker {
   cancelOrder(orderId: string): Promise<void>;
   // Chiusure giornaliere di sedute finite, dalla più vecchia alla più recente.
   getDailyCloses(symbols: string[], days: number): Promise<Record<string, number[]>>;
+  // Le stesse chiusure con la data (YYYY-MM-DD): serve al backtest per allineare titoli e crypto, che non hanno gli stessi giorni.
+  getDailyClosesByDate(symbols: string[], days: number): Promise<Record<string, { date: string; close: number }[]>>;
 }
 
 export class BrokerError extends Error {
@@ -88,5 +90,12 @@ export function isOpenOrder(o: Order): boolean {
 }
 
 export function isProtectiveStop(o: Order): boolean {
-  return o.type === "stop" && o.side === "sell";
+  return (o.type === "stop" || o.type === "stop_limit") && o.side === "sell";
+}
+
+// Quantità ammessa da Alpaca: azioni intere per i titoli, frazioni (6 decimali) per le crypto.
+export function roundQty(symbol: string, qty: number): number {
+  if (!symbol.includes("/")) return Math.floor(qty);
+  const f = 10 ** 6;
+  return Math.floor(qty * f) / f;
 }

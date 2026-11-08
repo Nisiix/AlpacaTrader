@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { writeJsonAtomic } from "../fsutil.ts";
-import { romeTime } from "../slots.ts";
+import { isCrypto } from "../config.ts";
+import { addDays, romeTime } from "../slots.ts";
 import type { Account, Broker, MarketClock, Order, OrderRequest, Position, StopOrderRequest } from "./types.ts";
 import { BrokerError, DuplicateOrderError, isOpenOrder, isProtectiveStop } from "./types.ts";
 
@@ -39,7 +40,7 @@ export function defaultFakeState(): FakeState {
     cash: 100_000,
     lastEquity: 100_000,
     positions: {},
-    prices: { SPY: 600, QQQ: 520, IWM: 230, AAPL: 250, MSFT: 480, NVDA: 180, GLD: 380, TLT: 90, TSLA: 400 },
+    prices: { SPY: 600, QQQ: 520, IWM: 230, AAPL: 250, MSFT: 480, NVDA: 180, GLD: 380, TLT: 90, TSLA: 400, "BTC/USD": 76_000, "ETH/USD": 2_200 },
     orders: [],
     closes: {},
     clock: "auto",
@@ -48,7 +49,7 @@ export function defaultFakeState(): FakeState {
   };
 }
 
-const FAKE_VOL: Record<string, number> = { SPY: 0.01, QQQ: 0.013, IWM: 0.015, AAPL: 0.017, MSFT: 0.015, NVDA: 0.03, GLD: 0.01, TLT: 0.009, TSLA: 0.035 };
+const FAKE_VOL: Record<string, number> = { SPY: 0.01, QQQ: 0.013, IWM: 0.015, AAPL: 0.017, MSFT: 0.015, NVDA: 0.03, GLD: 0.01, TLT: 0.009, TSLA: 0.035, "BTC/USD": 0.025, "ETH/USD": 0.035 };
 
 // Storico finto deterministico: trend in salita del 10% e oscillazioni ± pari alla volatilità del titolo.
 export function syntheticCloses(price: number, vol: number, days: number): number[] {
@@ -222,6 +223,19 @@ export class FakeBroker implements Broker {
     return order;
   }
 
+  async getDailyClosesByDate(symbols: string[], days: number): Promise<Record<string, { date: string; close: number }[]>> {
+    const closes = await this.getDailyCloses(symbols, days);
+    const today = romeTime(this.now()).date;
+    const out: Record<string, { date: string; close: number }[]> = {};
+    for (const [sym, c] of Object.entries(closes)) {
+      // Tutti sulla stessa griglia di giorni feriali, le crypto comprese: nel finto basta così.
+      const dates: string[] = [];
+      for (let d = today; dates.length < c.length; d = addDays(d, -1)) if (new Date(`${d}T12:00:00Z`).getUTCDay() % 6 !== 0) dates.unshift(d);
+      out[sym] = c.map((close, i) => ({ date: dates[i]!, close }));
+    }
+    return out;
+  }
+
   async submitStopOrder(req: StopOrderRequest): Promise<Order> {
     const s = this.load();
     this.checkOutage(s, "submitStopOrder");
@@ -237,7 +251,7 @@ export class FakeBroker implements Broker {
       filledQty: 0,
       status: "new",
       submittedAt: this.now().toISOString(),
-      type: "stop",
+      type: isCrypto(req.symbol) ? "stop_limit" : "stop",
       stopPrice: req.stopPrice,
     };
     s.orders.push(order);

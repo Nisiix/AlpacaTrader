@@ -4,6 +4,15 @@ export const PAPER_TRADING_URL = "https://paper-api.alpaca.markets";
 export const MARKET_DATA_URL = "https://data.alpaca.markets";
 
 export const UNIVERSE = ["SPY", "QQQ", "IWM", "AAPL", "MSFT", "NVDA", "GLD", "TLT"] as const;
+// Coppie crypto di Alpaca: 24 ore su 24, quantità frazionarie, ordine minimo 10 $, stop solo come stop_limit.
+export const CRYPTO = ["BTC/USD", "ETH/USD"] as const;
+export const isCrypto = (symbol: string) => symbol.includes("/");
+export const CRYPTO_MIN_NOTIONAL = 10;
+// Settori: servono al contesto economico per dire "in questo settore oggi si aspetta".
+export const SECTORS: Record<string, string> = { SPY: "indici", IWM: "indici", QQQ: "tecnologia", AAPL: "tecnologia", MSFT: "tecnologia", NVDA: "tecnologia", GLD: "oro", TLT: "obbligazioni", "BTC/USD": "crypto", "ETH/USD": "crypto" };
+export const CRYPTO_QTY_DECIMALS = 6;
+// Prezzo limite dello stop_limit crypto: mezzo punto sotto lo stop, così scatta e viene eseguito anche con un buco.
+export const CRYPTO_STOP_LIMIT_GAP = 0.005;
 
 export const LIMITS = {
   maxPositions: 5,
@@ -105,6 +114,10 @@ export const JOURNAL = {
 export const AGENTS = {
   tickMinutes: 5,
   horizonSessions: 20,
+  // Titoli che gli agenti possono comprare: senza IWM e TLT (attesa nulla o negativa con obiettivo +3% / stop -3%).
+  // Le crypto si aggiungono con --crypto (enableCrypto): nel backtest ago 2025 - nov 2026 hanno tolto 5-6 punti.
+  // La gabbia accetta comunque vendite su tutto UNIVERSE ∪ CRYPTO.
+  universe: ["SPY", "QQQ", "AAPL", "MSFT", "NVDA", "GLD"] as string[],
   // Finestra degli ingressi, ora di Roma: dopo i primi 10 minuti di seduta, fino a metà pomeriggio USA.
   entryWindow: { from: "15:40", to: "17:30" },
   // Punteggio netto (somma pesata dei segnali) oltre il quale si compra / sotto il quale si vende.
@@ -128,10 +141,21 @@ export const AGENTS = {
   // Presa di profitto secca (agente "profitto"): spenta di serie, si accende con --profitto; il backtest la misura.
   takeProfit: { enabled: false, pct: 0.02 },
   // Politica di uscita (agente "uscite", segnali vincolanti che la gabbia non può votare via):
-  // stop a -2% dal carico (anche come stop GTC su Alpaca); a +3% si incassa, a meno che la proiezione (Kronos) dica
+  // stop a -3% dal carico (anche come stop GTC su Alpaca); a +3% (o +4% per titolo) si incassa, a meno che la proiezione (Kronos) dica
   // che c'è altro da prendere: allora si lascia correre con uno stop che segue il massimo e non restituisce più del
   // rischio (giveBackPct), mai sotto il carico + lockPct. Proiezione negativa: si esce subito, in guadagno o in perdita.
-  exit: { enabled: true, stopPct: 0.02, targetPct: 0.03, giveBackPct: 0.02, lockPct: 0.005 },
+  // Stop a -3%: con -2% NVDA (3% di volatilità al giorno) usciva sul rumore. Obiettivo +4% dove le barriere lo pagano.
+  exit: { enabled: true, stopPct: 0.03, targetPct: 0.03, targetBySymbol: { GLD: 0.04, MSFT: 0.04, QQQ: 0.04 } as Record<string, number>, giveBackPct: 0.02, lockPct: 0.005 },
+  // Contesto economico (agente "contesto"): prima di ogni trade. Regole sui dati di mercato e sul calendario eventi sempre;
+  // in più, se c'è `claude -p`, una lettura della situazione economica con ricerca web ogni refreshHours (cache in state/macro.json).
+  // Sfavorevole: esposizione × unfavorableScale, nessun ingresso nuovo e niente fiducia nella proiezione per quel settore
+  // (si aspetta la candela successiva). Neutro: esposizione × neutralScale, si entra ma la proiezione non guida le uscite.
+  context: { enabled: true, useClaude: true, refreshHours: 6, unfavorableScale: 0.5, neutralScale: 0.75, waitDaysBeforeEvent: 2 },
   dashboardPort: 8787,
   eventsKeepDays: 60,
 };
+
+// Aggiunge BTC/USD ed ETH/USD all'universo degli agenti (24 ore su 24). Scelta esplicita, non di serie.
+export function enableCrypto() {
+  for (const c of CRYPTO) if (!AGENTS.universe.includes(c)) AGENTS.universe.push(c);
+}

@@ -471,3 +471,112 @@ Cosa dicono questi numeri, senza giri di parole:
 
 Da questa sessione cloud non posso scrivere sul tuo PC (nessuna cartella condivisa via Remote Control). Lo script
 `installa-windows.ps1` fa tutto con un comando: vedi README, sezione "Installazione su Windows".
+
+---
+
+## Addendum (8 novembre, pomeriggio): tre leve, stop -3%, crypto, e cosa dice la letteratura
+
+### Cosa è cambiato nel codice
+
+- **Universo degli agenti** (`AGENTS.universe`): SPY, QQQ, AAPL, MSFT, NVDA, GLD, BTC/USD, ETH/USD. IWM e TLT non si
+  comprano più (attesa nulla o negativa con obiettivo +3% / stop -2%), ma una posizione vecchia resta sorvegliata e
+  vendibile. La gabbia accetta UNIVERSE ∪ CRYPTO.
+- **Obiettivo per titolo** (`AGENTS.exit.targetBySymbol`): +4% su GLD, MSFT e QQQ (dove le barriere pagano di più), +3%
+  sugli altri. **Stop a -3%** (`AGENTS.exit.stopPct`), anche come stop GTC su Alpaca.
+- **Crypto su Alpaca**: prezzi e barre dagli endpoint `v1beta3/crypto`, simboli normalizzati (`BTCUSD` delle posizioni →
+  `BTC/USD`), quantità frazionarie a 6 decimali, ordine minimo 10 $, `time_in_force: gtc`, stop come `stop_limit` con
+  limite mezzo punto sotto (Alpaca rifiuta lo `stop` a mercato sulle crypto: verificato con una sonda a prezzo impossibile,
+  poi cancellata). La gabbia lascia passare le crypto a mercato chiuso e fuori finestra (24 ore su 24), con un ingresso al
+  giorno per coppia; gli stop delle crypto si aggiornano anche a borsa chiusa. Il backtest allinea le crypto (7 giorni su 7)
+  sulle sedute di SPY.
+- **Test**: 122, tutti verdi.
+
+### Backtest, 550 sedute, solo titoli (le crypto hanno storico Alpaca più corto: sotto)
+
+| Variante | senza contesto | con contesto (regole) | Perdita max (con) | Trade | Vinti | Attesa/trade |
+|---|---|---|---|---|---|---|
+| Agenti base (stop gabbia 5-10%), universo senza IWM/TLT | +13,5% | +14,2% | -5,7% | 71 | 28% | +0,79% |
+| + presa di profitto secca +2% | +17,8% | +11,9% | -5,8% | 110 | 48% | +0,52% |
+| + uscite: stop -3%, obiettivo +3% (+4% GLD/MSFT/QQQ), **di serie** | +14,8% | +11,5% | **-5,1%** | 152 | 47% | +0,42% |
+| + uscite: stop -3%, obiettivo +4% | +13,5% | +12,0% | -7,8% | 161 | 43% | +0,39% |
+| riferimento: gabbia + trend con riarmo | +17,7% | | -8,7% | | | |
+| riferimento: SPY / 60-40 | +35,2% / +18,2% | | | | | |
+
+- **Stop -3% contro -2%**: stesso rendimento, 100 trade in meno (186 contro 281), attesa per trade da +0,29% a +0,51%,
+  e il "rientro" da perdente (-0,60%) a vincente (+0,63%): lo stop stretto gli tagliava le gambe.
+- **Il contesto economico** (regole sui dati: SPY sotto la 200, volatilità, settore con la maggioranza dei titoli sotto la
+  50, oro e obbligazioni in salita con SPY in calo, Fed vicina) **costa 2-6 punti di rendimento** nel periodo 2024-2026,
+  che è stato rialzista, e abbassa la perdita massima. È il prezzo dell'aspettare la candela successiva quando il quadro
+  è dubbio: in un mercato in discesa il segno si inverte. Nel vivo si aggiunge la lettura con `claude -p` e ricerca web.
+
+### Crypto nel motore: misurate, e per ora fuori di serie
+
+Backtest su 312 sedute (agosto 2025 - novembre 2026, il periodo coperto dalle barre crypto di Alpaca), tutto allineato
+sulle sedute di SPY, configurazione di serie (uscite +3%/-3%, contesto):
+
+| Universo | Rendimento | Perdita max | Trade | Vinti | Attesa/trade |
+|---|---|---|---|---|---|
+| titoli | **+9,3%** | -5,1% | 108 | 49% | +0,62% |
+| titoli + BTC/USD, ETH/USD | **+3,0%** | -5,3% | 139 | 43% | +0,17% |
+| riferimento: SPY / 60-40 | +15,6% / +8,9% | | | | |
+
+Nelle altre varianti il danno è uguale o peggiore (base: da +8,7% a +3,3%; profitto +2%: da +7,4% a -2,0%). In quel periodo
+BTC ed ETH hanno alternato salite brevi e discese lunghe: il trend a 50/200 giorni li compra tardi e li vende sullo stop.
+Quindi il supporto crypto resta nel codice, completo e testato, ma **si accende solo con `--crypto`** (anche nel backtest):
+la "costanza" richiesta, oggi, le crypto la peggiorano. Da riprovare con il filtro di momentum assoluto (punto 7 sotto).
+
+### Strategie migliori in giro? Cosa dicono bot open source e letteratura
+
+Ricerca fatta su freqtrade, Jesse, Hummingbot, NautilusTrader, OctoBot, Lumibot, repo "alpaca trading bot" e sulla
+letteratura accademica (fonti in fondo). Sintesi onesta:
+
+- **Nessun bot open source distribuisce una strategia con prove credibili di profitto.** Sono infrastrutture di
+  esecuzione e backtest. Le strategie popolari nelle loro comunità (scalper multi-indicatore a 5-15 minuti con tabelle di
+  take-profit e stop fissi, tipo NostalgiaForInfinity su freqtrade) sono proprio quelle che la documentazione di freqtrade
+  stessa sconsiglia; un test indipendente su 7 strategie pubbliche le ha trovate tutte in perdita su 24 mesi.
+  Il nostro progetto non è indietro rispetto a loro.
+- **Le evidenze pubblicate solide, per azioni ed ETF long-only su dati giornalieri, sono tre**: (1) i filtri di trend a
+  lungo periodo (media a 200 giorni / 10 mesi, Faber) **riducono le perdite massime** ma non alzano il rendimento;
+  (2) il momentum a 6-12 mesi tra asset aggiunge un rendimento modesto (Antonacci, Moskowitz-Ooi-Pedersen; dopo la
+  pubblicazione gli effetti calano del 25-50%, McLean-Pontiff); (3) la **taglia inversa alla volatilità** migliora Sharpe e
+  code (Harvey et al., Barroso-Santa Clara). Il nostro motore ha già tutte e tre. Nessuna produce "3-4% a trade con
+  costanza": producono rendimenti vicini al mercato con metà delle perdite, su orizzonti di mesi.
+- **Stop fissi e obiettivi fissi**: Kaminski-Lo (2014) mostrano che uno stop aggiunge valore solo quando i rendimenti
+  persistono (cioè dopo che il trend si è rotto), non come percentuale stretta; Lei-Li (2009) trovano che stop fissi e
+  trailing non cambiano il rendimento, solo il rischio, e con soglie di 5-20 deviazioni standard (larghe); Han-Zhou-Zhu
+  trovano che per il momentum lo stop utile è al 10%, e il 5% è il peggiore tra quelli provati; i test CXO su SPY
+  trovano che un take-profit fisso tra l'1% e il 15% non batte "compra e tieni" al netto dei costi. È coerente con il
+  nostro backtest: la variante con uscite fisse rende meno del trend puro, in un periodo fortemente rialzista.
+- **Crypto spot**: l'unica cosa con supporto pubblicato è il trend/momentum giornaliero (Liu-Tsyvinski 2021): taglia le
+  perdite massime da -90% a -70%, con lunghi periodi piatti; i parametri ottimizzati su un anno non predicono l'anno
+  dopo (arXiv 2009.12155). Le strategie scalper delle comunità non hanno risultati live verificati.
+- **Modelli fondazionali (Kronos, Chronos, TimesFM)**: studi del 2025 trovano R² negativo zero-shot sulle azioni USA e
+  nessuna strategia economicamente utile; un test indipendente di Kronos su date fuori campione non trova vantaggio.
+  Conferma quanto misurato qui nella sezione 2.
+
+**Cambiamenti suggeriti dalla letteratura, in ordine di priorità** (da provare nel backtest, non da adottare a occhi chiusi):
+
+1. Uscita di trend o trailing largo (2,5-3 ATR, o chiusura sotto la 50) al posto dell'obiettivo fisso: meno vinti, vincite
+   più grandi, più trend catturato.
+2. Stop scalato sulla volatilità (8-10% sui titoli nervosi) con taglia ridotta di conseguenza: stesso rischio per trade,
+   molte meno uscite sul rumore. Lo stop a -3% appena introdotto va in questa direzione ma è ancora stretto per NVDA e crypto.
+3. Taglia sulla volatilità di portafoglio (obiettivo 10-12% annuo) invece del solo tetto per titolo.
+4. Riesame mensile o settimanale sul momentum 6-12 mesi, al posto delle 20 sedute.
+5. Filtro di momentum assoluto (rendimento a 12 mesi > 0) oltre alle medie, con la liquidità come posizione di riposo.
+6. Il "rientro" come comparto separato a breve orizzonte (RSI(2) sotto 10 sopra la 200, uscita in 3-5 giorni) con obiettivi
+   piccoli: gli obiettivi fissi funzionano sulla mean reversion, non sul trend.
+7. Crypto solo in trend (sopra la media a 100-200 giorni e rendimento a 1-3 mesi positivo), con stop larghi.
+8. Confronto onesto: contro GTAA/GEM sullo stesso universo e il 60/40, su 2010-2026 includendo 2018, 2020 e 2022, con
+   costi e slippage del feed IEX, e un taglio del 25-50% a qualunque vantaggio di backtest.
+
+Da evitare: tabelle di take-profit ottimizzate (pattern freqtrade), stop stretti fissi, breakout Donchian a 20 giorni su
+ETF large cap, previsioni di direzione da modelli fondazionali nel ciclo live, ottimizzazione di parametri su finestre
+corte in crypto, e l'aspettativa di un 3-4% a trade costante: nessuna strategia long-only pubblicata lo consegna.
+
+Fonti principali: [Moskowitz-Ooi-Pedersen](https://papers.ssrn.com/abstract=2089463) · [Faber GTAA, estensione 2006-2025](https://concretumgroup.substack.com/p/global-tactical-asset-allocation) ·
+[Volatility targeting, Harvey et al.](https://quantpedia.com/the-impact-of-volatility-targeting-on-equities-bonds-commodities-and-currencies) ·
+[Kaminski-Lo, stop-loss](https://dspace.mit.edu/bitstream/handle/1721.1/114876/Lo_When%20Do%20Stop-Loss.pdf) · [Lei-Li, trailing stop](https://www.cxoadvisory.com/?p=1821) ·
+[Stop-gain su SPY](https://www.cxoadvisory.com/?p=25241) · [Momentum crashes e stop al 10%](https://www.cxoadvisory.com/technical-trading/stop-losses-to-avoid-stock-momentum-crashes/) ·
+[McLean-Pontiff](https://Www.Gwern.net/doc/economics/2016-mclean.pdf) · [Liu-Tsyvinski, crypto](https://econpapers.repec.org/RePEc:oup:rfinst:v:34:y:2021:i:6:p:2689-2727) ·
+[Parametri instabili in crypto](https://arxiv.org/pdf/2009.12155v1.pdf) · [TSFM in finanza, 2025](https://arxiv.org/abs/2511.18578) · [Test indipendente di Kronos](https://dev.to/alexbsolodev/we-tested-the-viral-ai-chart-model-on-dates-it-cant-have-seen-no-edge-4n1g) ·
+[freqtrade, strategy 101](https://docs.freqtrade.io/en/2025.3/strategy-101/) · [Hummingbot, intervista market maker](https://hummingbot.org/blog/interview-with-liquidity-miner-dominator008/) · [Lumibot](https://gittrend.io/repo/Lumiwealth/lumibot).

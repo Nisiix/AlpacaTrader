@@ -4,6 +4,7 @@ import type { Agent, AgentReport, AgentView, Signal } from "./types.ts";
 export interface ExitPolicy {
   stopPct: number; // perdita massima dal carico
   targetPct: number; // guadagno a cui si incassa, se la proiezione non dice di continuare
+  targetBySymbol?: Record<string, number>; // obiettivi diversi per titolo (dove le barriere pagano di più)
   giveBackPct: number; // quanto può restituire dal massimo chi continua
   lockPct: number; // sotto carico + lockPct non si scende più, una volta oltre l'obiettivo
 }
@@ -16,7 +17,7 @@ export class ExitAgent implements Agent {
 
   observe(v: AgentView): AgentReport {
     const segnali: Signal[] = [];
-    const { stopPct, targetPct, giveBackPct, lockPct } = this.policy;
+    const { stopPct, giveBackPct, lockPct } = this.policy;
     const pct = (x: number) => `${(x * 100).toFixed(1)}%`;
     for (const p of v.positions) {
       if (p.qty <= 0 || p.avgEntryPrice <= 0) continue;
@@ -34,6 +35,7 @@ export class ExitAgent implements Agent {
         sell(`proiezione negativa (${pct(forecast)}) su un titolo in portafoglio: si esce ${gain >= 0 ? "in guadagno" : "limitando la perdita"} (${pct(gain)})`);
         continue;
       }
+      const targetPct = this.policy.targetBySymbol?.[p.symbol] ?? this.policy.targetPct;
       const peakGain = peak / p.avgEntryPrice - 1;
       if (peakGain < targetPct) continue; // sotto l'obiettivo decide il resto del motore (trend, orizzonte, stop)
       const expectsMore = forecast !== undefined && forecast > 0;
@@ -44,6 +46,7 @@ export class ExitAgent implements Agent {
       const floor = Math.max(p.avgEntryPrice * (1 + lockPct), peak * (1 - giveBackPct));
       if (price <= floor) sell(`dal massimo ${peak.toFixed(2)} il prezzo è tornato a ${price.toFixed(2)}: si incassa ${pct(gain)} prima di restituire più del ${pct(giveBackPct)}`);
     }
-    return { segnali, note: segnali.length ? undefined : [`stop ${pct(stopPct)}, obiettivo ${pct(targetPct)}, restituzione massima ${pct(giveBackPct)}`] };
+    const targets = Object.entries(this.policy.targetBySymbol ?? {}).map(([k, t]) => `${k} ${pct(t)}`).join(", ");
+    return { segnali, note: segnali.length ? undefined : [`stop ${pct(stopPct)}, obiettivo ${pct(this.policy.targetPct)}${targets ? ` (${targets})` : ""}, restituzione massima ${pct(giveBackPct)}`] };
   }
 }

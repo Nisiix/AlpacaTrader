@@ -44,6 +44,7 @@
 <div id="scene"></div>
 <aside>
   <section><h2>Posizioni</h2><table id="positions"><thead><tr><th>Titolo</th><th class="num">Qta</th><th class="num">Carico</th><th class="num">Ora</th><th class="num">Var.</th><th class="num">Valore</th></tr></thead><tbody></tbody></table></section>
+  <section><h2>Contesto economico</h2><div id="context" class="muted">non ancora valutato</div></section>
   <section><h2>Agenti e pesi</h2><table id="agents"><tbody></tbody></table></section>
   <section><h2>Punteggi e segnali</h2><table id="scores"><thead><tr><th>Titolo</th><th class="num">Punteggio</th><th>Agenti</th></tr></thead><tbody></tbody></table><div id="signals" class="muted" style="margin-top:6px"></div></section>
   <section><h2>Ordini dell'ultimo giro</h2><div id="orders" class="muted">nessuno</div></section>
@@ -60,8 +61,7 @@ const $ = (s) => document.querySelector(s);
 const fmt = (x, d = 2) => (x === null || x === undefined || Number.isNaN(x)) ? '–' : Number(x).toLocaleString('it-IT', { minimumFractionDigits: d, maximumFractionDigits: d });
 const pct = (x) => (x === null || x === undefined) ? '–' : `${x >= 0 ? '+' : ''}${(x * 100).toFixed(2)}%`;
 const cls = (x) => x > 0 ? 'up' : x < 0 ? 'down' : '';
-const UNIVERSE = ['SPY', 'QQQ', 'IWM', 'AAPL', 'MSFT', 'NVDA', 'GLD', 'TLT'];
-const GROUPS = { SPY: 'indici', QQQ: 'tecnologia', IWM: 'indici', AAPL: 'tecnologia', MSFT: 'tecnologia', NVDA: 'tecnologia', GLD: 'oro', TLT: 'obbligazioni' };
+const DEFAULT_SYMBOLS = ['SPY', 'QQQ', 'AAPL', 'MSFT', 'NVDA', 'GLD', 'BTC/USD', 'ETH/USD', 'IWM', 'TLT'];
 
 // ---------- scena 3D: il pavimento dei mercati, l'anello della gabbia, gli agenti in orbita ----------
 const host = $('#scene');
@@ -85,15 +85,23 @@ cage.rotation.x = Math.PI / 2; cage.position.y = 0.05; scene.add(cage);
 const cageLbl = new CSS2DObject(Object.assign(document.createElement('div'), { className: 'lbl agent', textContent: 'gabbia' })); cageLbl.position.set(0, 0.2, 6.4); scene.add(cageLbl);
 
 const symbols = new Map(); // simbolo -> { mesh, label, pos }
-UNIVERSE.forEach((s, i) => {
-  const col = i % 4, row = Math.floor(i / 4);
-  const pos = new THREE.Vector3((col - 1.5) * 2.4, 0, (row - 0.5) * 2.6);
-  const mesh = new THREE.Mesh(new THREE.BoxGeometry(1.4, 1, 1.4), new THREE.MeshStandardMaterial({ color: 0x3a4657, roughness: 0.5, metalness: 0.1 }));
-  mesh.position.copy(pos); mesh.scale.y = 0.2; mesh.position.y = 0.1; scene.add(mesh);
-  const el = document.createElement('div'); el.className = 'lbl'; el.textContent = s;
-  const label = new CSS2DObject(el); label.position.set(pos.x, 0.6, pos.z); scene.add(label);
-  symbols.set(s, { mesh, label, el, pos, targetH: 0.2 });
-});
+function placeSymbols(list) {
+  const all = [...new Set([...DEFAULT_SYMBOLS.filter((s) => list.includes(s)), ...list])];
+  if ([...symbols.keys()].join() === all.join()) return;
+  for (const s of symbols.values()) { scene.remove(s.mesh); scene.remove(s.label); }
+  symbols.clear();
+  const perRow = Math.ceil(all.length / 2);
+  all.forEach((s, i) => {
+    const col = i % perRow, row = Math.floor(i / perRow);
+    const pos = new THREE.Vector3((col - (perRow - 1) / 2) * 2.2, 0, (row - 0.5) * 2.6);
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(1.3, 1, 1.3), new THREE.MeshStandardMaterial({ color: 0x3a4657, roughness: 0.5, metalness: 0.1 }));
+    mesh.position.copy(pos); mesh.scale.y = 0.2; mesh.position.y = 0.1; scene.add(mesh);
+    const el = document.createElement('div'); el.className = 'lbl'; el.textContent = s;
+    const label = new CSS2DObject(el); label.position.set(pos.x, 0.6, pos.z); scene.add(label);
+    symbols.set(s, { mesh, label, el, pos, targetH: 0.2 });
+  });
+}
+placeSymbols(DEFAULT_SYMBOLS.slice(0, 8));
 const agents = new Map(); // nome -> { mesh, pos }
 function placeAgents(names) {
   names.forEach((n, i) => {
@@ -156,6 +164,7 @@ function paint(st) {
   $('#k-spy').textContent = st.confronto ? `${pct(st.confronto.conto)} / ${pct(st.confronto.spy)}` : '–';
   const eq = c.patrimonio || 1;
   const held = new Map((st.posizioni || []).map((p) => [p.simbolo, p]));
+  placeSymbols([...new Set([...Object.keys(st.prezzi || {}), ...held.keys()])]);
   for (const [sym, s] of symbols) {
     const p = held.get(sym);
     const share = p ? p.valore / eq : 0;
@@ -167,6 +176,8 @@ function paint(st) {
   }
   $('#positions tbody').innerHTML = (st.posizioni || []).map((p) => `<tr><td>${p.simbolo}</td><td class="num">${p.quantita}</td><td class="num">${fmt(p.prezzoCarico)}</td><td class="num">${fmt(p.prezzoAttuale)}</td><td class="num ${cls(p.variazione)}">${pct(p.variazione)}</td><td class="num">${fmt(p.valore, 0)}</td></tr>`).join('') || '<tr><td colspan="6" class="muted">nessuna posizione</td></tr>';
   placeAgents(Object.keys(st.agenti || {}));
+  const cx = st.contesto;
+  $('#context').innerHTML = cx ? `<b class="${cx.generale === 'favorevole' ? 'up' : cx.generale === 'sfavorevole' ? 'down' : ''}">${cx.generale}</b> <span class="tag">${cx.fonte}</span> ${Object.entries(cx.settori || {}).map(([k, v]) => `<span class="tag">${k}: ${v}</span>`).join('')}<br><span class="muted">${cx.motivo}</span>${(st.inAttesa || []).length ? `<br>In attesa della candela successiva: ${st.inAttesa.map((w) => `<b>${w.simbolo}</b>`).join(', ')}` : ''}` : 'non ancora valutato';
   $('#agents tbody').innerHTML = Object.entries(st.agenti || {}).map(([n, a]) => `<tr><td><b>${n}</b> <span class="tag">peso ${st.pesi?.[n] ?? 1}</span> <span class="tag">${a.segnali} segnali</span>${a.errore ? `<br><span class="down">${a.errore}</span>` : ''}${a.note?.length ? `<br><span class="muted">${a.note.join(' · ')}</span>` : ''}</td></tr>`).join('');
   $('#scores tbody').innerHTML = (st.punteggi || []).map((s) => `<tr><td>${s.simbolo}</td><td class="num ${cls(s.punteggio)}">${s.punteggio.toFixed(2)}</td><td class="muted">${s.agenti.join(', ')}</td></tr>`).join('') || '<tr><td colspan="3" class="muted">nessun segnale</td></tr>';
   $('#signals').innerHTML = (st.segnali || []).map((s) => `<div><span class="${s.lato}">${s.lato === 'buy' ? '▲' : '▼'} ${s.simbolo}</span> <span class="tag">${s.agente}</span> <span class="tag">forza ${s.forza.toFixed(2)}</span> ${s.perche}</div>`).join('');
@@ -188,6 +199,7 @@ function describe(e) {
     case 'prezzi': return `prezzi: ${Object.entries(e.prezzi || {}).map(([k, v]) => `${k} ${fmt(v)}`).join(' · ')}`;
     case 'agente': return `<span class="tag">${e.agente}</span>${e.errore ? `<span class="down">${e.errore}</span>` : `${e.segnali} segnali${e.rischio !== null && e.rischio !== undefined ? `, rischio ${Math.round(e.rischio * 100)}%` : ''}${e.note?.length ? ` · ${e.note.join(' · ')}` : ''}`}`;
     case 'segnale': return `<span class="tag">${e.agente}</span><span class="${e.lato}">${e.lato === 'buy' ? '▲ compra' : '▼ vendi'} ${e.simbolo}</span> forza ${Number(e.forza).toFixed(2)} · ${e.perche}`;
+    case 'contesto': return `contesto <b>${e.generale}</b> <span class="tag">${e.fonte}</span> ${Object.entries(e.settori || {}).map(([k, v]) => `${k} ${v}`).join(' · ')} · ${e.motivo}${Object.keys(e.attendi || {}).length ? ` · in attesa: ${Object.keys(e.attendi).join(', ')}` : ''}`;
     case 'rischio': return `rischio ammesso ${Math.round(e.rischio * 100)}% · ${(e.note || []).join(' · ')}`;
     case 'allocazione': return `allocazione: ${(e.proposte || []).map((p) => `${p.side} ${p.qty} ${p.symbol}`).join(', ') || 'nessuna proposta'} · rischio ${Math.round(e.rischio * 100)}%`;
     case 'ordine': return `<span class="${e.lato}">ORDINE ${e.lato === 'buy' ? 'COMPRA' : 'VENDE'} ${e.quantita} ${e.simbolo}</span> <span class="tag">${e.esito}${e.stato ? ` ${e.stato}` : ''}</span>${e.errore ? ` <span class="down">${e.errore}</span>` : ''}`;

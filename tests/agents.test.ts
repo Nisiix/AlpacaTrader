@@ -3,6 +3,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { agentWeights, allocate, scoreSignals } from "../src/agents/allocator.ts";
 import { runAgentsBacktest } from "../src/agents/backtest.ts";
+import { ClaudeMacro, ContextAgent } from "../src/agents/context.ts";
 import { ExitAgent } from "../src/agents/exits.ts";
 import { EventBus, readEvents } from "../src/agents/bus.ts";
 import { emptyCache, inEntryWindow, runTick, statusPath, type AgentsStatus, type EngineDeps } from "../src/agents/engine.ts";
@@ -11,10 +12,11 @@ import { KronosAgent } from "../src/agents/kronos.ts";
 import { PullbackAgent } from "../src/agents/pullback.ts";
 import { RegimeAgent } from "../src/agents/regime.ts";
 import { TrendAgent } from "../src/agents/trend.ts";
-import type { AgentView } from "../src/agents/types.ts";
+import type { Agent, AgentView } from "../src/agents/types.ts";
 import { evaluateBreaker } from "../src/breaker.ts";
+import { applyCage } from "../src/cage.ts";
 import { syntheticCloses } from "../src/broker/fake.ts";
-import { LIMITS, UNIVERSE } from "../src/config.ts";
+import { LIMITS, UNIVERSE, enableCrypto } from "../src/config.ts";
 import { startDashboard } from "../src/dashboard/server.ts";
 import { indicatorsFor } from "../src/indicators.ts";
 import { emptyJournal, type JournalFile } from "../src/journal.ts";
@@ -170,7 +172,7 @@ describe("allocatore", () => {
   });
 });
 
-function engineDeps(env: TestEnv, agents = [new TrendAgent(), new PullbackAgent(), new RegimeAgent(), new HorizonAgent()]): EngineDeps {
+function engineDeps(env: TestEnv, agents: Agent[] = [new TrendAgent(), new PullbackAgent(), new RegimeAgent(), new HorizonAgent()]): EngineDeps {
   const d = env.deps();
   return { broker: d.broker, notifier: d.notifier, stateDir: d.stateDir, logsDir: d.logsDir, redactor: d.redactor, now: d.now, sleep: d.sleep, agents, bus: new EventBus(d.stateDir, d.now), echo: false };
 }
@@ -314,13 +316,22 @@ describe("uscite (regole vincolanti)", () => {
   const pos = (symbol: string, avg: number, price: number) => ({ symbol, qty: 10, avgEntryPrice: avg, currentPrice: price, marketValue: price * 10 });
   const openTrade = (simbolo: string, massimo?: number) => ({ id: simbolo, simbolo, stato: "aperto" as const, apertoIl: "2026-09-01T14:00:00Z", comprate: 10, costo: 1000, vendute: 0, incassato: 0, quantita: 10, contesto: null, massimo });
 
-  test("stop a -2% vende; sotto l'obiettivo tace; a +3% senza proiezione incassa", () => {
+  test("stop a -3% vende; sotto l'obiettivo tace; a +3% senza proiezione incassa", () => {
     const j = emptyJournal();
     j.trade.push(openTrade("AAPL"), openTrade("MSFT"), openTrade("SPY"));
-    const v = view({ positions: [pos("AAPL", 100, 97.9), pos("MSFT", 100, 101), pos("SPY", 100, 103.1)], journal: j });
-    v.prices.AAPL = 97.9; v.prices.MSFT = 101; v.prices.SPY = 103.1;
+    const v = view({ positions: [pos("AAPL", 100, 96.9), pos("MSFT", 100, 101), pos("SPY", 100, 103.1)], journal: j });
+    v.prices.AAPL = 96.9; v.prices.MSFT = 101; v.prices.SPY = 103.1;
     const r = new ExitAgent().observe(v);
     expect(r.segnali.map((s) => s.simbolo).sort()).toEqual(["AAPL", "SPY"]);
+    // MSFT ha obiettivo +4%: a +3,5% non incassa ancora.
+    const j4 = emptyJournal();
+    j4.trade.push(openTrade("MSFT"));
+    const v4 = view({ positions: [pos("MSFT", 100, 103.5)], journal: j4 });
+    v4.prices.MSFT = 103.5;
+    expect(new ExitAgent().observe(v4).segnali).toEqual([]);
+    v4.prices.MSFT = 104.1;
+    v4.positions[0]!.currentPrice = 104.1;
+    expect(new ExitAgent().observe(v4).segnali.length).toBe(1);
     expect(r.segnali.every((s) => s.vincolante && s.lato === "sell")).toBe(true);
     expect(r.segnali.find((s) => s.simbolo === "AAPL")!.perche).toContain("oltre lo stop");
     expect(r.segnali.find((s) => s.simbolo === "SPY")!.perche).toContain("si incassa");
@@ -354,12 +365,12 @@ describe("uscite (regole vincolanti)", () => {
     expect(a.punteggi.find((p) => p.simbolo === "NVDA")!.agenti).toEqual(["trend"]); // il vincolo non entra nei punteggi
   });
 
-  test("nel motore lo stop GTC su Alpaca sta al 2% dal carico e il massimo visto finisce nel diario", async () => {
+  test("nel motore lo stop GTC su Alpaca sta al 3% dal carico e il massimo visto finisce nel diario", async () => {
     const env = makeEnv(day("2026-09-24", "15:41"));
     const r = await runTick(engineDeps(env, [new TrendAgent(), new RegimeAgent(), new ExitAgent()]));
     const sym = r.status_file!.posizioni[0]!.simbolo;
     const stop = openStopsFor(env, sym)[0]!;
-    expect(stop.stopPrice).toBeCloseTo(PRICES[sym]! * 0.98, 1);
+    expect(stop.stopPrice).toBeCloseTo(PRICES[sym]! * 0.97, 1);
     const journal = JSON.parse(readFileSync(join(env.stateDir, "journal.json"), "utf8")) as JournalFile;
     // Il massimo si aggiorna alla passata successiva, con il prezzo del momento.
     env.setFake((s) => {
@@ -370,5 +381,112 @@ describe("uscite (regole vincolanti)", () => {
     const j2 = JSON.parse(readFileSync(join(env.stateDir, "journal.json"), "utf8")) as JournalFile;
     expect(j2.trade.find((t) => t.simbolo === sym)!.massimo).toBeCloseTo(PRICES[sym]! * 1.05, 5);
     void journal;
+  });
+});
+
+describe("crypto", () => {
+  test("la gabbia accetta BTC/USD a mercato chiuso e fuori finestra, con quantità frazionaria sopra i 10 $; rifiuta sotto il minimo", () => {
+    const closes: Record<string, number[]> = { "BTC/USD": syntheticCloses(76_000, 0.025, 260) };
+    const base = { today: "2026-09-24", slotKind: "mid" as const, marketOpen: false, latenessMin: 0, account: { equity: 100_000, lastEquity: 100_000, cash: 100_000, status: "ACTIVE" }, positions: [], prices: { "BTC/USD": 76_000 }, closes, recentOrders: [], lessons: [], buyBlock: null, events: [] };
+    const ok = applyCage({ ...base, proposals: [{ symbol: "BTC/USD", side: "buy", qty: 0.05, why: "trend" }] });
+    expect(ok.orders.map((o) => `${o.side} ${o.qty} ${o.symbol}`)).toEqual(["buy 0.05 BTC/USD"]);
+    const small = applyCage({ ...base, proposals: [{ symbol: "BTC/USD", side: "buy", qty: 0.0001, why: "trend" }] });
+    expect(small.rejected[0]!.reason).toContain("minimo di 10 $");
+    // Un titolo nello stesso giro resta bloccato dal mercato chiuso.
+    const mixed = applyCage({ ...base, prices: { ...base.prices, SPY: 600 }, proposals: [{ symbol: "SPY", side: "buy", qty: 1, why: "" }, { symbol: "BTC/USD", side: "buy", qty: 0.05, why: "" }] });
+    expect(mixed.orders.length).toBe(1);
+    expect(mixed.rejected[0]!.reason).toBe("mercato chiuso");
+  });
+
+  test("il motore compra crypto anche di domenica sera, con stop_limit su Alpaca al 3% e ID senza barra", async () => {
+    enableCrypto(); // scelta esplicita, come --crypto
+    const env = makeEnv(day("2026-09-27", "21:00")); // domenica
+    // Titoli piatti (non in trend): restano solo le crypto come candidati.
+    env.setFake((s) => {
+      for (const sym of ["SPY", "QQQ", "AAPL", "MSFT", "NVDA", "GLD"]) s.closes[sym] = Array(260).fill(s.prices[sym]!);
+    });
+    const r = await runTick(engineDeps(env, [new TrendAgent(), new RegimeAgent(), new ExitAgent()]));
+    const crypto = r.status_file!.ordini.filter((o) => o.simbolo.includes("/"));
+    expect(crypto.length).toBe(2);
+    expect(r.status_file!.ordini.some((o) => !o.simbolo.includes("/"))).toBe(false);
+    expect(crypto[0]!.id).toMatch(/^agenti-2026-09-27-(BTC|ETH)USD-buy$/);
+    const stop = openStopsFor(env, "BTC/USD")[0]!;
+    expect(stop.type).toBe("stop_limit");
+    expect(stop.stopPrice).toBeCloseTo(76_000 * 0.97, 0);
+    expect(Number.isInteger(stop.qty)).toBe(false);
+  });
+
+  test("gli agenti non comprano IWM e TLT ma sorvegliano una posizione vecchia in TLT", () => {
+    const r = new TrendAgent().observe(view({ falling: ["TLT"], positions: [{ symbol: "TLT", qty: 10, avgEntryPrice: 95, currentPrice: 80, marketValue: 800 }] }));
+    expect(r.segnali.filter((s) => s.lato === "buy").map((s) => s.simbolo)).not.toContain("IWM");
+    expect(r.segnali.find((s) => s.lato === "sell")?.simbolo).toBe("TLT");
+  });
+});
+
+describe("contesto economico", () => {
+  test("regole: con SPY sopra la 200 e settori in trend è favorevole; con SPY sotto la 200 è sfavorevole e tutti aspettano", async () => {
+    const ok = await new ContextAgent(null, []).assess(view());
+    expect(ok.generale).toBe("favorevole");
+    expect(Object.keys(ok.attendi)).toEqual([]);
+    expect(ok.fidatiDellaProiezione.NVDA).toBe(true);
+    const bad = await new ContextAgent(null, []).assess(view({ falling: ["SPY"] }));
+    expect(bad.generale).toBe("sfavorevole");
+    expect(bad.attendi.NVDA).toContain("candela successiva");
+    expect(bad.fidatiDellaProiezione.NVDA).toBe(false);
+  });
+
+  test("settore debole: si aspetta solo in quel settore; la Fed vicina rende tutto neutro e toglie fiducia alla proiezione", async () => {
+    const v = view({ falling: ["QQQ", "AAPL", "MSFT", "NVDA"] });
+    const c = await new ContextAgent(null, []).assess(v);
+    expect(c.settori.tecnologia).toBe("sfavorevole");
+    expect(c.attendi.NVDA).toBeDefined();
+    expect(c.attendi.GLD).toBeUndefined();
+    const fed = await new ContextAgent(null, [{ date: "2026-09-25", kind: "fed", confirmed: true }]).assess(view());
+    expect(fed.generale).toBe("neutro");
+    expect(fed.fidatiDellaProiezione.SPY).toBe(false);
+    expect(fed.attendi.SPY).toBeUndefined(); // neutro: si entra, ma senza fidarsi della proiezione
+  });
+
+  test("lettura esterna (claude) peggiora ma non migliora le regole; cache rispettata; l'allocatore non apre sui titoli in attesa", async () => {
+    let calls = 0;
+    const runner = async () => {
+      calls++;
+      return { code: 0, stdout: JSON.stringify({ structured_output: { datiVerificati: true, generale: "neutro", settori: { crypto: "sfavorevole" }, motivo: "dazi e inflazione in salita" } }), stderr: "" };
+    };
+    const env = makeEnv(day("2026-09-24", "15:41"));
+    const macro = new ClaudeMacro(env.stateDir, runner, env.deps().now);
+    const agent = new ContextAgent(macro, []);
+    const c = await agent.assess(view());
+    expect(c.generale).toBe("neutro");
+    expect(c.settori.crypto).toBe("sfavorevole");
+    expect(c.attendi["BTC/USD"]).toContain("crypto");
+    expect(c.motivo).toContain("dazi");
+    await agent.assess(view());
+    expect(calls).toBe(1); // dalla cache
+    const v = view({ contesto: c });
+    const a = allocate(v, { trend: { segnali: [{ agente: "trend", simbolo: "BTC/USD", lato: "buy", forza: 1, orizzonteSedute: 20, perche: "" }, { agente: "trend", simbolo: "SPY", lato: "buy", forza: 1, orizzonteSedute: 20, perche: "" }] } }, { trend: 1 });
+    expect(a.proposte.map((p) => p.symbol)).toEqual(["SPY"]);
+    expect(a.inAttesa[0]!.simbolo).toBe("BTC/USD");
+  });
+
+  test("lettura senza ricerca web (datiVerificati false): ignorata, restano le regole", async () => {
+    const env = makeEnv(day("2026-09-24", "15:41"));
+    const runner = async () => ({ code: 0, stdout: JSON.stringify({ structured_output: { datiVerificati: false, generale: "neutro", settori: {}, motivo: "ricerca non autorizzata" } }), stderr: "" });
+    const c = await new ContextAgent(new ClaudeMacro(env.stateDir, runner, env.deps().now), []).assess(view());
+    expect(c.generale).toBe("favorevole");
+    expect(c.fonte).toBe("regole");
+    expect(c.motivo).toContain("ricerca web non disponibile");
+  });
+
+  test("nel motore il contesto viene prima: filtra le proiezioni e finisce nello stato e negli eventi", async () => {
+    const env = makeEnv(day("2026-09-24", "15:41"));
+    const deps = engineDeps(env, [new TrendAgent(), new RegimeAgent(), new ExitAgent(), new ContextAgent(null, [{ date: "2026-09-25", kind: "fed", confirmed: true }])]);
+    deps.forecaster = async (symbols) => Object.fromEntries(symbols.map((s) => [s, -0.05]));
+    const r = await runTick(deps);
+    expect(r.status_file!.contesto?.generale).toBe("neutro");
+    expect(r.status_file!.rischio).toBe(0.75);
+    // Proiezioni negative su tutto, ma senza fiducia (Fed vicina) non fanno uscire: nessuna vendita vincolante.
+    expect(r.status_file!.ordini.filter((o) => o.lato === "sell")).toEqual([]);
+    expect(readEvents(env.stateDir, "2026-09-24").some((e) => e.tipo === "contesto")).toBe(true);
   });
 });

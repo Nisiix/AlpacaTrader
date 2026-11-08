@@ -2,7 +2,9 @@
 // Il motore degli agenti: processo sempre acceso sul tuo PC. Ogni `tick` minuti legge il conto, interroga gli agenti
 // (trend, rientro, regime, orizzonte, Kronos se c'è), passa dalla gabbia, invia, e aggiorna la dashboard locale.
 import { HorizonAgent } from "../agents/horizon.ts";
+import { ClaudeMacro, ContextAgent } from "../agents/context.ts";
 import { ExitAgent } from "../agents/exits.ts";
+import { spawnRunner } from "../brain/claude.ts";
 import { KronosAgent, forecasterFor, httpFetcher } from "../agents/kronos.ts";
 import { PullbackAgent } from "../agents/pullback.ts";
 import { RegimeAgent } from "../agents/regime.ts";
@@ -11,18 +13,21 @@ import { TrendAgent } from "../agents/trend.ts";
 import { EventBus } from "../agents/bus.ts";
 import { runEngine, runTick, type EngineDeps } from "../agents/engine.ts";
 import type { Agent } from "../agents/types.ts";
-import { AGENTS } from "../config.ts";
+import { AGENTS, enableCrypto } from "../config.ts";
 import { startDashboard } from "../dashboard/server.ts";
 import { buildDeps } from "../deps.ts";
 import { parseArgs } from "./args.ts";
 
 try {
   const args = parseArgs(process.argv.slice(2));
+  if (args.crypto) enableCrypto();
   const deps = await buildDeps(args);
   for (const w of deps.warnings) console.warn(w);
   const bus = new EventBus(deps.stateDir, deps.now);
   const agents: Agent[] = [new TrendAgent(), new PullbackAgent(), new RegimeAgent(), new HorizonAgent()];
   if (AGENTS.exit.enabled) agents.push(new ExitAgent());
+  // Il contesto economico: regole sui dati sempre; la lettura con claude e ricerca web solo nel vero, se abilitata.
+  if (AGENTS.context.enabled) agents.push(new ContextAgent(AGENTS.context.useClaude && !args.fake ? new ClaudeMacro(deps.stateDir, spawnRunner, deps.now) : null));
   const kronosUrl = args.kronos ?? process.env.KRONOS_URL;
   if (kronosUrl) agents.push(new KronosAgent(httpFetcher(kronosUrl)));
   if (args.profitto || AGENTS.takeProfit.enabled) agents.push(new TakeProfitAgent());

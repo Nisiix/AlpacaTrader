@@ -5,7 +5,7 @@ import { BrainError, type Brain, type BrainInput, type Decision } from "./types.
 
 export type Runner = (args: string[], stdin: string, timeoutMs: number) => Promise<{ code: number; stdout: string; stderr: string }>;
 
-const spawnRunner: Runner = async (args, stdin, timeoutMs) => {
+export const spawnRunner: Runner = async (args, stdin, timeoutMs) => {
   const proc = Bun.spawn(args, { stdin: new Blob([stdin]), stdout: "pipe", stderr: "pipe" });
   const timer = setTimeout(() => proc.kill("SIGKILL"), timeoutMs);
   const [stdout, stderr, code] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text(), proc.exited]);

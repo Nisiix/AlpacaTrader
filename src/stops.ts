@@ -72,7 +72,7 @@ export async function manageStops(broker: Broker, runId: string, positions: Posi
 // L'ID resta deterministico; se quello base è già usato (sveglia rifatta) si prova con un suffisso.
 async function placeStop(broker: Broker, runId: string, symbol: string, qty: number, stopPrice: number) {
   for (let n = 1; n <= 5; n++) {
-    const id = `${runId}-${symbol}-stop${n > 1 ? `-${n}` : ""}`;
+    const id = `${runId}-${symbol.replace("/", "")}-stop${n > 1 ? `-${n}` : ""}`;
     try {
       return await broker.submitStopOrder({ symbol, qty, stopPrice, clientOrderId: id });
     } catch (e) {

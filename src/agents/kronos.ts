@@ -1,4 +1,4 @@
-import { AGENTS, LIMITS, UNIVERSE } from "../config.ts";
+import { AGENTS, LIMITS } from "../config.ts";
 import { sma } from "../indicators.ts";
 import type { Agent, AgentReport, AgentView, Signal } from "./types.ts";
 
@@ -41,7 +41,7 @@ export class KronosAgent implements Agent {
     if (v.previsioni) fc = Object.entries(v.previsioni).map(([simbolo, rendimentoPrevisto]) => ({ simbolo, rendimentoPrevisto }));
     else {
       try {
-        fc = await this.fetcher([...UNIVERSE], AGENTS.kronos.horizon);
+        fc = await this.fetcher([...AGENTS.universe], AGENTS.kronos.horizon);
       } catch (e) {
         return { segnali: [], note: [`Kronos non disponibile: ${(e as Error).message}`] };
       }

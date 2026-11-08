@@ -15,7 +15,7 @@ bun run agents --kronos http://127.0.0.1:8765   # aggiunge l'agente Kronos (side
 bun run dashboard                    # solo la dashboard, in lettura, sullo stato esistente
 ```
 
-Opzioni: `--tick 5` (minuti tra un giro e l'altro), `--port 8787`, `--no-dashboard`, `--fake`, `--once`.
+Opzioni: `--tick 5` (minuti tra un giro e l'altro), `--port 8787`, `--no-dashboard`, `--fake`, `--once`, `--crypto` (aggiunge BTC/USD ed ETH/USD), `--profitto`, `--kronos url`.
 Da tenere acceso il PC (o un altro processo con lo stesso `state/`): il motore riparte da `state/` dopo un riavvio,
 il lock e gli ID deterministici evitano doppioni anche con le sveglie classiche.
 
@@ -25,7 +25,8 @@ il lock e gli ID deterministici evitano doppioni anche con le sveglie classiche.
 | `rientro` | sopra la 200, tornato entro il 2% dalla media a 50 dopo una corsa di almeno il 4% in 20 sedute | compra (forza 0,7) |
 | `regime` | SPY contro la sua media a 200 giorni e la volatilità a 20 giorni | nessun ordine: dimezza l'esposizione ammessa quando il mercato è debole o nervoso |
 | `orizzonte` | trade aperti da 20 sedute | vende (0,8 se lo slancio è finito, 0,4 se il trend regge: allora decide il trend) |
-| `uscite` | ogni posizione: perdita dal carico, guadagno, massimo visto, proiezione di Kronos se c'è | **vincolante** (non si vota): vende a -2%; a +3% incassa, salvo proiezione positiva: allora segue il massimo e vende se restituisce il 2% (mai sotto carico +0,5%); proiezione negativa: esce subito |
+| `contesto` | **prima di ogni trade**: situazione economica generale e per settore (regole sui dati: SPY e media a 200, volatilità, oro e obbligazioni in salita con SPY in calo, titoli del settore sotto la 50, Fed nei prossimi 2 giorni; più, se c'è `claude -p`, una lettura con ricerca web ogni 6 ore in `state/macro.json`) | nessun ordine: esposizione × 0,75 (neutro) o × 0,5 (sfavorevole); con contesto sfavorevole nel settore **non si apre niente e si aspetta la candela successiva**; la proiezione di Kronos guida ingressi e uscite **solo** con contesto favorevole |
+| `uscite` | ogni posizione: perdita dal carico, guadagno, massimo visto, proiezione di Kronos se il contesto si fida | **vincolante** (non si vota): vende a -3%; a +3% (+4% su GLD, MSFT, QQQ) incassa, salvo proiezione positiva: allora segue il massimo e vende se restituisce il 2% (mai sotto carico +0,5%); proiezione negativa: esce subito |
 | `kronos` (opzionale) | previsioni del modello a 5 sedute, solo il 25% più nette e nel verso del trend | compra/vende (0,5); le stesse proiezioni guidano `uscite` |
 | `profitto` (opzionale, `--profitto`) | guadagno oltre +2% | vende (1) |
 
@@ -33,7 +34,13 @@ L'**allocatore** somma i segnali pesati (peso 1 per tutti finché il diario non 
 1,2 a chi vince con campione affidabile), compra sopra 0,5 e vende sotto -0,5; il peso obiettivo di un titolo è il massimo
 della gabbia (20%, meno se volatile) × rischio del regime × punteggio. Poi tutto passa dalla **gabbia** (`src/cage.ts`):
 acquisti solo nella finestra 15:40-17:30 di Roma e una sola volta al giorno per titolo, vendite e stop a mercato aperto.
-Lo stop GTC su Alpaca sta al 2% dal carico (`AGENTS.exit.stopPct`); la politica di uscita si regola in `src/config.ts` (`AGENTS.exit`).
+Lo stop GTC su Alpaca sta al 3% dal carico (`AGENTS.exit.stopPct`); la politica di uscita si regola in `src/config.ts` (`AGENTS.exit`).
+Gli agenti comprano solo in `AGENTS.universe` (SPY QQQ AAPL MSFT NVDA GLD: niente IWM e TLT, che con obiettivo +3% e
+stop -3% hanno attesa nulla o negativa); una posizione vecchia resta sorvegliata e vendibile.
+
+**Crypto** (BTC/USD, ETH/USD, con `--crypto`, anche nel backtest): 24 ore su 24, anche a borsa chiusa e fuori finestra, un ingresso al giorno per coppia,
+quantità frazionarie (6 decimali, minimo 10 $), stop su Alpaca come `stop_limit` (Alpaca non accetta lo `stop` a
+mercato sulle crypto) con limite mezzo punto sotto. Le posizioni crypto di Alpaca (`BTCUSD`) sono normalizzate a `BTC/USD`.
 L'interruttore a -5% dal massimo si **riarma da solo dopo 5 giorni di borsa** (nel backtest: da +4,3% a +17,7%).
 
 Ogni cosa che succede finisce nel **registro eventi** `state/events/AAAA-MM-GG.jsonl` (prezzi, segnali, rischio,
@@ -58,14 +65,20 @@ powershell -ExecutionPolicy Bypass -File installa-windows.ps1
 
 ### Backtest del motore (550 sedute, dati Alpaca, esecuzione alla chiusura, senza costi)
 
+Configurazione attuale: universo senza IWM/TLT, contesto economico (regole), stop -3%, obiettivo +3% (+4% GLD/MSFT/QQQ).
+Le crypto hanno storico Alpaca più corto e restano fuori da questa tabella (vedi `docs/`).
+
 | Variante | Rendimento | Perdita max | Trade | Vinti | Attesa/trade | Durata media |
 |---|---|---|---|---|---|---|
 | Gabbia + metodo trend (sveglie), interruttore a riarmo automatico | +17,65% | -8,72% | 208 ordini | – | – | – |
-| Agenti: trend, rientro, regime, orizzonte, pesi dal diario | +13,60% | -8,57% | 86 | 34% | +0,64% | 27 g |
-| Agenti + presa di profitto secca a +2% | +16,93% | -7,32% | 143 | 47% | +0,73% | 16 g |
-| Agenti + uscite: stop -2%, incasso a +3% | +14,85% | -7,62% | 281 | 45% | +0,29% | 7 g |
-| Agenti + uscite: stop -2%, incasso a +4% | +13,18% | -9,00% | 235 | 39% | +0,36% | 9 g |
+| Agenti: trend, rientro, regime, orizzonte, contesto, pesi dal diario (stop gabbia 5-10%) | +14,17% | -5,73% | 71 | 28% | +0,79% | 28 g |
+| Agenti + presa di profitto secca a +2% | +11,91% | -5,76% | 110 | 48% | +0,52% | 14 g |
+| **Agenti + uscite: stop -3%, obiettivo +3%/+4% (configurazione di serie)** | +11,49% | **-5,11%** | 152 | 47% | +0,42% | 10 g |
+| Agenti + uscite: stop -3%, obiettivo +4% | +12,01% | -7,82% | 161 | 43% | +0,39% | 11 g |
 | SPY comprato e tenuto / 60-40 | +35,18% / +18,22% | | | | | |
+
+Senza l'agente contesto le stesse varianti rendono 2-6 punti in più (uscite +3%: +14,8%) con esposizione più alta:
+il contesto costa rendimento nei periodi rialzisti e compra protezione in quelli deboli.
 
 ## Sveglie (modalità classica)
 

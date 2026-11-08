@@ -1,6 +1,7 @@
 // bun run backtest [--fake] [--days 500] [--riarmo 5]: rigioca sulle chiusure storiche di Alpaca prima la gabbia con il
 // metodo trend (le sveglie), poi il motore degli agenti (trend, rientro, regime, orizzonte, pesi dal diario).
 import { runAgentsBacktest } from "../agents/backtest.ts";
+import { ContextAgent } from "../agents/context.ts";
 import { ExitAgent } from "../agents/exits.ts";
 import { HorizonAgent } from "../agents/horizon.ts";
 import { PullbackAgent } from "../agents/pullback.ts";
@@ -8,7 +9,7 @@ import { RegimeAgent } from "../agents/regime.ts";
 import { TakeProfitAgent } from "../agents/takeprofit.ts";
 import { TrendAgent } from "../agents/trend.ts";
 import { runBacktest } from "../backtest.ts";
-import { AGENTS, UNIVERSE } from "../config.ts";
+import { AGENTS, UNIVERSE, enableCrypto } from "../config.ts";
 import { buildDeps } from "../deps.ts";
 import { parseArgs } from "./args.ts";
 
@@ -18,8 +19,26 @@ try {
   const days = i >= 0 ? Number(argv.splice(i, 2)[1]) : 500;
   const j = argv.indexOf("--riarmo");
   const reset = j >= 0 ? Number(argv.splice(j, 2)[1]) : null;
-  const deps = await buildDeps(parseArgs(argv));
-  const closes = await deps.broker.getDailyCloses([...UNIVERSE], days);
+  const args = parseArgs(argv);
+  if (args.crypto) enableCrypto();
+  const deps = await buildDeps(args);
+  // Titoli e crypto non hanno gli stessi giorni: tutto allineato sulle sedute di SPY (per le crypto vale la chiusura di quel giorno).
+  const byDate = await deps.broker.getDailyClosesByDate([...new Set([...UNIVERSE, ...AGENTS.universe])], days);
+  const grid = (byDate.SPY ?? []).map((b) => b.date);
+  const closes: Record<string, number[]> = {};
+  for (const [sym, bars] of Object.entries(byDate)) {
+    const m = new Map(bars.map((b) => [b.date, b.close]));
+    let last: number | undefined;
+    const out: number[] = [];
+    for (const d of grid) {
+      const c = m.get(d) ?? last;
+      if (c === undefined) continue; // la serie inizia dopo: si parte dal primo giorno disponibile
+      out.push(c);
+      last = c;
+    }
+    if (out.length === grid.length) closes[sym] = out;
+    else console.warn(`${sym}: storico più corto (${out.length} di ${grid.length} sedute), escluso dal backtest`);
+  }
   const r = runBacktest(closes, 100_000, undefined, reset);
   const p = (x: number) => `${x >= 0 ? "+" : ""}${(x * 100).toFixed(2)}%`;
   console.log(`Backtest su ${r.days} giorni di borsa (${deps.broker.name})`);
@@ -31,10 +50,10 @@ try {
   console.log("Limiti: ordini alla chiusura, stop controllato una volta al giorno, niente costi né slippage.");
 
   const st = (s: { trade: number; vinti: number; attesa: number | null; campione: string }) => `${s.trade} trade, ${s.vinti} vinti, attesa ${s.attesa === null ? "–" : p(s.attesa)} (${s.campione})`;
-  const base = () => [new TrendAgent(), new PullbackAgent(), new RegimeAgent(), new HorizonAgent()];
+  const base = () => [new TrendAgent(), new PullbackAgent(), new RegimeAgent(), new HorizonAgent(), new ContextAgent(null, [])];
   const ex = AGENTS.exit;
   const variants: [string, () => ReturnType<typeof runAgentsBacktest>][] = [
-    ["trend, rientro, regime, orizzonte, pesi dal diario; stop della gabbia 5-10%", () => runAgentsBacktest(closes, 100_000, undefined, base())],
+    ["trend, rientro, regime, orizzonte, contesto (regole), pesi dal diario; stop della gabbia 5-10%", () => runAgentsBacktest(closes, 100_000, undefined, base())],
     [`gli stessi + presa di profitto secca a +${(AGENTS.takeProfit.pct * 100).toFixed(0)}%`, () => runAgentsBacktest(closes, 100_000, undefined, [...base(), new TakeProfitAgent()])],
     [`gli stessi + uscite: stop -${(ex.stopPct * 100).toFixed(0)}%, incasso a +${(ex.targetPct * 100).toFixed(0)}% (senza proiezioni)`, () => runAgentsBacktest(closes, 100_000, undefined, [...base(), new ExitAgent()])],
     [`gli stessi + uscite: stop -${(ex.stopPct * 100).toFixed(0)}%, incasso a +4% (senza proiezioni)`, () => runAgentsBacktest(closes, 100_000, undefined, [...base(), new ExitAgent({ ...ex, targetPct: 0.04 })])],

@@ -26,10 +26,28 @@ export interface AgentView {
   journal: JournalFile;
   // Rendimento previsto per simbolo (Kronos) quando il sidecar c'è; altrimenti assente.
   previsioni?: Record<string, number>;
+  // Contesto economico deciso prima degli altri agenti: settori in cui si aspetta, proiezioni di cui fidarsi.
+  contesto?: MarketContext;
+}
+
+export type Outlook = "favorevole" | "neutro" | "sfavorevole";
+
+export interface MarketContext {
+  aggiornato: string;
+  fonte: string; // "regole" | "claude" | "claude (cache)"
+  generale: Outlook;
+  settori: Record<string, Outlook>;
+  motivo: string;
+  // Titoli per cui oggi non si apre niente: si aspetta la candela successiva, con il perché.
+  attendi: Record<string, string>;
+  // Titoli per cui la proiezione (Kronos) può guidare uscite e ingressi.
+  fidatiDellaProiezione: Record<string, boolean>;
 }
 
 export interface AgentReport {
   segnali: Signal[];
+  // Solo l'agente del contesto: cosa ha deciso, per la vista degli altri agenti e per la dashboard.
+  contesto?: MarketContext;
   // Solo gli agenti di rischio: moltiplicatore 0..1 dell'esposizione ammessa.
   rischio?: number;
   note?: string[];

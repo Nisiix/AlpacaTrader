@@ -3,7 +3,7 @@ import { isProtectiveStop, type Account, type Broker, type MarketClock, type Ord
 import { compareWithBenchmarks, type Comparison } from "../benchmark.ts";
 import { evaluateBreaker, readBreaker, writeBreaker } from "../breaker.ts";
 import { applyCage, lossPct, tradingBlockReason, type Rejection } from "../cage.ts";
-import { AGENTS, DAILY_BARS_DAYS, LIMITS, UNIVERSE } from "../config.ts";
+import { AGENTS, DAILY_BARS_DAYS, LIMITS, UNIVERSE, isCrypto } from "../config.ts";
 import { clientOrderId, sendOne, waitForFills, type ExecOutcome } from "../execute.ts";
 import { writeJsonAtomic } from "../fsutil.ts";
 import { indicatorsFor } from "../indicators.ts";
@@ -16,7 +16,8 @@ import { manageStops, type StopsReport } from "../stops.ts";
 import type { Notifier } from "../telegram.ts";
 import { agentWeights, allocate, type Score } from "./allocator.ts";
 import type { EventBus } from "./bus.ts";
-import type { Agent, AgentReport, AgentView, Signal } from "./types.ts";
+import { ContextAgent } from "./context.ts";
+import type { Agent, AgentReport, AgentView, MarketContext, Signal } from "./types.ts";
 
 export interface EngineDeps {
   broker: Broker;
@@ -49,6 +50,8 @@ export interface AgentsStatus {
   punteggi: Score[];
   ordini: { id: string; simbolo: string; lato: string; quantita: number; esito: string; perche: string }[];
   rifiuti: Rejection[];
+  contesto: MarketContext | null;
+  inAttesa: { simbolo: string; motivo: string }[];
   stopSuAlpaca: StopsReport | null;
   acquistiBloccati: string | null;
   lezioniAttive: Lesson[];
@@ -145,7 +148,7 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
       snap = await retry(async () => {
         const [account, positions, recent, open, clock] = await Promise.all([deps.broker.getAccount(), deps.broker.getPositions(), deps.broker.getRecentOrders(48), deps.broker.getOpenOrders(), deps.broker.getClock()]);
         const recentOrders = [...recent, ...open.filter((o) => !recent.some((r) => r.id === o.id))];
-        const symbols = [...new Set([...UNIVERSE, ...positions.map((p) => p.symbol)])];
+        const symbols = [...new Set([...UNIVERSE, ...AGENTS.universe, ...positions.map((p) => p.symbol)])];
         const prices = await deps.broker.getLatestPrices(symbols);
         for (const p of positions) if (!prices[p.symbol] && p.currentPrice > 0) prices[p.symbol] = p.currentPrice;
         return { account, positions, recentOrders, clock, prices };
@@ -158,7 +161,7 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
     bus.emit("prezzi", { prezzi: snap.prices });
     if (cache.closesDate !== today) {
       try {
-        cache.closes = await retry(() => deps.broker.getDailyCloses([...UNIVERSE], DAILY_BARS_DAYS), deps.sleep);
+        cache.closes = await retry(() => deps.broker.getDailyCloses([...new Set([...UNIVERSE, ...AGENTS.universe, ...snap.positions.map((p) => p.symbol)])], DAILY_BARS_DAYS), deps.sleep);
         cache.closesDate = today;
       } catch (e) {
         log.warn(`storico non disponibile: ${(e as Error).message}. Senza storico niente acquisti.`);
@@ -204,7 +207,7 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
     let previsioni: Record<string, number> | undefined;
     if (deps.forecaster) {
       try {
-        previsioni = await deps.forecaster([...new Set([...UNIVERSE, ...snap.positions.map((p) => p.symbol)])]);
+        previsioni = await deps.forecaster([...new Set([...AGENTS.universe, ...snap.positions.map((p) => p.symbol)])]);
         bus.emit("nota", { testo: `proiezioni: ${Object.entries(previsioni).map(([k, v]) => `${k} ${(v * 100).toFixed(1)}%`).join(", ")}` });
       } catch (e) {
         log.warn(`proiezioni non disponibili: ${(e as Error).message}`);
@@ -214,6 +217,20 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
     const view: AgentView = { today, now: startedAt, prices: snap.prices, closes, indicators, positions: snap.positions, account: snap.account, journal, previsioni };
     const reports: Record<string, AgentReport> = {};
     const agentStatus: AgentsStatus["agenti"] = {};
+    // Il contesto economico si valuta per primo: decide dove si aspetta e di quali proiezioni fidarsi.
+    const ctxAgent = deps.agents.find((a): a is ContextAgent => a instanceof ContextAgent);
+    let contesto: MarketContext | null = null;
+    if (ctxAgent) {
+      try {
+        contesto = await ctxAgent.assess(view);
+        view.contesto = contesto;
+        if (view.previsioni) view.previsioni = Object.fromEntries(Object.entries(view.previsioni).filter(([s]) => contesto!.fidatiDellaProiezione[s] !== false));
+        bus.emit("contesto", { generale: contesto.generale, settori: contesto.settori, fonte: contesto.fonte, motivo: contesto.motivo, attendi: contesto.attendi });
+      } catch (e) {
+        log.error(`contesto: ${(e as Error).message}`);
+        bus.emit("agente", { agente: ctxAgent.name, errore: (e as Error).message });
+      }
+    }
     await Promise.all(
       deps.agents.map(async (a) => {
         try {
@@ -232,7 +249,8 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
     );
     const weights = agentWeights(journal, today, deps.agents.map((a) => a.name));
     const alloc = allocate(view, reports, weights);
-    bus.emit("allocazione", { rischio: alloc.rischio, pesi: weights, punteggi: alloc.punteggi, proposte: alloc.proposte });
+    for (const w of alloc.inAttesa) bus.emit("rifiuto", { simbolo: w.simbolo, lato: "buy", quantita: 0, origine: "contesto", motivo: w.motivo });
+    bus.emit("allocazione", { rischio: alloc.rischio, pesi: weights, punteggi: alloc.punteggi, proposte: alloc.proposte, inAttesa: alloc.inAttesa });
 
     // 5. Gabbia: gli acquisti solo nella finestra di ingresso, le vendite e gli stop sempre a mercato aperto.
     const entry = inEntryWindow(startedAt);
@@ -276,12 +294,16 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
     // 7. Stop su Alpaca, diario, lezioni.
     let stops: StopsReport | null = null;
     let positions = snap.positions;
-    if (!tradingBlockReason({ slotKind: "mid", marketOpen: snap.clock.isOpen, latenessMin: 0, account: snap.account })) {
+    const equitiesOpen = !tradingBlockReason({ slotKind: "mid", marketOpen: snap.clock.isOpen, latenessMin: 0, account: snap.account });
+    if (equitiesOpen || snap.positions.some((p) => isCrypto(p.symbol)) || outcomes.length) {
       await waitForFills(deps.broker, outcomes.filter((o) => o.kind === "inviato").map((o) => o.id), deps.sleep, log);
       try {
         const [pos, open] = await Promise.all([deps.broker.getPositions(), deps.broker.getOpenOrders()]);
         positions = pos;
-        stops = await manageStops(deps.broker, giro, pos, open, log, closes, AGENTS.exit.enabled ? AGENTS.exit.stopPct : undefined);
+        // A borsa chiusa si toccano solo gli stop delle crypto; quelli dei titoli restano com'erano.
+        const manageable = equitiesOpen ? pos : pos.filter((p) => isCrypto(p.symbol));
+        const relevantOpen = equitiesOpen ? open : open.filter((o) => isCrypto(o.symbol));
+        stops = await manageStops(deps.broker, giro, manageable, relevantOpen, log, closes, AGENTS.exit.enabled ? AGENTS.exit.stopPct : undefined);
       } catch (e) {
         stops = { ok: [], placed: [], cancelled: [], errors: [`Alpaca non risponde: ${(e as Error).message}`] };
       }
@@ -332,6 +354,8 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
       punteggi: alloc.punteggi,
       ordini: outcomes.map((o) => ({ id: o.id, simbolo: o.plan.symbol, lato: o.plan.side, quantita: o.plan.qty, esito: "order" in o ? `${o.kind} (${o.order.status})` : `${o.kind}: ${o.error}`, perche: o.plan.why })),
       rifiuti: cage.rejected,
+      contesto,
+      inAttesa: alloc.inAttesa,
       stopSuAlpaca: stops,
       acquistiBloccati: buyBlock,
       lezioniAttive: activeLessons(lessonsFile, today),
@@ -367,6 +391,7 @@ export function summaryText(s: AgentsStatus): string {
   if (s.confronto) lines.push(`Dal ${s.confronto.dal}: conto ${pct(s.confronto.conto)}, SPY ${pct(s.confronto.spy)}${s.confronto.misto ? `, 60/40 ${pct(s.confronto.misto.rendimento)}` : ""}`);
   lines.push(`Posizioni: ${s.posizioni.length ? s.posizioni.map((p) => `${p.simbolo} ${p.quantita} (${pct(p.variazione)})`).join(", ") : "nessuna"}`);
   lines.push(`Rischio ammesso ${(s.rischio * 100).toFixed(0)}% · pesi ${Object.entries(s.pesi).map(([k, v]) => `${k} ${v}`).join(", ")}`);
+  if (s.contesto) lines.push(`Contesto ${s.contesto.generale} (${s.contesto.fonte}): ${s.contesto.motivo}${s.inAttesa.length ? ` · in attesa: ${s.inAttesa.map((w) => w.simbolo).join(", ")}` : ""}`);
   if (s.tradeChiusiOggi.length) lines.push(`Trade chiusi oggi: ${s.tradeChiusiOggi.map((t) => `${t.simbolo} ${pct(t.risultato)} in ${t.giorni} g (${t.uscita})`).join("; ")}`);
   lines.push(`Diario: ${s.diario.stato}`);
   if (s.acquistiBloccati) lines.push(`Acquisti bloccati: ${s.acquistiBloccati}`);

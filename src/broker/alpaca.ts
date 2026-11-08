@@ -1,15 +1,22 @@
-import { HTTP_TIMEOUT_MS, MARKET_DATA_URL, PAPER_TRADING_URL } from "../config.ts";
+import { CRYPTO_STOP_LIMIT_GAP, HTTP_TIMEOUT_MS, MARKET_DATA_URL, PAPER_TRADING_URL, isCrypto } from "../config.ts";
 import { assertPaperUrl } from "../guard.ts";
 import type { Account, Broker, MarketClock, Order, OrderRequest, Position, StopOrderRequest } from "./types.ts";
 import { BrokerError, DuplicateOrderError } from "./types.ts";
 
 const num = (v: unknown) => (v === null || v === undefined || v === "" ? 0 : Number(v));
 
+// Alpaca scrive le posizioni crypto senza barra (BTCUSD) e gli ordini con la barra (BTC/USD): qui vale sempre BTC/USD.
+export function canonicalSymbol(symbol: string, assetClass?: string): string {
+  if (assetClass === "crypto" && !symbol.includes("/") && symbol.endsWith("USD")) return `${symbol.slice(0, -3)}/USD`;
+  return symbol;
+}
+const qtyString = (symbol: string, qty: number) => (isCrypto(symbol) ? qty.toFixed(6).replace(/0+$/, "").replace(/\.$/, "") : String(qty));
+
 function toOrder(o: any): Order {
   return {
     id: String(o.id),
     clientOrderId: String(o.client_order_id),
-    symbol: String(o.symbol),
+    symbol: canonicalSymbol(String(o.symbol), o.asset_class),
     side: o.side,
     qty: num(o.qty),
     filledQty: num(o.filled_qty),
@@ -67,7 +74,7 @@ export class AlpacaBroker implements Broker {
   async getPositions(): Promise<Position[]> {
     const list = await this.request(this.baseUrl, "/v2/positions");
     return (list as any[]).map((p) => ({
-      symbol: String(p.symbol),
+      symbol: canonicalSymbol(String(p.symbol), p.asset_class),
       qty: num(p.qty),
       avgEntryPrice: num(p.avg_entry_price),
       currentPrice: num(p.current_price),
@@ -92,10 +99,17 @@ export class AlpacaBroker implements Broker {
   }
 
   async getLatestPrices(symbols: string[]): Promise<Record<string, number>> {
-    if (symbols.length === 0) return {};
-    const data = await this.request(MARKET_DATA_URL, `/v2/stocks/trades/latest?feed=iex&symbols=${symbols.map(encodeURIComponent).join(",")}`);
     const out: Record<string, number> = {};
-    for (const [sym, t] of Object.entries<any>(data?.trades ?? {})) if (t?.p) out[sym] = Number(t.p);
+    const stocks = symbols.filter((s) => !isCrypto(s));
+    const crypto = symbols.filter(isCrypto);
+    if (stocks.length) {
+      const data = await this.request(MARKET_DATA_URL, `/v2/stocks/trades/latest?feed=iex&symbols=${stocks.map(encodeURIComponent).join(",")}`);
+      for (const [sym, t] of Object.entries<any>(data?.trades ?? {})) if (t?.p) out[sym] = Number(t.p);
+    }
+    if (crypto.length) {
+      const data = await this.request(MARKET_DATA_URL, `/v1beta3/crypto/us/latest/trades?symbols=${crypto.map(encodeURIComponent).join(",")}`);
+      for (const [sym, t] of Object.entries<any>(data?.trades ?? {})) if (t?.p) out[sym] = Number(t.p);
+    }
     return out;
   }
 
@@ -111,25 +125,21 @@ export class AlpacaBroker implements Broker {
   async submitOrder(req: OrderRequest): Promise<Order> {
     const body = {
       symbol: req.symbol,
-      qty: String(req.qty),
+      qty: qtyString(req.symbol, req.qty),
       side: req.side,
       type: "market",
-      time_in_force: "day",
+      // Le crypto non accettano "day".
+      time_in_force: isCrypto(req.symbol) ? "gtc" : "day",
       client_order_id: req.clientOrderId,
     };
     return toOrder(await this.request(this.baseUrl, "/v2/orders", { method: "POST", body: JSON.stringify(body) }));
   }
 
   async submitStopOrder(req: StopOrderRequest): Promise<Order> {
-    const body = {
-      symbol: req.symbol,
-      qty: String(req.qty),
-      side: "sell",
-      type: "stop",
-      stop_price: req.stopPrice.toFixed(2),
-      time_in_force: "gtc",
-      client_order_id: req.clientOrderId,
-    };
+    // Le crypto non accettano lo stop a mercato: stop_limit con limite mezzo punto sotto.
+    const body = isCrypto(req.symbol)
+      ? { symbol: req.symbol, qty: qtyString(req.symbol, req.qty), side: "sell", type: "stop_limit", stop_price: req.stopPrice.toFixed(2), limit_price: (req.stopPrice * (1 - CRYPTO_STOP_LIMIT_GAP)).toFixed(2), time_in_force: "gtc", client_order_id: req.clientOrderId }
+      : { symbol: req.symbol, qty: String(req.qty), side: "sell", type: "stop", stop_price: req.stopPrice.toFixed(2), time_in_force: "gtc", client_order_id: req.clientOrderId };
     return toOrder(await this.request(this.baseUrl, "/v2/orders", { method: "POST", body: JSON.stringify(body) }));
   }
 
@@ -144,20 +154,32 @@ export class AlpacaBroker implements Broker {
   }
 
   async getDailyCloses(symbols: string[], days: number): Promise<Record<string, number[]>> {
-    const out: Record<string, number[]> = {};
+    const byDate = await this.getDailyClosesByDate(symbols, days);
+    return Object.fromEntries(Object.entries(byDate).map(([sym, bars]) => [sym, bars.map((b) => b.close)]));
+  }
+
+  async getDailyClosesByDate(symbols: string[], days: number): Promise<Record<string, { date: string; close: number }[]>> {
+    const out: Record<string, { date: string; close: number }[]> = {};
     if (symbols.length === 0) return out;
     const start = new Date(Date.now() - days * 1.6 * 86_400_000).toISOString().slice(0, 10);
-    const today = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date());
-    let token = "";
-    for (let page = 0; page < 20; page++) {
-      const q = `/v2/stocks/bars?timeframe=1Day&adjustment=all&feed=iex&limit=10000&start=${start}&symbols=${symbols.map(encodeURIComponent).join(",")}${token ? `&page_token=${encodeURIComponent(token)}` : ""}`;
-      const data = await this.request(MARKET_DATA_URL, q);
-      // Solo giornate chiuse: la barra di oggi, a seduta aperta, è un prezzo provvisorio.
-      for (const [sym, bars] of Object.entries<any[]>(data?.bars ?? {})) (out[sym] ??= []).push(...bars.filter((b) => String(b.t).slice(0, 10) < today).map((b) => Number(b.c)));
-      token = data?.next_page_token ?? "";
-      if (!token) break;
-    }
-    for (const sym of Object.keys(out)) out[sym] = out[sym]!.slice(-days);
+    const todayNy = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date());
+    const todayUtc = new Date().toISOString().slice(0, 10);
+    const fetchAll = async (path: string, today: string) => {
+      let token = "";
+      for (let page = 0; page < 20; page++) {
+        const data = await this.request(MARKET_DATA_URL, `${path}${token ? `&page_token=${encodeURIComponent(token)}` : ""}`);
+        // Solo giornate chiuse: la barra di oggi, ancora in corso, è un prezzo provvisorio.
+        for (const [sym, bars] of Object.entries<any[]>(data?.bars ?? {})) (out[sym] ??= []).push(...bars.filter((b) => String(b.t).slice(0, 10) < today).map((b) => ({ date: String(b.t).slice(0, 10), close: Number(b.c) })));
+        token = data?.next_page_token ?? "";
+        if (!token) break;
+      }
+    };
+    const stocks = symbols.filter((s) => !isCrypto(s));
+    const crypto = symbols.filter(isCrypto);
+    if (stocks.length) await fetchAll(`/v2/stocks/bars?timeframe=1Day&adjustment=all&feed=iex&limit=10000&start=${start}&symbols=${stocks.map(encodeURIComponent).join(",")}`, todayNy);
+    if (crypto.length) await fetchAll(`/v1beta3/crypto/us/bars?timeframe=1Day&limit=10000&start=${start}T00:00:00Z&symbols=${crypto.map(encodeURIComponent).join(",")}`, todayUtc);
+    // Le crypto hanno 7 barre a settimana: per coprire gli stessi giorni di borsa ne servono di più.
+    for (const sym of Object.keys(out)) out[sym] = out[sym]!.sort((a, b) => a.date.localeCompare(b.date)).slice(isCrypto(sym) ? -Math.ceil(days * 1.55) : -days);
     return out;
   }
 }

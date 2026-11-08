@@ -1,12 +1,13 @@
 import { evaluateBreaker, type BreakerFile } from "../breaker.ts";
 import { applyCage } from "../cage.ts";
 import { MIX } from "../benchmark.ts";
-import { LIMITS, UNIVERSE } from "../config.ts";
+import { AGENTS, LIMITS, UNIVERSE } from "../config.ts";
 import { indicatorsFor } from "../indicators.ts";
 import { emptyJournal, learnFromJournal, learningStatus, statsOf, type JournalFile, type Stats, type Trade } from "../journal.ts";
 import { activeLessons, emptyLessons, learnFromStopLoss } from "../lessons.ts";
 import { addTradingDays } from "../slots.ts";
 import { agentWeights, allocate } from "./allocator.ts";
+import { ContextAgent } from "./context.ts";
 import { HorizonAgent } from "./horizon.ts";
 import { PullbackAgent } from "./pullback.ts";
 import { RegimeAgent } from "./regime.ts";
@@ -40,8 +41,9 @@ export interface AgentsBacktestResult {
 // Il motore degli agenti rigiocato sulle chiusure: ogni seduta vale una passata nella finestra di ingresso,
 // con esecuzione alla chiusura. Stessa convenzione del backtest della gabbia (la chiusura di oggi è l'ultima nota):
 // ottimista sui buchi intraday, niente costi né slippage, calendario eventi assente.
-export function runAgentsBacktest(closes: Record<string, number[]>, startEquity = 100_000, startDate = "2026-01-05", agents: Agent[] = [new TrendAgent(), new PullbackAgent(), new RegimeAgent(), new HorizonAgent()]): AgentsBacktestResult {
-  const len = Math.min(...UNIVERSE.filter((s) => closes[s]).map((s) => closes[s]!.length));
+export function runAgentsBacktest(closes: Record<string, number[]>, startEquity = 100_000, startDate = "2026-01-05", agents: Agent[] = [new TrendAgent(), new PullbackAgent(), new RegimeAgent(), new HorizonAgent(), new ContextAgent(null, [])]): AgentsBacktestResult {
+  const SYMBOLS = [...new Set([...UNIVERSE, ...AGENTS.universe])];
+  const len = Math.min(...SYMBOLS.filter((s) => closes[s]).map((s) => closes[s]!.length));
   const positions = new Map<string, { qty: number; avg: number }>();
   const journal: JournalFile = emptyJournal();
   const lessons = emptyLessons();
@@ -58,19 +60,29 @@ export function runAgentsBacktest(closes: Record<string, number[]>, startEquity 
 
   for (let day = first; day < len; day++, date = addTradingDays(date, 1)) {
     const prices: Record<string, number> = {};
-    for (const s of UNIVERSE) if (closes[s]) prices[s] = closes[s]![day]!;
+    for (const s of SYMBOLS) if (closes[s]) prices[s] = closes[s]![day]!;
     const equity = cash + [...positions].reduce((a, [s, p]) => a + p.qty * prices[s]!, 0);
     const ev = evaluateBreaker(breaker, equity, lastEquity, `${date}T20:00:00Z`);
     breaker = ev.file;
     if (ev.newlyTripped) r.breakerTrips++;
     const hist: Record<string, number[]> = {};
-    for (const s of UNIVERSE) if (closes[s]) hist[s] = closes[s]!.slice(0, day + 1);
+    for (const s of SYMBOLS) if (closes[s]) hist[s] = closes[s]!.slice(0, day + 1);
     const pos = [...positions].map(([symbol, p]) => ({ symbol, qty: p.qty, avgEntryPrice: p.avg, currentPrice: prices[symbol]!, marketValue: p.qty * prices[symbol]! }));
     for (const t of journal.trade) if (t.stato === "aperto" && prices[t.simbolo]) t.massimo = Math.max(t.massimo ?? 0, prices[t.simbolo]!);
     const account = { equity, lastEquity, cash, status: "ACTIVE" };
     const view: AgentView = { today: date, now: new Date(`${date}T14:00:00Z`), prices, closes: hist, indicators: indicatorsFor(hist, prices, LIMITS.trendSmaDays, LIMITS.volLookbackDays, LIMITS.longSmaDays, LIMITS.rankMomentumDays), positions: pos, account, journal };
     const reports: Record<string, AgentReport> = {};
-    for (const a of agents) reports[a.name] = a.observe(view) as AgentReport; // gli agenti del backtest sono sincroni
+    // Nel backtest il contesto usa solo le regole sui dati (il calendario eventi non ha storico): sincrono.
+    const ctx = agents.find((a): a is ContextAgent => a instanceof ContextAgent);
+    if (ctx) view.contesto = ctx.assessWith(view, null);
+    for (const a of agents) {
+      if (a instanceof ContextAgent) {
+        const c = view.contesto!;
+        reports[a.name] = { segnali: [], rischio: c.generale === "sfavorevole" ? AGENTS.context.unfavorableScale : c.generale === "neutro" ? AGENTS.context.neutralScale : 1, contesto: c };
+        continue;
+      }
+      reports[a.name] = a.observe(view) as AgentReport; // gli altri agenti del backtest sono sincroni
+    }
     weights = agentWeights(journal, date, names);
     if (!r.learningFrom && learningStatus(journal, date).attivo) r.learningFrom = date;
     const alloc = allocate(view, reports, weights);

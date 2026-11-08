@@ -1,0 +1,220 @@
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import { AGENTS, LIMITS, SECTORS } from "../config.ts";
+import { EVENTS, eventBlockFor, type MarketEvent } from "../events.ts";
+import { isObject, writeJsonAtomic } from "../fsutil.ts";
+import { dailyVol, momentum, sma } from "../indicators.ts";
+import type { Agent, AgentReport, AgentView, MarketContext, Outlook } from "./types.ts";
+
+// Il contesto economico, prima di ogni trade. Due fonti che si sommano:
+// 1. regole sui dati di mercato (SPY e media a 200, volatilità, trend dei settori, oro e obbligazioni come termometro
+//    della paura) e sul calendario di Fed e trimestrali (events.ts): sempre disponibili, anche nel backtest;
+// 2. una lettura della situazione economica da `claude -p` con ricerca web, ogni refreshHours, in cache su file.
+// Il risultato: esposizione ammessa, settori in cui oggi si aspetta la candela successiva, proiezioni di cui fidarsi.
+export interface MacroSource {
+  readonly name: string;
+  read(today: string): Promise<MacroReading | null>;
+}
+
+export interface MacroReading {
+  aggiornato: string;
+  generale: Outlook;
+  settori: Partial<Record<string, Outlook>>;
+  motivo: string;
+}
+
+const worst = (a: Outlook, b: Outlook): Outlook => (a === "sfavorevole" || b === "sfavorevole" ? "sfavorevole" : a === "neutro" || b === "neutro" ? "neutro" : "favorevole");
+
+export function marketRules(v: AgentView, events: MarketEvent[] = EVENTS): MacroReading {
+  const reasons: string[] = [];
+  let generale: Outlook = "favorevole";
+  const spy = v.closes.SPY;
+  if (spy && spy.length >= LIMITS.longSmaDays + 1) {
+    const m200 = sma(spy, LIMITS.longSmaDays)!;
+    const price = v.prices.SPY ?? spy[spy.length - 1]!;
+    const vol = dailyVol(spy, LIMITS.volLookbackDays) ?? 0;
+    if (price < m200) {
+      generale = "sfavorevole";
+      reasons.push("SPY sotto la media a 200 giorni");
+    } else if (vol >= AGENTS.regime.highVolDaily) {
+      generale = "neutro";
+      reasons.push(`volatilità di SPY ${(vol * 100).toFixed(2)}% al giorno`);
+    }
+    // Oro e obbligazioni lunghe che salgono insieme mentre SPY perde slancio: il mercato cerca riparo.
+    const gld = v.closes.GLD ? momentum(v.closes.GLD, 20) : null;
+    const tlt = v.closes.TLT ? momentum(v.closes.TLT, 20) : null;
+    const spyMom = momentum(spy, 20);
+    if (gld !== null && tlt !== null && spyMom !== null && gld > 0.02 && tlt > 0.02 && spyMom < 0) {
+      generale = worst(generale, "neutro");
+      reasons.push("oro e obbligazioni in salita con SPY in calo: mercato in cerca di riparo");
+    }
+  } else reasons.push("storico di SPY insufficiente");
+  // Settori: sfavorevole se la maggioranza dei suoi titoli è sotto la media a 50; crypto su BTC.
+  const settori: Partial<Record<string, Outlook>> = {};
+  const bySector = new Map<string, string[]>();
+  for (const [s, sec] of Object.entries(SECTORS)) bySector.set(sec, [...(bySector.get(sec) ?? []), s]);
+  for (const [sec, syms] of bySector) {
+    let above = 0, total = 0;
+    for (const s of syms) {
+      const c = v.closes[s];
+      const m = c ? sma(c, LIMITS.trendSmaDays) : null;
+      const p = v.prices[s] ?? c?.[c.length - 1];
+      if (m === null || m === undefined || p === undefined) continue;
+      total++;
+      if (p > m) above++;
+    }
+    if (!total) continue;
+    const share = above / total;
+    settori[sec] = share >= 0.5 ? (share === 1 ? "favorevole" : "neutro") : "sfavorevole";
+    if (settori[sec] === "sfavorevole") reasons.push(`${sec}: ${above} su ${total} sopra la media a 50 giorni`);
+  }
+  // Fed nei prossimi giorni: tutto neutro; trimestrale vicina: quel titolo lo decide eventBlockFor nella gabbia.
+  const fedSoon = events.some((e) => e.kind === "fed" && e.date >= v.today && e.date <= addDaysStr(v.today, AGENTS.context.waitDaysBeforeEvent));
+  if (fedSoon) {
+    generale = worst(generale, "neutro");
+    reasons.push("decisione della Fed nei prossimi giorni");
+  }
+  return { aggiornato: v.now.toISOString(), generale, settori, motivo: reasons.join("; ") || "nessun segnale di allarme dai dati di mercato" };
+}
+
+function addDaysStr(date: string, n: number): string {
+  const d = new Date(`${date}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+export class ContextAgent implements Agent {
+  readonly name = "contesto";
+  constructor(
+    private macro: MacroSource | null = null,
+    private events: MarketEvent[] = EVENTS,
+  ) {}
+
+  async assess(v: AgentView): Promise<MarketContext> {
+    let reading: MacroReading | null = null;
+    let problem: string | null = null;
+    if (this.macro) {
+      try {
+        reading = await this.macro.read(v.today);
+      } catch (e) {
+        problem = `${this.macro.name} non disponibile: ${(e as Error).message}`;
+      }
+    }
+    return this.assessWith(v, reading, problem);
+  }
+
+  // La parte sincrona: regole sui dati più, se c'è, la lettura esterna già ottenuta. È quella che usa il backtest.
+  assessWith(v: AgentView, reading: MacroReading | null, problem: string | null = null): MarketContext {
+    const rules = marketRules(v, this.events);
+    let fonte = "regole";
+    let generale = rules.generale;
+    const settori: Record<string, Outlook> = { ...(rules.settori as Record<string, Outlook>) };
+    const motivi = [rules.motivo];
+    if (reading && this.macro) {
+      fonte = `regole + ${this.macro.name}`;
+      generale = worst(generale, reading.generale);
+      for (const [sec, o] of Object.entries(reading.settori)) if (o) settori[sec] = worst(settori[sec] ?? "favorevole", o);
+      motivi.push(`${this.macro.name}: ${reading.motivo}`);
+    }
+    if (problem) motivi.push(problem);
+    const attendi: Record<string, string> = {};
+    const fidati: Record<string, boolean> = {};
+    const symbols = new Set([...AGENTS.universe, ...v.positions.map((p) => p.symbol)]);
+    for (const s of symbols) {
+      const sec = SECTORS[s] ?? "altro";
+      const o = worst(generale, settori[sec] ?? "favorevole");
+      const ev = eventBlockFor(s, v.today, this.events);
+      if (o === "sfavorevole") attendi[s] = `contesto sfavorevole (${sec}): si aspetta la candela successiva`;
+      else if (ev) attendi[s] = ev;
+      // La proiezione guida solo con contesto favorevole: con dubbi si aspetta una candela nuova invece di fidarsi.
+      fidati[s] = o === "favorevole" && !ev;
+    }
+    return { aggiornato: v.now.toISOString(), fonte, generale, settori, motivo: motivi.join(" · "), attendi, fidatiDellaProiezione: fidati };
+  }
+
+  async observe(v: AgentView): Promise<AgentReport> {
+    const c = v.contesto ?? (await this.assess(v));
+    const rischio = c.generale === "sfavorevole" ? AGENTS.context.unfavorableScale : c.generale === "neutro" ? AGENTS.context.neutralScale : 1;
+    const waiting = Object.keys(c.attendi);
+    return { segnali: [], rischio, contesto: c, note: [`${c.generale} (${c.fonte}): ${c.motivo}`, ...(waiting.length ? [`in attesa della candela successiva: ${waiting.join(", ")}`] : [])] };
+  }
+}
+
+// Lettura della situazione economica con `claude -p` e ricerca web, in cache su file per refreshHours.
+export const MACRO_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["generale", "settori", "motivo", "datiVerificati"],
+  properties: {
+    // false se la ricerca web non ha funzionato: la lettura allora non conta (senza dati non si abbassa il rischio).
+    datiVerificati: { type: "boolean" },
+    generale: { type: "string", enum: ["favorevole", "neutro", "sfavorevole"] },
+    settori: {
+      type: "object",
+      additionalProperties: false,
+      properties: Object.fromEntries([...new Set(Object.values(SECTORS))].map((s) => [s, { type: "string", enum: ["favorevole", "neutro", "sfavorevole"] }])),
+    },
+    motivo: { type: "string" },
+  },
+};
+
+export const MACRO_PROMPT = `Sei l'analista macro di un agente di paper trading. Cerca sul web le notizie economiche degli ultimi giorni
+(banche centrali, inflazione, lavoro, dazi e geopolitica, trimestrali, liquidità) e rispondi SOLO con JSON conforme allo schema:
+generale (favorevole|neutro|sfavorevole) per chi compra azioni USA, oro, obbligazioni lunghe e crypto nelle prossime settimane;
+settori: lo stesso giudizio per indici, tecnologia, oro, obbligazioni, crypto; motivo: tre frasi in italiano con i fatti che pesano;
+datiVerificati: true solo se hai davvero letto notizie recenti con la ricerca web, false se la ricerca non era disponibile
+(in quel caso il tuo giudizio non verrà usato). "Sfavorevole" significa che oggi è meglio non aprire posizioni nuove e aspettare.
+Sii prudente ma non pessimista per abitudine.`;
+
+export type Runner = (args: string[], stdin: string, timeoutMs: number) => Promise<{ code: number; stdout: string; stderr: string }>;
+
+export class ClaudeMacro implements MacroSource {
+  readonly name = "claude";
+  constructor(
+    private stateDir: string,
+    private runner: Runner,
+    private now: () => Date = () => new Date(),
+    private timeoutMs = 240_000,
+  ) {}
+
+  private get path() {
+    return join(this.stateDir, "macro.json");
+  }
+
+  private cached(): MacroReading | null {
+    if (!existsSync(this.path)) return null;
+    try {
+      const v = JSON.parse(readFileSync(this.path, "utf8"));
+      if (isObject(v) && typeof v.aggiornato === "string" && typeof v.generale === "string" && isObject(v.settori) && typeof v.motivo === "string") return v as unknown as MacroReading;
+    } catch {}
+    return null;
+  }
+
+  async read(_today: string): Promise<MacroReading | null> {
+    const c = this.cached();
+    if (c && this.now().getTime() - Date.parse(c.aggiornato) < AGENTS.context.refreshHours * 3600_000) return c;
+    // --allowedTools pre-autorizza la ricerca: in modalità -p senza terminale i permessi non si possono chiedere.
+    const args = ["claude", "-p", "--output-format", "json", "--json-schema", JSON.stringify(MACRO_SCHEMA), "--tools", "WebSearch", "--allowedTools", "WebSearch", "--strict-mcp-config", "--no-session-persistence", "--system-prompt", MACRO_PROMPT];
+    const res = await this.runner(args, `Oggi è ${_today}. Valuta la situazione economica attuale per un investitore in azioni USA, oro, obbligazioni lunghe e crypto. Rispondi solo con il JSON.`, this.timeoutMs);
+    let env: any;
+    try {
+      env = JSON.parse(res.stdout);
+    } catch {
+      if (c) return c; // meglio una lettura vecchia che niente
+      throw new Error(`claude non ha risposto con JSON (codice ${res.code})`);
+    }
+    const out = env?.structured_output ?? (typeof env?.result === "string" ? JSON.parse(env.result.match(/\{[\s\S]*\}/)?.[0] ?? "null") : null);
+    if (!isObject(out) || !["favorevole", "neutro", "sfavorevole"].includes(String(out.generale))) {
+      if (c) return c;
+      throw new Error("risposta di claude non valida");
+    }
+    // Senza notizie verificate il giudizio non vale: meglio le sole regole che un "neutro" per mancanza di dati.
+    if (out.datiVerificati === false) {
+      if (c) return c;
+      throw new Error(`ricerca web non disponibile (${String(out.motivo ?? "").slice(0, 120)})`);
+    }
+    const reading: MacroReading = { aggiornato: this.now().toISOString(), generale: out.generale as Outlook, settori: (isObject(out.settori) ? out.settori : {}) as Partial<Record<string, Outlook>>, motivo: String(out.motivo ?? "") };
+    writeJsonAtomic(this.path, reading);
+    return reading;
+  }
+}

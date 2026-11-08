@@ -4,7 +4,7 @@ import { SUBMIT_VERIFY_DELAYS_MS } from "./config.ts";
 import type { Logger } from "./log.ts";
 
 export function clientOrderId(runId: string, symbol: string, side: string): string {
-  return `${runId}-${symbol}-${side}`;
+  return `${runId}-${symbol.replace("/", "")}-${side}`;
 }
 
 export type ExecOutcome =

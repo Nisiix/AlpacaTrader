@@ -1,4 +1,4 @@
-import { AGENTS, LIMITS, UNIVERSE } from "../config.ts";
+import { AGENTS, LIMITS } from "../config.ts";
 import { sma } from "../indicators.ts";
 import { type Agent, type AgentReport, type AgentView, type Signal } from "./types.ts";
 
@@ -10,7 +10,7 @@ export class PullbackAgent implements Agent {
   observe(v: AgentView): AgentReport {
     const segnali: Signal[] = [];
     const { nearPct, runUpPct, lookback } = AGENTS.pullback;
-    for (const s of UNIVERSE) {
+    for (const s of AGENTS.universe) {
       const c = v.closes[s];
       if (!c || c.length < LIMITS.longSmaDays + lookback) continue;
       const m50 = sma(c, LIMITS.trendSmaDays);
