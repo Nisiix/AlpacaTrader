@@ -10,6 +10,8 @@ import type { CustodeStato } from "./custode.ts";
 import type { IntradayStato } from "./intraday.ts";
 import { refreshCryptoUniverse, type TopFetcher } from "./universe.ts";
 import { applyAgentSettings } from "../agent-settings.ts";
+import * as simulations from "../simulations.ts";
+import type { Simulazione } from "../simulations.ts";
 import { clientOrderId, sendOne, waitForFills, type ExecOutcome } from "../execute.ts";
 import { writeJsonAtomic } from "../fsutil.ts";
 import { indicatorsFor } from "../indicators.ts";
@@ -80,6 +82,8 @@ export interface AgentsStatus {
   universo: { titoli: string[]; crypto: string[]; fonteCrypto: string | null; aggiornatoCrypto: string | null };
   kronos: { stato: string; proiezioniDel: string | null; simboli: number };
   giornata: { pnlPct: number; obiettivoPct: number; perditaMaxPct: number; obiettivoRaggiunto: boolean; perditaOltre: boolean };
+  // Operazioni simulate di oggi (dopo il tetto del giorno), con l'esito virtuale ai prezzi correnti.
+  simulazioni: Simulazione[];
 }
 
 export const statusPath = (stateDir: string) => join(stateDir, "agents-status.json");
@@ -265,7 +269,10 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
     }
     let buyBlock: string | null = null;
     const br = readBreaker(deps.stateDir);
-    if (br.kind === "corrupt") {
+    if (!LIMITS.breakerEnabled) {
+      // Interruttore spento: il massimo si aggiorna comunque (per il confronto), ma non blocca niente.
+      if (br.kind !== "corrupt") writeBreaker(deps.stateDir, evaluateBreaker(br.file, snap.account.equity, snap.account.lastEquity, startedAt.toISOString()).file);
+    } else if (br.kind === "corrupt") {
       buyBlock = `file dell'interruttore illeggibile (${br.error}): acquisti bloccati finché non lanci bun run breaker-reset`;
       await alarm("Interruttore illeggibile", buyBlock);
     } else {
@@ -277,9 +284,9 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
     // Obiettivo giornaliero: patrimonio contro la chiusura di ieri. Raggiunto → niente nuovi acquisti fino a domani e
     // l'intraday incassa; perdita oltre la soglia → niente nuovi acquisti (gli stop proteggono il resto).
     const pnlPct = snap.account.lastEquity > 0 ? snap.account.equity / snap.account.lastEquity - 1 : 0;
-    const giornata = { pnlPct, obiettivoRaggiunto: AGENTS.daily.enabled && pnlPct >= AGENTS.daily.targetPct, perditaOltre: AGENTS.daily.enabled && pnlPct <= -AGENTS.daily.maxLossPct };
+    const giornata = { pnlPct, obiettivoRaggiunto: AGENTS.daily.enabled && AGENTS.daily.targetPct > 0 && pnlPct >= AGENTS.daily.targetPct, perditaOltre: AGENTS.daily.enabled && AGENTS.daily.maxLossPct > 0 && pnlPct <= -AGENTS.daily.maxLossPct };
     if (!buyBlock && giornata.obiettivoRaggiunto) {
-      buyBlock = `obiettivo giornaliero raggiunto (${(pnlPct * 100).toFixed(2)}% ≥ ${(AGENTS.daily.targetPct * 100).toFixed(1)}%): niente nuovi acquisti fino a domani, si incassa`;
+      buyBlock = `obiettivo giornaliero raggiunto (${(pnlPct * 100).toFixed(2)}% ≥ ${(AGENTS.daily.targetPct * 100).toFixed(1)}%): per oggi niente nuovi acquisti, gli agenti continuano in simulazione; si riparte domani`;
       if (cache.giornataAvvisata !== `${today}-obiettivo`) {
         cache.giornataAvvisata = `${today}-obiettivo`;
         const r = await deps.notifier.send(deps.redactor.apply(`🎯 Agenti · ${buyBlock}`));
@@ -350,9 +357,22 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
     const entry = inEntryWindow(startedAt);
     const cage = applyCage({ today, slotKind: entry ? "open" : "mid", marketOpen: snap.clock.isOpen, latenessMin: 0, account: snap.account, positions: snap.positions, prices: snap.prices, closes, recentOrders: snap.recentOrders, lessons: lessonsNow, buyBlock, proposals: alloc.proposte });
     for (const x of cage.rejected) {
+      // Obiettivo del giorno raggiunto: l'acquisto che si sarebbe fatto diventa una simulazione (si segue e si misura).
+      if (giornata.obiettivoRaggiunto && x.side === "buy" && /obiettivo giornaliero/.test(x.reason)) {
+        const price = snap.prices[x.symbol];
+        if (price) {
+          const sc = alloc.punteggi.find((p) => p.simbolo === x.symbol);
+          simulations.add(deps.stateDir, today, { id: `${giro}-${x.symbol}`, simbolo: x.symbol, quantita: x.qty, prezzo: price, quando: startedAt.toISOString(), agenti: sc?.agenti ?? [], perche: sc?.perche.join(" · ") ?? "" });
+          bus.emit("simulazione", { simbolo: x.symbol, lato: "buy", quantita: x.qty, prezzo: price, agenti: sc?.agenti ?? [], motivo: "obiettivo del giorno raggiunto: operazione simulata, non inviata" });
+          log.info(`simulazione: comprerebbe ${x.qty} ${x.symbol} a ${price}`);
+        }
+        continue;
+      }
       log.warn(`rifiutato ${x.side} ${x.qty} ${x.symbol} [${x.source}]: ${x.reason}`);
       bus.emit("rifiuto", { simbolo: x.symbol, lato: x.side, quantita: x.qty, origine: x.source, motivo: x.reason });
     }
+    // Le simulazioni di oggi si rivalutano con i prezzi di adesso: come sarebbe andata.
+    const simulazioni = simulations.evaluate(deps.stateDir, today, snap.prices);
     // Gli acquisti hanno un ID al giorno (un solo ingresso per titolo al giorno), le vendite uno per giro.
     const runIdFor = (side: string) => (side === "buy" ? `agenti-${today}` : giro);
     for (const o of cage.orders) {
@@ -464,6 +484,7 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
       universo: { titoli: AGENTS.universe.filter((s) => !isCrypto(s)), crypto: AGENTS.universe.filter(isCrypto), fonteCrypto: cache.universeInfo?.fonte ?? null, aggiornatoCrypto: cache.universeInfo?.aggiornato ?? null },
       kronos: { stato: deps.kronosStato?.() ?? (deps.forecaster ? "attivo" : "non configurato"), proiezioniDel: cache.previsioni?.date ?? null, simboli: Object.keys(cache.previsioni?.data ?? {}).length },
       giornata: { pnlPct, obiettivoPct: AGENTS.daily.targetPct, perditaMaxPct: AGENTS.daily.maxLossPct, obiettivoRaggiunto: giornata.obiettivoRaggiunto, perditaOltre: giornata.perditaOltre },
+      simulazioni,
     };
     writeJsonAtomic(statusPath(deps.stateDir), status);
     log.info(`giro ${giro}: ${status.segnali.length} segnali, ${alloc.proposte.length} proposte, ${outcomes.length} ordini, ${cage.rejected.length} rifiuti, rischio ${alloc.rischio}`);
@@ -521,7 +542,7 @@ export async function valutaTitolo(deps: EngineDeps, cache: EngineCache, symbol:
   const indicators = indicatorsFor(closes, prices, LIMITS.trendSmaDays, LIMITS.volLookbackDays, LIMITS.longSmaDays, LIMITS.rankMomentumDays);
   const lessonsFile = readLessons(deps.stateDir, now).file;
   const br = readBreaker(deps.stateDir);
-  const buyBlock = br.kind === "corrupt" ? "interruttore illeggibile" : evaluateBreaker(br.file, account.equity, account.lastEquity, now.toISOString()).buyBlock;
+  const buyBlock = !LIMITS.breakerEnabled ? null : br.kind === "corrupt" ? "interruttore illeggibile" : evaluateBreaker(br.file, account.equity, account.lastEquity, now.toISOString()).buyBlock;
   const journal = readJournal(deps.stateDir, now).file;
   const previsioniNum = cache.previsioni?.date === today ? Object.fromEntries(Object.entries(cache.previsioni.data).map(([k, v]) => [k, v.rendimentoPrevisto])) : undefined;
   const view: AgentView = { today, now, prices, closes, indicators, positions, account, journal, previsioni: previsioniNum, mercatoAperto: clock.isOpen, finestraIngressi: inEntryWindow(now) && clock.isOpen };

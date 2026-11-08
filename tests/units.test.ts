@@ -124,7 +124,7 @@ describe("impostazioni degli agenti e chiavi", () => {
     const { mkdtempSync } = await import("node:fs");
     const { tmpdir } = await import("node:os");
     const dir = mkdtempSync(`${tmpdir()}/imp-`);
-    expect(validate("LIMITS.maxPositions", 50).ok).toBe(false);
+    expect(validate("LIMITS.maxPositions", 500).ok).toBe(false);
     expect(validate("AGENTS.exit.mode", "boh").ok).toBe(false);
     expect(validate("AGENTS.intraday.closeBy.stocks", "25:00").ok).toBe(false);
     const before = LIMITS.maxPositions;

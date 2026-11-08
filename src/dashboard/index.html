@@ -204,6 +204,10 @@
           <h2>Operazioni intraday <small>si aprono e si chiudono in giornata</small></h2>
           <div id="intraday"></div>
         </section>
+        <section class="card" id="sim-card" hidden>
+          <h2>Simulazioni di oggi <small>dopo l'obiettivo del giorno: cosa avrebbero comprato gli agenti e come sta andando</small></h2>
+          <div id="simulazioni"></div>
+        </section>
       </div>
     </div>
   </div>
@@ -288,7 +292,11 @@
         </form>
       </section>
     </div>
-    <p class="why" style="margin-top:12px">Le chiavi si salvano in <code>secrets.ts</code> sul tuo PC e non escono mai da qui; in lettura sono mascherate. Il motore le legge all'avvio: dopo un salvataggio riavvia il bot (Ctrl-C, poi <code>avvia-bot.cmd</code>). Alpaca accetta solo chiavi del conto paper.</p>
+    <section class="card" style="margin-top:16px">
+      <h2>Motore</h2>
+      <div class="row"><button type="button" class="btn" id="riavvia">Riavvia il motore</button><span class="why" id="riavvia-msg">Applica codice e chiavi nuove: il motore finisce il giro, esce e avvia-bot.cmd lo rilancia da solo.</span></div>
+    </section>
+    <p class="why" style="margin-top:12px">Le chiavi si salvano in <code>secrets.ts</code> sul tuo PC e non escono mai da qui; in lettura sono mascherate. Il motore le legge all'avvio: dopo un salvataggio premi «Riavvia il motore». Alpaca accetta solo chiavi del conto paper.</p>
   </div>
 
   <!-- Guida: come funziona e come si usa. -->
@@ -567,7 +575,7 @@ function sayState() {
   }
   if (status.giornata?.obiettivoRaggiunto) {
     say.className = 'say';
-    say.textContent = `Obiettivo del giorno raggiunto (${pct(status.giornata.pnlPct)}): si incassa, niente nuovi acquisti fino a domani.`;
+    say.textContent = `Obiettivo del giorno raggiunto (${pct(status.giornata.pnlPct)}): per oggi gli agenti continuano in simulazione, si riparte domani.`;
     return;
   }
   if (status.acquistiBloccati) {
@@ -584,7 +592,7 @@ function paintMoney(st) {
   if (!c) return;
   $('#k-eq').textContent = money(c.patrimonio);
   const dayPct = c.patrimonio - c.pnlGiorno > 0 ? c.pnlGiorno / (c.patrimonio - c.pnlGiorno) : null;
-  $('#k-day').textContent = `${usd(c.pnlGiorno)}${dayPct !== null ? ` (${pct(dayPct)})` : ''}${st.giornata ? ` · obiettivo ${pct(st.giornata.obiettivoPct)}` : ''}`; $('#k-day').className = `val ${cls(c.pnlGiorno)}`;
+  $('#k-day').textContent = `${usd(c.pnlGiorno)}${dayPct !== null ? ` (${pct(dayPct)})` : ''}${st.giornata && st.giornata.obiettivoPct > 0 ? ` · tetto ${pct(st.giornata.obiettivoPct)}` : ''}`; $('#k-day').className = `val ${cls(c.pnlGiorno)}`;
   $('#k-cash').textContent = money(c.contanti);
   $('#k-risk').textContent = `${Math.round((st.rischio ?? 1) * 100)}%`;
   const cmp = st.confronto;
@@ -687,7 +695,7 @@ function paint(st) {
   sayState();
   if (!status) { $('#when').textContent = lastTick ? `ultimo giro iniziato ${hhmm(lastTick.t)}` : 'nessuno stato'; return; }
   $('#when').textContent = `ultimo giro ${hhmm(status.aggiornato)} (${ago(status.aggiornato)})`;
-  paintMoney(status); paintPositions(status); paintPnl(status); paintDecisions(status); paintScores(status); paintAgents(status); paintScene(status); paintCustodi(status); paintChips(status); paintIntraday(status); paintVotes(status);
+  paintMoney(status); paintPositions(status); paintPnl(status); paintDecisions(status); paintScores(status); paintAgents(status); paintScene(status); paintCustodi(status); paintChips(status); paintIntraday(status); paintVotes(status); paintSimulazioni(status);
 }
 async function loadStatus() {
   try { paint(await (await fetch('/api/status')).json()); } catch (e) { $('#say').textContent = 'La dashboard non riesce a leggere lo stato.'; $('#fix').hidden = false; $('#fix').textContent = e.message; }
@@ -978,6 +986,13 @@ function paintIntraday(st) {
   const row = (x) => `<tr><td><b>${esc(x.simbolo)}</b><br><span class="why">${esc(x.candela)}</span></td><td><span class="pill ${x.fase === 'in posizione' ? 'up' : x.fase === 'cerca ingresso' ? 'agent' : ''}">${esc(x.fase)}</span></td><td class="n">${x.ingresso !== null ? px(x.ingresso) : '–'}</td><td class="n up">${x.obiettivo !== null ? px(x.obiettivo) : '–'}</td><td class="n down">${x.stop !== null ? px(x.stop) : '–'}</td><td class="why">${esc(x.motivo)}</td></tr>`;
   $('#intraday').innerHTML = `<table><thead><tr><th>Titolo</th><th>Fase</th><th class="n">Ingresso</th><th class="n">Obiettivo</th><th class="n">Stop</th><th>Perché</th></tr></thead><tbody>${[...open, ...rest].slice(0, 40).map(row).join('')}</tbody></table>`;
 }
+function paintSimulazioni(st) {
+  const list = st.simulazioni || [];
+  $('#sim-card').hidden = !list.length && !st.giornata?.obiettivoRaggiunto;
+  if (!list.length) { $('#simulazioni').innerHTML = '<p class="empty">Nessuna simulazione ancora: gli agenti osservano e votano, gli acquisti che proporrebbero compaiono qui.</p>'; return; }
+  const tot = list.reduce((a, x) => a + (x.virtuale ?? 0), 0);
+  $('#simulazioni').innerHTML = `<p class="why" style="margin-bottom:8px">Esito virtuale complessivo <b class="${cls(tot)}">${usd(tot)}</b> su ${list.length} operazioni simulate (nessun ordine inviato).</p><table><thead><tr><th>Titolo</th><th class="n">Quantità</th><th class="n">Prezzo simulato</th><th class="n">Ora</th><th class="n">Virtuale</th><th>Agenti</th></tr></thead><tbody>${list.map((x) => `<tr><td><b>${esc(x.simbolo)}</b><br><span class="why">${hhmm(x.quando)}</span></td><td class="n">${qty(x.quantita)}</td><td class="n">${px(x.prezzo)}</td><td class="n">${x.prezzoOra !== null ? px(x.prezzoOra) : '–'}</td><td class="n ${cls(x.virtuale ?? 0)}">${x.virtuale !== null ? `${usd(x.virtuale)}<br><span class="why">${pct(x.risultato)}</span>` : '–'}</td><td class="why">${(x.agenti || []).map(agentName).join(', ')}</td></tr>`).join('')}</tbody></table>`;
+}
 function paintVotes(st) {
   const sig = st.segnali || [];
   $('#votes').innerHTML = sig.length ? sig.map((s) => `<div class="vote"><span class="pill agent">${agentName(s.agente)}</span> <span class="${s.lato === 'buy' ? 'up' : 'down'}"><b>${s.lato === 'buy' ? 'compra' : 'vendi'} ${esc(s.simbolo)}</b></span> forza ${s.forza.toFixed(2).replace('.', ',')}${s.vincolante ? ' <span class="pill warn">regola</span>' : ''}${s.intraday ? ' <span class="pill">intraday</span>' : ''}<br><span class="why">${esc(s.perche)}</span></div>`).join('') : '<p class="empty">Nessun voto nell\u2019ultimo giro.</p>';
@@ -1010,6 +1025,11 @@ $('#f-alpaca').addEventListener('submit', (e) => { e.preventDefault(); saveSetti
 $('#f-telegram').addEventListener('submit', (e) => { e.preventDefault(); saveSettings(e.target, $('#telegram-msg')); });
 $('#prova-alpaca').addEventListener('click', () => testSettings($('#f-alpaca'), $('#alpaca-msg')));
 $('#prova-telegram').addEventListener('click', () => testSettings($('#f-telegram'), $('#telegram-msg')));
+$('#riavvia').addEventListener('click', async () => {
+  const b = $('#riavvia'); b.disabled = true;
+  try { const d = await (await fetch('/api/riavvia', { method: 'POST' })).json(); $('#riavvia-msg').textContent = d.nota; } catch (e) { $('#riavvia-msg').textContent = `Richiesta non riuscita: ${e.message}`; }
+  setTimeout(() => { b.disabled = false; }, 15000);
+});
 
 // ---------- schede degli agenti ----------
 const fmtVal = (p, v) => p.tipo === 'percento' ? String(Math.round(v * 10000) / 100) : String(v);

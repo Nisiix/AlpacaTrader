@@ -19,8 +19,9 @@ export const CRYPTO_STOP_LIMIT_GAP = 0.005;
 
 export const LIMITS = {
   // Scelta dell'utente: al massimo il 10% del patrimonio per titolo, e meno se la proiezione di Kronos è incerta
-  // (vedi AGENTS.sizing); fino a 8 titoli insieme.
-  maxPositions: 8,
+  // (vedi AGENTS.sizing). Nessun numero fisso di titoli: tanti quante sono le occasioni (il tetto qui è solo una sicurezza;
+  // il limite vero è la liquidità, con il 10% per titolo).
+  maxPositions: 100,
   maxPositionPct: 0.1,
   // Stop di protezione: non è più l'uscita normale (quella è il trend), serve solo contro i crolli.
   // Distanza = multiplo × volatilità giornaliera × √giorni, arrotondata al mezzo punto e tenuta tra min e max.
@@ -43,6 +44,9 @@ export const LIMITS = {
   // giorni di borsa (nel backtest su 550 sedute il riarmo manuale mai fatto costava 13 punti di rendimento).
   maxDrawdownPct: 0.05,
   breakerRearmSessions: 5,
+  // Spento per scelta dell'utente: nessun interruttore sul conto, decidono gli agenti (stop per posizione, uscite, gabbia).
+  // Dalle schede si può riaccendere. Le sveglie classiche (bun run schedule) lo usano sempre.
+  breakerEnabled: false,
   // Oltre questa perdita in giornata niente acquisti fino a domani.
   maxDailyLossPct: 0.02,
   // Dopo uno stop loss su un titolo, niente riacquisto per questi giorni di borsa.
@@ -132,7 +136,10 @@ export const AGENTS = {
   // fino a domani e le operazioni intraday incassano; oltre la perdita massima del giorno niente nuovi acquisti (le
   // posizioni restano protette dagli stop). I profitti restano nel conto e le taglie sono percentuali del patrimonio
   // corrente: il guadagno di oggi si reinveste da solo domani.
-  daily: { enabled: true, targetPct: 0.01, maxLossPct: 0.02 },
+  // Tetto generale del giorno (scelta dell'utente): raggiunto il +10% sul patrimonio di ieri gli agenti non investono più
+  // per oggi; continuano a girare in simulazione (le operazioni che avrebbero fatto, con esito virtuale, in
+  // state/simulazioni/) per imparare, e si riparte domani con i criteri del motore. Nessun tetto alla perdita (0).
+  daily: { enabled: true, targetPct: 0.1, maxLossPct: 0 },
   // Taglia proporzionale alla fiducia: la probabilità che la proiezione di Kronos si avveri (rendimento atteso diviso la
   // volatilità sull'orizzonte) porta il peso da minFactor (fiducia 50%) a 1 (fiducia ≥ fullAt); senza proiezione vale noForecast.
   sizing: { byKronos: true, minFactor: 0.4, fullAt: 0.8, noForecast: 0.6 },

@@ -130,6 +130,17 @@ come decide e i parametri regolabili: soglie, percentuali, finestre, candele; i 
 le pagine). La finestra degli acquisti sui titoli è tutta la seduta (15:35–21:55 Roma); le crypto trattano sempre.
 La logica completa è in `docs/logica-del-motore.md`.
 
+### Limiti del giorno, interruttore, riavvio
+
+Per scelta dell'utente il motore **non ha tetti di rischio sul conto**: il limite di volatilità annua e l'interruttore a −5% dal
+massimo sono spenti (`AGENTS.volTarget.enabled`, `LIMITS.breakerEnabled`, riaccendibili dalle schede), nessun tetto alla perdita
+del giorno, nessun numero fisso di titoli (`LIMITS.maxPositions` è solo una sicurezza a 100: il limite vero è la liquidità con il
+**10% per titolo**, e la taglia scende con la fiducia nella proiezione di Kronos). Resta un **limite generale del giorno**: raggiunto il
+**+10%** sul patrimonio di ieri gli agenti smettono di comprare davvero e continuano in **simulazione** (gli acquisti che farebbero
+si annotano in `state/simulazioni/AAAA-MM-GG.jsonl` e si rivalutano ai prezzi correnti a ogni giro: nella dashboard «Simulazioni di
+oggi»); le vendite di protezione restano reali; si riparte domani. Da **Impostazioni → Riavvia il motore** il processo esce con
+codice 75 e `avvia-bot.cmd` lo rilancia da solo: codice e chiavi nuove entrano in uso senza toccare il PC.
+
 ### Ripartire da zero
 
 `bun run chiudi-posizioni` (Windows: `chiudi-posizioni.cmd`) toglie gli stop e vende a mercato tutte le posizioni del conto paper

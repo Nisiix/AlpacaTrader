@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { listEventDays, readEvents, type BusEvent, type EventBus } from "../agents/bus.ts";
 import { barsPath, forecastsPath, statusPath, type Valutazione } from "../agents/engine.ts";
@@ -88,6 +88,10 @@ export function startDashboard(o: DashboardOptions) {
       if (url.pathname === "/api/impostazioni/prova" && req.method === "POST") {
         const body = (await req.json().catch(() => ({}))) as Record<string, string>;
         return Response.json(await testSettings(ROOT, body));
+      }
+      if (url.pathname === "/api/riavvia" && req.method === "POST") {
+        writeFileSync(join(o.stateDir, "riavvio.richiesta"), new Date().toISOString());
+        return Response.json({ ok: true, nota: "Riavvio richiesto: il motore finisce il giro in corso ed esce; avvia-bot.cmd lo rilancia da solo entro un minuto (se è stato avviato con avvia-bot.cmd)." });
       }
       if (url.pathname === "/api/agenti/schede" && req.method === "GET") return Response.json({ schede: agentCardsWithValues(o.stateDir) });
       if (url.pathname === "/api/agenti/schede" && req.method === "POST") {

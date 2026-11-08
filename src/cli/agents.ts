@@ -22,9 +22,12 @@ import { AGENTS, enableCrypto } from "../config.ts";
 import { startDashboard } from "../dashboard/server.ts";
 import { ROOT, buildDeps } from "../deps.ts";
 import { ensureKronos, pathForecaster, type KronosLink } from "../kronos-sidecar.ts";
-import { appendFileSync, mkdirSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { parseArgs } from "./args.ts";
+
+// Codice di uscita che chiede ad avvia-bot.cmd di rilanciare il motore.
+const RESTART_CODE = 75;
 
 try {
   const args = parseArgs(process.argv.slice(2));
@@ -89,19 +92,32 @@ try {
     process.exit(r.status === "fatto" ? 0 : 1);
   }
   let stop = false;
-  const quit = () => {
+  let exitCode = 0;
+  const quit = (code = 0) => {
     if (stop) return;
     stop = true;
-    console.log("chiusura richiesta: finisco il giro in corso e mi fermo");
+    exitCode = code;
+    console.log(code === RESTART_CODE ? "riavvio richiesto: finisco il giro in corso e riparto (avvia-bot.cmd rilancia il motore)" : "chiusura richiesta: finisco il giro in corso e mi fermo");
     dash?.stop();
     kronos?.stop();
-    setTimeout(() => process.exit(0), 20_000).unref();
+    setTimeout(() => process.exit(code), 20_000).unref();
   };
-  process.on("SIGINT", quit);
-  process.on("SIGTERM", quit);
+  process.on("SIGINT", () => quit(0));
+  process.on("SIGTERM", () => quit(0));
+  // Riavvio dall'applicazione (Impostazioni → «Riavvia il motore», o il file state/riavvio.richiesta): il processo esce con
+  // codice 75 e avvia-bot.cmd lo rilancia, così il codice e le chiavi nuove entrano in uso senza toccare il PC.
+  const restartFile = join(deps.stateDir, "riavvio.richiesta");
+  const watcher = setInterval(() => {
+    if (!existsSync(restartFile)) return;
+    try {
+      unlinkSync(restartFile);
+    } catch {}
+    quit(RESTART_CODE);
+  }, 5_000);
+  watcher.unref();
   await runEngine(engine, (args.tick ?? AGENTS.tickMinutes) * 60_000, () => stop, cache);
   kronos?.stop();
-  process.exit(0);
+  process.exit(exitCode);
 } catch (e) {
   console.error(`ERRORE: ${(e as Error).message}`);
   process.exit(2);

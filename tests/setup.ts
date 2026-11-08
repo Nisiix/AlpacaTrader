@@ -6,3 +6,4 @@ import { AGENTS, LIMITS } from "../src/config.ts";
 LIMITS.maxPositions = 5;
 LIMITS.maxPositionPct = 0.2;
 AGENTS.sizing.byKronos = false;
+LIMITS.breakerEnabled = true;
