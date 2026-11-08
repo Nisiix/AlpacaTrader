@@ -237,6 +237,14 @@ export function inEntryWindow(now: Date): boolean {
   return rt.weekday >= 1 && rt.weekday <= 5 && rt.minutes >= minutesOf(AGENTS.entryWindow.from) && rt.minutes <= minutesOf(AGENTS.entryWindow.to);
 }
 
+// Gli acquisti di azioni: per tutta la seduta vera, dall'orologio di Alpaca (apertura e chiusura reali, ora legale e giorni
+// festivi compresi), fino a 5 minuti dalla chiusura. Senza orario di chiusura vale la finestra fissa in ora di Roma.
+export function stockEntryOpen(clock: { isOpen: boolean; nextClose?: string }, now: Date): boolean {
+  if (!clock.isOpen) return false;
+  if (clock.nextClose) return Date.parse(clock.nextClose) - now.getTime() >= 5 * 60_000;
+  return inEntryWindow(now);
+}
+
 async function retry<T>(fn: () => Promise<T>, sleep: (ms: number) => Promise<void>, delays = [2_000, 5_000]): Promise<T> {
   for (let i = 0; ; i++) {
     try {
@@ -397,7 +405,7 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
       fonti = deps.fonti ? await deps.fonti.read() : undefined;
     } catch {}
     const percorsi = previsioni && cache.previsioni ? Object.fromEntries(Object.keys(previsioni).filter((k) => cache.previsioni!.data[k]?.percorso?.length).map((k) => [k, cache.previsioni!.data[k]!.percorso])) : undefined;
-    const view: AgentView = { today, now: startedAt, prices: snap.prices, closes, indicators, positions: snap.positions, account: snap.account, journal, previsioni, percorsi, mercatoAperto: snap.clock.isOpen, finestraIngressi: inEntryWindow(startedAt) && snap.clock.isOpen, giornata, fonti };
+    const view: AgentView = { today, now: startedAt, prices: snap.prices, closes, indicators, positions: snap.positions, account: snap.account, journal, previsioni, percorsi, mercatoAperto: snap.clock.isOpen, chiusuraBorsa: snap.clock.nextClose, finestraIngressi: stockEntryOpen(snap.clock, startedAt), giornata, fonti };
     const reports: Record<string, AgentReport> = {};
     const agentStatus: AgentsStatus["agenti"] = {};
     // Il contesto economico si valuta per primo: decide dove si aspetta e di quali proiezioni fidarsi.
@@ -462,7 +470,7 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
     bus.emit("allocazione", { rischio: alloc.rischio, pesi: weights, punteggi: alloc.punteggi, proposte: alloc.proposte, inAttesa: alloc.inAttesa });
 
     // 5. Gabbia: gli acquisti solo nella finestra di ingresso, le vendite e gli stop sempre a mercato aperto.
-    const entry = inEntryWindow(startedAt);
+    const entry = stockEntryOpen(snap.clock, startedAt);
     const cage = applyCage({ today, slotKind: entry ? "open" : "mid", marketOpen: snap.clock.isOpen, latenessMin: 0, account: snap.account, positions: snap.positions, prices: snap.prices, closes, recentOrders: snap.recentOrders, lessons: lessonsNow, buyBlock, proposals: alloc.proposte, previsioni: view.previsioni, apertiOggi: openedToday(view) });
     for (const x of cage.rejected) {
       // Obiettivo del giorno raggiunto: l'acquisto che si sarebbe fatto diventa una simulazione (si segue e si misura).
@@ -676,7 +684,7 @@ export async function valutaTitolo(deps: EngineDeps, cache: EngineCache, symbol:
   const buyBlock = !LIMITS.breakerEnabled ? null : br.kind === "corrupt" ? "interruttore illeggibile" : evaluateBreaker(br.file, account.equity, account.lastEquity, now.toISOString()).buyBlock;
   const journal = readJournal(deps.stateDir, now).file;
   const previsioniNum = usableForecasts(cache.previsioni?.date === today ? Object.fromEntries(Object.entries(cache.previsioni.data).map(([k, v]) => [k, v.rendimentoPrevisto])) : undefined).usabili;
-  const view: AgentView = { today, now, prices, closes, indicators, positions, account, journal, previsioni: previsioniNum, mercatoAperto: clock.isOpen, finestraIngressi: inEntryWindow(now) && clock.isOpen };
+  const view: AgentView = { today, now, prices, closes, indicators, positions, account, journal, previsioni: previsioniNum, mercatoAperto: clock.isOpen, chiusuraBorsa: clock.nextClose, finestraIngressi: stockEntryOpen(clock, now) };
   const ctxAgent = deps.agents.find((a): a is ContextAgent => a instanceof ContextAgent);
   let contesto: MarketContext | null = null;
   if (ctxAgent) {
@@ -705,7 +713,7 @@ export async function valutaTitolo(deps: EngineDeps, cache: EngineCache, symbol:
   const voti = Object.values(reports).flatMap((r) => r.segnali).filter((s) => s.simbolo === symbol);
   const score = alloc.punteggi.find((p) => p.simbolo === symbol);
   const proposals = alloc.proposte.filter((p) => p.symbol === symbol);
-  const entry = inEntryWindow(now);
+  const entry = stockEntryOpen(clock, now);
   const recentOrders = open;
   const cage = applyCage({ today, slotKind: entry ? "open" : "mid", marketOpen: clock.isOpen, latenessMin: 0, account, positions, prices, closes, recentOrders, lessons: activeLessons(lessonsFile, today), buyBlock, proposals, previsioni: view.previsioni, apertiOggi: openedToday(view) });
   const pos = positions.find((p) => p.symbol === symbol && p.qty > 0) ?? null;

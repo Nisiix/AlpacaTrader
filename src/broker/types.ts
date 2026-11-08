@@ -34,6 +34,7 @@ export interface Order {
 export interface MarketClock {
   isOpen: boolean;
   timestamp: string;
+  nextClose?: string; // ISO: con la borsa aperta, la chiusura di oggi (orari veri di Alpaca, ora legale compresa)
 }
 
 export interface OrderRequest {

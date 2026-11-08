@@ -230,6 +230,12 @@ export const AGENTS = {
   evidenza: { min: 0.5, minContro: 0.6 },
   // Contanti che restano sempre liberi (quota del patrimonio): il riparto del capitale divide il resto.
   riservaContanti: 0.01,
+  // Costi di andata e ritorno su Alpaca: crypto 0,25% per lato (taker, livello base: percentuale, nessuna quota fissa);
+  // azioni senza commissioni, solo tasse regolamentari sulle vendite arrotondate al centesimo (trascurabili sopra i 100 $).
+  // Un ingresso di più giorni si fa solo se Kronos prevede almeno `margineCosti` volte il costo; una posizione nuova
+  // vale la pena da `minNuova.pct` del conto e almeno `minNuova.usd` dollari.
+  costi: { cryptoAndataRitorno: 0.005, azioniAndataRitorno: 0.0005, margineCosti: 2 },
+  minNuova: { pct: 0.002, usd: 100 },
   // Esplorazione: gli agenti in sala caffè passano in rassegna il radar (RADAR_SECTORS e le crypto rimaste fuori dal
   // tetto di coppie) ogni everyMinutes (di serie ogni minuto, anche tra un giro e l'altro), perGiro titoli alla volta;
   // finito il radar si ricomincia da capo (i prezzi cambiano, Kronos si chiede una volta al giorno per titolo). Un titolo che supera i criteri del motore (sopra la
@@ -255,8 +261,13 @@ export const AGENTS = {
     targetAtr: 1.5, stopAtr: 1.2, minStopPct: 0.004,
     maxWeight: 0.1, // peso massimo di un'operazione intraday (comparto a taglia ridotta)
     // Finestre, ora di Roma: ingressi solo se resta tempo per chiudere in giornata; poi chiusura forzata.
-    entry: { stocks: { from: "15:45", to: "20:30" }, crypto: { from: "00:10", to: "20:00" } },
-    closeBy: { stocks: "21:45", crypto: "23:30" },
+    // Crypto: sempre aperte, un'operazione intraday dura al massimo cryptoOreMax ore. Azioni: tutta la seduta vera
+    // (orologio di Alpaca): ingressi fino a minutiPrimaChiusura.ingresso dalla chiusura, uscita a minutiPrimaChiusura.uscita.
+    // entry/closeBy delle azioni valgono solo se Alpaca non dà l'orario di chiusura.
+    cryptoOreMax: 12,
+    minutiPrimaChiusura: { ingresso: 30, uscita: 15 },
+    entry: { stocks: { from: "15:35", to: "21:30" } },
+    closeBy: { stocks: "21:45" },
     rsiMax: 70, // solo informativo nelle note
     maxExtensionAtr: 3, // oltre tanti ATR sopra la media a 20 candele non si entra
   },

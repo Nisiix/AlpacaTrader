@@ -249,8 +249,9 @@ trade; il richiamo della squadra vale per ogni custode che non ha ancora un giud
 
 ## 5. Dove vedere tutto
 
-Dashboard su `http://127.0.0.1:8787`, quattro voci: **Oggi** (frase di stato, soldi, profitto e perdita di oggi,
-posizioni, ultimo giro, intraday quando c'è un'operazione aperta, simulazioni, registro della giornata con le azioni ripetute
+Dashboard su `http://127.0.0.1:8787`, quattro voci: **Dashboard** (frase di stato, soldi, situazione in breve), **Titoli**
+(grafico con candele giorno/4 ore/1 ora/15/5 minuti, scheda del titolo in un dialogo «Analisi/Riepilogo investimento» e, sotto,
+la parte «Oggi»: profitto e perdita di oggi, posizioni, ultimo giro, intraday quando c'è un'operazione aperta, simulazioni, registro della giornata con le azioni ripetute
 a ogni giro raggruppate), **Titoli** (candele con medie, carico, stop, candela di oggi in formazione, scelte del motore,
 scenario di Kronos, dossier del custode; «Chiedi agli agenti adesso» per una valutazione a secco), **Agenti** (Squadra: capo
 ufficio, custodi, punteggi e voti; Ufficio 3D), **Impostazioni** (schede degli agenti, chiavi e riavvio, guida). La stessa

@@ -171,6 +171,13 @@ export function allocate(view: AgentView, reports: Record<string, AgentReport>, 
     const ev = sc.intraday ? null : dossierOf(sc.simbolo);
     sc.evidenza = ev;
     const minEv = contro ? AGENTS.evidenza.minContro : AGENTS.evidenza.min;
+    // Il rendimento previsto deve coprire i costi: crypto 0,5% andata e ritorno (×2 di margine), azioni quasi nulli.
+    const fcCosti = sc.intraday ? undefined : (view.previsioni?.[sc.simbolo] ?? sc.kronos);
+    const costo = isCrypto(sc.simbolo) ? AGENTS.costi.cryptoAndataRitorno : AGENTS.costi.azioniAndataRitorno;
+    if (!p && fcCosti !== undefined && fcCosti < costo * AGENTS.costi.margineCosti) {
+      inAttesa.push({ simbolo: sc.simbolo, motivo: `Kronos prevede ${(fcCosti * 100).toFixed(2)}%: non copre ${AGENTS.costi.margineCosti} volte i costi di andata e ritorno (${(costo * 100).toFixed(2)}%)` });
+      continue;
+    }
     if (!p && ev !== null && ev < minEv) {
       inAttesa.push({ simbolo: sc.simbolo, motivo: `evidenza combinata ${Math.round(ev * 100)}% sotto il minimo ${Math.round(minEv * 100)}%${contro ? " richiesto sotto la media a 200" : ""} (Kronos, grafico, notizie, contesto)` });
       continue;
@@ -229,7 +236,7 @@ export function allocate(view: AgentView, reports: Record<string, AgentReport>, 
     const delta = target - have;
     // Aggiunte a una posizione già aperta solo se valgono la pena (minAddPct); una posizione nuova anche piccola, se il
     // riparto del capitale l'ha resa tale, purché sopra lo 0,2% del conto.
-    if (delta / equity < (p ? AGENTS.minAddPct : 0.002)) continue;
+    if (p ? delta / equity < AGENTS.minAddPct : delta < Math.max(AGENTS.minNuova.pct * equity, AGENTS.minNuova.usd)) continue;
     const qty = roundQty(sc.simbolo, delta / price);
     if (qty <= 0 || (isCrypto(sc.simbolo) && qty * price < CRYPTO_MIN_NOTIONAL)) continue;
     proposte.push({ symbol: sc.simbolo, side: "buy", qty, why: sc.perche.join(" · "), confidence: conf(sc.punteggio), expect: `${sc.intraday ? "intraday: " : ""}peso obiettivo ${((target / equity) * 100).toFixed(1)}% del conto${riparto && chiesto > 0 ? ` (riparto del capitale: ${Math.round((dato / chiesto) * 100)}% di quanto chiesto, ${(w * scale * 100).toFixed(1)}%)` : ""}${sc.fiducia !== undefined ? ` (fiducia nella proiezione ${sc.fiducia === null ? "n.d." : `${(sc.fiducia * 100).toFixed(0)}%`})` : ""}${scale < 1 ? ` (ridotto per la volatilità di portafoglio, obiettivo ${(AGENTS.volTarget.annual * 100).toFixed(0)}% annuo)` : ""}`, intraday: sc.intraday || undefined, kronos: sc.kronos });

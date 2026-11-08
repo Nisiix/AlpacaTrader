@@ -95,7 +95,7 @@ export class AlpacaBroker implements Broker {
 
   async getClock(): Promise<MarketClock> {
     const c = await this.request(this.baseUrl, "/v2/clock");
-    return { isOpen: Boolean(c.is_open), timestamp: String(c.timestamp) };
+    return { isOpen: Boolean(c.is_open), timestamp: String(c.timestamp), ...(c.next_close ? { nextClose: new Date(String(c.next_close)).toISOString() } : {}) };
   }
 
   async getLatestPrices(symbols: string[]): Promise<Record<string, number>> {

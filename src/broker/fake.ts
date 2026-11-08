@@ -164,7 +164,8 @@ export class FakeBroker implements Broker {
       const rt = romeTime(now);
       isOpen = rt.weekday >= 1 && rt.weekday <= 5 && rt.minutes >= 15 * 60 + 30 && rt.minutes < 22 * 60;
     }
-    return { isOpen, timestamp: now.toISOString() };
+    const nextClose = isOpen && s.clock === "auto" ? new Date(now.getTime() + (22 * 60 - romeTime(now).minutes) * 60_000).toISOString() : undefined;
+    return { isOpen, timestamp: now.toISOString(), ...(nextClose ? { nextClose } : {}) };
   }
 
   async getLatestPrices(symbols: string[]): Promise<Record<string, number>> {

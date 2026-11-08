@@ -21,7 +21,7 @@ const readJsonSafe = (p: string) => {
   }
 };
 
-export function buildSnapshot(root: string, stateDir: string, outDir: string) {
+export function buildSnapshot(root: string, stateDir: string, outDir: string, candele?: Record<string, Record<string, unknown>>) {
   const data = join(outDir, "data");
   mkdirSync(join(outDir, "vendor", "addons", "controls"), { recursive: true });
   mkdirSync(join(outDir, "vendor", "addons", "renderers"), { recursive: true });
@@ -42,6 +42,8 @@ export function buildSnapshot(root: string, stateDir: string, outDir: string) {
   writeFileSync(join(data, "previsioni.json"), JSON.stringify(readJsonSafe(forecastsPath(stateDir)) ?? { previsioni: {} }));
   writeFileSync(join(data, "journal.json"), JSON.stringify(readJsonSafe(join(stateDir, "journal.json")) ?? { trade: [] }));
   writeFileSync(join(data, "schede.json"), JSON.stringify({ schede: agentCardsWithValues(stateDir) }));
+  // Candele brevi (5 min, 15 min, 1 ora, 4 ore) con la proiezione di Kronos, per i titoli che contano adesso.
+  writeFileSync(join(data, "candele.json"), JSON.stringify({ aggiornato: new Date().toISOString(), titoli: candele ?? {} }));
 }
 
 async function git(cwd: string, args: string[]): Promise<{ code: number; out: string }> {
@@ -50,11 +52,11 @@ async function git(cwd: string, args: string[]): Promise<{ code: number; out: st
   return { code: await p.exited, out: (out + err).trim() };
 }
 
-export async function publishPages(root: string, stateDir: string): Promise<PagesResult> {
+export async function publishPages(root: string, stateDir: string, candele?: Record<string, Record<string, unknown>>): Promise<PagesResult> {
   const cfg = AGENTS.pages;
   const outDir = join(root, ".pages");
   try {
-    buildSnapshot(root, stateDir, outDir);
+    buildSnapshot(root, stateDir, outDir, candele);
   } catch (e) {
     return { ok: false, messaggio: `istantanea non scritta: ${(e as Error).message}` };
   }
@@ -65,7 +67,10 @@ export async function publishPages(root: string, stateDir: string): Promise<Page
     await git(outDir, ["remote", "add", "origin", remote]);
   } else await git(outDir, ["remote", "set-url", "origin", remote]);
   await git(outDir, ["add", "-A"]);
-  const c = await git(outDir, ["-c", "user.name=Agenti Alpaca", "-c", "user.email=agenti@localhost", "commit", "-q", "-m", `istantanea ${new Date().toISOString()}`]);
+  // Un solo commit che si sostituisce a ogni pubblicazione: il ramo non cresce con la storia delle istantanee.
+  const hasHead = (await git(outDir, ["rev-parse", "--verify", "-q", "HEAD"])).code === 0;
+  const c = await git(outDir, ["-c", "user.name=Agenti Alpaca", "-c", "user.email=agenti@localhost", "commit", "-q", ...(hasHead ? ["--amend"] : []), "-m", `istantanea ${new Date().toISOString()}`]);
+  if (hasHead) await git(outDir, ["gc", "-q", "--prune=now"]);
   if (c.code !== 0 && !/nothing to commit/i.test(c.out)) return { ok: false, messaggio: `commit fallito: ${c.out.slice(0, 200)}` };
   const p = await git(outDir, ["push", "-q", "-f", "origin", `HEAD:${cfg.branch}`]);
   return p.code === 0 ? { ok: true, messaggio: `pubblicata su ${cfg.branch}` } : { ok: false, messaggio: `push fallito (credenziali GitHub del PC?): ${p.out.slice(0, 200)}` };

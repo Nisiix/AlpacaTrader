@@ -44,6 +44,8 @@ export interface AgentView {
   contesto?: MarketContext;
   // Borsa aperta adesso e finestra degli ingressi sui titoli: l'allocatore non spreca posti su titoli non negoziabili.
   mercatoAperto?: boolean;
+  // Con la borsa aperta: quando chiude oggi (dall'orologio di Alpaca). Gli ingressi sulle azioni seguono l'orario vero.
+  chiusuraBorsa?: string;
   finestraIngressi?: boolean;
   // Giornata: guadagno dal patrimonio di ieri e stato dell'obiettivo giornaliero (raggiunto → si incassa, niente nuovi ingressi).
   giornata?: { pnlPct: number; obiettivoRaggiunto: boolean; perditaOltre: boolean };

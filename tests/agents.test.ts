@@ -10,7 +10,7 @@ import { IntradayAgent, readBars, timeframeFor } from "../src/agents/intraday.ts
 import type { IntradayBar } from "../src/broker/types.ts";
 import { selectPairs } from "../src/agents/universe.ts";
 import { EventBus, readEvents } from "../src/agents/bus.ts";
-import { emptyCache, inEntryWindow, runTick, statusPath, summaryText, usableForecasts, type AgentsStatus, type EngineDeps } from "../src/agents/engine.ts";
+import { emptyCache, inEntryWindow, runTick, stockEntryOpen, statusPath, summaryText, usableForecasts, type AgentsStatus, type EngineDeps } from "../src/agents/engine.ts";
 import { HorizonAgent } from "../src/agents/horizon.ts";
 import { KronosAgent } from "../src/agents/kronos.ts";
 import { PullbackAgent } from "../src/agents/pullback.ts";
@@ -237,6 +237,15 @@ function engineDeps(env: TestEnv, agents: Agent[] = [new TrendAgent(), new Pullb
 }
 
 describe("motore", () => {
+  test("gli acquisti di azioni seguono l'orologio di Alpaca: tutta la seduta fino a 5 minuti dalla chiusura", () => {
+    const now = new Date("2026-11-09T14:35:00Z"); // 15:35 a Roma, borsa appena aperta (ora solare)
+    expect(stockEntryOpen({ isOpen: true, nextClose: "2026-11-09T21:00:00Z" }, now)).toBe(true);
+    expect(stockEntryOpen({ isOpen: true, nextClose: "2026-11-09T21:00:00Z" }, new Date("2026-11-09T20:57:00Z"))).toBe(false);
+    expect(stockEntryOpen({ isOpen: false }, now)).toBe(false);
+    // Nelle settimane in cui l'ora legale non coincide (borsa aperta alle 14:30 di Roma) l'orario vero vale lo stesso.
+    expect(stockEntryOpen({ isOpen: true, nextClose: "2026-03-09T20:00:00Z" }, new Date("2026-03-09T13:40:00Z"))).toBe(true);
+  });
+
   test("finestra di ingresso: lun-ven per tutta la seduta (15:35-21:55 ora di Roma)", () => {
     expect(inEntryWindow(day("2026-09-24", "15:41"))).toBe(true);
     expect(inEntryWindow(day("2026-09-24", "17:31"))).toBe(true);
@@ -558,7 +567,7 @@ describe("taglia proporzionale alla fiducia in Kronos (valori di serie: 10% per 
         return (p.qty * v.prices[s]!) / v.account.equity;
       };
       const pieno = weightFor("SPY", { SPY: 0.1 }); // 10% in 5 sedute con volatilità 1%: quasi certo
-      const incerto = weightFor("SPY", { SPY: 0.0005 });
+      const incerto = weightFor("SPY", { SPY: 0.0015 }); // appena sopra i costi (2 × 0,05%), ma incerto
       const senza = weightFor("SPY");
       expect(pieno).toBeLessThanOrEqual(0.1 + 1e-9);
       expect(pieno).toBeGreaterThan(0.09);
@@ -710,9 +719,11 @@ describe("intraday", () => {
     // Allo stop vende.
     const r3 = await a.observe(view({ closes, prices: { ...prices, "BTC/USD": st.stop! - 1 }, now: day("2026-09-22", "17:35"), today: "2026-09-22", positions: pos }));
     expect(r3.segnali.find((x) => x.lato === "sell")!.perche).toContain("stop intraday");
-    // Fine giornata: vende comunque.
-    const r4 = await a.observe(view({ closes, prices: { ...prices, "BTC/USD": 76_500 }, now: day("2026-09-22", "23:40"), today: "2026-09-22", positions: pos }));
-    expect(r4.segnali.find((x) => x.lato === "sell")!.perche).toContain("chiusura di giornata");
+    // Crypto: nessun orario di chiusura, ma dopo la durata massima (12 ore) si chiude comunque.
+    const r4a = await a.observe(view({ closes, prices: { ...prices, "BTC/USD": 76_500 }, now: day("2026-09-22", "23:40"), today: "2026-09-22", positions: pos }));
+    expect(r4a.segnali.filter((x) => x.lato === "sell" && x.simbolo === "BTC/USD")).toEqual([]);
+    const r4 = await a.observe(view({ closes, prices: { ...prices, "BTC/USD": 76_500 }, now: day("2026-09-23", "04:40"), today: "2026-09-23", positions: pos }));
+    expect(r4.segnali.find((x) => x.lato === "sell")!.perche).toContain("durata massima");
     // Stesso giorno, dopo l'uscita: niente secondo ingresso su BTC.
     const r5 = await a.observe(view({ closes, prices, now: day("2026-09-22", "18:00"), today: "2026-09-22" }));
     expect(r5.segnali.filter((x) => x.lato === "buy" && x.simbolo === "BTC/USD")).toEqual([]);
@@ -1040,6 +1051,20 @@ describe("protezione del profitto", () => {
     // In perdita la regola non c'entra (decidono stop e proiezione).
     v.prices.NVDA = 168; v.percorsi = { NVDA: [-0.025, -0.01, 0.01, 0.02, 0.03] };
     expect(new ExitAgent().observe(v).segnali.filter((x) => x.simbolo === "NVDA" && x.perche.includes("protezione"))).toEqual([]);
+  });
+});
+
+describe("costi e taglia minima", () => {
+  test("una crypto non si compra se Kronos non copre due volte i costi di andata e ritorno; una posizione nuova parte da 100 $", () => {
+    const v = view({ previsioni: { "BTC/USD": 0.006 } });
+    v.prices["BTC/USD"] = 76_000; v.closes["BTC/USD"] = syntheticCloses(76_000, 0.02, 260);
+    const a = allocate(v, { trend: { segnali: [{ agente: "trend", simbolo: "BTC/USD", lato: "buy", forza: 1, orizzonteSedute: 20, perche: "" }] } }, { trend: 1 });
+    expect(a.proposte).toEqual([]);
+    expect(a.inAttesa[0]!.motivo).toContain("non copre 2 volte i costi");
+    // Con poco capitale disponibile (50 $) nessuna posizione nuova: sotto i 100 $ non vale la pena.
+    const w = view({ previsioni: { NVDA: 0.03 } });
+    w.account = { ...w.account, cash: 1_050 };
+    expect(allocate(w, { trend: { segnali: [{ agente: "trend", simbolo: "NVDA", lato: "buy", forza: 1, orizzonteSedute: 20, perche: "" }] } }, { trend: 1 }).proposte).toEqual([]);
   });
 });
 

@@ -90,32 +90,32 @@ try {
   };
   console.log(`motore degli agenti${args.fake ? " (finto)" : ""}: ${agents.map((a) => a.name).join(", ")} · stato in ${deps.stateDir}${kronos ? ` · kronos ${kronos.stato}` : ""}`);
 
+  // Candele intraday per il grafico, con la proiezione di Kronos sulle prossime candele (in memoria finché non chiude
+  // una candela nuova: il sidecar non si interroga a ogni richiesta della pagina).
+  const kfChart = kronos ? intradayForecaster(kronos) : null;
+  const memo = new Map<string, { at: number; barre: any[]; previsione: any; ultima: string }>();
+  const candele = async (sym: string, tf: string) => {
+    const key = `${sym}|${tf}`;
+    const m = memo.get(key);
+    if (m && Date.now() - m.at < 60_000) return { barre: m.barre, previsione: m.previsione };
+    const b = (await deps.broker.getIntradayBars([sym], tf, 160))[sym] ?? [];
+    const barre = b.map((x) => ({ date: x.t, open: x.open, high: x.high, low: x.low, close: x.close, volume: x.volume }));
+    const ultima = b.at(-1)?.t ?? "";
+    let previsione = m && m.ultima === ultima ? m.previsione : null;
+    let nota: string | undefined;
+    if (!previsione && kfChart && b.length >= 60) {
+      try {
+        const f = (await kfChart({ [sym]: b }, Number(tf.endsWith("Min") ? tf.replace("Min", "") : Number(tf.replace("Hour", "")) * 60), 12))[sym];
+        previsione = f ? { rendimentoPrevisto: f.rendimentoPrevisto, percorso: f.percorso } : null;
+      } catch (e) {
+        nota = `Kronos: ${(e as Error).message}`;
+      }
+    }
+    memo.set(key, { at: Date.now(), barre, previsione, ultima });
+    return { barre, previsione, ...(nota ? { nota } : {}) };
+  };
   let dash: ReturnType<typeof startDashboard> | null = null;
   if (!args.noDashboard && !args.once) {
-    // Candele intraday per il grafico, con la proiezione di Kronos sulle prossime candele (in memoria finché non chiude
-    // una candela nuova: il sidecar non si interroga a ogni richiesta della pagina).
-    const kfChart = kronos ? intradayForecaster(kronos) : null;
-    const memo = new Map<string, { at: number; barre: any[]; previsione: any; ultima: string }>();
-    const candele = async (sym: string, tf: string) => {
-      const key = `${sym}|${tf}`;
-      const m = memo.get(key);
-      if (m && Date.now() - m.at < 60_000) return { barre: m.barre, previsione: m.previsione };
-      const b = (await deps.broker.getIntradayBars([sym], tf, 160))[sym] ?? [];
-      const barre = b.map((x) => ({ date: x.t, open: x.open, high: x.high, low: x.low, close: x.close, volume: x.volume }));
-      const ultima = b.at(-1)?.t ?? "";
-      let previsione = m && m.ultima === ultima ? m.previsione : null;
-      let nota: string | undefined;
-      if (!previsione && kfChart && b.length >= 60) {
-        try {
-          const f = (await kfChart({ [sym]: b }, Number(tf.endsWith("Min") ? tf.replace("Min", "") : Number(tf.replace("Hour", "")) * 60), 12))[sym];
-          previsione = f ? { rendimentoPrevisto: f.rendimentoPrevisto, percorso: f.percorso } : null;
-        } catch (e) {
-          nota = `Kronos: ${(e as Error).message}`;
-        }
-      }
-      memo.set(key, { at: Date.now(), barre, previsione, ultima });
-      return { barre, previsione, ...(nota ? { nota } : {}) };
-    };
     dash = startDashboard({ port: args.port ?? AGENTS.dashboardPort, stateDir: deps.stateDir, bus, valuta: (s) => valutaTitolo(engine, cache, s), candele });
     console.log(`dashboard su ${dash.url}`);
   }
@@ -160,7 +160,25 @@ try {
     const pagesTimer = setInterval(async () => {
       if (!AGENTS.pages.enabled || Date.now() - lastPages < AGENTS.pages.everyMinutes * 60_000) return;
       lastPages = Date.now();
-      const r = await publishPages(ROOT, deps.stateDir);
+      // Candele brevi per la pagina pubblica: posizioni, custodi, esplorazione e titoli votati, ognuno su 4 candele.
+      const titoli = new Map<string, Record<string, unknown>>();
+      try {
+        const st = JSON.parse(await Bun.file(join(deps.stateDir, "agents-status.json")).text());
+        const syms = [...new Set<string>([...(st.posizioni ?? []).map((p: any) => p.simbolo), ...(st.custodi ?? []).map((c: any) => c.simbolo), ...(st.esplorazione?.attive ?? []).map((x: any) => x.simbolo), ...(st.punteggi ?? []).filter((p: any) => p.punteggio > 0).map((p: any) => p.simbolo)])].slice(0, 16);
+        for (const sym of syms) {
+          const per: Record<string, unknown> = {};
+          for (const tf of ["5Min", "15Min", "1Hour", "4Hour"]) {
+            try {
+              const c = await candele(sym, tf);
+              per[tf] = { barre: c.barre.slice(-120), previsione: c.previsione };
+            } catch {}
+          }
+          titoli.set(sym, per);
+        }
+      } catch (e) {
+        console.warn(`candele per la pagina pubblica: ${(e as Error).message}`);
+      }
+      const r = await publishPages(ROOT, deps.stateDir, Object.fromEntries(titoli));
       console.log(`${new Date().toISOString()} pagina pubblica: ${r.messaggio}`);
       bus.emit("nota", { testo: `pagina pubblica: ${r.messaggio}` });
     }, 30_000);
