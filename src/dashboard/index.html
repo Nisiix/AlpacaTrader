@@ -38,7 +38,7 @@
   .nav a:focus-visible { outline:2px solid var(--agent); outline-offset:2px; }
   [hidden] { display:none !important; }
   .page { display:none; } .page.on { display:block; }
-  #scene { height:calc(100vh - 300px); min-height:420px; }
+  #scene { height:calc(100vh - 230px); min-height:420px; }
   .subnav { display:flex; gap:6px; margin:0 0 14px; flex-wrap:wrap; }
   .subnav a { text-decoration:none; font-size:14px; padding:6px 14px; border-radius:999px; border:1px solid var(--line); background:var(--card); color:var(--ink-2); }
   .subnav a[aria-current="true"] { background:var(--ink); color:var(--card); border-color:var(--ink); font-weight:600; }
@@ -113,6 +113,18 @@
   .scene-nav button[data-zoom] { width:36px; padding:6px 0; font-weight:700; }
   .scene-help { position:absolute; left:10px; bottom:10px; z-index:2; font-size:12px; color:#334155; background:rgba(255,255,255,.85); padding:4px 10px; border-radius:999px; pointer-events:none; }
   #scene canvas { touch-action:none; }
+  .scene-wrap { display:grid; grid-template-columns:minmax(0, 1fr) 270px; align-items:start; --scene-h:max(480px, calc(100vh - 240px)); }
+  .scene-wrap #scene { height:var(--scene-h); }
+  .agent-list { border-left:1px solid var(--line); background:var(--card); height:var(--scene-h); overflow:auto; padding:8px 8px 12px; }
+  .agent-list h4 { margin:12px 6px 4px; font-size:12px; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-3); display:flex; justify-content:space-between; }
+  .agent-list button { display:grid; grid-template-columns:12px 1fr auto; gap:8px; align-items:center; width:100%; text-align:left; font:inherit; font-size:14px; background:transparent; border:0; border-radius:8px; padding:6px 8px; color:var(--ink); cursor:pointer; }
+  .agent-list button:hover, .agent-list button.on { background:var(--agent-bg); }
+  .agent-list button:focus-visible { outline:2px solid var(--agent); outline-offset:-2px; }
+  .agent-list .sw { width:10px; height:10px; border-radius:50%; }
+  .agent-list .st { color:var(--ink-3); font-size:12px; white-space:nowrap; }
+  .agent-list .nm { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .agent-list .caffe { color:var(--warn); font-size:11px; }
+  @media (max-width: 860px) { .scene-wrap { grid-template-columns:1fr; } .scene-wrap { --scene-h:70vh; } .agent-list { border-left:0; border-top:1px solid var(--line); height:auto; max-height:320px; } }
   /* Telefono: menu a schede scorrevole, niente scorrimento orizzontale della pagina, tabelle scorrevoli dentro la card. */
   main > *, .cols > *, .stack > *, .title-grid > * { min-width:0; }
   @media (max-width: 700px) {
@@ -388,8 +400,8 @@
     <h1 class="page-title">Ufficio</h1>
       <details class="scene" id="scene-box" open>
       <summary>Ufficio degli agenti <span class="hint">trascina per girare, rotella per avvicinarti</span></summary>
-      <div id="scene"></div>
-      <p class="legend">In fondo la <b>Direzione</b> (gli agenti generali) davanti alla <b>lavagna dei risultati</b>; poi i <b>Custodi</b>, una scrivania per titolo seguito, con la camicia del colore della fase (blu pronto, verde in posizione, rosso in uscita, grigio in attesa) e lo schermo con prezzo e andamento; infine la <b>Sala intraday</b> (arancione). A destra, oltre la porta, la <b>Sala caffè</b>: chi in questo giro non ha niente da fare si siede ai tavolini e scambia con i colleghi dati veri (dossier, candele, proiezioni di Kronos, lezioni dei trade chiusi); appena ha un trade da aprire o una posizione da seguire torna alla scrivania. Chi vota alza la mano, chi compra o vende si alza e lo schermo lampeggia. Mouse sopra per leggere, clic per aprire.</p>
+      <div class="scene-wrap"><div id="scene"></div><aside class="agent-list" id="agent-list" aria-label="agenti dell'ufficio"></aside></div>
+      <p class="legend">In fondo la <b>Direzione</b> (gli agenti generali) davanti alla <b>lavagna dei risultati</b>; poi i <b>Custodi</b>, una scrivania per titolo seguito, con la camicia del colore della fase (blu pronto, verde in posizione, rosso in uscita, grigio in attesa) e lo schermo con prezzo e andamento; infine la <b>Sala intraday</b> (arancione). A destra, oltre la porta, la <b>Sala caffè</b>: chi in questo giro non ha niente da fare si siede ai tavolini e scambia con i colleghi dati veri (dossier, candele, proiezioni di Kronos, lezioni dei trade chiusi); appena ha un trade da aprire o una posizione da seguire torna alla scrivania. Chi vota alza la mano, chi compra o vende si alza e lo schermo lampeggia. Mouse sopra per leggere, clic per aprire. A destra l'elenco degli agenti: passando sopra un nome il suo avatar si alza in piedi e la postazione si illumina; il clic apre la scheda.</p>
     </details>
     <div class="cols" style="margin-top:16px">
       <div class="stack">
@@ -821,13 +833,47 @@ function makeDesk(key, big = false) {
   const emp = makeEmployee(0x2a55c7, look, big); emp.position.set(0, 0, -0.85); g.add(emp);
   // il busto guarda lo schermo davanti a sé (verso +z): braccia sulla tastiera
   for (const a of emp.userData.arms) a.position.z = 0.3;
+  // Il nome sopra l'avatar compare solo quando la postazione è evidenziata (dall'elenco a destra o con il mouse):
+  // nell'ambiente niente scritte sovrapposte.
   const el = document.createElement('div'); el.className = 'lbl desk-lbl';
-  const tag = new CSS2DObject(el); tag.position.set(0, 2.05, -0.6); g.add(tag);
+  const tag = new CSS2DObject(el); tag.position.set(0, 2.05, -0.6); tag.visible = false; g.add(tag);
   g.userData = { scr, emp, el, tag };
   return g;
 }
 
 const desks = new Map(); // chiave -> { group, info }
+// Postazione evidenziata dall'elenco a destra: anello luminoso a terra, avatar in piedi, nome sopra.
+let listHoverKey = null;
+const listHoverDesk = () => (listHoverKey ? desks.get(listHoverKey) || null : null);
+const hiRing = new THREE.Mesh(new THREE.RingGeometry(0.55, 0.75, 40), new THREE.MeshBasicMaterial({ color: 0x3b82f6, transparent: true, opacity: 0.85, side: THREE.DoubleSide }));
+hiRing.rotation.x = -Math.PI / 2; hiRing.visible = false; scene.add(hiRing);
+const hexCss = (h) => `#${h.toString(16).padStart(6, '0')}`;
+function paintAgentList(st) {
+  const box = $('#agent-list'); if (!box) return;
+  const pausa = new Set((st.caffe?.presenti || []).map((p) => p.chiave));
+  const row = (key, nome, stato) => { const d = desks.get(key); if (!d) return ''; const col = hexCss(d.group.userData.emp.userData.shirtM.color.getHex()); return `<button type="button" data-key="${esc(key)}" class="${cardKey === key || listHoverKey === key ? 'on' : ''}"><span class="sw" style="background:${col}"></span><span class="nm">${esc(nome)}${pausa.has(key) ? ' <span class="caffe">☕</span>' : ''}</span><span class="st">${esc(stato)}</span></button>`; };
+  const general = Object.keys(st.agenti || {}).filter((n) => n !== 'custodi' && n !== 'intraday');
+  const cust = st.custodi || [];
+  const intra = [...desks.keys()].filter((k) => k.startsWith('i:'));
+  const capo = st.capo; const rich = (capo?.valutazioni || []).filter((v) => v.giudizio === 'richiamato').length;
+  const html = `<h4>Direzione <span>${general.length + 1}</span></h4>${row('capo', 'Capo ufficio', rich ? `${rich} richiami` : 'in regola')}${general.map((n) => { const a = st.agenti[n]; return row(`a:${n}`, agentName(n), a.errore ? 'errore' : `${a.segnali} segnali`); }).join('')}
+    <h4>Custodi <span>${cust.length}</span></h4>${cust.map((c) => row(`c:${c.simbolo}`, c.simbolo, `${c.dossier ? `${Math.round(c.dossier.probabilita * 100)}% · ` : ''}${FASI[c.fase] || c.fase}`)).join('') || '<p class="empty" style="padding:4px 8px">nessuno</p>'}
+    <h4>Sala intraday <span>${intra.length}</span></h4>${intra.map((k) => { const x = desks.get(k)?.info?.x; return x ? row(k, x.simbolo, `${x.candela} · ${x.fase === 'in posizione' ? 'in posizione' : x.ingresso !== null ? 'ingresso votato' : 'cerca'}`) : ''; }).join('') || '<p class="empty" style="padding:4px 8px">nessuno</p>'}
+    ${pausa.size ? `<p class="why" style="padding:8px">☕ ${pausa.size} in pausa in sala caffè</p>` : ''}`;
+  // Si riscrive solo se cambia qualcosa: il nome sotto il mouse resta lo stesso elemento.
+  if (box.dataset.html !== html) { box.innerHTML = html; box.dataset.html = html; }
+}
+// Un solo gestore per tutto l'elenco (le voci si riscrivono quando cambia lo stato).
+{
+  const box = $('#agent-list');
+  const keyOf = (ev) => ev.target.closest?.('button[data-key]')?.dataset.key ?? null;
+  const set = (k) => { listHoverKey = k; for (const b of box.querySelectorAll('button[data-key]')) b.classList.toggle('on', b.dataset.key === k || b.dataset.key === cardKey); };
+  box.addEventListener('mouseover', (ev) => { const k = keyOf(ev); if (k) set(k); });
+  box.addEventListener('mouseleave', () => set(null));
+  box.addEventListener('focusin', (ev) => { const k = keyOf(ev); if (k) set(k); });
+  box.addEventListener('focusout', () => set(null));
+  box.addEventListener('click', (ev) => { const k = keyOf(ev); if (k) openCard(k); });
+}
 const deptLabels = [];
 function deptLabel(text, x, z) { const el = document.createElement('div'); el.className = 'lbl dept-lbl'; el.textContent = text; const o = new CSS2DObject(el); o.position.set(x, 2.6, z); scene.add(o); deptLabels.push(o); }
 const SPX = 2.2, SPZ = 2.6;
@@ -1025,6 +1071,7 @@ function paintScene(st) {
   moveToCaffe(st);
   drawBoard(st, journal);
   if (cardKey) renderCard();
+  paintAgentList(st);
 }
 
 // In sala caffè si parla: ogni 4 secondi uno scambio vero dallo stato del motore (dossier, candele, Kronos, lezioni, capo).
@@ -1097,6 +1144,7 @@ function pickDesk(ev) {
 let hoveredDesk = null;
 renderer.domElement.addEventListener('mousemove', (ev) => {
   const d = pickDesk(ev); hoveredDesk = d && !d.board ? d : null;
+  { let k0 = null; for (const [k, x] of desks) if (x === hoveredDesk) k0 = k; for (const b of document.querySelectorAll('#agent-list button[data-key]')) b.classList.toggle('on', b.dataset.key === k0 || b.dataset.key === cardKey); }
   if (!d) { hoverEl.style.display = 'none'; return; }
   let html;
   if (d.board) html = '<b>Lavagna dei risultati</b><br>trade chiusi vinti e persi per agente, dal diario; in alto il risultato di oggi';
@@ -1165,6 +1213,7 @@ function animate() {
   requestAnimationFrame(animate);
   if (!officeOn() || !sceneBox.open) return;
   const dt = Math.min(0.05, clock.getDelta()); const now = performance.now();
+  const hiDesk = listHoverDesk();
   for (const d of desks.values()) {
     const empO = d.group.userData.emp;
     if (d.walk) {
@@ -1192,10 +1241,15 @@ function animate() {
     }
     if (e.raise > 0) { e.arms[1].position.y = 0.84 + e.raise * 0.55; e.arms[1].position.z = 0.3 - e.raise * 0.2; e.raise = Math.max(0, e.raise - dt * 0.6); }
     if (e.bow > 0) { e.head.rotation.x = e.bow * 0.5; e.bow = Math.max(0, e.bow - dt * 0.4); } else e.head.rotation.x = 0;
-    if (!d.walk) { if (e.stand > 0) { empO.position.y = e.stand * 0.35; e.stand = Math.max(0, e.stand - dt * 0.5); } else empO.position.y = 0; }
-    e.torso.material.emissive?.setHex(d === hoveredDesk ? 0x333333 : 0x000000);
+    const lh = d === hiDesk;
+    const evid = lh || d === hoveredDesk;
+    if (lh) e.stand = Math.min(1, Math.max(e.stand, 0) + dt * 4); // dall'elenco: in piedi finché il mouse resta sul nome
+    if (!d.walk) { if (e.stand > 0) { empO.position.y = e.stand * 0.35; if (!lh) e.stand = Math.max(0, e.stand - dt * 0.5); } else empO.position.y = 0; }
+    e.torso.material.emissive?.setHex(lh ? 0x4a5f9a : d === hoveredDesk ? 0x333333 : 0x000000);
+    d.group.userData.tag.visible = evid;
     const s = d.group.userData.scr; if (s.userData.flash > 0) { s.userData.flash = Math.max(0, s.userData.flash - dt * 0.5); if (s.userData.flash === 0 && status) paintScene(status); }
   }
+  if (hiDesk) { hiDesk.group.userData.emp.getWorldPosition(hiRing.position); hiRing.position.y = 0.02; hiRing.visible = true; hiRing.scale.setScalar(1 + Math.sin(now / 220) * 0.08); } else hiRing.visible = false;
   for (let i = bubbles.length - 1; i >= 0; i--) { const b = bubbles[i]; const k = (now - b.born) / b.life; if (k >= 1) { b.host.remove(b.o); b.o.element.remove(); bubbles.splice(i, 1); continue; } b.o.position.y = 2.3 + k * (b.life > 3000 ? 0.15 : 0.6); b.o.element.style.opacity = String(b.life > 3000 ? Math.min(1, (1 - k) * 4) : 1 - k); }
   chatTick(now);
   if (fly) { const k = Math.min(1, (now - fly.t0) / 900); const ease = k * (2 - k); controls.target.lerpVectors(fly.fromT, fly.toT, ease); camera.position.lerpVectors(fly.fromP, fly.toP, ease); if (k >= 1) fly = null; }
