@@ -152,6 +152,19 @@ export function isProtectiveStop(o: Order): boolean {
   return (o.type === "stop" || o.type === "stop_limit") && o.side === "sell";
 }
 
+// Decimali di prezzo ammessi da Alpaca: azioni 2 (4 sotto il dollaro); crypto 4 cifre significative, da 2 a 9 decimali
+// (PEPE a 0,0000048 con 2 decimali diventerebbe 0 e Alpaca rifiuterebbe lo stop).
+export function decimaliPrezzo(symbol: string, price: number): number {
+  if (!symbol.includes("/")) return price >= 1 ? 2 : 4;
+  if (!(price > 0)) return 2;
+  return Math.max(2, Math.min(9, 3 - Math.floor(Math.log10(price))));
+}
+export function arrotondaPrezzo(symbol: string, price: number): number {
+  const f = 10 ** decimaliPrezzo(symbol, price);
+  return Math.round(price * f) / f;
+}
+export const prezzoStringa = (symbol: string, price: number) => price.toFixed(decimaliPrezzo(symbol, price));
+
 // Quantità ammessa da Alpaca: azioni intere per i titoli, frazioni (6 decimali) per le crypto.
 export function roundQty(symbol: string, qty: number): number {
   if (!symbol.includes("/")) return Math.floor(qty);

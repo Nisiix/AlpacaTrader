@@ -191,7 +191,7 @@ interface Custode {
 }
 
 const pct = (x: number | null, d = 1) => (x === null ? "n.d." : `${x >= 0 ? "+" : ""}${(x * 100).toFixed(d)}%`);
-const num = (x: number | null) => (x === null ? "n.d." : x >= 100 ? x.toFixed(2) : x.toFixed(4));
+const num = (x: number | null) => (x === null ? "n.d." : x >= 100 ? x.toFixed(2) : x >= 0.01 ? x.toFixed(4) : x.toPrecision(4));
 export const custodeName = (symbol: string) => `custode ${symbol}`;
 
 export class CustodiAgent implements Agent {

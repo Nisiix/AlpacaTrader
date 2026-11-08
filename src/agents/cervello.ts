@@ -159,6 +159,17 @@ export class Cervello {
     return out;
   }
 
+  // Affidabilità misurata di Kronos su un tipo di previsione (es. "intraday-5m"): quota di direzioni giuste avvicinata al
+  // valore atteso `prior` con il peso di `forza` previsioni, e il fattore che ne deriva (1 = come atteso, 0 = come il caso).
+  affidabilitaTipo(tipo: string, modello = "kronos"): { fattore: number; quota: number; campione: number; giusti: number | null } {
+    const a = AGENTS.intraday.affidabilita;
+    const st = this.f.stat[`${tipo}|${modello}`];
+    const n = st?.n ?? 0;
+    const quota = ((st?.giusti ?? 0) + a.prior * a.forza) / (n + a.forza);
+    const fattore = Math.max(0, Math.min(a.max, (quota - 0.5) / (a.prior - 0.5)));
+    return { fattore, quota, campione: n, giusti: n ? st!.giusti / n : null };
+  }
+
   // Per la dashboard: una riga per tipo e modello con campione, direzione giusta, resa e peso di adesso.
   stato(): { righe: RigaCervello[]; inAttesa: number } {
     const perTipo = new Map<string, Set<string>>();

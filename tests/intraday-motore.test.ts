@@ -109,4 +109,45 @@ describe("intraday nel motore vero: candele da 5 minuti, Kronos, ordini", () => 
     expect(debole.segnali.filter((x) => x.lato === "buy")).toEqual([]);
     expect(debole.intraday!.find((x) => x.simbolo === "BTC/USD")!.motivo).toContain("non basta");
   });
+
+  test("ingresso deciso da Kronos sotto la media a 20: al giro dopo non si esce per «due candele sotto la media» (la ragione per cui è entrato)", async () => {
+    setCryptoUniverse(["BTC/USD"]);
+    const now = new Date("2026-09-27T21:00:00+02:00");
+    const end = Math.floor(now.getTime() / 300_000) * 300_000;
+    const bars: IntradayBar[] = Array.from({ length: 120 }, (_, i) => {
+      const k = 119 - i;
+      const c = 76_000 * (1 + 0.0008 * k) * (1 + (k % 2 === 0 ? 0.003 : -0.003));
+      return { t: new Date(end - (k + 1) * 300_000).toISOString(), open: c, high: c * 1.002, low: c * 0.998, close: c, volume: 1_000 };
+    });
+    const prezzo = bars.at(-1)!.close;
+    const base = { today: "2026-09-27", prices: { "BTC/USD": prezzo }, closes: { "BTC/USD": syntheticCloses(prezzo, 0.02, 260) }, indicators: {}, account: { equity: 100_000, lastEquity: 100_000, cash: 100_000, status: "ACTIVE" }, mercatoAperto: false };
+    const agente = new IntradayAgent(async (syms, tf) => Object.fromEntries(syms.map((x) => [x, tf === "5Min" ? bars : []])), async (b, step, h) => Object.fromEntries(Object.keys(b).map((x) => [x, Array.from({ length: h }, (_, i) => (step === 5 ? Math.min(0.015, 0.005 * (i + 1)) : 0))])));
+    const r1 = await agente.observe({ ...base, now, positions: [], journal: emptyJournal() } as unknown as AgentView);
+    expect(r1.segnali.find((x) => x.lato === "buy")!.perche).toContain("Kronos anticipa la ripartenza");
+    const journal: JournalFile = { ...emptyJournal(), trade: [{ id: "t1", simbolo: "BTC/USD", stato: "aperto", apertoIl: now.toISOString(), comprate: 0.1, costo: prezzo * 0.1, vendute: 0, incassato: 0, quantita: 0.1, contesto: { setup: "", momentum20: null, volGiornaliera: null, distanzaMedia: null, fiducia: null, attesa: "", perche: "", agenti: ["intraday"] } } as any] };
+    const r2 = await agente.observe({ ...base, now: new Date(now.getTime() + 5 * 60_000), positions: [{ symbol: "BTC/USD", qty: 0.1, avgEntryPrice: prezzo, currentPrice: prezzo, marketValue: prezzo * 0.1 }], journal, analisi: false } as unknown as AgentView);
+    expect(r2.segnali.filter((x) => x.lato === "sell")).toEqual([]);
+    expect(r2.intraday!.find((x) => x.simbolo === "BTC/USD")!.motivo).toContain("in corsa");
+  });
+
+  test("scelta della candela: conta la probabilità netta dei costi, pesata dall'affidabilità misurata di Kronos su quella candela; candele discordi = niente ingresso", async () => {
+    setCryptoUniverse(["BTC/USD"]);
+    const now = new Date("2026-09-27T21:00:00+02:00");
+    const bars = salitaA5Minuti(76_000, now);
+    const v = { today: "2026-09-27", now, prices: { "BTC/USD": 76_000 }, closes: { "BTC/USD": syntheticCloses(76_000, 0.02, 260) }, indicators: {}, positions: [], account: { equity: 100_000, lastEquity: 100_000, cash: 100_000, status: "ACTIVE" }, journal: emptyJournal(), mercatoAperto: false } as unknown as AgentView;
+    const rialzo = (step: number, h: number) => Array.from({ length: h }, (_, i) => (step === 5 ? Math.min(0.015, 0.005 * (i + 1)) : step === 60 ? Math.min(0.03, 0.006 * (i + 1)) : 0));
+    const fetch = async (syms: string[]) => Object.fromEntries(syms.map((x) => [x, bars]));
+    // Affidabilità come attesa su tutte le candele: entra.
+    const ok = await new IntradayAgent(fetch, async (b, step, h) => Object.fromEntries(Object.keys(b).map((x) => [x, rialzo(step, h)])), () => ({ fattore: 1, quota: 0.55, campione: 0 })).observe(v);
+    expect(ok.segnali.some((x) => x.lato === "buy")).toBe(true);
+    // Kronos sulle 5 minuti indovina come una moneta (fattore 0): quella candela non fa più entrare, si sceglie la 1 ora.
+    const solo1h = await new IntradayAgent(fetch, async (b, step, h) => Object.fromEntries(Object.keys(b).map((x) => [x, rialzo(step, h)])), (step) => (step === 5 ? { fattore: 0, quota: 0.5, campione: 400, giusti: 0.48 } : { fattore: 1, quota: 0.55, campione: 0 })).observe(v);
+    const b1 = solo1h.segnali.find((x) => x.lato === "buy");
+    expect(b1?.perche).toContain("candele 1Hour");
+    expect(b1!.perche).toContain("5Min a 15 min +1.50% → 50%");
+    // Sulle 15 minuti Kronos vede un calo nella stessa ora: discorde, nessun ingresso.
+    const discorde = await new IntradayAgent(fetch, async (b, step, h) => Object.fromEntries(Object.keys(b).map((x) => [x, step === 15 ? Array.from({ length: h }, () => -0.006) : step === 5 ? rialzo(5, h) : Array.from({ length: h }, () => 0)])), () => ({ fattore: 1, quota: 0.55, campione: 0 })).observe(v);
+    expect(discorde.segnali.filter((x) => x.lato === "buy")).toEqual([]);
+    expect(discorde.intraday!.find((x) => x.simbolo === "BTC/USD")!.motivo).toContain("Kronos discorde tra le candele");
+  });
 });

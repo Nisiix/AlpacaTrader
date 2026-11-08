@@ -23,7 +23,7 @@ import { AGENTS, enableCrypto } from "../config.ts";
 import { startDashboard } from "../dashboard/server.ts";
 import { ROOT, buildDeps } from "../deps.ts";
 import { CAMPIONI, ensureKronos, intradayForecaster, pathForecaster, type KronosLink } from "../kronos-sidecar.ts";
-import { Cervello, previsioniCombinate, previsioniIntradayCombinate } from "../agents/cervello.ts";
+import { Cervello, previsioniCombinate, previsioniIntradayCombinate, tipoIntraday } from "../agents/cervello.ts";
 import { nasdaqEarnings } from "../earnings.ts";
 import { appendFileSync, existsSync, mkdirSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
@@ -77,7 +77,7 @@ try {
   // sulle candele brevi (se il sidecar c'è) con le medie brevi; il grafico più lungo pesa solo sulla taglia.
   if (AGENTS.intraday.enabled) {
     const kf = kronos ? previsioniIntradayCombinate(intradayForecaster(kronos), cervello, deps.now) : null;
-    agents.push(new IntradayAgent((s, tf, n) => deps.broker.getIntradayBars(s, tf, n), kf ? async (b, step, h) => Object.fromEntries(Object.entries(await kf(b, step, h)).map(([k, v]) => [k, v.percorso.length ? v.percorso : [v.rendimentoPrevisto]])) : null));
+    agents.push(new IntradayAgent((s, tf, n) => deps.broker.getIntradayBars(s, tf, n), kf ? async (b, step, h) => Object.fromEntries(Object.entries(await kf(b, step, h)).map(([k, v]) => [k, v.percorso.length ? v.percorso : [v.rendimentoPrevisto]])) : null, kf ? (step) => cervello.affidabilitaTipo(tipoIntraday(step)) : null));
   }
   const cache = emptyCache();
   const engine: EngineDeps = {

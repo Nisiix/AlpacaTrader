@@ -2,7 +2,7 @@ import { limitiSedute } from "../sedute.ts";
 import { CRYPTO_STOP_LIMIT_GAP, HTTP_TIMEOUT_MS, MARKET_DATA_URL, PAPER_TRADING_URL, isCrypto } from "../config.ts";
 import { assertPaperUrl } from "../guard.ts";
 import type { Account, Bar, Broker, IntradayBar, MarketClock, Order, OrderRequest, Position, StopOrderRequest } from "./types.ts";
-import { BrokerError, DuplicateOrderError, humanizeBrokerError } from "./types.ts";
+import { BrokerError, DuplicateOrderError, humanizeBrokerError, prezzoStringa } from "./types.ts";
 
 const num = (v: unknown) => (v === null || v === undefined || v === "" ? 0 : Number(v));
 
@@ -141,8 +141,8 @@ export class AlpacaBroker implements Broker {
   async submitStopOrder(req: StopOrderRequest): Promise<Order> {
     // Le crypto non accettano lo stop a mercato: stop_limit con limite mezzo punto sotto.
     const body = isCrypto(req.symbol)
-      ? { symbol: req.symbol, qty: qtyString(req.symbol, req.qty), side: "sell", type: "stop_limit", stop_price: req.stopPrice.toFixed(2), limit_price: (req.stopPrice * (1 - CRYPTO_STOP_LIMIT_GAP)).toFixed(2), time_in_force: "gtc", client_order_id: req.clientOrderId }
-      : { symbol: req.symbol, qty: String(req.qty), side: "sell", type: "stop", stop_price: req.stopPrice.toFixed(2), time_in_force: "gtc", client_order_id: req.clientOrderId };
+      ? { symbol: req.symbol, qty: qtyString(req.symbol, req.qty), side: "sell", type: "stop_limit", stop_price: prezzoStringa(req.symbol, req.stopPrice), limit_price: prezzoStringa(req.symbol, req.stopPrice * (1 - CRYPTO_STOP_LIMIT_GAP)), time_in_force: "gtc", client_order_id: req.clientOrderId }
+      : { symbol: req.symbol, qty: String(req.qty), side: "sell", type: "stop", stop_price: prezzoStringa(req.symbol, req.stopPrice), time_in_force: "gtc", client_order_id: req.clientOrderId };
     return toOrder(await this.request(this.baseUrl, "/v2/orders", { method: "POST", body: JSON.stringify(body) }));
   }
 

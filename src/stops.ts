@@ -1,4 +1,4 @@
-import { DuplicateOrderError, isProtectiveStop, type Broker, type Order, type Position } from "./broker/types.ts";
+import { DuplicateOrderError, arrotondaPrezzo, isProtectiveStop, prezzoStringa, type Broker, type Order, type Position } from "./broker/types.ts";
 import { CRYPTO_MIN_NOTIONAL, LIMITS, isCrypto } from "./config.ts";
 import { dailyVol } from "./indicators.ts";
 import type { Logger } from "./log.ts";
@@ -19,7 +19,7 @@ export function stopPctFor(closes: number[] | undefined): number {
   return Math.min(maxPct, Math.max(minPct, raw));
 }
 
-export const stopPriceFor = (p: Position, closes?: number[], fixedPct?: number) => Math.round(p.avgEntryPrice * (1 - (fixedPct ?? stopPctFor(closes))) * 100) / 100;
+export const stopPriceFor = (p: Position, closes?: number[], fixedPct?: number) => arrotondaPrezzo(p.symbol, p.avgEntryPrice * (1 - (fixedPct ?? stopPctFor(closes))));
 
 // Ogni posizione ha uno e un solo stop su Alpaca, per tutta la quantità, alla distanza di stopPctFor.
 // Così la protezione vale anche tra un giro e l'altro e a macchina spenta.
@@ -39,22 +39,23 @@ export async function manageStops(broker: Broker, runId: string, positions: Posi
     }
     // Senza storico la distanza non si può ricalcolare: uno stop già giusto per quantità resta dov'è.
     if (fixedPct === undefined && !closes[p.symbol] && existing.length === 1 && existing[0]!.qty === p.qty && existing[0]!.stopPrice) {
-      r.ok.push(`${p.symbol} ${p.qty} @ ${existing[0]!.stopPrice.toFixed(2)} (storico non disponibile: stop lasciato com'era)`);
+      r.ok.push(`${p.symbol} ${p.qty} @ ${prezzoStringa(p.symbol, existing[0]!.stopPrice)} (storico non disponibile: stop lasciato com'era)`);
       continue;
     }
     const want = stopPriceFor(p, closes[p.symbol], fixedPct);
-    if (existing.length === 1 && existing[0]!.qty === p.qty && Math.abs((existing[0]!.stopPrice ?? 0) - want) < 0.01) {
-      r.ok.push(`${p.symbol} ${p.qty} @ ${want.toFixed(2)}`);
+    // Stesso stop se differisce meno di un millesimo del prezzo (o di un centesimo): non si sposta per l'arrotondamento.
+    if (existing.length === 1 && existing[0]!.qty === p.qty && Math.abs((existing[0]!.stopPrice ?? 0) - want) < Math.min(0.01, want * 0.001)) {
+      r.ok.push(`${p.symbol} ${p.qty} @ ${prezzoStringa(p.symbol, want)}`);
       continue;
     }
     try {
       for (const o of existing) {
         await broker.cancelOrder(o.id);
-        r.cancelled.push(`${p.symbol} ${o.qty} @ ${o.stopPrice?.toFixed(2)}`);
+        r.cancelled.push(`${p.symbol} ${o.qty} @ ${o.stopPrice === null ? "?" : prezzoStringa(p.symbol, o.stopPrice)}`);
       }
       await placeStop(broker, runId, p.symbol, p.qty, want);
-      r.placed.push(`${p.symbol} ${p.qty} @ ${want.toFixed(2)}`);
-      log.info(`stop su Alpaca: ${p.symbol} ${p.qty} @ ${want.toFixed(2)}`);
+      r.placed.push(`${p.symbol} ${p.qty} @ ${prezzoStringa(p.symbol, want)}`);
+      log.info(`stop su Alpaca: ${p.symbol} ${p.qty} @ ${prezzoStringa(p.symbol, want)}`);
     } catch (e) {
       r.errors.push(`${p.symbol}: ${(e as Error).message}`);
       log.error(`stop su ${p.symbol} non piazzato: ${(e as Error).message}`);

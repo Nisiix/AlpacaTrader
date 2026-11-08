@@ -130,4 +130,32 @@ describe("campioni di Kronos", () => {
     for (let i = 0; i < 20; i++) c.misura(10, 1, c.quanti());
     expect(c.quanti()).toBe(cfg.max);
   });
+
+  test("affidabilità per candela: campione piccolo vicino all'atteso, campione grande decide; prezzi minuscoli con i decimali giusti; messaggi lunghi divisi", async () => {
+    const { mkdtempSync } = await import("node:fs");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const c = new Cervello(mkdtempSync(join(tmpdir(), "cerv-")));
+    expect(c.affidabilitaTipo("intraday-5m").fattore).toBeCloseTo(1, 6);
+    (c as any).f.stat["intraday-5m|kronos"] = { n: 20, giusti: 7, segno: -0.15 };
+    const poco = c.affidabilitaTipo("intraday-5m");
+    expect(poco.fattore).toBeGreaterThan(0.2);
+    expect(poco.fattore).toBeLessThan(0.5);
+    (c as any).f.stat["intraday-5m|kronos"] = { n: 1000, giusti: 480, segno: -1 };
+    expect(c.affidabilitaTipo("intraday-5m").fattore).toBe(0);
+    (c as any).f.stat["intraday-60m|kronos"] = { n: 1000, giusti: 600, segno: 2 };
+    expect(c.affidabilitaTipo("intraday-60m").fattore).toBe(AGENTS.intraday.affidabilita.max);
+    const { prezzoStringa, arrotondaPrezzo } = await import("../src/broker/types.ts");
+    expect(prezzoStringa("PEPE/USD", 4.816e-6)).toBe("0.000004816");
+    expect(Number(prezzoStringa("PEPE/USD", 4.816e-6 * 0.995))).toBeGreaterThan(0);
+    expect(prezzoStringa("ETH/USD", 1914.0412)).toBe("1914.04");
+    expect(prezzoStringa("AAPL", 231.456)).toBe("231.46");
+    expect(arrotondaPrezzo("DOGE/USD", 0.123456)).toBe(0.1235);
+    const { dividiMessaggio } = await import("../src/telegram.ts");
+    const lungo = Array.from({ length: 300 }, (_, i) => `riga ${i} ${"x".repeat(30)}`).join("\n");
+    const parti = dividiMessaggio(lungo);
+    expect(parti.length).toBeGreaterThan(1);
+    expect(parti.every((x) => x.length <= 4000)).toBe(true);
+    expect(parti.join("\n")).toBe(lungo);
+  });
 });

@@ -262,6 +262,12 @@ export const AGENTS = {
     // minProbSenzaGrafico: con le medie brevi della candela non in ordine (né rottura né rientro) decide Kronos da solo,
     // ma serve una probabilità più alta e la taglia si dimezza (un'inversione anticipata, non un trend già visibile).
     kronos: { orizzontiMin: [15, 30, 60, 120, 240, 480] as number[], maxCandele: 20, perGiro: 40, minProb: 0.55, minProbSenzaGrafico: 0.65, zMax: 4 },
+    // Scelta della candela: la probabilità che conta è quella di un guadagno NETTO dei costi di andata e ritorno, Φ(z) con
+    // z = (rialzo previsto − costi) / (volatilità delle candele × √candele), moltiplicato per l'affidabilità misurata della
+    // candela dal cervello: quota di direzioni giuste di Kronos su quella candela, avvicinata a `prior` con il peso di `forza`
+    // previsioni finte (un campione piccolo conta poco). Fattore = (quota − 50%) / (prior − 50%), tra 0 e `max`: una candela
+    // su cui Kronos indovina come una moneta non fa entrare, una su cui indovina più del previsto pesa di più.
+    affidabilita: { prior: 0.55, forza: 100, max: 1.5 },
     // Scaduto l'orizzonte scelto (× questo fattore) senza obiettivo e senza rialzo ancora probabile, si chiude.
     scadenzaOrizzonte: 1.5,
     // Le candele su cui si cerca l'ingresso: con Kronos si sceglie quella con la probabilità di successo più alta.
