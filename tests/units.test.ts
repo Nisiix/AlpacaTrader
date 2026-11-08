@@ -179,3 +179,13 @@ describe("briciole e arrotondamenti", () => {
     expect(f.rifiuti).toHaveLength(0);
   });
 });
+
+describe("errori di Alpaca leggibili", () => {
+  test("il JSON di Alpaca diventa una frase in italiano con il codice tra parentesi", async () => {
+    const { humanizeBrokerError } = await import("../src/broker/types.ts");
+    expect(humanizeBrokerError(422, '{"code":40010001,"message":"qty must be \\u003e 0"}')).toBe("Alpaca 422: quantità troppo piccola (resto frazionario) (codice 40010001)");
+    expect(humanizeBrokerError(403, '{"available":"0.000000937","balance":"0.000000937","code":40310000,"message":"insufficient balance for LTC (requested: 0.000001, available: 0.000000937)","symbol":"USD"}')).toBe("Alpaca 403: saldo insufficiente di LTC (chiesti 0.000001, disponibili 0.000000937) (codice 40310000)");
+    expect(humanizeBrokerError(401, '{"message": "unauthorized."}')).toContain("chiavi rifiutate");
+    expect(humanizeBrokerError(500, "errore interno")).toBe("Alpaca 500: errore interno");
+  });
+});

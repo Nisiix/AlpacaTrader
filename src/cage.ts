@@ -48,6 +48,9 @@ export interface CageInput {
   proposals: ProposedOrder[];
   // Proiezioni di Kronos (rendimento a `horizon` sedute): con un rialzo anticipato l'uscita di trend aspetta (lo stop resta).
   previsioni?: Record<string, number>;
+  // Titoli comprati oggi: l'uscita di trend (che guarda la chiusura di ieri, già nota all'acquisto) non li vende finché
+  // non si è formata una candela giornaliera nuova. Restano gli stop e le uscite vincolanti.
+  apertiOggi?: Set<string>;
 }
 
 export interface CageResult {
@@ -117,6 +120,7 @@ export function applyCage(i: CageInput): CageResult {
       const m = c ? sma(c, LIMITS.trendSmaDays) : null;
       const last = c?.[c.length - 1];
       if (m === null || last === undefined || last >= m) continue;
+      if (i.apertiOggi?.has(p.symbol)) continue;
       // Posizione aperta (o tenuta) perché Kronos anticipa un rialzo: la regola del trend aspetta finché la proiezione resta netta.
       const fc = i.previsioni?.[p.symbol];
       if (fc !== undefined && fc >= AGENTS.kronos.anticipaSoglia) continue;

@@ -742,6 +742,23 @@ describe("intraday", () => {
   });
 });
 
+describe("tenuta minima", () => {
+  test("un titolo comprato oggi non si rivende al giro dopo per il trend o per i voti; lo stop e le regole vincolanti restano", () => {
+    const v = view({ falling: ["NVDA"] });
+    const pos = [{ symbol: "NVDA", qty: 10, avgEntryPrice: v.prices.NVDA!, currentPrice: v.prices.NVDA!, marketValue: 10 * v.prices.NVDA! }];
+    const j = emptyJournal();
+    j.trade.push({ id: "t1", simbolo: "NVDA", stato: "aperto", apertoIl: "2026-09-24T13:41:00Z", comprate: 10, costo: 10 * v.prices.NVDA!, vendute: 0, incassato: 0, quantita: 10, contesto: null });
+    const sell = [{ agente: "trend", simbolo: "NVDA", lato: "sell" as const, forza: 1, orizzonteSedute: 20, perche: "sotto la 50" }];
+    const today = allocate(view({ falling: ["NVDA"], positions: pos, journal: j }), { trend: { segnali: sell } }, { trend: 1 });
+    expect(today.proposte.filter((p) => p.side === "sell")).toEqual([]);
+    const forced = allocate(view({ falling: ["NVDA"], positions: pos, journal: j }), { uscite: { segnali: [{ ...sell[0]!, agente: "uscite", vincolante: true, perche: "stop" }] } }, { uscite: 1 });
+    expect(forced.proposte.map((p) => p.side)).toEqual(["sell"]);
+    const base = { today: "2026-09-24", slotKind: "open" as const, marketOpen: true, latenessMin: 0, account: v.account, positions: pos, prices: v.prices, closes: v.closes, recentOrders: [], lessons: [], buyBlock: null, proposals: [] };
+    expect(applyCage(base).orders.filter((o) => o.source === "uscita-trend").map((o) => o.symbol)).toEqual(["NVDA"]);
+    expect(applyCage({ ...base, apertiOggi: new Set(["NVDA"]) }).orders.filter((o) => o.source === "uscita-trend")).toEqual([]);
+  });
+});
+
 describe("contesto economico", () => {
   test("regole: con SPY sopra la 200 e settori in trend è favorevole; con SPY sotto la 200 è sfavorevole e tutti aspettano", async () => {
     const ok = await new ContextAgent(null, []).assess(view());

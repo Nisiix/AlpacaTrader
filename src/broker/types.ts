@@ -95,6 +95,40 @@ export interface Bar {
   volume: number;
 }
 
+// Gli errori di Alpaca arrivano come JSON ({"code":40310000,"message":"insufficient balance ..."}): qui diventano una frase
+// leggibile in italiano, per log, Telegram e dashboard. Il codice numerico resta tra parentesi per chi deve indagare.
+export function humanizeBrokerError(status: number | undefined, body: string): string {
+  let msg = body.trim();
+  let code: string | number | undefined;
+  try {
+    const j = JSON.parse(body) as { message?: string; code?: number | string; available?: string; requested?: string };
+    if (j && typeof j === "object") {
+      msg = String(j.message ?? body);
+      code = j.code;
+    }
+  } catch {}
+  const it: [RegExp, (m: RegExpMatchArray) => string][] = [
+    [/qty must be > 0|qty must be \u003e 0/i, () => "quantità troppo piccola (resto frazionario)"],
+    [/insufficient balance for (\w+)(?: \(requested: ([\d.]+), available: ([\d.]+)\))?/i, (m) => `saldo insufficiente di ${m[1]}${m[2] ? ` (chiesti ${m[2]}, disponibili ${m[3]})` : ""}`],
+    [/insufficient buying power/i, () => "liquidità insufficiente"],
+    [/forbidden|unauthorized/i, () => "chiavi rifiutate (controlla key id e secret del conto paper)"],
+    [/market is closed|not open/i, () => "mercato chiuso"],
+    [/asset .* is not (?:active|tradable)/i, () => "titolo non negoziabile su Alpaca"],
+    [/client_order_id must be unique/i, () => "ordine già inviato con lo stesso identificativo"],
+    [/potential wash trade/i, () => "ordine opposto ancora aperto sullo stesso titolo (wash trade)"],
+    [/rate limit|too many requests/i, () => "troppe richieste, Alpaca chiede di rallentare"],
+  ];
+  for (const [re, f] of it) {
+    const m = msg.match(re);
+    if (m) {
+      msg = f(m);
+      break;
+    }
+  }
+  if (msg.length > 160) msg = `${msg.slice(0, 157)}…`;
+  return `Alpaca${status ? ` ${status}` : ""}: ${msg}${code !== undefined ? ` (codice ${code})` : ""}`;
+}
+
 export class BrokerError extends Error {
   constructor(
     message: string,

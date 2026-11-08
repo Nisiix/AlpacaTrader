@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { isProtectiveStop, type Account, type Bar, type Broker, type MarketClock, type Order, type Position } from "../broker/types.ts";
 import { compareWithBenchmarks, type Comparison } from "../benchmark.ts";
@@ -23,7 +24,7 @@ import { Logger, type Redactor } from "../log.ts";
 import { romeTime } from "../slots.ts";
 import { manageStops, type StopsReport } from "../stops.ts";
 import type { Notifier } from "../telegram.ts";
-import { agentWeights, allocate, type Score } from "./allocator.ts";
+import { agentWeights, allocate, openedToday, type Score } from "./allocator.ts";
 import type { EventBus } from "./bus.ts";
 import { ContextAgent } from "./context.ts";
 import type { Agent, AgentReport, AgentView, MarketContext, Signal } from "./types.ts";
@@ -169,6 +170,14 @@ async function loadUniverse(deps: EngineDeps, cache: EngineCache, today: string,
 // Le proiezioni di Kronos del giorno: una chiamata sulle barre giornaliere, poi riuso. Se il sidecar non è pronto si riprova al giro dopo.
 async function loadForecasts(deps: EngineDeps, cache: EngineCache, today: string, symbols: string[], note: (m: string) => void): Promise<Record<string, number> | undefined> {
   if (!deps.forecaster) return undefined;
+  // Dopo un riavvio le proiezioni di oggi già calcolate si riprendono dal file: senza, al primo giro (sidecar ancora in
+  // caricamento) le posizioni aperte per Kronos perderebbero il loro motivo e verrebbero vendute.
+  if (!cache.previsioni) {
+    try {
+      const f = JSON.parse(readFileSync(forecastsPath(deps.stateDir), "utf8")) as { giorno?: string; previsioni?: Record<string, KronosForecastPath> };
+      if (f.giorno === today && f.previsioni) cache.previsioni = { date: today, data: f.previsioni };
+    } catch {}
+  }
   const missing = symbols.filter((s) => !cache.previsioni?.data[s] && cache.bars[s]);
   if (!cache.previsioni || cache.previsioni.date !== today || missing.length) {
     try {
@@ -373,7 +382,7 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
 
     // 5. Gabbia: gli acquisti solo nella finestra di ingresso, le vendite e gli stop sempre a mercato aperto.
     const entry = inEntryWindow(startedAt);
-    const cage = applyCage({ today, slotKind: entry ? "open" : "mid", marketOpen: snap.clock.isOpen, latenessMin: 0, account: snap.account, positions: snap.positions, prices: snap.prices, closes, recentOrders: snap.recentOrders, lessons: lessonsNow, buyBlock, proposals: alloc.proposte, previsioni: view.previsioni });
+    const cage = applyCage({ today, slotKind: entry ? "open" : "mid", marketOpen: snap.clock.isOpen, latenessMin: 0, account: snap.account, positions: snap.positions, prices: snap.prices, closes, recentOrders: snap.recentOrders, lessons: lessonsNow, buyBlock, proposals: alloc.proposte, previsioni: view.previsioni, apertiOggi: openedToday(view) });
     for (const x of cage.rejected) {
       // Obiettivo del giorno raggiunto: l'acquisto che si sarebbe fatto diventa una simulazione (si segue e si misura).
       if (giornata.obiettivoRaggiunto && x.side === "buy" && /obiettivo giornaliero/.test(x.reason)) {
@@ -433,7 +442,7 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
         const [pos, open] = await Promise.all([deps.broker.getPositions(), deps.broker.getOpenOrders()]);
         positions = cleanPositions(pos);
         // A borsa chiusa si toccano solo gli stop delle crypto; quelli dei titoli restano com'erano.
-        const manageable = equitiesOpen ? pos : pos.filter((p) => isCrypto(p.symbol));
+        const manageable = equitiesOpen ? positions : positions.filter((p) => isCrypto(p.symbol));
         const relevantOpen = equitiesOpen ? open : open.filter((o) => isCrypto(o.symbol));
         stops = await manageStops(deps.broker, giro, manageable, relevantOpen, log, closes, AGENTS.exit.enabled && AGENTS.exit.stopMode === "fisso" ? AGENTS.exit.stopPct : undefined);
       } catch (e) {
@@ -593,7 +602,7 @@ export async function valutaTitolo(deps: EngineDeps, cache: EngineCache, symbol:
   const proposals = alloc.proposte.filter((p) => p.symbol === symbol);
   const entry = inEntryWindow(now);
   const recentOrders = open;
-  const cage = applyCage({ today, slotKind: entry ? "open" : "mid", marketOpen: clock.isOpen, latenessMin: 0, account, positions, prices, closes, recentOrders, lessons: activeLessons(lessonsFile, today), buyBlock, proposals, previsioni: view.previsioni });
+  const cage = applyCage({ today, slotKind: entry ? "open" : "mid", marketOpen: clock.isOpen, latenessMin: 0, account, positions, prices, closes, recentOrders, lessons: activeLessons(lessonsFile, today), buyBlock, proposals, previsioni: view.previsioni, apertiOggi: openedToday(view) });
   const pos = positions.find((p) => p.symbol === symbol && p.qty > 0) ?? null;
   const price = prices[symbol] ?? closes[symbol]?.at(-1) ?? null;
   const c = closes[symbol];

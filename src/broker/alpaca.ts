@@ -1,7 +1,7 @@
 import { CRYPTO_STOP_LIMIT_GAP, HTTP_TIMEOUT_MS, MARKET_DATA_URL, PAPER_TRADING_URL, isCrypto } from "../config.ts";
 import { assertPaperUrl } from "../guard.ts";
 import type { Account, Bar, Broker, IntradayBar, MarketClock, Order, OrderRequest, Position, StopOrderRequest } from "./types.ts";
-import { BrokerError, DuplicateOrderError } from "./types.ts";
+import { BrokerError, DuplicateOrderError, humanizeBrokerError } from "./types.ts";
 
 const num = (v: unknown) => (v === null || v === undefined || v === "" ? 0 : Number(v));
 
@@ -61,7 +61,7 @@ export class AlpacaBroker implements Broker {
     if (!res.ok) {
       const body = text.slice(0, 300);
       if (res.status === 422 && /client_order_id/i.test(body)) throw new DuplicateOrderError(`client_order_id già usato: ${body}`, 422);
-      throw new BrokerError(`Alpaca ${res.status} su ${path}: ${body}`, res.status, res.status >= 500 || res.status === 429);
+      throw new BrokerError(humanizeBrokerError(res.status, text), res.status, res.status >= 500 || res.status === 429);
     }
     return text ? JSON.parse(text) : null;
   }

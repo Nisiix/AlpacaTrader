@@ -2,6 +2,7 @@ import type { ProposedOrder } from "../brain/types.ts";
 import { maxWeightFor } from "../cage.ts";
 import { AGENTS, CRYPTO_MIN_NOTIONAL, LIMITS, isCrypto } from "../config.ts";
 import { dailyVol } from "../indicators.ts";
+import { romeTime } from "../slots.ts";
 import { roundQty } from "../broker/types.ts";
 import { learningStatus, statsOf, type JournalFile } from "../journal.ts";
 import type { AgentReport, AgentView, Signal } from "./types.ts";
@@ -45,6 +46,13 @@ export function agentWeights(journal: JournalFile, today: string, names: string[
     if (s.attesa < 0 && (s.campione === "indicativo" || s.campione === "affidabile")) out[n] = AGENTS.weights.losing;
     else if (s.attesa > 0 && s.campione === "affidabile") out[n] = AGENTS.weights.winning;
   }
+  return out;
+}
+
+// I titoli con un trade aperto oggi (ora di Roma) nel diario.
+export function openedToday(view: AgentView): Set<string> {
+  const out = new Set<string>();
+  for (const t of view.journal.trade) if (t.stato === "aperto" && romeTime(new Date(t.apertoIl)).date === view.today) out.add(t.simbolo);
   return out;
 }
 
@@ -117,9 +125,13 @@ export function allocate(view: AgentView, reports: Record<string, AgentReport>, 
     if (qty <= 0) continue;
     proposte.push({ symbol: s.simbolo, side: "sell", qty, why: `${s.agente}: ${s.perche}`, confidence: "alta", expect: s.frazione && s.frazione < 1 ? "presa di profitto parziale" : "regola di rischio" });
   }
+  // Comprati oggi: i voti di vendita "di opinione" (trend, custodi, punteggio) aspettano una candela giornaliera nuova;
+  // le uscite vincolanti (stop, obiettivo, intraday, proiezione contraria) restano sopra e valgono sempre.
+  const apertiOggi = openedToday(view);
   for (const sc of punteggi) {
     const p = held.get(sc.simbolo);
     if (forced.has(sc.simbolo)) continue;
+    if (sc.punteggio <= AGENTS.sellScore && p && apertiOggi.has(sc.simbolo)) continue;
     if (sc.punteggio <= AGENTS.sellScore && p) {
       proposte.push({ symbol: sc.simbolo, side: "sell", qty: p.qty, why: sc.perche.join(" · "), confidence: conf(-sc.punteggio), expect: `uscita: punteggio ${sc.punteggio.toFixed(2)}` });
     }
