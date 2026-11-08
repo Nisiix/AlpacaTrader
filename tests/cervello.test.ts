@@ -159,3 +159,15 @@ describe("campioni di Kronos", () => {
     expect(parti.join("\n")).toBe(lungo);
   });
 });
+
+describe("Kronos e i prezzi minuscoli", () => {
+  test("le serie sotto 1 $ arrivano a Kronos scalate (ultima chiusura 100): la normalizzazione (x − media)/(std + 1e-5) non le appiattisce", async () => {
+    const { scalaSerie } = await import("../src/kronos-sidecar.ts");
+    const pepe = Array.from({ length: 5 }, (_, i) => ({ t: String(i), o: 4.8e-6, h: 4.9e-6, l: 4.7e-6, c: 4.8e-6 + i * 1e-8, v: 1e8 }));
+    const s = scalaSerie(pepe);
+    expect(s.serie.at(-1)!.c).toBeCloseTo(100, 9);
+    expect(s.serie[0]!.c / s.serie.at(-1)!.c).toBeCloseTo(pepe[0]!.c / pepe.at(-1)!.c, 12);
+    expect(s.serie[0]!.v).toBe(1e8);
+    expect(scalaSerie([{ t: "0", o: 600, h: 601, l: 599, c: 600, v: 1 }]).k).toBe(1);
+  });
+});

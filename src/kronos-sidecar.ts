@@ -167,14 +167,26 @@ export async function ensureKronos(o: SidecarOptions): Promise<KronosLink> {
   return link;
 }
 
+// Prezzi minuscoli (PEPE a 0,000005 $): Kronos normalizza ogni serie con (x − media) / (dev. std + 1e-5), e con una
+// deviazione standard di 1e-7 il denominatore è tutto 1e-5: la serie diventa piatta e la proiezione esce fuori misura.
+// Le serie sotto 1 $ si mandano scalate (ultima chiusura = 100): i rendimenti non cambiano, l'ultima chiusura si riporta
+// alla scala vera.
+export function scalaSerie(b: { o: number; h: number; l: number; c: number; v: number; t: string }[]): { serie: typeof b; k: number } {
+  const last = b.at(-1)?.c ?? 0;
+  if (!(last > 0) || last >= 1) return { serie: b, k: 1 };
+  const k = 100 / last;
+  return { serie: b.map((x) => ({ ...x, o: x.o * k, h: x.h * k, l: x.l * k, c: x.c * k })), k };
+}
+
 // Chiede le proiezioni mandando le barre che il motore ha già (così il sidecar non ha bisogno di chiavi Alpaca).
 export function pathForecaster(link: KronosLink): (symbols: string[], bars: Record<string, Bar[]>, tipo?: "giorno" | "esplorazione") => Promise<Record<string, KronosForecastPath>> {
   return async (symbols, bars, tipo = "giorno") => {
     if (!link.ready) throw new Error(`Kronos ${link.stato}`);
     const series: Record<string, { t: string; o: number; h: number; l: number; c: number; v: number }[]> = {};
+    const scala: Record<string, number> = {};
     for (const s of symbols) {
       const b = bars[s];
-      if (b && b.length >= 60) series[s] = b.slice(-AGENTS.kronos.lookback).map((x) => ({ t: x.date, o: x.open, h: x.high, l: x.low, c: x.close, v: x.volume }));
+      if (b && b.length >= 60) { const sc = scalaSerie(b.slice(-AGENTS.kronos.lookback).map((x) => ({ t: x.date, o: x.open, h: x.high, l: x.low, c: x.close, v: x.volume }))); series[s] = sc.serie; scala[s] = sc.k; }
     }
     if (!Object.keys(series).length) return {};
     const n = Object.keys(series).length;
@@ -195,7 +207,7 @@ export function pathForecaster(link: KronosLink): (symbols: string[], bars: Reco
       const r = Number(f.pred_ret);
       if (!Number.isFinite(r)) continue;
       const modelli = modelliDi(f);
-      out[s] = { rendimentoPrevisto: r, percorso: Array.isArray(f.path) ? f.path.map(Number) : [r], ultimaChiusura: typeof f.last_close === "number" ? f.last_close : null, ...(modelli ? { modelli } : {}) };
+      out[s] = { rendimentoPrevisto: r, percorso: Array.isArray(f.path) ? f.path.map(Number) : [r], ultimaChiusura: typeof f.last_close === "number" ? f.last_close / (scala[s] ?? 1) : null, ...(modelli ? { modelli } : {}) };
     }
     return out;
   };
@@ -207,7 +219,8 @@ export function intradayForecaster(link: KronosLink, tipo: "intraday" | "grafico
   return async (bars, stepMinutes, horizon) => {
     if (!link.ready) throw new Error(`Kronos ${link.stato}`);
     const series: Record<string, { t: string; o: number; h: number; l: number; c: number; v: number }[]> = {};
-    for (const [s, b] of Object.entries(bars)) if (b.length >= 60) series[s] = b.slice(-AGENTS.kronos.lookback).map((x) => ({ t: x.t, o: x.open, h: x.high, l: x.low, c: x.close, v: x.volume }));
+    const scala: Record<string, number> = {};
+    for (const [s, b] of Object.entries(bars)) if (b.length >= 60) { const sc = scalaSerie(b.slice(-AGENTS.kronos.lookback).map((x) => ({ t: x.t, o: x.open, h: x.high, l: x.low, c: x.close, v: x.volume }))); series[s] = sc.serie; scala[s] = sc.k; }
     if (!Object.keys(series).length) return {};
     const n = Object.keys(series).length;
     const camp = CAMPIONI[tipo];
@@ -226,7 +239,7 @@ export function intradayForecaster(link: KronosLink, tipo: "intraday" | "grafico
     for (const [s, f] of Object.entries(data.forecasts ?? {})) {
       const r = Number(f.pred_ret);
       const modelli = modelliDi(f);
-      if (Number.isFinite(r)) out[s] = { rendimentoPrevisto: r, percorso: Array.isArray(f.path) ? f.path.map(Number) : [r], ultimaChiusura: typeof f.last_close === "number" ? f.last_close : null, ...(modelli ? { modelli } : {}) };
+      if (Number.isFinite(r)) out[s] = { rendimentoPrevisto: r, percorso: Array.isArray(f.path) ? f.path.map(Number) : [r], ultimaChiusura: typeof f.last_close === "number" ? f.last_close / (scala[s] ?? 1) : null, ...(modelli ? { modelli } : {}) };
     }
     return out;
   };
