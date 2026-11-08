@@ -10,6 +10,9 @@ export const isCrypto = (symbol: string) => symbol.includes("/");
 export const CRYPTO_MIN_NOTIONAL = 10;
 // Settori: servono al contesto economico per dire "in questo settore oggi si aspetta".
 export const SECTORS: Record<string, string> = { SPY: "indici", IWM: "indici", QQQ: "tecnologia", AAPL: "tecnologia", MSFT: "tecnologia", NVDA: "tecnologia", GLD: "oro", TLT: "obbligazioni", "BTC/USD": "crypto", "ETH/USD": "crypto" };
+export const sectorOf = (symbol: string) => SECTORS[symbol] ?? (isCrypto(symbol) ? "crypto" : "altro");
+// Stablecoin e token ancorati: mai in portafoglio, non hanno trend.
+export const STABLECOINS = new Set(["USDT", "USDC", "DAI", "USDE", "FDUSD", "TUSD", "PYUSD", "USDS", "USD1", "BUSD", "FRAX", "LUSD", "GUSD", "USDP", "WBTC", "WETH", "STETH", "WSTETH", "CBBTC", "WEETH", "RETH", "LBTC", "SUSDE", "SUSDS", "BSC-USD", "USDTB", "USDD", "RLUSD", "XAUT", "PAXG"]);
 export const CRYPTO_QTY_DECIMALS = 6;
 // Prezzo limite dello stop_limit crypto: mezzo punto sotto lo stop, così scatta e viene eseguito anche con un buco.
 export const CRYPTO_STOP_LIMIT_GAP = 0.005;
@@ -144,7 +147,9 @@ export const AGENTS = {
   // Pesi degli agenti dal diario: scendono se un agente perde con un campione almeno indicativo, salgono se vince con campione affidabile.
   weights: { base: 1, losing: 0.5, winning: 1.2 },
   // Kronos (sidecar Python, opzionale): si considerano solo le previsioni più nette (quota) e solo se concordano col trend.
-  kronos: { topShare: 0.25, horizon: 5, timeoutMs: 90_000 },
+  // Kronos: il sidecar lo accende il motore (tools/kronos, venv da installa-kronos); porta e modello qui. Le proiezioni si
+  // calcolano una volta al giorno sulle barre giornaliere e restano in state/previsioni.json (anche per la dashboard).
+  kronos: { topShare: 0.25, horizon: 5, timeoutMs: 600_000, port: 8765, model: "small" as "mini" | "small" | "base", lookback: 400, samples: 3 },
   // Riepilogo su Telegram una volta al giorno, alla prima passata dopo quest'ora di Roma.
   summaryAfter: "22:05",
   // Presa di profitto parziale (agente "profitto"): a +3% vende metà e lascia correre il resto col trend. Scelta col
@@ -170,7 +175,19 @@ export const AGENTS = {
   context: { enabled: true, useClaude: true, refreshHours: 6, unfavorableScale: 0.5, neutralScale: 0.75, waitDaysBeforeEvent: 2 },
   dashboardPort: 8787,
   eventsKeepDays: 60,
+  // Universo crypto: tutte le coppie USD negoziabili su Alpaca che stanno nella top N per capitalizzazione
+  // (CoinGecko, una volta al giorno, cache in state/crypto-universe.json). Senza CoinGecko: tutte le coppie di Alpaca.
+  cryptoUniverse: { enabled: true, topMarketCap: 100, maxPairs: 40, refreshHours: 24, coingeckoUrl: "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=100&page=1" },
+  // Custodi: un agente per ogni crypto in portafoglio o tra le migliori candidate; ognuno segue il suo titolo
+  // con tesi, piano e rischio dichiarati, dentro le stesse regole del motore.
+  custodi: { enabled: true, maxCandidates: 5, pullbackSmaDays: 20, extendedPct: 0.15, keepIdleTicks: 12 },
 };
+
+// Sostituisce le crypto nell'universo degli agenti con la lista data (le azioni restano).
+export function setCryptoUniverse(pairs: string[]) {
+  const stocks = AGENTS.universe.filter((s) => !isCrypto(s));
+  AGENTS.universe.splice(0, AGENTS.universe.length, ...stocks, ...pairs);
+}
 
 // Aggiunge BTC/USD ed ETH/USD all'universo degli agenti (24 ore su 24). Nel motore (bun run agents) è di serie,
 // --no-crypto le toglie; nelle sveglie classiche e nei backtest resta una scelta esplicita (--crypto).

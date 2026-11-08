@@ -55,7 +55,7 @@ $lnk.Save()
 
 Write-Host ""
 Write-Host "Fatto. Prossimi passi:" -ForegroundColor Green
-Write-Host "  1. Compila '$Cartella\secrets.ts' (chiavi PAPER di Alpaca, bot Telegram)."
+Write-Host "  1. Compila '$Cartella\secrets.ts' (chiavi PAPER di Alpaca, bot Telegram); poi installa-kronos.cmd per le proiezioni."
 Write-Host "  2. Prova a vuoto:   bun run agents --fake --once"
 Write-Host "  3. Avvia davvero:   doppio clic su 'Bot alpaca agents' sul desktop o su avvia-bot.cmd nella cartella (o bun run agents)."
 Write-Host "  4. Dashboard:       http://127.0.0.1:8787"

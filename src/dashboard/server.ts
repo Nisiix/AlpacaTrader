@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { listEventDays, readEvents, type BusEvent, type EventBus } from "../agents/bus.ts";
-import { statusPath } from "../agents/engine.ts";
+import { barsPath, forecastsPath, statusPath, type Valutazione } from "../agents/engine.ts";
 import { readJson, isObject } from "../fsutil.ts";
 import { readWitness } from "../witness.ts";
 
@@ -12,6 +12,8 @@ export interface DashboardOptions {
   stateDir: string;
   bus?: EventBus;
   hostname?: string;
+  // Valutazione a secco di un titolo con gli agenti del motore (solo quando la dashboard gira dentro bun run agents).
+  valuta?: (symbol: string) => Promise<Valutazione>;
 }
 
 const html = () => readFileSync(join(import.meta.dir, "index.html"), "utf8");
@@ -32,7 +34,7 @@ export function startDashboard(o: DashboardOptions) {
   const server = Bun.serve({
     port: o.port,
     hostname: o.hostname ?? "127.0.0.1",
-    fetch(req, server) {
+    async fetch(req, server) {
       const url = new URL(req.url);
       if (url.pathname === "/ws") return server.upgrade(req) ? undefined : new Response("websocket richiesto", { status: 426 });
       if (url.pathname === "/" || url.pathname === "/index.html") return new Response(html(), { headers: { "content-type": "text/html; charset=utf-8" } });
@@ -51,6 +53,27 @@ export function startDashboard(o: DashboardOptions) {
         const n = Number(url.searchParams.get("n") ?? 500);
         const kinds = url.searchParams.get("tipi");
         return Response.json({ giorno: day, giorni: days, eventi: day ? readEvents(o.stateDir, day, n, kinds ? new Set(kinds.split(",")) : undefined) : [] });
+      }
+      if (url.pathname === "/api/bars") {
+        const sym = url.searchParams.get("simbolo");
+        const r = readJson(barsPath(o.stateDir), isObject) as { kind: string; value?: any };
+        if (r.kind !== "ok") return Response.json({ aggiornato: null, barre: sym ? [] : {} , nota: "barre non ancora scaricate: arrivano col primo giro" });
+        const all = (r.value.barre ?? {}) as Record<string, unknown[]>;
+        return Response.json(sym ? { aggiornato: r.value.aggiornato, simbolo: sym, barre: all[sym] ?? [] } : { aggiornato: r.value.aggiornato, simboli: Object.keys(all) });
+      }
+      if (url.pathname === "/api/previsioni") {
+        const r = readJson(forecastsPath(o.stateDir), isObject) as { kind: string; value?: any };
+        return Response.json(r.kind === "ok" ? r.value : { aggiornato: null, giorno: null, previsioni: {}, nota: "nessuna proiezione: Kronos non ancora attivo" });
+      }
+      if (url.pathname === "/api/valuta") {
+        const sym = url.searchParams.get("simbolo");
+        if (!sym) return Response.json({ errore: "manca il simbolo" }, { status: 400 });
+        if (!o.valuta) return Response.json({ errore: "la valutazione in diretta funziona solo con il motore acceso (bun run agents)" }, { status: 503 });
+        try {
+          return Response.json(await o.valuta(sym));
+        } catch (e) {
+          return Response.json({ errore: (e as Error).message }, { status: 502 });
+        }
       }
       if (url.pathname === "/api/journal") {
         const p = join(o.stateDir, "journal.json");

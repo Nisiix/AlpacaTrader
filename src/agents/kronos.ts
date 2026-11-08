@@ -46,6 +46,7 @@ export class KronosAgent implements Agent {
         return { segnali: [], note: [`Kronos non disponibile: ${(e as Error).message}`] };
       }
     }
+    if (!fc.length) return { segnali: [], note: [v.previsioni ? "nessuna proiezione per i titoli di oggi" : "nessuna proiezione: Kronos in avvio o non installato"] };
     const valid = fc.filter((f) => Number.isFinite(f.rendimentoPrevisto)).sort((a, b) => Math.abs(b.rendimentoPrevisto) - Math.abs(a.rendimentoPrevisto));
     const keep = Math.max(1, Math.round(valid.length * AGENTS.kronos.topShare));
     const segnali: Signal[] = [];

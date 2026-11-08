@@ -1,9 +1,13 @@
 import { join } from "node:path";
-import { isProtectiveStop, type Account, type Broker, type MarketClock, type Order, type Position } from "../broker/types.ts";
+import { isProtectiveStop, type Account, type Bar, type Broker, type MarketClock, type Order, type Position } from "../broker/types.ts";
 import { compareWithBenchmarks, type Comparison } from "../benchmark.ts";
 import { evaluateBreaker, readBreaker, writeBreaker } from "../breaker.ts";
 import { applyCage, lossPct, tradingBlockReason, type Rejection } from "../cage.ts";
-import { AGENTS, DAILY_BARS_DAYS, LIMITS, UNIVERSE, isCrypto } from "../config.ts";
+import { AGENTS, DAILY_BARS_DAYS, LIMITS, UNIVERSE, isCrypto, setCryptoUniverse } from "../config.ts";
+import type { KronosForecastPath } from "../kronos-sidecar.ts";
+import { stopPctFor } from "../stops.ts";
+import type { CustodeStato } from "./custode.ts";
+import { refreshCryptoUniverse, type TopFetcher } from "./universe.ts";
 import { clientOrderId, sendOne, waitForFills, type ExecOutcome } from "../execute.ts";
 import { writeJsonAtomic } from "../fsutil.ts";
 import { indicatorsFor } from "../indicators.ts";
@@ -31,7 +35,12 @@ export interface EngineDeps {
   bus: EventBus;
   echo?: boolean;
   // Proiezioni (Kronos) per l'agente delle uscite e per l'agente kronos; assente = nessuna proiezione.
-  forecaster?: (symbols: string[]) => Promise<Record<string, number>>;
+  // Riceve anche le barre giornaliere già scaricate (il sidecar lavora su quelle). Un numero = solo rendimento finale.
+  forecaster?: (symbols: string[], bars: Record<string, Bar[]>) => Promise<Record<string, number | KronosForecastPath>>;
+  // Una riga sullo stato di Kronos per la dashboard (attivo, in avvio, non installato).
+  kronosStato?: () => string;
+  // Universo crypto dinamico: coppie di Alpaca nella top N per capitalizzazione. fetchTop null = solo lista Alpaca.
+  cryptoUniverse?: { fetchTop: TopFetcher | null };
 }
 
 export interface AgentsStatus {
@@ -63,6 +72,10 @@ export interface AgentsStatus {
   // Profitto e perdita della giornata: realizzato dalle vendite di oggi (per operazione e per agente) e
   // non realizzato sulle posizioni ancora aperte.
   pnlOggi: DailyPnl & { nonRealizzato: number };
+  // I custodi (un investitore per crypto seguita), l'universo crypto del giorno, lo stato di Kronos.
+  custodi: CustodeStato[];
+  universo: { titoli: string[]; crypto: string[]; fonteCrypto: string | null; aggiornatoCrypto: string | null };
+  kronos: { stato: string; proiezioniDel: string | null; simboli: number };
 }
 
 export const statusPath = (stateDir: string) => join(stateDir, "agents-status.json");
@@ -79,10 +92,71 @@ interface Snapshot {
 export interface EngineCache {
   closesDate?: string;
   closes: Record<string, number[]>;
+  bars: Record<string, Bar[]>;
   ultimoRiepilogo: string | null;
+  universeDate?: string;
+  universeInfo?: { fonte: string; aggiornato: string; coppie: string[] };
+  // Proiezioni del giorno (Kronos): si calcolano una volta sulle barre giornaliere e si riusano a ogni giro.
+  previsioni?: { date: string; data: Record<string, KronosForecastPath> };
 }
 
-export const emptyCache = (): EngineCache => ({ closes: {}, ultimoRiepilogo: null });
+export const emptyCache = (): EngineCache => ({ closes: {}, bars: {}, ultimoRiepilogo: null });
+export const barsPath = (stateDir: string) => join(stateDir, "bars.json");
+export const forecastsPath = (stateDir: string) => join(stateDir, "previsioni.json");
+
+const normalizeForecast = (v: number | KronosForecastPath): KronosForecastPath => (typeof v === "number" ? { rendimentoPrevisto: v, percorso: [v], ultimaChiusura: null } : v);
+
+// Le barre giornaliere di tutto l'universo, una volta al giorno; da qui le chiusure per gli indicatori e il file per i grafici.
+async function loadBars(deps: EngineDeps, cache: EngineCache, today: string, symbols: string[], warn: (m: string) => void) {
+  if (cache.closesDate === today && symbols.every((s) => cache.bars[s] || !isCrypto(s))) return;
+  try {
+    const bars = await retry(() => deps.broker.getDailyBars(symbols, DAILY_BARS_DAYS), deps.sleep);
+    cache.bars = bars;
+    cache.closes = Object.fromEntries(Object.entries(bars).map(([s, b]) => [s, b.map((x) => x.close)]));
+    cache.closesDate = today;
+    writeJsonAtomic(barsPath(deps.stateDir), { versione: 1, aggiornato: deps.now().toISOString(), barre: bars });
+  } catch (e) {
+    warn(`storico non disponibile: ${(e as Error).message}. Senza storico niente acquisti.`);
+    if (!cache.closesDate) {
+      cache.closes = {};
+      cache.bars = {};
+    }
+  }
+}
+
+// L'universo crypto del giorno (top N per capitalizzazione ∩ coppie Alpaca), una volta al giorno.
+async function loadUniverse(deps: EngineDeps, cache: EngineCache, today: string, note: (m: string) => void) {
+  if (!deps.cryptoUniverse || !AGENTS.cryptoUniverse.enabled || cache.universeDate === today) return;
+  try {
+    const r = await refreshCryptoUniverse(deps.broker, deps.stateDir, deps.now(), deps.cryptoUniverse.fetchTop);
+    setCryptoUniverse(r.file.coppie);
+    cache.universeDate = today;
+    cache.universeInfo = { fonte: r.file.fonte, aggiornato: r.file.aggiornato, coppie: r.file.coppie };
+    if (r.refreshed) note(`universo crypto (${r.file.fonte}): ${r.file.coppie.length} coppie: ${r.file.coppie.join(", ")}${r.problem ? ` · ${r.problem}` : ""}`);
+  } catch (e) {
+    note(`universo crypto non aggiornato: ${(e as Error).message}`);
+  }
+}
+
+// Le proiezioni di Kronos del giorno: una chiamata sulle barre giornaliere, poi riuso. Se il sidecar non è pronto si riprova al giro dopo.
+async function loadForecasts(deps: EngineDeps, cache: EngineCache, today: string, symbols: string[], note: (m: string) => void): Promise<Record<string, number> | undefined> {
+  if (!deps.forecaster) return undefined;
+  const missing = symbols.filter((s) => !cache.previsioni?.data[s] && cache.bars[s]);
+  if (!cache.previsioni || cache.previsioni.date !== today || missing.length) {
+    try {
+      const raw = await deps.forecaster(cache.previsioni?.date === today ? missing : symbols, cache.bars);
+      const data = { ...(cache.previsioni?.date === today ? cache.previsioni.data : {}) };
+      for (const [s, v] of Object.entries(raw)) data[s] = normalizeForecast(v);
+      cache.previsioni = { date: today, data };
+      writeJsonAtomic(forecastsPath(deps.stateDir), { versione: 1, aggiornato: deps.now().toISOString(), giorno: today, orizzonte: AGENTS.kronos.horizon, previsioni: data });
+      note(`proiezioni (${Object.keys(raw).length} nuove): ${Object.entries(data).map(([k, v]) => `${k} ${(v.rendimentoPrevisto * 100).toFixed(1)}%`).join(", ")}`);
+    } catch (e) {
+      note(`proiezioni non disponibili: ${(e as Error).message}`);
+      if (cache.previsioni?.date !== today) return undefined;
+    }
+  }
+  return cache.previsioni ? Object.fromEntries(Object.entries(cache.previsioni.data).map(([k, v]) => [k, v.rendimentoPrevisto])) : undefined;
+}
 
 const minutesOf = (hhmm: string) => {
   const [h, m] = hhmm.split(":").map(Number);
@@ -145,7 +219,11 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
 
   try {
     bus.emit("tick", { giro });
-    // 2. Alpaca.
+    // 2. L'universo crypto del giorno, poi Alpaca.
+    await loadUniverse(deps, cache, today, (m) => {
+      log.info(m);
+      bus.emit("nota", { testo: m });
+    });
     let snap: Snapshot;
     try {
       snap = await retry(async () => {
@@ -162,15 +240,7 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
     }
     bus.emit("conto", { patrimonio: snap.account.equity, contanti: snap.account.cash, pnlGiorno: snap.account.equity - snap.account.lastEquity, mercatoAperto: snap.clock.isOpen });
     bus.emit("prezzi", { prezzi: snap.prices });
-    if (cache.closesDate !== today) {
-      try {
-        cache.closes = await retry(() => deps.broker.getDailyCloses([...new Set([...UNIVERSE, ...AGENTS.universe, ...snap.positions.map((p) => p.symbol)])], DAILY_BARS_DAYS), deps.sleep);
-        cache.closesDate = today;
-      } catch (e) {
-        log.warn(`storico non disponibile: ${(e as Error).message}. Senza storico niente acquisti.`);
-        if (!cache.closesDate) cache.closes = {};
-      }
-    }
+    await loadBars(deps, cache, today, [...new Set([...UNIVERSE, ...AGENTS.universe, ...snap.positions.map((p) => p.symbol)])], (m) => log.warn(m));
     const closes = cache.closes;
     const indicators = indicatorsFor(closes, snap.prices, LIMITS.trendSmaDays, LIMITS.volLookbackDays, LIMITS.longSmaDays, LIMITS.rankMomentumDays);
 
@@ -207,16 +277,10 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
       const price = snap.prices[t.simbolo];
       if (price) t.massimo = Math.max(t.massimo ?? 0, price);
     }
-    let previsioni: Record<string, number> | undefined;
-    if (deps.forecaster) {
-      try {
-        previsioni = await deps.forecaster([...new Set([...AGENTS.universe, ...snap.positions.map((p) => p.symbol)])]);
-        bus.emit("nota", { testo: `proiezioni: ${Object.entries(previsioni).map(([k, v]) => `${k} ${(v * 100).toFixed(1)}%`).join(", ")}` });
-      } catch (e) {
-        log.warn(`proiezioni non disponibili: ${(e as Error).message}`);
-        bus.emit("nota", { testo: `proiezioni non disponibili: ${(e as Error).message}` });
-      }
-    }
+    const previsioni = await loadForecasts(deps, cache, today, [...new Set([...AGENTS.universe, ...snap.positions.map((p) => p.symbol)])], (m) => {
+      log.info(m);
+      bus.emit("nota", { testo: m });
+    });
     const view: AgentView = { today, now: startedAt, prices: snap.prices, closes, indicators, positions: snap.positions, account: snap.account, journal, previsioni };
     const reports: Record<string, AgentReport> = {};
     const agentStatus: AgentsStatus["agenti"] = {};
@@ -368,6 +432,9 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
       ultimoRiepilogo: cache.ultimoRiepilogo,
       tradeChiusiOggi: fills.closed.map((t) => ({ simbolo: t.simbolo, risultato: t.risultato ?? 0, giorni: t.giorni ?? 0, uscita: t.motivoUscita ?? "sconosciuto" })),
       pnlOggi: { ...dailyPnl(journal, today), nonRealizzato: positions.reduce((s, p) => s + (p.currentPrice - p.avgEntryPrice) * p.qty, 0) },
+      custodi: Object.values(reports).flatMap((r) => r.custodi ?? []),
+      universo: { titoli: AGENTS.universe.filter((s) => !isCrypto(s)), crypto: AGENTS.universe.filter(isCrypto), fonteCrypto: cache.universeInfo?.fonte ?? null, aggiornatoCrypto: cache.universeInfo?.aggiornato ?? null },
+      kronos: { stato: deps.kronosStato?.() ?? (deps.forecaster ? "attivo" : "non configurato"), proiezioniDel: cache.previsioni?.date ?? null, simboli: Object.keys(cache.previsioni?.data ?? {}).length },
     };
     writeJsonAtomic(statusPath(deps.stateDir), status);
     log.info(`giro ${giro}: ${status.segnali.length} segnali, ${alloc.proposte.length} proposte, ${outcomes.length} ordini, ${cage.rejected.length} rifiuti, rischio ${alloc.rischio}`);
@@ -387,6 +454,112 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
   } finally {
     releaseLock(deps.stateDir);
   }
+}
+
+// Valutazione interattiva di un titolo, su richiesta dalla dashboard: stessi dati e stessi agenti di un giro, ma a secco.
+// Nessun ordine, nessun lock, niente scritto nello stato: solo cosa direbbero gli agenti, l'allocatore e la gabbia adesso.
+export interface Valutazione {
+  simbolo: string;
+  quando: string;
+  prezzo: number | null;
+  mercatoAperto: boolean;
+  finestraIngressi: boolean;
+  posizione: { quantita: number; carico: number; valore: number; guadagno: number; variazione: number } | null;
+  livelli: { media20: number | null; media50: number | null; media200: number | null; stopPct: number; stop: number | null; obiettivo: number | null };
+  contesto: { generale: string; motivo: string; attendi: string | null } | null;
+  voti: Signal[];
+  punteggio: number | null;
+  proposta: { lato: string; quantita: number; perche: string } | null;
+  gabbia: { esito: "passa" | "rifiuta" | "niente"; motivo: string };
+  verdetto: string; // una frase
+  previsione: (KronosForecastPath & { orizzonte: number }) | null;
+  custode: CustodeStato | null;
+  note: string[];
+}
+
+export async function valutaTitolo(deps: EngineDeps, cache: EngineCache, symbol: string): Promise<Valutazione> {
+  const now = deps.now();
+  const rt = romeTime(now);
+  const today = rt.date;
+  const note: string[] = [];
+  const [account, positions, clock, open] = await Promise.all([deps.broker.getAccount(), deps.broker.getPositions(), deps.broker.getClock(), deps.broker.getOpenOrders()]);
+  const symbols = [...new Set([...UNIVERSE, ...AGENTS.universe, symbol, ...positions.map((p) => p.symbol)])];
+  const prices = await deps.broker.getLatestPrices(symbols);
+  for (const p of positions) if (!prices[p.symbol] && p.currentPrice > 0) prices[p.symbol] = p.currentPrice;
+  await loadBars(deps, cache, today, symbols, (m) => note.push(m));
+  const closes = cache.closes;
+  const indicators = indicatorsFor(closes, prices, LIMITS.trendSmaDays, LIMITS.volLookbackDays, LIMITS.longSmaDays, LIMITS.rankMomentumDays);
+  const lessonsFile = readLessons(deps.stateDir, now).file;
+  const br = readBreaker(deps.stateDir);
+  const buyBlock = br.kind === "corrupt" ? "interruttore illeggibile" : evaluateBreaker(br.file, account.equity, account.lastEquity, now.toISOString()).buyBlock;
+  const journal = readJournal(deps.stateDir, now).file;
+  const previsioniNum = cache.previsioni?.date === today ? Object.fromEntries(Object.entries(cache.previsioni.data).map(([k, v]) => [k, v.rendimentoPrevisto])) : undefined;
+  const view: AgentView = { today, now, prices, closes, indicators, positions, account, journal, previsioni: previsioniNum };
+  const ctxAgent = deps.agents.find((a): a is ContextAgent => a instanceof ContextAgent);
+  let contesto: MarketContext | null = null;
+  if (ctxAgent) {
+    try {
+      contesto = await ctxAgent.assess(view);
+      view.contesto = contesto;
+      if (view.previsioni) view.previsioni = Object.fromEntries(Object.entries(view.previsioni).filter(([s]) => contesto!.fidatiDellaProiezione[s] !== false));
+    } catch (e) {
+      note.push(`contesto non valutato: ${(e as Error).message}`);
+    }
+  }
+  const reports: Record<string, AgentReport> = {};
+  await Promise.all(
+    deps.agents.map(async (a) => {
+      try {
+        reports[a.name] = await a.observe(view);
+      } catch (e) {
+        note.push(`${a.name}: ${(e as Error).message}`);
+      }
+    }),
+  );
+  const weights = agentWeights(journal, today, deps.agents.map((a) => a.name));
+  const alloc = allocate(view, reports, weights);
+  const voti = Object.values(reports).flatMap((r) => r.segnali).filter((s) => s.simbolo === symbol);
+  const score = alloc.punteggi.find((p) => p.simbolo === symbol);
+  const proposals = alloc.proposte.filter((p) => p.symbol === symbol);
+  const entry = inEntryWindow(now);
+  const recentOrders = open;
+  const cage = applyCage({ today, slotKind: entry ? "open" : "mid", marketOpen: clock.isOpen, latenessMin: 0, account, positions, prices, closes, recentOrders, lessons: activeLessons(lessonsFile, today), buyBlock, proposals });
+  const pos = positions.find((p) => p.symbol === symbol && p.qty > 0) ?? null;
+  const price = prices[symbol] ?? closes[symbol]?.at(-1) ?? null;
+  const c = closes[symbol];
+  const stopPct = AGENTS.exit.enabled && AGENTS.exit.stopMode === "fisso" ? AGENTS.exit.stopPct : stopPctFor(c);
+  const sma = (n: number) => (c && c.length >= n ? c.slice(-n).reduce((a, b) => a + b, 0) / n : null);
+  const target = AGENTS.exit.enabled && AGENTS.exit.mode === "obiettivo" && pos ? pos.avgEntryPrice * (1 + (AGENTS.exit.targetBySymbol[symbol] ?? AGENTS.exit.targetPct)) : null;
+  const prop = proposals[0] ?? null;
+  const order = cage.orders.find((o) => o.symbol === symbol);
+  const rej = cage.rejected.find((r) => r.symbol === symbol);
+  const gabbia: Valutazione["gabbia"] = order ? { esito: "passa", motivo: `la gabbia lascerebbe passare: ${order.side === "buy" ? "acquisto" : "vendita"} di ${order.qty} ${symbol}` } : rej ? { esito: "rifiuta", motivo: rej.reason } : { esito: "niente", motivo: prop ? "nessun ordine" : "gli agenti non propongono niente su questo titolo" };
+  const fc = cache.previsioni?.data[symbol];
+  const custode = Object.values(reports).flatMap((r) => r.custodi ?? []).find((k) => k.simbolo === symbol) ?? null;
+  let verdetto: string;
+  if (prop && order) verdetto = `Gli agenti ${prop.side === "buy" ? "comprerebbero" : "venderebbero"} ${order.qty} ${symbol} adesso: ${prop.why}`;
+  else if (prop && rej) verdetto = `Gli agenti vorrebbero ${prop.side === "buy" ? "comprare" : "vendere"} ${prop.qty} ${symbol}, ma le regole lo fermano: ${rej.reason}`;
+  else if (pos) verdetto = `Tenere ${symbol}: nessun agente chiede di uscire${score ? ` (punteggio ${score.punteggio.toFixed(2)})` : ""}.`;
+  else if (voti.length) verdetto = `Nessun ordine su ${symbol}: i voti non bastano (punteggio ${score ? score.punteggio.toFixed(2) : "0"}, serve ${AGENTS.buyScore} per comprare).`;
+  else verdetto = `Nessun agente vede un'occasione su ${symbol} adesso.`;
+  return {
+    simbolo: symbol,
+    quando: now.toISOString(),
+    prezzo: price,
+    mercatoAperto: clock.isOpen,
+    finestraIngressi: entry && clock.isOpen,
+    posizione: pos ? { quantita: pos.qty, carico: pos.avgEntryPrice, valore: pos.marketValue, guadagno: (pos.currentPrice - pos.avgEntryPrice) * pos.qty, variazione: lossPct(pos) } : null,
+    livelli: { media20: sma(AGENTS.custodi.pullbackSmaDays), media50: sma(LIMITS.trendSmaDays), media200: sma(LIMITS.longSmaDays), stopPct, stop: pos ? pos.avgEntryPrice * (1 - stopPct) : price !== null ? price * (1 - stopPct) : null, obiettivo: target },
+    contesto: contesto ? { generale: contesto.generale, motivo: contesto.motivo, attendi: contesto.attendi[symbol] ?? null } : null,
+    voti,
+    punteggio: score?.punteggio ?? null,
+    proposta: prop ? { lato: prop.side, quantita: prop.qty, perche: prop.why } : null,
+    gabbia,
+    verdetto,
+    previsione: fc ? { ...fc, orizzonte: AGENTS.kronos.horizon } : null,
+    custode,
+    note,
+  };
 }
 
 const pct = (x: number) => `${x >= 0 ? "+" : ""}${(x * 100).toFixed(2)}%`;
@@ -425,8 +598,7 @@ export function summaryText(s: AgentsStatus): string {
 }
 
 // Il ciclo: un giro ogni tickMinutes, finché il processo vive. Fuori orario il giro è solo lettura.
-export async function runEngine(deps: EngineDeps, tickMs: number, shouldStop: () => boolean = () => false): Promise<void> {
-  const cache = emptyCache();
+export async function runEngine(deps: EngineDeps, tickMs: number, shouldStop: () => boolean = () => false, cache: EngineCache = emptyCache()): Promise<void> {
   while (!shouldStop()) {
     const t0 = deps.now().getTime();
     try {

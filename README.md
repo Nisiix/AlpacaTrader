@@ -15,7 +15,7 @@ bun run agents --kronos http://127.0.0.1:8765   # aggiunge l'agente Kronos (side
 bun run dashboard                    # solo la dashboard, in lettura, sullo stato esistente
 ```
 
-Opzioni: `--tick 5` (minuti tra un giro e l'altro), `--port 8787`, `--no-dashboard`, `--fake`, `--once`, `--no-crypto` (toglie BTC/USD ed ETH/USD, che nel motore sono di serie e lavorano 24 ore su 24 con la stessa logica dei titoli), `--profitto`, `--kronos url`.
+Opzioni: `--tick 5` (minuti tra un giro e l'altro), `--port 8787`, `--no-dashboard`, `--fake`, `--once`, `--no-crypto` (toglie le crypto, che nel motore sono di serie e lavorano 24 ore su 24 con la stessa logica dei titoli), `--no-kronos`, `--kronos url` (sidecar già acceso altrove), `--profitto`.
 Da tenere acceso il PC (o un altro processo con lo stesso `state/`): il motore riparte da `state/` dopo un riavvio,
 il lock e gli ID deterministici evitano doppioni anche con le sveglie classiche.
 
@@ -27,7 +27,8 @@ il lock e gli ID deterministici evitano doppioni anche con le sveglie classiche.
 | `orizzonte` | trade aperti da **60 sedute** (un trimestre) | vende (0,8) solo se lo slancio è finito; se il trend regge tace |
 | `contesto` | **prima di ogni trade**: situazione economica generale e per settore (regole sui dati: SPY e media a 200, volatilità, oro e obbligazioni in salita con SPY in calo, titoli del settore sotto la 50, Fed nei prossimi 2 giorni; più, se c'è `claude -p`, una lettura con ricerca web ogni 6 ore in `state/macro.json`) | nessun ordine: esposizione × 0,75 (neutro) o × 0,5 (sfavorevole); con contesto sfavorevole nel settore **non si apre niente e si aspetta la candela successiva**; la proiezione di Kronos guida ingressi e uscite **solo** con contesto favorevole |
 | `uscite` | ogni posizione: perdita dal carico, massimo visto, proiezione di Kronos se il contesto si fida | **vincolante** (non si vota). Di serie (`mode: "trend"`): stop **scalato sulla volatilità** (2,5 × vol × √5, tra 5% e 10%, anche come stop GTC su Alpaca), nessun obiettivo (l'uscita normale è il trend della gabbia), proiezione negativa: esce subito. Opzioni: `trailAtr` per uscire anche a N ATR dal massimo; `mode: "obiettivo"` per la vecchia politica a +3%/+4% con stop fisso -3% |
-| `kronos` (opzionale) | previsioni del modello a 5 sedute, solo il 25% più nette e nel verso del trend | compra/vende (0,5); le stesse proiezioni guidano `uscite` |
+| `kronos` | previsioni del modello a 5 sedute (percorso giorno per giorno), calcolate una volta al giorno sulle barre giornaliere e salvate in `state/previsioni.json`; tenute solo il 25% più nette e nel verso del trend | compra/vende (0,5); le stesse proiezioni guidano `uscite` e disegnano gli scenari nella dashboard |
+| `custodi` | **un investitore per ogni crypto seguita**: nasce per le crypto in portafoglio e per le migliori candidate del trend (sopra le medie 50/200, slancio a 12 e 3 mesi positivo, le prime 5 per momentum a 6 mesi); ognuno dichiara tesi, piano e rischio e segue solo il suo titolo | entra (0,6; 0,8 sul rientro verso la media a 20; 0,25 se il prezzo è oltre il 15% sopra la 50), esce sotto la media a 50 (0,9) o con slancio a 3 mesi negativo (0,6); muore dopo 12 giri fuori dai criteri |
 | `profitto` | guadagno oltre +3% su un trade non ancora alleggerito | **vincolante**: vende metà e lascia correre il resto col trend (`AGENTS.takeProfit`: `fraction` 1 per vendere tutto, `enabled: false` per spegnerlo) |
 
 L'**allocatore** somma i segnali pesati (peso 1 per tutti finché il diario non ha un campione; poi 0,5 a chi perde,
@@ -40,7 +41,10 @@ Lo stop GTC su Alpaca è scalato sulla volatilità (5-10%); la politica di uscit
 Gli agenti comprano solo in `AGENTS.universe` (SPY QQQ AAPL MSFT NVDA GLD: niente IWM e TLT, che con obiettivo +3% e
 stop -3% hanno attesa nulla o negativa); una posizione vecchia resta sorvegliata e vendibile.
 
-**Crypto** (BTC/USD, ETH/USD: di serie nel motore degli agenti, `--crypto` nel backtest e nelle sveglie): 24 ore su 24, anche a borsa chiusa e fuori finestra, un ingresso al giorno per coppia,
+**Crypto** (di serie nel motore degli agenti, `--crypto` nel backtest e nelle sveglie): l'universo è **tutte le coppie USD negoziabili su
+Alpaca che stanno nella top 100 per capitalizzazione** (CoinGecko, rinnovato una volta al giorno in `state/crypto-universe.json`; senza
+CoinGecko restano le coppie di Alpaca; stablecoin e token ancorati esclusi; massimo 40 coppie, `AGENTS.cryptoUniverse`). La scelta di
+cosa comprare resta del motore: trend, momentum, custodi, allocatore, gabbia. 24 ore su 24, anche a borsa chiusa e fuori finestra, un ingresso al giorno per coppia,
 quantità frazionarie (6 decimali, minimo 10 $), stop su Alpaca come `stop_limit` (Alpaca non accetta lo `stop` a
 mercato sulle crypto) con limite mezzo punto sotto. Le posizioni crypto di Alpaca (`BTCUSD`) sono normalizzate a `BTC/USD`.
 L'interruttore a -5% dal massimo si **riarma da solo dopo 5 giorni di borsa** (nel backtest: da +4,3% a +17,7%).
@@ -95,6 +99,23 @@ va tagliato del 25-50% (McLean-Pontiff). Nel backtest le crypto entrano solo con
 
 `bun run sweep [--days 2600]` ripete l'ottimizzazione prudente: 40 combinazioni (presa di profitto, trailing, stop,
 finestra del momentum), scelte sul primo 60% dello storico e verificate sul resto.
+
+### Kronos, il sidecar Python
+
+Kronos (modello open source per candele OHLCV, MIT) è parte del motore: `installa-kronos.cmd` (Windows) o `installa-kronos.sh`
+scarica il codice del modello in `tools/kronos/kronos-src`, crea `tools/kronos/venv` e installa torch per CPU. Da lì in poi
+`bun run agents` **accende il sidecar da solo** (`tools/kronos/server.py --model small --port 8765`), gli manda le barre che ha
+già scaricato (niente chiavi Alpaca nel sidecar) e salva le proiezioni del giorno in `state/previsioni.json`. I pesi del modello
+arrivano da Hugging Face al primo avvio (1-2 minuti); il motore intanto lavora senza proiezioni e lo dice nella dashboard.
+`--kronos http://host:porta` usa un sidecar già acceso, `--no-kronos` lo esclude. Modello, porta e campioni in `AGENTS.kronos`.
+
+### Dashboard: scheda per titolo
+
+«Titolo per titolo»: scegli un titolo (posizioni e custodi per primi) e vedi le ultime 120 candele con medie 20/50/200, carico e
+stop del motore, le operazioni fatte (▲▼ dal diario), e lo **scenario di Kronos**: il percorso previsto per le prossime sedute con il
+cono d'incertezza (una volatilità e mezza). «Chiedi agli agenti adesso» fa valutare quel titolo a tutti gli agenti con i prezzi
+di quel momento (`/api/valuta`): voti, punteggio, cosa direbbe la gabbia, livelli, custode. È una prova a secco: nessun ordine
+parte dalla dashboard. Dati: `/api/bars`, `/api/previsioni`, `/api/journal`.
 
 ## Sveglie (modalità classica)
 

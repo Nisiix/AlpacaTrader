@@ -4,7 +4,9 @@ import { join } from "node:path";
 import { agentWeights, allocate, scoreSignals } from "../src/agents/allocator.ts";
 import { runAgentsBacktest } from "../src/agents/backtest.ts";
 import { ClaudeMacro, ContextAgent } from "../src/agents/context.ts";
+import { CustodiAgent } from "../src/agents/custode.ts";
 import { ExitAgent } from "../src/agents/exits.ts";
+import { selectPairs } from "../src/agents/universe.ts";
 import { EventBus, readEvents } from "../src/agents/bus.ts";
 import { emptyCache, inEntryWindow, runTick, statusPath, summaryText, type AgentsStatus, type EngineDeps } from "../src/agents/engine.ts";
 import { HorizonAgent } from "../src/agents/horizon.ts";
@@ -17,7 +19,7 @@ import type { Agent, AgentView } from "../src/agents/types.ts";
 import { evaluateBreaker } from "../src/breaker.ts";
 import { applyCage } from "../src/cage.ts";
 import { FAKE_VOL, syntheticCloses } from "../src/broker/fake.ts";
-import { AGENTS, LIMITS, UNIVERSE, enableCrypto } from "../src/config.ts";
+import { AGENTS, LIMITS, UNIVERSE, enableCrypto, setCryptoUniverse } from "../src/config.ts";
 import { stopPctFor } from "../src/stops.ts";
 import { startDashboard } from "../src/dashboard/server.ts";
 import { indicatorsFor } from "../src/indicators.ts";
@@ -310,7 +312,7 @@ describe("motore", () => {
   });
 
   test("il riepilogo elenca il profitto e la perdita di ogni vendita del giorno, il totale e il conto per agente", () => {
-    const base = { versione: 1 as const, aggiornato: "2026-09-24T20:10:00.000Z", giro: "g", mercatoAperto: false, finestraIngressi: false, conto: null, posizioni: [], prezzi: {}, rischio: 1, pesi: {}, agenti: {}, segnali: [], punteggi: [], ordini: [], rifiuti: [], contesto: null, inAttesa: [], stopSuAlpaca: null, acquistiBloccati: null, lezioniAttive: [], allarmi: [], diario: { stato: "x", statistiche: { trade: 0, vinti: 0, percVinti: null, mediaVincita: null, mediaPerdita: null, attesa: null, campione: "nessuno" as const } }, confronto: null, ultimoRiepilogo: null, tradeChiusiOggi: [] };
+    const base = { versione: 1 as const, aggiornato: "2026-09-24T20:10:00.000Z", giro: "g", mercatoAperto: false, finestraIngressi: false, conto: null, posizioni: [], prezzi: {}, rischio: 1, pesi: {}, agenti: {}, segnali: [], punteggi: [], ordini: [], rifiuti: [], contesto: null, inAttesa: [], stopSuAlpaca: null, acquistiBloccati: null, lezioniAttive: [], allarmi: [], diario: { stato: "x", statistiche: { trade: 0, vinti: 0, percVinti: null, mediaVincita: null, mediaPerdita: null, attesa: null, campione: "nessuno" as const } }, confronto: null, ultimoRiepilogo: null, tradeChiusiOggi: [], custodi: [], universo: { titoli: [], crypto: [], fonteCrypto: null, aggiornatoCrypto: null }, kronos: { stato: "non configurato", proiezioniDel: null, simboli: 0 } };
     const st: AgentsStatus = {
       ...base,
       pnlOggi: {
@@ -524,6 +526,52 @@ describe("crypto", () => {
     const r = new TrendAgent().observe(view({ falling: ["TLT"], positions: [{ symbol: "TLT", qty: 10, avgEntryPrice: 95, currentPrice: 80, marketValue: 800 }] }));
     expect(r.segnali.filter((s) => s.lato === "buy").map((s) => s.simbolo)).not.toContain("IWM");
     expect(r.segnali.find((s) => s.lato === "sell")?.simbolo).toBe("TLT");
+  });
+});
+
+describe("universo crypto e custodi", () => {
+  test("selezione: top N per capitalizzazione ∩ coppie Alpaca, stablecoin fuori, ordine di classifica; senza classifica tutte le coppie", () => {
+    const pairs = ["BTC/USD", "ETH/USD", "USDT/USD", "USDC/USD", "SOL/USD", "DOGE/USD", "SHIB/USD", "BAT/USD", "ETH/BTC"];
+    const top = ["BTC", "ETH", "USDT", "XRP", "SOL", "USDC", "DOGE", "ADA", "SHIB"]; // BAT fuori dalla top
+    const sel = selectPairs(pairs, top, 40, 100);
+    expect(sel.coppie).toEqual(["BTC/USD", "ETH/USD", "SOL/USD", "DOGE/USD", "SHIB/USD"]);
+    expect(sel.classifica["SOL/USD"]).toBe(5);
+    expect(sel.scartate.sort()).toEqual(["BAT/USD", "USDC/USD", "USDT/USD"]);
+    const capped = selectPairs(pairs, top, 2, 100);
+    expect(capped.coppie).toEqual(["BTC/USD", "ETH/USD"]);
+    const noTop = selectPairs(pairs, null, 40, 100);
+    expect(noTop.coppie).toEqual(["BTC/USD", "ETH/USD", "SOL/USD", "DOGE/USD", "SHIB/USD", "BAT/USD"]);
+  });
+
+  test("custodi: uno per crypto in trend o in portafoglio, con tesi, piano e rischio; vota l'ingresso e l'uscita sotto la media a 50", () => {
+    setCryptoUniverse(["BTC/USD", "ETH/USD", "SOL/USD"]);
+    const a = new CustodiAgent();
+    const closes: Record<string, number[]> = {};
+    for (const s of UNIVERSE) closes[s] = syntheticCloses(PRICES[s]!, 0.01, 260);
+    closes["BTC/USD"] = syntheticCloses(76_000, 0.01, 260); // in trend
+    closes["ETH/USD"] = Array.from({ length: 260 }, (_, i) => 3000 - i * 3); // in discesa: niente custode
+    closes["SOL/USD"] = syntheticCloses(180, 0.01, 260);
+    const prices = { ...PRICES, "BTC/USD": closes["BTC/USD"]!.at(-1)!, "ETH/USD": closes["ETH/USD"]!.at(-1)!, "SOL/USD": closes["SOL/USD"]!.at(-1)! };
+    const r = a.observe(view({ closes, prices, indicators: indicatorsFor(closes, prices, LIMITS.trendSmaDays, LIMITS.volLookbackDays, LIMITS.longSmaDays, LIMITS.rankMomentumDays) }));
+    expect(r.custodi!.map((c) => c.simbolo).sort()).toEqual(["BTC/USD", "SOL/USD"]);
+    for (const c of r.custodi!) {
+      expect(["pronto", "osserva"]).toContain(c.fase);
+      expect(c.tesi).toContain(c.simbolo);
+      expect(c.piano.length).toBeGreaterThan(20);
+      expect(c.rischio).toContain("Stop");
+      expect(c.livelli.stop).not.toBeNull();
+    }
+    expect(r.segnali.filter((s) => s.lato === "buy").map((s) => s.agente).sort()).toEqual(["custode BTC/USD", "custode SOL/USD"]);
+    // In portafoglio e sotto la media a 50: il custode chiede di uscire.
+    const down = { ...closes, "BTC/USD": [...closes["BTC/USD"]!.slice(0, -1), 60_000] };
+    const p2 = { ...prices, "BTC/USD": 60_000 };
+    const r2 = a.observe(view({ closes: down, prices: p2, positions: [{ symbol: "BTC/USD", qty: 0.1, avgEntryPrice: 70_000, currentPrice: 60_000, marketValue: 6_000 }] }));
+    const btc = r2.custodi!.find((c) => c.simbolo === "BTC/USD")!;
+    expect(btc.fase).toBe("in uscita");
+    expect(r2.segnali.some((s) => s.agente === "custode BTC/USD" && s.lato === "sell")).toBe(true);
+    // ETH mai in trend: nessun custode.
+    expect(r2.custodi!.some((c) => c.simbolo === "ETH/USD")).toBe(false);
+    setCryptoUniverse(["BTC/USD", "ETH/USD"]);
   });
 });
 

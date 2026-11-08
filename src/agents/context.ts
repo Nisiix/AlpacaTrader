@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { AGENTS, LIMITS, SECTORS } from "../config.ts";
+import { AGENTS, LIMITS, SECTORS, sectorOf } from "../config.ts";
 import { EVENTS, eventBlockFor, type MarketEvent } from "../events.ts";
 import { isObject, writeJsonAtomic } from "../fsutil.ts";
 import { dailyVol, momentum, sma } from "../indicators.ts";
@@ -121,7 +121,7 @@ export class ContextAgent implements Agent {
     const fidati: Record<string, boolean> = {};
     const symbols = new Set([...AGENTS.universe, ...v.positions.map((p) => p.symbol)]);
     for (const s of symbols) {
-      const sec = SECTORS[s] ?? "altro";
+      const sec = sectorOf(s);
       const o = worst(generale, settori[sec] ?? "favorevole");
       const ev = eventBlockFor(s, v.today, this.events);
       if (o === "sfavorevole") attendi[s] = `contesto sfavorevole (${sec}): si aspetta la candela successiva`;

@@ -93,6 +93,33 @@
   #events time { color:var(--ink-3); font-size:13px; padding-top:2px; }
   #events .ev.quiet { color:var(--ink-3); }
   #events .ev.alarm { color:var(--down); }
+  /* Scheda per titolo: candele, livelli, scenari di Kronos, verdetto degli agenti. */
+  .chips { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px; }
+  .chip { font:inherit; font-size:14px; padding:6px 12px; border-radius:999px; border:1px solid var(--line); background:var(--card); color:var(--ink); cursor:pointer; display:inline-flex; gap:8px; align-items:center; }
+  .chip[aria-pressed="true"] { background:var(--ink); color:var(--card); border-color:var(--ink); }
+  .chip[aria-pressed="true"] .up, .chip[aria-pressed="true"] .down { color:inherit; opacity:.85; }
+  .chip .k { width:7px; height:7px; border-radius:50%; background:var(--agent); display:inline-block; }
+  .chip:focus-visible { outline:2px solid var(--agent); outline-offset:2px; }
+  .title-grid { display:grid; grid-template-columns: minmax(0, 1.7fr) minmax(300px, 1fr); gap:18px; }
+  @media (max-width: 1000px) { .title-grid { grid-template-columns:1fr; } }
+  .chart-wrap { position:relative; }
+  #chart { width:100%; height:400px; display:block; border-radius:10px; background:var(--card-2); cursor:crosshair; }
+  #tip { position:absolute; pointer-events:none; background:var(--ink); color:var(--card); font-size:13px; padding:6px 9px; border-radius:8px; display:none; white-space:nowrap; z-index:2; }
+  .legend-row { display:flex; gap:14px; flex-wrap:wrap; color:var(--ink-3); font-size:13px; margin-top:8px; }
+  .legend-row i { display:inline-block; width:14px; height:0; border-top:2px solid; vertical-align:middle; margin-right:5px; }
+  .verdict { font-size:18px; font-weight:600; line-height:1.3; letter-spacing:-.01em; }
+  .verdict.up { color:var(--up); } .verdict.down { color:var(--down); }
+  .btn { font:inherit; font-size:14px; font-weight:600; padding:9px 16px; border-radius:10px; border:0; background:var(--agent); color:#fff; cursor:pointer; }
+  .btn:disabled { opacity:.6; cursor:progress; }
+  .btn:focus-visible { outline:2px solid var(--ink); outline-offset:2px; }
+  .kv { display:grid; grid-template-columns: auto 1fr; gap:4px 14px; font-size:14px; }
+  .kv dt { color:var(--ink-3); } .kv dd { margin:0; }
+  .vote { padding:8px 0; border-top:1px solid var(--line); font-size:14px; }
+  .custode-card { border:1px solid var(--line); border-radius:10px; padding:12px 14px; display:grid; gap:6px; font-size:14px; background:var(--card-2); }
+  .custode-card .h { display:flex; justify-content:space-between; gap:10px; align-items:baseline; }
+  .custode-list { display:grid; gap:10px; }
+  .custode-list button { text-align:left; font:inherit; background:var(--card-2); border:1px solid var(--line); border-radius:10px; padding:10px 12px; color:var(--ink); cursor:pointer; }
+  .custode-list button:hover { border-color:var(--agent); }
   @media (prefers-reduced-motion: reduce) { * { transition:none !important; } }
 </style>
 <script type="importmap">{ "imports": { "three": "/vendor/three.module.js", "three/addons/": "/vendor/addons/" } }</script>
@@ -116,6 +143,26 @@
     </div>
   </section>
 
+  <section class="card" id="titoli">
+    <h2>Titolo per titolo <small>candele, livelli del motore, scenari di Kronos e il verdetto degli agenti</small></h2>
+    <div class="chips" id="chips" role="group" aria-label="scegli il titolo"></div>
+    <div class="title-grid">
+      <div>
+        <div class="chart-wrap"><canvas id="chart" aria-label="grafico a candele"></canvas><div id="tip"></div></div>
+        <div class="legend-row"><span><i style="border-color:#8a94a6"></i>media 20</span><span><i style="border-color:var(--agent)"></i>media 50</span><span><i style="border-color:#b08900"></i>media 200</span><span><i style="border-color:var(--ink); border-top-style:dashed"></i>carico</span><span><i style="border-color:var(--down); border-top-style:dashed"></i>stop</span><span><i style="border-color:var(--up); border-top-style:dotted"></i>scenario Kronos</span><span>▲▼ operazioni</span></div>
+        <p class="why" id="chart-note" style="margin-top:8px"></p>
+      </div>
+      <div class="stack" style="gap:12px">
+        <div class="row" style="justify-content:space-between">
+          <div><div class="lab" style="color:var(--ink-3); font-size:13px">Ultimo prezzo</div><div class="val" style="font-size:22px; font-weight:700" id="t-price">–</div></div>
+          <button class="btn" id="ask">Chiedi agli agenti adesso</button>
+        </div>
+        <p class="verdict" id="verdict">Scegli un titolo.</p>
+        <div id="verdict-body"></div>
+      </div>
+    </div>
+  </section>
+
   <div class="cols">
     <div class="stack">
       <section class="card">
@@ -136,6 +183,10 @@
       <section class="card">
         <h2>Chi vota cosa <small>punteggio netto dei segnali</small></h2>
         <div id="scores"></div>
+      </section>
+      <section class="card">
+        <h2>I custodi delle crypto <small>un investitore per ogni titolo seguito</small></h2>
+        <div class="custode-list" id="custodi"></div>
       </section>
       <section class="card">
         <h2>Gli agenti</h2>
@@ -174,6 +225,7 @@ const fmt = (x, d = 2) => (x === null || x === undefined || Number.isNaN(x)) ? '
 const pct = (x) => (x === null || x === undefined) ? '–' : `${x >= 0 ? '+' : ''}${(x * 100).toFixed(2).replace('.', ',')}%`;
 const usd = (x) => (x === null || x === undefined) ? '–' : `${x >= 0 ? '+' : ''}${fmt(x)} $`;
 const money = (x) => `${fmt(x)} $`;
+const px = (x) => (x === null || x === undefined || Number.isNaN(x)) ? '–' : fmt(x, Math.abs(x) >= 100 ? 2 : Math.abs(x) >= 1 ? 3 : Math.abs(x) >= 0.01 ? 4 : 6);
 const cls = (x) => x > 0 ? 'up' : x < 0 ? 'down' : '';
 const qty = (q) => Number.isInteger(q) ? String(q) : String(Number(q)).replace('.', ',');
 const hhmm = (iso) => new Date(iso).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
@@ -412,7 +464,7 @@ function paintAgents(st) {
   const rows = Object.entries(st.agenti || {});
   $('#agents').innerHTML = rows.length ? `<table><tbody>${rows.map(([n, a]) => `<tr><td style="width:150px"><b>${agentName(n)}</b><br><span class="why">peso ${String(st.pesi?.[n] ?? 1).replace('.', ',')}</span></td><td>${a.errore ? `<span class="down">${esc(a.errore)}</span>` : `${a.segnali === 0 ? 'nessun segnale' : a.segnali === 1 ? '1 segnale' : `${a.segnali} segnali`}${a.note?.length ? `<br><span class="why">${a.note.map(esc).join(' ')}</span>` : ''}`}</td></tr>`).join('')}</tbody></table>` : '<p class="empty">Gli agenti compaiono dopo il primo giro.</p>';
   const d = st.diario?.statistiche;
-  $('#journal').innerHTML = d ? `Diario dei trade: ${d.trade === 0 ? 'nessun trade chiuso finora' : `${d.trade} chiusi, ${d.vinti} in guadagno, risultato medio ${pct(d.attesa)}`}. ${esc(st.diario.stato)}` : '';
+  $('#journal').innerHTML = `${d ? `Diario dei trade: ${d.trade === 0 ? 'nessun trade chiuso finora' : `${d.trade} chiusi, ${d.vinti} in guadagno, risultato medio ${pct(d.attesa)}`}. ${esc(st.diario.stato)}` : ''}${st.kronos ? `<br>Kronos: ${esc(st.kronos.stato)}${st.kronos.proiezioniDel ? `, proiezioni del ${st.kronos.proiezioniDel} su ${st.kronos.simboli} titoli` : ''}.` : ''}${st.universo?.crypto?.length ? `<br>Universo crypto di oggi: ${st.universo.crypto.length} coppie${st.universo.fonteCrypto ? ` (${esc(st.universo.fonteCrypto)})` : ''}.` : ''}`;
 }
 
 function paintScene(st) {
@@ -436,11 +488,214 @@ function paint(st) {
   sayState();
   if (!status) { $('#when').textContent = lastTick ? `ultimo giro iniziato ${hhmm(lastTick.t)}` : 'nessuno stato'; return; }
   $('#when').textContent = `ultimo giro ${hhmm(status.aggiornato)} (${ago(status.aggiornato)})`;
-  paintMoney(status); paintPositions(status); paintPnl(status); paintDecisions(status); paintScores(status); paintAgents(status); paintScene(status);
+  paintMoney(status); paintPositions(status); paintPnl(status); paintDecisions(status); paintScores(status); paintAgents(status); paintScene(status); paintCustodi(status); paintChips(status);
 }
 async function loadStatus() {
   try { paint(await (await fetch('/api/status')).json()); } catch (e) { $('#say').textContent = 'La dashboard non riesce a leggere lo stato.'; $('#fix').hidden = false; $('#fix').textContent = e.message; }
 }
+
+// ---------- scheda per titolo ----------
+const FASI = { osserva: 'osserva', pronto: 'pronto a entrare', 'in posizione': 'in posizione', 'in uscita': 'in uscita', attende: 'in attesa' };
+const faseCls = (f) => f === 'in posizione' || f === 'pronto' ? 'up' : f === 'in uscita' ? 'down' : f === 'attende' ? 'warn' : '';
+function paintCustodi(st) {
+  const list = st.custodi || [];
+  $('#custodi').innerHTML = list.length ? list.map((c) => `<button type="button" data-sym="${esc(c.simbolo)}"><div class="row" style="justify-content:space-between"><b>${esc(c.simbolo)}</b><span class="pill ${faseCls(c.fase)}">${FASI[c.fase] || esc(c.fase)}</span></div><div class="why" style="margin-top:4px">${esc(c.stato)}</div></button>`).join('')
+    : `<p class="empty">Nessun custode attivo: nasce uno per ogni crypto in trend (sopra le medie, slancio a 3 e 12 mesi positivo) o in portafoglio. ${st.universo?.crypto?.length ? `Universo di oggi: ${st.universo.crypto.length} coppie${st.universo.fonteCrypto ? ` (${esc(st.universo.fonteCrypto)})` : ''}.` : ''}</p>`;
+  for (const b of $('#custodi').querySelectorAll('button')) b.addEventListener('click', () => { selectSymbol(b.dataset.sym); $('#titoli').scrollIntoView({ behavior: 'smooth', block: 'start' }); });
+}
+
+let selected = null;
+let bars = [];          // barre del titolo scelto
+let forecasts = null;   // /api/previsioni
+let journal = null;     // /api/journal
+let valutazione = null; // ultima valutazione a secco
+function symbolsOf(st) {
+  const held = (st?.posizioni || []).map((p) => p.simbolo);
+  const cust = (st?.custodi || []).map((c) => c.simbolo);
+  const uni = [...(st?.universo?.titoli || []), ...(st?.universo?.crypto || [])];
+  return [...new Set([...held, ...cust, ...uni, ...Object.keys(st?.prezzi || {})])];
+}
+function paintChips(st) {
+  const syms = symbolsOf(st);
+  if (!selected || !syms.includes(selected)) { selected = (st.posizioni?.[0]?.simbolo) || (st.custodi?.[0]?.simbolo) || syms[0] || null; if (selected) loadSymbol(selected); }
+  const held = new Map((st.posizioni || []).map((p) => [p.simbolo, p]));
+  const cust = new Set((st.custodi || []).map((c) => c.simbolo));
+  $('#chips').innerHTML = syms.map((s) => { const p = held.get(s); return `<button type="button" class="chip" data-sym="${esc(s)}" aria-pressed="${s === selected}">${cust.has(s) ? '<span class="k" title="ha un custode"></span>' : ''}${esc(s)}${p ? `<span class="${cls(p.variazione)}">${pct(p.variazione)}</span>` : ''}</button>`; }).join('');
+  for (const b of $('#chips').querySelectorAll('.chip')) b.addEventListener('click', () => selectSymbol(b.dataset.sym));
+  if (selected) paintTitle();
+}
+function selectSymbol(sym) {
+  if (!sym) return;
+  selected = sym; valutazione = null;
+  for (const b of $('#chips').querySelectorAll('.chip')) b.setAttribute('aria-pressed', String(b.dataset.sym === sym));
+  loadSymbol(sym);
+}
+async function loadSymbol(sym) {
+  try {
+    const [b, f, j] = await Promise.all([
+      fetch(`/api/bars?simbolo=${encodeURIComponent(sym)}`).then((r) => r.json()),
+      forecasts ? Promise.resolve(forecasts) : fetch('/api/previsioni').then((r) => r.json()),
+      fetch('/api/journal').then((r) => r.json()),
+    ]);
+    if (sym !== selected) return;
+    bars = b.barre || []; forecasts = f; journal = j;
+  } catch { bars = []; }
+  paintTitle();
+}
+setInterval(() => { forecasts = null; }, 10 * 60_000);
+
+function tradesFor(sym) {
+  const out = [];
+  for (const t of journal?.trade || []) {
+    if (t.simbolo !== sym) continue;
+    for (const a of t.acquisti || []) out.push({ date: a.data.slice(0, 10), side: 'buy', qty: a.quantita, price: a.prezzo });
+    for (const v of t.vendite || []) out.push({ date: v.data.slice(0, 10), side: 'sell', qty: v.quantita, price: v.prezzo, pnl: (v.prezzo - v.carico) * v.quantita });
+    if (!(t.acquisti || []).length) out.push({ date: t.apertoIl.slice(0, 10), side: 'buy', qty: t.comprate, price: t.costo / t.comprate });
+    if (!(t.vendite || []).length && t.stato === 'chiuso' && t.chiusoIl) out.push({ date: t.chiusoIl.slice(0, 10), side: 'sell', qty: t.vendute, price: t.prezzoUscita, pnl: t.incassato - t.costo });
+  }
+  return out;
+}
+const smaAt = (arr, i, n) => i + 1 < n ? null : arr.slice(i + 1 - n, i + 1).reduce((a, b) => a + b, 0) / n;
+function dailyVolOf(closes, n = 20) {
+  const w = closes.slice(-(n + 1)); const r = [];
+  for (let i = 1; i < w.length; i++) if (w[i - 1] > 0 && w[i] > 0) r.push(Math.log(w[i] / w[i - 1]));
+  if (r.length < 2) return 0.02;
+  const m = r.reduce((a, b) => a + b, 0) / r.length;
+  return Math.sqrt(r.reduce((a, b) => a + (b - m) ** 2, 0) / (r.length - 1));
+}
+const cssVar = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+
+// Il grafico: ultime 120 candele, medie 20/50/200, carico e stop, il percorso previsto da Kronos con il cono di incertezza, le operazioni.
+let chartGeom = null;
+function drawChart() {
+  const cv = $('#chart'); const dpr = Math.min(2, window.devicePixelRatio || 1);
+  const W = cv.clientWidth, H = cv.clientHeight; if (!W) return;
+  cv.width = W * dpr; cv.height = H * dpr;
+  const ctx = cv.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, H);
+  const all = bars; const N = Math.min(120, all.length);
+  ctx.font = '12px Figtree, system-ui, sans-serif';
+  if (!N) { ctx.fillStyle = cssVar('--ink-3'); ctx.fillText(status ? 'Le barre arrivano con il primo giro riuscito del motore.' : 'Nessun dato.', 16, 28); chartGeom = null; return; }
+  const view = all.slice(-N); const closesAll = all.map((b) => b.close);
+  const fc = forecasts?.previsioni?.[selected]; const path = fc?.percorso || [];
+  const vol = dailyVolOf(closesAll);
+  const last = view[view.length - 1].close;
+  const pos = (status?.posizioni || []).find((p) => p.simbolo === selected);
+  const stopPct = valutazione?.livelli?.stopPct ?? Math.min(0.10, Math.max(0.05, Math.round(2.5 * vol * Math.sqrt(5) * 200) / 200));
+  const carico = pos?.prezzoCarico ?? null;
+  const stop = carico !== null ? carico * (1 - stopPct) : null;
+  const H_FC = path.length; const slots = N + H_FC + 1;
+  let lo = Math.min(...view.map((b) => b.low)), hi = Math.max(...view.map((b) => b.high));
+  for (let k = 0; k < path.length; k++) { const band = vol * Math.sqrt(k + 1) * 1.65; lo = Math.min(lo, last * (1 + path[k] - band)); hi = Math.max(hi, last * (1 + path[k] + band)); }
+  if (stop !== null) lo = Math.min(lo, stop); if (carico !== null) hi = Math.max(hi, carico);
+  const pad = (hi - lo) * 0.06 || hi * 0.02; lo -= pad; hi += pad;
+  const L = 8, R = 84, T = 14, B = 26; const pw = W - L - R, ph = H - T - B;
+  const x = (i) => L + ((i + 0.5) / slots) * pw; const y = (v) => T + (1 - (v - lo) / (hi - lo)) * ph;
+  const cw = Math.max(2, (pw / slots) * 0.62);
+  // griglia e scala
+  ctx.strokeStyle = cssVar('--line'); ctx.fillStyle = cssVar('--ink-3'); ctx.lineWidth = 1; ctx.textAlign = 'left';
+  for (let g = 0; g <= 5; g++) { const v = lo + ((hi - lo) * g) / 5; const yy = y(v); ctx.beginPath(); ctx.moveTo(L, yy); ctx.lineTo(W - R, yy); ctx.stroke(); ctx.fillText(px(v), W - R + 6, yy + 4); }
+  // date (ogni ~20 barre)
+  ctx.textAlign = 'center';
+  for (let i = 0; i < N; i += Math.ceil(N / 6)) ctx.fillText(view[i].date.slice(5), x(i), H - 8);
+  // zona futura
+  if (H_FC) { ctx.fillStyle = cssVar('--agent-bg'); ctx.globalAlpha = 0.35; ctx.fillRect(x(N - 0.5), T, x(slots - 0.5) - x(N - 0.5), ph); ctx.globalAlpha = 1; ctx.fillStyle = cssVar('--ink-3'); ctx.fillText(`prossime ${H_FC} sedute`, (x(N) + x(slots - 1)) / 2, H - 8); }
+  // medie
+  const line = (n, color, dash) => { ctx.beginPath(); ctx.strokeStyle = color; ctx.lineWidth = 1.5; ctx.setLineDash(dash || []); let started = false; for (let i = 0; i < N; i++) { const gi = all.length - N + i; const v = smaAt(closesAll, gi, n); if (v === null) continue; const xx = x(i), yy = y(v); if (!started) { ctx.moveTo(xx, yy); started = true; } else ctx.lineTo(xx, yy); } ctx.stroke(); ctx.setLineDash([]); };
+  line(200, '#b08900'); line(50, cssVar('--agent')); line(20, '#8a94a6', [2, 3]);
+  // candele
+  const up = cssVar('--up'), down = cssVar('--down');
+  view.forEach((b, i) => { const c = b.close >= b.open ? up : down; ctx.strokeStyle = c; ctx.fillStyle = c; ctx.lineWidth = 1; const xx = x(i); ctx.beginPath(); ctx.moveTo(xx, y(b.high)); ctx.lineTo(xx, y(b.low)); ctx.stroke(); const top = y(Math.max(b.open, b.close)), bot = y(Math.min(b.open, b.close)); ctx.fillRect(xx - cw / 2, top, cw, Math.max(1, bot - top)); });
+  // livelli
+  const hline = (v, color, dash, label) => { if (v === null || v === undefined) return; ctx.beginPath(); ctx.strokeStyle = color; ctx.lineWidth = 1.2; ctx.setLineDash(dash); ctx.moveTo(L, y(v)); ctx.lineTo(W - R, y(v)); ctx.stroke(); ctx.setLineDash([]); ctx.fillStyle = color; ctx.textAlign = 'left'; ctx.fillText(label, L + 6, y(v) - 4); };
+  hline(carico, cssVar('--ink'), [6, 4], `carico ${px(carico)}`);
+  hline(stop, down, [6, 4], `stop ${px(stop)} (${pct(-stopPct)})`);
+  // scenario Kronos: percorso previsto e cono
+  if (H_FC) {
+    ctx.beginPath(); ctx.fillStyle = up; ctx.globalAlpha = 0.12;
+    ctx.moveTo(x(N - 1), y(last));
+    for (let k = 0; k < H_FC; k++) ctx.lineTo(x(N + k), y(last * (1 + path[k] + vol * Math.sqrt(k + 1) * 1.65)));
+    for (let k = H_FC - 1; k >= 0; k--) ctx.lineTo(x(N + k), y(last * (1 + path[k] - vol * Math.sqrt(k + 1) * 1.65)));
+    ctx.closePath(); ctx.fill(); ctx.globalAlpha = 1;
+    ctx.beginPath(); ctx.strokeStyle = fc.rendimentoPrevisto >= 0 ? up : down; ctx.lineWidth = 2; ctx.setLineDash([3, 4]); ctx.moveTo(x(N - 1), y(last));
+    for (let k = 0; k < H_FC; k++) ctx.lineTo(x(N + k), y(last * (1 + path[k])));
+    ctx.stroke(); ctx.setLineDash([]);
+    for (let k = 0; k < H_FC; k++) { ctx.beginPath(); ctx.fillStyle = fc.rendimentoPrevisto >= 0 ? up : down; ctx.arc(x(N + k), y(last * (1 + path[k])), 3, 0, Math.PI * 2); ctx.fill(); }
+    ctx.fillStyle = fc.rendimentoPrevisto >= 0 ? up : down; ctx.textAlign = 'right'; ctx.fillText(`Kronos ${pct(fc.rendimentoPrevisto)} → ${px(last * (1 + fc.rendimentoPrevisto))}`, x(slots - 1) + cw, y(last * (1 + path[H_FC - 1])) - 10);
+  }
+  // operazioni
+  for (const t of tradesFor(selected)) { let i = view.findIndex((b) => b.date >= t.date); if (i < 0 && t.date > view[N - 1].date) i = N - 1; if (i < 0) continue; ctx.fillStyle = t.side === 'buy' ? up : down; ctx.textAlign = 'center'; ctx.font = 'bold 14px Figtree, system-ui, sans-serif'; ctx.fillText(t.side === 'buy' ? '▲' : '▼', x(i), t.side === 'buy' ? y(view[i].low) + 16 : y(view[i].high) - 6); ctx.font = '12px Figtree, system-ui, sans-serif'; }
+  chartGeom = { x, y, N, slots, view, path, last, vol, L, R, W, H, T, ph };
+}
+$('#chart').addEventListener('mousemove', (ev) => {
+  const g = chartGeom; const tip = $('#tip'); if (!g) { tip.style.display = 'none'; return; }
+  const rect = ev.currentTarget.getBoundingClientRect(); const mx = ev.clientX - rect.left, my = ev.clientY - rect.top;
+  const i = Math.floor(((mx - g.L) / (g.W - g.L - g.R)) * g.slots);
+  if (i < 0 || i >= g.slots) { tip.style.display = 'none'; return; }
+  let html;
+  if (i < g.N) { const b = g.view[i]; html = `<b>${b.date}</b><br>apertura ${px(b.open)} · massimo ${px(b.high)}<br>minimo ${px(b.low)} · chiusura ${px(b.close)} <span class="${cls(b.close - b.open)}">${pct(b.close / b.open - 1)}</span>`; }
+  else { const k = i - g.N; if (k >= g.path.length) { tip.style.display = 'none'; return; } const band = g.vol * Math.sqrt(k + 1) * 1.65; html = `<b>Scenario Kronos, seduta +${k + 1}</b><br>atteso ${px(g.last * (1 + g.path[k]))} (${pct(g.path[k])})<br>fascia ${px(g.last * (1 + g.path[k] - band))} – ${px(g.last * (1 + g.path[k] + band))}`; }
+  tip.innerHTML = html; tip.style.display = 'block';
+  tip.style.left = `${Math.min(mx + 14, g.W - 230)}px`; tip.style.top = `${Math.max(4, my - 60)}px`;
+});
+$('#chart').addEventListener('mouseleave', () => { $('#tip').style.display = 'none'; });
+new ResizeObserver(() => drawChart()).observe($('#chart'));
+
+function paintTitle() {
+  if (!selected) return;
+  const st = status; const price = st?.prezzi?.[selected] ?? bars.at(-1)?.close ?? null;
+  $('#t-price').textContent = price !== null ? `${px(price)} $` : '–';
+  drawChart();
+  const fc = forecasts?.previsioni?.[selected];
+  const note = [];
+  if (bars.length) note.push(`${Math.min(120, bars.length)} sedute fino al ${bars.at(-1).date}.`);
+  note.push(fc ? `Kronos (${forecasts.giorno}): ${pct(fc.rendimentoPrevisto)} in ${forecasts.orizzonte} sedute; il cono è la fascia di una volatilità e mezza attorno al percorso previsto.` : `Scenario Kronos non disponibile${st?.kronos?.stato ? ` (${st.kronos.stato})` : ''}.`);
+  $('#chart-note').textContent = note.join(' ');
+  if (valutazione) return paintVerdict(valutazione);
+  // Prima della richiesta: cosa dicono lo stato dell'ultimo giro e il custode.
+  const votes = (st?.segnali || []).filter((s) => s.simbolo === selected);
+  const score = (st?.punteggi || []).find((s) => s.simbolo === selected);
+  const cust = (st?.custodi || []).find((c) => c.simbolo === selected);
+  const pos = (st?.posizioni || []).find((p) => p.simbolo === selected);
+  const v = $('#verdict'); v.className = 'verdict';
+  v.textContent = pos ? `In portafoglio: ${qty(pos.quantita)} a ${px(pos.prezzoCarico)}, ${pct(pos.variazione)}.` : votes.length ? `Nell'ultimo giro ${votes.length === 1 ? 'un agente ha votato' : `${votes.length} agenti hanno votato`} su ${selected}${score ? ` (punteggio ${score.punteggio >= 0 ? '+' : ''}${score.punteggio.toFixed(2)})` : ''}.` : `Nessun voto su ${selected} nell'ultimo giro.`;
+  $('#verdict-body').innerHTML = `${votes.map((s) => `<div class="vote"><span class="pill agent">${agentName(s.agente)}</span> <span class="${s.lato === 'buy' ? 'up' : 'down'}"><b>${s.lato === 'buy' ? 'compra' : 'vendi'}</b></span> forza ${s.forza.toFixed(2).replace('.', ',')}<br><span class="why">${esc(s.perche)}</span></div>`).join('')}${cust ? custodeCard(cust) : ''}<p class="why" style="margin-top:10px">Il pulsante chiede a tutti gli agenti di guardare ${selected} adesso, con i prezzi di questo momento: nessun ordine parte da qui.</p>`;
+}
+function custodeCard(c) {
+  return `<div class="custode-card"><div class="h"><b>Custode di ${esc(c.simbolo)}</b><span class="pill ${faseCls(c.fase)}">${FASI[c.fase] || esc(c.fase)}</span></div><div><span class="why">Tesi.</span> ${esc(c.tesi)}</div><div><span class="why">Piano.</span> ${esc(c.piano)}</div><div><span class="why">Rischio.</span> ${esc(c.rischio)}</div><div class="why">${esc(c.stato)}</div></div>`;
+}
+function paintVerdict(v) {
+  const el = $('#verdict');
+  const side = v.proposta?.lato;
+  el.className = `verdict ${v.gabbia.esito === 'passa' ? (side === 'buy' ? 'up' : 'down') : ''}`;
+  el.textContent = v.verdetto;
+  const lv = v.livelli;
+  $('#verdict-body').innerHTML = `
+    <div class="row"><span class="pill ${v.gabbia.esito === 'passa' ? 'up' : v.gabbia.esito === 'rifiuta' ? 'warn' : ''}">${v.gabbia.esito === 'passa' ? 'le regole lasciano passare' : v.gabbia.esito === 'rifiuta' ? 'fermato dalle regole' : 'nessun ordine'}</span>${v.punteggio !== null ? `<span class="pill ${cls(v.punteggio)}">punteggio ${v.punteggio >= 0 ? '+' : ''}${v.punteggio.toFixed(2).replace('.', ',')}</span>` : ''}<span class="pill">${v.mercatoAperto ? (v.finestraIngressi ? 'borsa aperta, finestra acquisti' : 'borsa aperta') : 'borsa chiusa'}</span></div>
+    ${v.gabbia.esito === 'rifiuta' ? `<p class="why">${esc(v.gabbia.motivo)}</p>` : ''}
+    <dl class="kv" style="margin:10px 0">
+      ${v.posizione ? `<dt>Posizione</dt><dd>${qty(v.posizione.quantita)} a ${px(v.posizione.carico)} → <span class="${cls(v.posizione.guadagno)}">${usd(v.posizione.guadagno)} (${pct(v.posizione.variazione)})</span></dd>` : ''}
+      <dt>Stop</dt><dd>${px(lv.stop)} (${pct(-lv.stopPct)} dal ${v.posizione ? 'carico' : 'prezzo'})</dd>
+      ${lv.obiettivo ? `<dt>Obiettivo</dt><dd>${px(lv.obiettivo)}</dd>` : ''}
+      <dt>Medie 20 / 50 / 200</dt><dd>${px(lv.media20)} / ${px(lv.media50)} / ${px(lv.media200)}</dd>
+      ${v.previsione ? `<dt>Kronos</dt><dd><span class="${cls(v.previsione.rendimentoPrevisto)}">${pct(v.previsione.rendimentoPrevisto)}</span> in ${v.previsione.orizzonte} sedute</dd>` : ''}
+      ${v.contesto ? `<dt>Contesto</dt><dd>${esc(v.contesto.generale)}${v.contesto.attendi ? ` · ${esc(v.contesto.attendi)}` : ''}</dd>` : ''}
+    </dl>
+    ${v.voti.length ? v.voti.map((s) => `<div class="vote"><span class="pill agent">${agentName(s.agente)}</span> <span class="${s.lato === 'buy' ? 'up' : 'down'}"><b>${s.lato === 'buy' ? 'compra' : 'vendi'}</b></span> forza ${s.forza.toFixed(2).replace('.', ',')}${s.vincolante ? ' <span class="pill warn">regola vincolante</span>' : ''}<br><span class="why">${esc(s.perche)}</span></div>`).join('') : '<p class="why">Nessun agente ha votato su questo titolo adesso.</p>'}
+    ${v.custode ? custodeCard(v.custode) : ''}
+    ${v.note.length ? `<p class="why">${v.note.map(esc).join(' · ')}</p>` : ''}
+    <p class="why">Valutato alle ${hhmm(v.quando)} con i prezzi di quel momento. Nessun ordine inviato.</p>`;
+  drawChart();
+}
+$('#ask').addEventListener('click', async () => {
+  if (!selected) return;
+  const b = $('#ask'); b.disabled = true; b.textContent = 'Gli agenti stanno guardando…';
+  try {
+    const r = await fetch(`/api/valuta?simbolo=${encodeURIComponent(selected)}`); const v = await r.json();
+    if (!r.ok) throw new Error(v.errore || r.statusText);
+    valutazione = v; paintVerdict(v);
+  } catch (e) { $('#verdict').className = 'verdict down'; $('#verdict').textContent = 'Valutazione non riuscita.'; $('#verdict-body').innerHTML = `<p class="why">${esc(e.message)}</p>`; }
+  b.disabled = false; b.textContent = 'Chiedi agli agenti adesso';
+});
 
 // ---------- cronologia ----------
 const evBox = $('#events');

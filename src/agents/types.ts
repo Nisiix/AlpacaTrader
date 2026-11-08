@@ -1,6 +1,7 @@
 import type { Account, Position, Side } from "../broker/types.ts";
 import type { Indicator } from "../indicators.ts";
 import type { JournalFile } from "../journal.ts";
+import type { CustodeStato } from "./custode.ts";
 
 // Un segnale è un'opinione: un agente, un titolo, un lato, una forza tra 0 e 1 e il perché in italiano.
 // Nessun agente ordina niente: l'allocatore somma i segnali pesati e la gabbia decide cosa passa.
@@ -55,6 +56,8 @@ export interface AgentReport {
   // Solo gli agenti di rischio: moltiplicatore 0..1 dell'esposizione ammessa.
   rischio?: number;
   note?: string[];
+  // Solo l'agente dei custodi: lo stato di ogni custode (tesi, piano, rischio, livelli), per la dashboard.
+  custodi?: CustodeStato[];
 }
 
 export interface Agent {

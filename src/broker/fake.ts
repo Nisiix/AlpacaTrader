@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { writeJsonAtomic } from "../fsutil.ts";
 import { isCrypto } from "../config.ts";
 import { addDays, romeTime } from "../slots.ts";
-import type { Account, Broker, MarketClock, Order, OrderRequest, Position, StopOrderRequest } from "./types.ts";
+import type { Account, Bar, Broker, MarketClock, Order, OrderRequest, Position, StopOrderRequest } from "./types.ts";
 import { BrokerError, DuplicateOrderError, isOpenOrder, isProtectiveStop } from "./types.ts";
 
 export interface FakeFaults {
@@ -221,6 +221,26 @@ export class FakeBroker implements Broker {
     if (s.faults.crashAfterSubmits !== undefined && s.submits >= s.faults.crashAfterSubmits) process.kill(process.pid, "SIGKILL");
     if (outageNow) throw new BrokerError("timeout: nessuna risposta da Alpaca (l'ordine però è arrivato)", undefined, true);
     return order;
+  }
+
+  // Barre finte dalle chiusure: apertura = chiusura precedente, massimo e minimo un po' oltre, volume costante.
+  async getDailyBars(symbols: string[], days: number): Promise<Record<string, Bar[]>> {
+    const byDate = await this.getDailyClosesByDate(symbols, days);
+    const out: Record<string, Bar[]> = {};
+    for (const [sym, cs] of Object.entries(byDate)) {
+      out[sym] = cs.map((c, i) => {
+        const open = i ? cs[i - 1]!.close : c.close;
+        const span = Math.abs(c.close - open) + c.close * 0.004;
+        return { date: c.date, open, high: Math.max(open, c.close) + span * 0.5, low: Math.min(open, c.close) - span * 0.5, close: c.close, volume: 1_000_000 };
+      });
+    }
+    return out;
+  }
+
+  // Il finto tratta le coppie di cui ha un prezzo, più qualche altcoin per provare la selezione.
+  async getCryptoPairs(): Promise<string[]> {
+    const s = this.load();
+    return [...new Set([...Object.keys(s.prices).filter(isCrypto), "BTC/USD", "ETH/USD", "SOL/USD", "DOGE/USD", "LINK/USD", "AVAX/USD", "LTC/USD", "UNI/USD", "AAVE/USD", "DOT/USD", "XRP/USD", "SHIB/USD"])].sort();
   }
 
   async getDailyClosesByDate(symbols: string[], days: number): Promise<Record<string, { date: string; close: number }[]>> {

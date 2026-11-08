@@ -1,6 +1,6 @@
 import { CRYPTO_STOP_LIMIT_GAP, HTTP_TIMEOUT_MS, MARKET_DATA_URL, PAPER_TRADING_URL, isCrypto } from "../config.ts";
 import { assertPaperUrl } from "../guard.ts";
-import type { Account, Broker, MarketClock, Order, OrderRequest, Position, StopOrderRequest } from "./types.ts";
+import type { Account, Bar, Broker, MarketClock, Order, OrderRequest, Position, StopOrderRequest } from "./types.ts";
 import { BrokerError, DuplicateOrderError } from "./types.ts";
 
 const num = (v: unknown) => (v === null || v === undefined || v === "" ? 0 : Number(v));
@@ -159,7 +159,20 @@ export class AlpacaBroker implements Broker {
   }
 
   async getDailyClosesByDate(symbols: string[], days: number): Promise<Record<string, { date: string; close: number }[]>> {
-    const out: Record<string, { date: string; close: number }[]> = {};
+    const bars = await this.getDailyBars(symbols, days);
+    return Object.fromEntries(Object.entries(bars).map(([sym, bs]) => [sym, bs.map((b) => ({ date: b.date, close: b.close }))]));
+  }
+
+  async getCryptoPairs(): Promise<string[]> {
+    const data = await this.request(PAPER_TRADING_URL, "/v2/assets?asset_class=crypto&status=active");
+    return (Array.isArray(data) ? data : [])
+      .filter((a: any) => a.tradable && typeof a.symbol === "string" && a.symbol.endsWith("/USD"))
+      .map((a: any) => String(a.symbol))
+      .sort();
+  }
+
+  async getDailyBars(symbols: string[], days: number): Promise<Record<string, Bar[]>> {
+    const out: Record<string, Bar[]> = {};
     if (symbols.length === 0) return out;
     const start = new Date(Date.now() - days * 1.6 * 86_400_000).toISOString().slice(0, 10);
     const todayNy = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date());
@@ -169,7 +182,7 @@ export class AlpacaBroker implements Broker {
       for (let page = 0; page < 20; page++) {
         const data = await this.request(MARKET_DATA_URL, `${path}${token ? `&page_token=${encodeURIComponent(token)}` : ""}`);
         // Solo giornate chiuse: la barra di oggi, ancora in corso, è un prezzo provvisorio.
-        for (const [sym, bars] of Object.entries<any[]>(data?.bars ?? {})) (out[sym] ??= []).push(...bars.filter((b) => String(b.t).slice(0, 10) < today).map((b) => ({ date: String(b.t).slice(0, 10), close: Number(b.c) })));
+        for (const [sym, bars] of Object.entries<any[]>(data?.bars ?? {})) (out[sym] ??= []).push(...bars.filter((b) => String(b.t).slice(0, 10) < today).map((b) => ({ date: String(b.t).slice(0, 10), open: Number(b.o), high: Number(b.h), low: Number(b.l), close: Number(b.c), volume: Number(b.v ?? 0) })));
         token = data?.next_page_token ?? "";
         if (!token) break;
       }

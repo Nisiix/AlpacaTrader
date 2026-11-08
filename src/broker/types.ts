@@ -69,6 +69,19 @@ export interface Broker {
   getDailyCloses(symbols: string[], days: number): Promise<Record<string, number[]>>;
   // Le stesse chiusure con la data (YYYY-MM-DD): serve al backtest per allineare titoli e crypto, che non hanno gli stessi giorni.
   getDailyClosesByDate(symbols: string[], days: number): Promise<Record<string, { date: string; close: number }[]>>;
+  // Barre giornaliere complete (apertura, massimo, minimo, chiusura, volume) di sedute finite: per i grafici a candele.
+  getDailyBars(symbols: string[], days: number): Promise<Record<string, Bar[]>>;
+  // Coppie crypto negoziabili su Alpaca (es. "SOL/USD"); i broker senza crypto rispondono con la lista vuota.
+  getCryptoPairs(): Promise<string[]>;
+}
+
+export interface Bar {
+  date: string; // YYYY-MM-DD
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
 }
 
 export class BrokerError extends Error {
