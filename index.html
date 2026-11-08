@@ -308,6 +308,10 @@
             <details style="margin-top:10px"><summary class="why" style="cursor:pointer">Tutti i voti con il motivo</summary><div id="votes" style="margin-top:8px"></div></details>
           </section>
           <section class="card">
+            <h2>Esplorazione <small>gli agenti in pausa cercano opportunità fuori dal loro titolo; chi trova torna alla scrivania</small></h2>
+            <div id="esplorazione"></div>
+          </section>
+          <section class="card">
             <h2>Sala caffè <small>chi non ha niente da fare si scambia dati e lezioni; chi ha un trade da aprire torna alla scrivania</small></h2>
             <div id="caffe"></div>
           </section>
@@ -388,6 +392,7 @@
         <li><b>Contesto</b> legge il clima; non decide da solo: se <b>Kronos</b> anticipa un rialzo il settore debole non ferma l'ingresso, se anticipa un ribasso si aspetta.</li>
         <li><b>Custodi</b>: un investitore per ogni titolo seguito (in trend o con Kronos al rialzo), senza numero fisso; leggono Kronos, grafico, notizie (Google News e X) e contesto, e ricordano i trade passati su quel titolo. </li>
         <li><b>Capo ufficio</b>: rivede i trade chiusi di ogni agente e della squadra dei custodi (un custode da solo arriva di rado a 3 trade), loda chi vince e richiama chi perde, imponendogli una soglia minima di Kronos e voti più deboli finché i risultati non tornano buoni. Non giudica i trade chiusi dalla vecchia uscita in giornata, che la regola oggi non permette più.</li>
+        <li><b>Esplorazione</b>: chi è in pausa non pensa solo al suo titolo. Ogni mezz'ora gli agenti in sala caffè passano in rassegna un pezzo del radar (circa 45 azioni ed ETF liquidi fuori dall'universo, per settore) con i criteri del motore: sopra la media a 200, momentum a 12 mesi positivo, grafico in ordine e Kronos al rialzo oltre la soglia, mai una proiezione fuori misura. Chi trova un'opportunità torna alla scrivania: il titolo entra nell'universo per 3 giorni (prezzi, contesto, custode, gabbia e uscite lo trattano come gli altri) e lo scopritore lo vota a ogni giro finché regge. Al massimo 6 scoperte al giorno.</li>
         <li><b>Sala caffè</b>: gli agenti senza niente da fare si scambiano quello che sanno (dossier, candele, Kronos) e le lezioni di squadra dai trade chiusi, per tipo d'ingresso, settore e forza di Kronos (almeno 3 trade). Un voto d'acquisto simile a ciò che alla squadra è andato male perde forza (fino a ×0,7); simile a ciò che ha reso ne guadagna un poco (fino a ×1,15). Kronos e le regole restano i padroni.</li>
         <li><b>Intraday</b>: candele a 5 min / 15 min / 4 ore scelte dalla volatilità; obiettivo e stop dall'ATR; chiusura entro la giornata.</li>
       </ul>
@@ -782,6 +787,11 @@ function paintScene(st) {
       u.el.innerHTML = `<b>${esc(x.simbolo)}</b> <span>${esc(x.candela)}</span>`;
     }
   }
+  // Chi lavora su un titolo trovato con l'esplorazione mostra quel titolo sullo schermo.
+  for (const op of st.caffe?.operativi || []) {
+    const m = /(?:opera su|ha trovato) (\S+)/.exec(op.perche || ''); const d = desks.get(op.chiave);
+    if (m && d) { const sym = m[1]; drawScreen(d.group.userData.scr, sym, `scoperto in sala caffè · ${px(st.prezzi?.[sym])}`, null, histOf(sym).map((b) => b.close), '#22c55e'); }
+  }
   const cd = desks.get('capo');
   if (cd) {
     cd.info = { kind: 'capo' }; const u = cd.group.userData; const cp = st.capo; const rich = (cp?.valutazioni || []).filter((v) => v.giudizio === 'richiamato');
@@ -899,6 +909,7 @@ function sceneEvent(e) {
   if (e.tipo === 'segnale') { const d = deskFor(e); if (d) { d.group.userData.emp.userData.raise = 1; bubble(d, e.lato === 'buy' ? 'compra!' : 'vendi!', e.lato === 'buy' ? '#15803d' : '#b91c1c'); } }
   if (e.tipo === 'ordine' && e.esito === 'inviato') { for (const d of desks.values()) if (d.info?.c?.simbolo === e.simbolo || d.info?.x?.simbolo === e.simbolo) { d.group.userData.emp.userData.stand = 1; const s = d.group.userData.scr; s.userData.flash = 1; s.userData.flashColor = e.lato === 'buy' ? '#14532d' : '#7f1d1d'; bubble(d, `${e.lato === 'buy' ? 'COMPRATO' : 'VENDUTO'} ${e.simbolo}`, e.lato === 'buy' ? '#15803d' : '#b91c1c'); } }
   if (e.tipo === 'rifiuto') { const d = deskFor(e); if (d) bubble(d, 'fermato dalle regole', '#a16207'); }
+  if (e.tipo === 'esplorazione') for (const n of e.nuove || []) { const d = deskFor({ agente: n.agente.startsWith('custode ') ? n.agente : n.agente === 'intraday' ? undefined : n.agente, simbolo: n.simbolo }); if (d) { d.group.userData.emp.userData.stand = 1; bubble(d, `ho trovato ${n.simbolo}!`, '#15803d', 4000); } }
   if (e.tipo === 'capo') {
     const cd = desks.get('capo'); if (cd) { cd.group.userData.emp.userData.stand = 1; bubble(cd, (e.richiamati || []).length ? `Richiamo a ${e.richiamati.map((r) => r.agente).join(', ')}!` : 'Bravi tutti!', (e.richiamati || []).length ? '#b91c1c' : '#15803d'); }
     for (const r of e.richiamati || []) { const d = desks.get(`a:${r.agente}`) || (r.agente.startsWith('custode ') ? desks.get(`c:${r.agente.slice(8)}`) : null); if (d) { d.group.userData.emp.userData.bow = 1; bubble(d, 'ricevuto, capo', '#334155'); } }
@@ -1176,7 +1187,7 @@ function paint(st) {
   sayState();
   if (!status) { $('#when').textContent = lastTick ? `ultimo giro iniziato ${hhmm(lastTick.t)}` : 'nessuno stato'; return; }
   $('#when').textContent = `ultimo giro ${hhmm(status.aggiornato)} (${ago(status.aggiornato)})`;
-  paintMoney(status); paintPositions(status); paintPnl(status); paintDecisions(status); paintScores(status); paintAgents(status); paintScene(status); paintCustodi(status); paintChips(status); paintIntraday(status); paintVotes(status); paintSimulazioni(status); paintCapo(status); paintCaffe(status);
+  paintMoney(status); paintPositions(status); paintPnl(status); paintDecisions(status); paintScores(status); paintAgents(status); paintScene(status); paintCustodi(status); paintChips(status); paintIntraday(status); paintVotes(status); paintSimulazioni(status); paintCapo(status); paintCaffe(status); paintEsplorazione(status);
 }
 async function loadStatus() {
   try { paint(await (await fetch('/api/status')).json()); } catch (e) { $('#say').textContent = 'La dashboard non riesce a leggere lo stato.'; $('#fix').hidden = false; $('#fix').textContent = e.message; }
@@ -1516,6 +1527,17 @@ function paintCaffe(st) {
     ${lez.length ? lez.map((l) => `<div class="vote"><span class="pill ${l.effetto === 'prudenza' ? 'down' : 'up'}">${esc(l.effetto)}</span> <span class="why">${esc(l.testo)}</span></div>`).join('') : '<p class="empty">Ancora nessuna lezione: servono almeno 3 trade chiusi simili (per ingresso, settore o forza di Kronos).</p>'}
     ${(c.applicati || []).length ? `<div class="why" style="margin:12px 0 4px">Applicate in questo giro</div>${c.applicati.map((n) => `<div class="why">• ${esc(n.replace(/^sala caffè: /, ''))}</div>`).join('')}` : ''}`;
 }
+function paintEsplorazione(st) {
+  const e = st.esplorazione;
+  if (!e) { $('#esplorazione').innerHTML = '<p class="empty">Nessun dato: l\u2019esplorazione parte con il prossimo giro.</p>'; return; }
+  const row = (x) => `<div class="vote"><b>${esc(x.simbolo)}</b> <span class="pill">${esc(x.settore)}</span> <span class="pill ${x.stato === 'attiva' ? 'up' : x.stato === 'comprata' ? 'agent' : ''}">${esc(x.stato)}</span> <span class="why">trovato da ${esc(keyName(x.scopritore))} alle ${hhmm(x.trovata)} · Kronos ${pct(x.kronos)}${x.stato === 'attiva' ? ` · nell'universo fino al ${esc(x.validaFino)}` : ''}</span><br><span class="why">${esc(x.motivo)}</span>${x.stato === 'attiva' ? `<br><button type="button" class="btn ghost" data-sym="${esc(x.simbolo)}" style="margin-top:6px; padding:3px 10px; font-size:13px">Apri il grafico</button>` : ''}</div>`;
+  $('#esplorazione').innerHTML = `
+    <p class="why">${e.ultimoGiro ? `Ultimo giro alle ${hhmm(e.ultimoGiro)}` : 'Nessun giro ancora'} · da esaminare oggi: ${e.daEsaminareOggi} titoli del radar. Un giro ogni mezz'ora, solo se qualcuno è in pausa.</p>
+    ${e.esito ? `<p class="why" style="margin-top:6px">${esc(e.esito)}</p>` : ''}
+    ${(e.attive || []).length ? `<div class="why" style="margin:10px 0 4px">Opportunità al lavoro</div>${e.attive.map(row).join('')}` : '<p class="empty" style="margin-top:8px">Nessuna opportunità aperta.</p>'}
+    ${(e.recenti || []).length ? `<details style="margin-top:8px"><summary class="why" style="cursor:pointer">Chiuse di recente (${e.recenti.length})</summary>${e.recenti.map(row).join('')}</details>` : ''}`;
+  for (const b of $('#esplorazione').querySelectorAll('button[data-sym]')) b.addEventListener('click', () => { selectSymbol(b.dataset.sym); location.hash = 'titoli'; });
+}
 function paintVotes(st) {
   const sig = st.segnali || [];
   $('#votes').innerHTML = sig.length ? sig.map((s) => `<div class="vote"><span class="pill agent">${agentName(s.agente)}</span> <span class="${s.lato === 'buy' ? 'up' : 'down'}"><b>${s.lato === 'buy' ? 'compra' : 'vendi'} ${esc(s.simbolo)}</b></span> forza ${s.forza.toFixed(2).replace('.', ',')}${s.vincolante ? ' <span class="pill warn">regola</span>' : ''}${s.intraday ? ' <span class="pill">intraday</span>' : ''}<br><span class="why">${esc(s.perche)}</span></div>`).join('') : '<p class="empty">Nessun voto nell\u2019ultimo giro.</p>';
@@ -1600,7 +1622,7 @@ async function currentSaved() {
 
 // ---------- cronologia ----------
 const evBox = $('#events');
-const IMPORTANT = new Set(['ordine', 'trade', 'allarme', 'rifiuto', 'attesa', 'stop', 'contesto', 'nota']);
+const IMPORTANT = new Set(['ordine', 'trade', 'allarme', 'rifiuto', 'attesa', 'stop', 'contesto', 'nota', 'esplorazione']);
 let filter = 'important';
 try { filter = localStorage.getItem('agenti.filtro') || 'important'; } catch {}
 const allEvents = [];
@@ -1617,6 +1639,7 @@ function describe(e) {
     case 'allocazione': return `Proposte: ${(e.proposte || []).map((p) => `${side(p.side)} ${qty(p.qty)} ${esc(p.symbol)}`).join(', ') || 'nessuna'}`;
     case 'ordine': return `<span class="pill ${e.lato === 'buy' ? 'up' : 'down'}">${e.lato === 'buy' ? 'Comprato' : 'Venduto'}</span> <b>${qty(e.quantita)} ${esc(e.simbolo)}</b> — ${esc(e.esito)}${e.stato ? ` (${esc(e.stato)})` : ''}${e.errore ? ` <span class="down">${esc(cleanErr(e.errore))}</span>` : ''}`;
     case 'caffe': return `<span class="pill">Sala caffè</span> ${(e.entrati || []).length ? `in pausa: ${e.entrati.map((k) => esc(keyName(k))).join(', ')}` : ''}${(e.entrati || []).length && (e.usciti || []).length ? ' · ' : ''}${(e.usciti || []).length ? `tornano alla scrivania: ${e.usciti.map((u) => `${esc(keyName(u.chiave))} (${esc(u.perche)})`).join(', ')}` : ''}`;
+    case 'esplorazione': return `<span class="pill agent">Esplorazione</span> ${(e.nuove || []).length ? `trovati: ${e.nuove.map((n) => `<b>${esc(n.simbolo)}</b> da ${esc(agentName(n.agente))} (Kronos ${pct(n.kronos)})`).join(', ')}` : 'nessuna opportunità'} · esaminati ${(e.esaminati || []).map(esc).join(', ')}`;
     case 'attesa': return `<span class="pill warn">In attesa</span> <b>${esc(e.simbolo)}</b>: ${esc(e.motivo)}`;
     case 'rifiuto': if (e.origine === 'contesto' && !e.quantita) return describe({ ...e, tipo: 'attesa' }); return `<span class="pill">Fermato dalle regole</span> ${side(e.lato)} ${qty(e.quantita)} <b>${esc(e.simbolo)}</b>: ${esc(e.motivo)}`;
     case 'stop': return `Stop di protezione ${e.azione === 'piazzato' ? 'messo' : 'tolto'}: ${esc(cleanErr(e.dettaglio))}`;
