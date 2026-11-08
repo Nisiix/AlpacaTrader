@@ -150,7 +150,9 @@ export function allocate(view: AgentView, reports: Record<string, AgentReport>, 
     // Titoli azionari a borsa chiusa (o fuori finestra, salvo intraday): non si propongono e non occupano un posto,
     // così i posti liberi vanno alle crypto, che trattano sempre.
     if (!isCrypto(sc.simbolo) && (view.mercatoAperto === false || (view.finestraIngressi === false && !sc.intraday))) continue;
-    const wait = view.contesto?.attendi[sc.simbolo];
+    // L'attesa del contesto (settore debole, Kronos a 5 sedute al ribasso) riguarda gli ingressi di più giorni: un voto
+    // solo intraday segue Kronos sulle candele brevi, le sue medie brevi e i suoi stop, e non aspetta il contesto.
+    const wait = sc.intraday ? undefined : view.contesto?.attendi[sc.simbolo];
     if (wait && !held.has(sc.simbolo)) {
       inAttesa.push({ simbolo: sc.simbolo, motivo: wait });
       continue;
@@ -159,7 +161,7 @@ export function allocate(view: AgentView, reports: Record<string, AgentReport>, 
     if (!price || price <= 0) continue;
     const p = held.get(sc.simbolo);
     if (!p && slots <= 0) continue;
-    let w = maxWeightFor(view.closes[sc.simbolo]).max * (kronosSu(sc.simbolo) ? rischioSenzaContesto : rischio) * (AGENTS.scaleByScore ? Math.min(1, sc.punteggio) : 1);
+    let w = maxWeightFor(view.closes[sc.simbolo]).max * (kronosSu(sc.simbolo) || sc.intraday ? rischioSenzaContesto : rischio) * (AGENTS.scaleByScore ? Math.min(1, sc.punteggio) : 1);
     if (sc.pesoMassimo !== undefined) w = Math.min(w, sc.pesoMassimo);
     // Sotto la media a 200 (ingresso contro tendenza) mai più di metà del peso massimo, chiunque abbia votato.
     if (!sc.intraday && sotto200(view.closes[sc.simbolo], price)) w = Math.min(w, pesoControTendenza());
