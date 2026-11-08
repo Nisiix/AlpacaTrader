@@ -176,6 +176,8 @@ export const AGENTS = {
     // grafici della dashboard e della pagina pubblica 0,7 s (solo indicativi: non tolgono tempo agli agenti).
     campioni: { min: 4, max: 128, giorno: { msPerSerie: 6_000, iniziali: 24 }, intraday: { msPerSerie: 3_000, iniziali: 16 }, esplorazione: { msPerSerie: 1_500, iniziali: 8 }, grafico: { msPerSerie: 700, iniziali: 4 } },
     cervello: { minCampione: 100, prudenza: 50, kronosMinimo: 0.5, maxAperte: 6000, bravuraAttesa: 0.03, affidabilita: { kronos: 1, chronos2: 0.13, timesfm: 0.05 } as Record<string, number>, affidabilitaIgnota: 0.05 } },
+  // Biblioteca degli agenti (src/agents/biblioteca.ts): regola del 6% di Elder sulle perdite realizzate del mese.
+  biblioteca: { meseMaxPerdita: 0.06 },
   // Riepilogo su Telegram una volta al giorno, alla prima passata dopo quest'ora di Roma.
   summaryAfter: "22:05",
   // Presa di profitto parziale (agente "profitto"): a +3% vende metà e lascia correre il resto col trend. Scelta col
@@ -268,6 +270,8 @@ export const AGENTS = {
     // previsioni finte (un campione piccolo conta poco). Fattore = (quota − 50%) / (prior − 50%), tra 0 e `max`: una candela
     // su cui Kronos indovina come una moneta non fa entrare, una su cui indovina più del previsto pesa di più.
     affidabilita: { prior: 0.55, forza: 100, max: 1.5 },
+    // Dopo `perdite` operazioni intraday chiuse in perdita di fila oggi, la taglia degli ingressi nuovi × fattore.
+    serieNegativa: { perdite: 3, fattore: 0.5 },
     // Scaduto l'orizzonte scelto (× questo fattore) senza obiettivo e senza rialzo ancora probabile, si chiude.
     scadenzaOrizzonte: 1.5,
     // Le candele su cui si cerca l'ingresso: con Kronos si sceglie quella con la probabilità di successo più alta.

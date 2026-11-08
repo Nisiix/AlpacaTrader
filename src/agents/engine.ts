@@ -32,6 +32,7 @@ import { allocate, openedToday, type Score } from "./allocator.ts";
 import { applyGuidance, review, type CapoReport } from "./capo.ts";
 import { simboliIntraday } from "./posizioni.ts";
 import type { Cervello, RigaCervello } from "./cervello.ts";
+import { BIBLIOTECA, perditaDelMese, type Principio } from "./biblioteca.ts";
 import { refreshEarnings, type EarningsFetcher } from "../earnings.ts";
 import { addEarnings } from "../events.ts";
 import type { EventBus } from "./bus.ts";
@@ -113,6 +114,8 @@ export interface AgentsStatus {
   // Il cervello delle previsioni: per tipo (giorno, candela intraday) e modello, quante previsioni valutate, quota di
   // direzioni giuste, resa media seguendole e peso di adesso nella previsione combinata.
   cervello?: { righe: RigaCervello[]; inAttesa: number };
+  // La biblioteca degli agenti: i principi dei libri di trading tradotti in regole, e la perdita del mese (regola del 6%).
+  biblioteca?: { principi: Principio[]; mese: { pnl: number; pct: number; soglia: number } };
 }
 
 // Il registro degli errori nel motore tiene solo le regole di sicurezza: niente riacquisto dopo uno stop e niente nuovo
@@ -441,6 +444,15 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
     const jr = readJournal(deps.stateDir, startedAt);
     const journal = jr.file;
     if (jr.problem) await alarm("Diario dei trade illeggibile", jr.problem);
+    // Regola del 6% (Elder, dalla biblioteca degli agenti): perdite realizzate del mese oltre la soglia → niente nuovi acquisti.
+    const mese = perditaDelMese(journal, today, snap.account.equity);
+    if (!buyBlock && mese.oltre) {
+      buyBlock = `perdite realizzate del mese ${(mese.pct * 100).toFixed(2)}% oltre il ${(AGENTS.biblioteca.meseMaxPerdita * 100).toFixed(0)}% del patrimonio (regola del 6% di Elder): niente nuovi acquisti fino al mese prossimo`;
+      if (cache.giornataAvvisata !== `${today.slice(0, 7)}-mese`) {
+        cache.giornataAvvisata = `${today.slice(0, 7)}-mese`;
+        await alarm("Regola del 6% del mese", buyBlock);
+      }
+    }
 
     // 4. Il massimo visto da ogni trade aperto (per lo stop che segue il profitto), poi le proiezioni, poi gli agenti.
     for (const t of journal.trade) {
@@ -642,6 +654,7 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
       versione: 1,
       aggiornato: deps.now().toISOString(),
       giro,
+      biblioteca: { principi: BIBLIOTECA, mese: { pnl: mese.pnl, pct: mese.pct, soglia: AGENTS.biblioteca.meseMaxPerdita } },
       mercatoAperto: snap.clock.isOpen,
       finestraIngressi: entry && snap.clock.isOpen,
       conto: { patrimonio: account.equity, contanti: account.cash, pnlGiorno: account.equity - account.lastEquity },

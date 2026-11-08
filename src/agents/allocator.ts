@@ -206,6 +206,11 @@ export function allocate(view: AgentView, reports: Record<string, AgentReport>, 
     }
     if (!price || price <= 0) continue;
     if (!p && slots <= 0) continue;
+    // Livermore: non si media mai al ribasso. Un'aggiunta a una posizione in perdita non si fa.
+    if (p && p.currentPrice > 0 && p.currentPrice < p.avgEntryPrice) {
+      inAttesa.push({ simbolo: sc.simbolo, motivo: `posizione in perdita (${(((p.currentPrice / p.avgEntryPrice) - 1) * 100).toFixed(2)}%): non si aggiunge, non si media al ribasso (Livermore)` });
+      continue;
+    }
     // Evidenza combinata: il dossier del custode mette insieme Kronos (45%), grafico (25%), notizie e post (15%) e contesto
     // con Fear & Greed e funding (15%). Per un ingresso nuovo di più giorni deve arrivare almeno a evidenza.min (sopra la
     // media a 200) o evidenza.minContro (sotto la 200): chiunque abbia votato, le altre fonti possono fermare l'ingresso.
