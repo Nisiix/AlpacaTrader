@@ -20,13 +20,14 @@ const ENV_NAMES: Record<keyof Secrets, string> = {
   alpacaSecretKey: "ALPACA_SECRET_KEY",
   telegramBotToken: "TELEGRAM_BOT_TOKEN",
   telegramChatId: "TELEGRAM_CHAT_ID",
+  xBearerToken: "X_BEARER_TOKEN",
 };
 
 export async function loadSecrets(required: boolean): Promise<Secrets | null> {
   const p = join(ROOT, "secrets.ts");
   const fromFile: Partial<Secrets> = existsSync(p) ? ((await import(p)).secrets as Secrets) : {};
   const merged = {} as Secrets;
-  for (const [k, env] of Object.entries(ENV_NAMES) as [keyof Secrets, string][]) merged[k] = fromFile[k] || process.env[env] || "";
+  for (const [k, env] of Object.entries(ENV_NAMES) as [keyof Secrets, string][]) (merged as unknown as Record<string, string>)[k] = fromFile[k] || process.env[env] || "";
   if (!existsSync(p) && !merged.alpacaKeyId) {
     if (required) throw new Error("secrets.ts non esiste e mancano ALPACA_KEY_ID/ALPACA_SECRET_KEY: copia secrets.example.ts in secrets.ts e riempi i campi");
     return null;

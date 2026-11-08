@@ -1,4 +1,5 @@
 import { mkdirSync, renameSync } from "node:fs";
+import { applyAgentSettings } from "./agent-settings.ts";
 import { hostname } from "node:os";
 import { join } from "node:path";
 import { BrainError, type Brain, type Decision } from "./brain/types.ts";
@@ -98,6 +99,8 @@ function resolveRun(now: Date, opts: WakeOptions): { runId: string; label: strin
 }
 
 export async function runWake(deps: WakeDeps, opts: WakeOptions = {}): Promise<WakeResult> {
+  // Le impostazioni cambiate dalla dashboard valgono anche per le sveglie classiche.
+  applyAgentSettings(deps.stateDir);
   const startedAt = deps.now();
   const r = resolveRun(startedAt, opts);
   if ("error" in r) return { status: r.error, message: r.message };

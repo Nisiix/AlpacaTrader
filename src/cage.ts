@@ -153,7 +153,8 @@ export function applyCage(i: CageInput): CageResult {
     } else {
       if (i.buyBlock) { reject(i.buyBlock); continue; }
       if (i.slotKind !== ENTRY_SLOT && !isCrypto(p.symbol) && !p.intraday) { reject("gli acquisti si fanno solo alla sveglia di apertura, sulle chiusure di ieri"); continue; }
-      const ev = eventBlockFor(p.symbol, i.today, i.events ?? EVENTS);
+      // L'intraday si chiude in giornata con obiettivo e stop propri: non segue il filtro macro né il trend giornaliero.
+      const ev = p.intraday ? null : eventBlockFor(p.symbol, i.today, i.events ?? EVENTS);
       if (ev) { reject(ev); continue; }
       const price = i.prices[p.symbol];
       if (!price || price <= 0) { reject("prezzo non disponibile"); continue; }
@@ -168,10 +169,17 @@ export function applyCage(i: CageInput): CageResult {
       }
       const closes = i.closes[p.symbol];
       const t = trendOf(closes, LIMITS.trendSmaDays, LIMITS.longSmaDays);
-      if (t === null) { reject(`storico insufficiente per il metodo (servono ${LIMITS.longSmaDays} giorni di chiusure)`); continue; }
-      if (t.close <= t.sma) { reject(`chiusura ${t.close.toFixed(2)} sotto la media a ${LIMITS.trendSmaDays} giorni (${t.sma.toFixed(2)}): il metodo compra solo in trend`); continue; }
-      if (t.close <= t.long) { reject(`chiusura ${t.close.toFixed(2)} sotto la media a ${LIMITS.longSmaDays} giorni (${t.long.toFixed(2)}): trend di lungo periodo negativo`); continue; }
-      if (price <= t.sma) { reject(`prezzo ${price.toFixed(2)} sceso sotto la media a ${LIMITS.trendSmaDays} giorni (${t.sma.toFixed(2)}) in giornata`); continue; }
+      if (!p.intraday) {
+        if (t === null) { reject(`storico insufficiente per il metodo (servono ${LIMITS.longSmaDays} giorni di chiusure)`); continue; }
+        // Kronos può anticipare: con una proiezione netta si entra anche sotto la media a 50 (un solo pattern contrario),
+        // mai sotto la 200 (trend di lungo periodo negativo = secondo pattern contrario: prudenza).
+        const kronosForte = p.kronos !== undefined && p.kronos >= AGENTS.kronos.anticipaSoglia;
+        if (t.close <= t.long) { reject(`chiusura ${t.close.toFixed(2)} sotto la media a ${LIMITS.longSmaDays} giorni (${t.long.toFixed(2)}): trend di lungo periodo negativo`); continue; }
+        if (!kronosForte) {
+          if (t.close <= t.sma) { reject(`chiusura ${t.close.toFixed(2)} sotto la media a ${LIMITS.trendSmaDays} giorni (${t.sma.toFixed(2)}): il metodo compra solo in trend, salvo un rialzo netto anticipato da Kronos`); continue; }
+          if (price <= t.sma) { reject(`prezzo ${price.toFixed(2)} sceso sotto la media a ${LIMITS.trendSmaDays} giorni (${t.sma.toFixed(2)}) in giornata`); continue; }
+        }
+      }
       const w = maxWeightFor(closes);
       if (share > w.max) { reject(`con volatilità giornaliera ${pct(w.vol)}${w.estimated ? " (stimata)" : ""} il massimo è ${pct(w.max)} del conto, qui si arriverebbe al ${pct(share)}`); continue; }
       if (cost > cash) { reject("niente leva: contanti insufficienti"); continue; }

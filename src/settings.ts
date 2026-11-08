@@ -10,6 +10,7 @@ export interface MaskedSettings {
   alpacaSecretKey: string;
   telegramBotToken: string;
   telegramChatId: string;
+  xBearerToken: string;
   file: boolean; // secrets.ts esiste
 }
 
@@ -20,12 +21,12 @@ export function readSecretsFile(root: string): Partial<Secrets> {
   if (!existsSync(p)) return {};
   const src = readFileSync(p, "utf8");
   const get = (k: keyof Secrets) => src.match(new RegExp(`${k}:\\s*"([^"]*)"`))?.[1] ?? "";
-  return { alpacaKeyId: get("alpacaKeyId"), alpacaSecretKey: get("alpacaSecretKey"), telegramBotToken: get("telegramBotToken"), telegramChatId: get("telegramChatId") };
+  return { alpacaKeyId: get("alpacaKeyId"), alpacaSecretKey: get("alpacaSecretKey"), telegramBotToken: get("telegramBotToken"), telegramChatId: get("telegramChatId"), xBearerToken: get("xBearerToken") };
 }
 
 export function maskedSettings(root: string): MaskedSettings {
   const s = readSecretsFile(root);
-  return { alpacaKeyId: mask(s.alpacaKeyId ?? ""), alpacaSecretKey: mask(s.alpacaSecretKey ?? ""), telegramBotToken: mask(s.telegramBotToken ?? ""), telegramChatId: s.telegramChatId ?? "", file: existsSync(join(root, "secrets.ts")) };
+  return { alpacaKeyId: mask(s.alpacaKeyId ?? ""), alpacaSecretKey: mask(s.alpacaSecretKey ?? ""), telegramBotToken: mask(s.telegramBotToken ?? ""), telegramChatId: s.telegramChatId ?? "", xBearerToken: mask(s.xBearerToken ?? ""), file: existsSync(join(root, "secrets.ts")) };
 }
 
 // Scrive secrets.ts: i campi vuoti nella richiesta lasciano il valore già presente (così si può cambiare solo Telegram).
@@ -36,6 +37,7 @@ export function writeSecretsFile(root: string, incoming: Partial<Secrets>): { ok
     alpacaSecretKey: (incoming.alpacaSecretKey ?? "").trim() || cur.alpacaSecretKey || "",
     telegramBotToken: (incoming.telegramBotToken ?? "").trim() || cur.telegramBotToken || "",
     telegramChatId: (incoming.telegramChatId ?? "").trim() || cur.telegramChatId || "",
+    xBearerToken: incoming.xBearerToken === "-" ? "" : (incoming.xBearerToken ?? "").trim() || cur.xBearerToken || "",
   };
   if (next.alpacaKeyId && !/^PK[A-Z0-9]+$/i.test(next.alpacaKeyId)) return { ok: false, errore: "la key id di Alpaca deve essere una chiave PAPER (inizia con PK)" };
   if (next.telegramBotToken && !/^\d+:[A-Za-z0-9_-]+$/.test(next.telegramBotToken)) return { ok: false, errore: "il token Telegram ha la forma 123456789:AAAA…" };
@@ -50,6 +52,7 @@ export const secrets: Secrets = {
   alpacaSecretKey: "${esc(next.alpacaSecretKey)}",
   telegramBotToken: "${esc(next.telegramBotToken)}",
   telegramChatId: "${esc(next.telegramChatId)}",
+  xBearerToken: "${esc(next.xBearerToken ?? "")}",
 };
 `;
   writeFileSync(join(root, "secrets.ts"), body);

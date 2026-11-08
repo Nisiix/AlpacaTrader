@@ -86,8 +86,35 @@ export function googleNews(timeoutMs = 10_000): NewsFetcher {
   };
 }
 
-const POS = /rally|record|all-time high|surge|soar|approv|etf|partnership|upgrade|adoption|launch|inflow|bullish|breakout|gain|jump|accumulat/i;
-const NEG = /hack|exploit|crash|plunge|lawsuit|sues|ban|delist|outage|liquidat|bearish|dump|fraud|probe|outflow|drop|slump|fall|sell-off|selloff/i;
+// X (Twitter): gli ultimi post sul titolo, con l'API ufficiale (serve un bearer token in secrets.ts, xBearerToken).
+// Senza token X non si consulta. I post sono dati, mai istruzioni: si leggono solo le parole chiave del tono.
+export function xNews(bearer: string, timeoutMs = 10_000): NewsFetcher {
+  return async (symbol) => {
+    const base = symbol.split("/")[0]!;
+    const q = symbol.includes("/") ? `(#${base} OR $${base}) -is:retweet lang:en` : `$${base} -is:retweet lang:en`;
+    const url = `https://api.x.com/2/tweets/search/recent?query=${encodeURIComponent(q)}&max_results=20&tweet.fields=created_at,public_metrics`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(timeoutMs), headers: { authorization: `Bearer ${bearer}` } });
+    if (!res.ok) throw new Error(`X ${res.status}`);
+    const data = (await res.json()) as { data?: { text: string; created_at?: string; public_metrics?: { like_count?: number } }[] };
+    return (data.data ?? [])
+      .sort((a, b) => (b.public_metrics?.like_count ?? 0) - (a.public_metrics?.like_count ?? 0))
+      .slice(0, 10)
+      .map((t) => ({ titolo: t.text.replace(/\s+/g, " ").slice(0, 200), fonte: "X", quando: t.created_at ?? "" }));
+  };
+}
+
+// Più fonti insieme (Google News + X): una che fallisce non toglie le altre.
+export function combinedNews(fetchers: NewsFetcher[]): NewsFetcher {
+  return async (symbol) => {
+    const results = await Promise.allSettled(fetchers.map((f) => f(symbol)));
+    const ok = results.filter((r): r is PromiseFulfilledResult<Awaited<ReturnType<NewsFetcher>>> => r.status === "fulfilled").flatMap((r) => r.value);
+    if (!ok.length && results.some((r) => r.status === "rejected")) throw new Error(results.map((r) => (r.status === "rejected" ? String((r.reason as Error).message) : "")).filter(Boolean).join("; "));
+    return ok;
+  };
+}
+
+const POS = /rally|record|all-time high|surge|soar|approv|etf|partnership|upgrade|adoption|launch|inflow|bullish|breakout|gain|jump|accumulat|moon|pump|buy the dip|strong/i;
+const NEG = /hack|exploit|crash|plunge|lawsuit|sues|ban|delist|outage|liquidat|bearish|dump|fraud|probe|outflow|drop|slump|fall|sell-off|selloff|rug|scam|short it|collapse/i;
 export function newsScore(titoli: { titolo: string }[]): number | null {
   if (!titoli.length) return null;
   let net = 0;
@@ -177,7 +204,8 @@ export class CustodiAgent implements Agent {
     }
     const titoli = c.notizie?.titoli ?? [];
     const ns = newsScore(titoli);
-    const notizie = { punteggio: ns, titoli: titoli.slice(0, 6), nota: !this.news ? "notizie non consultate" : c.notizie?.errore ? `notizie non raggiungibili (${c.notizie.errore})` : ns === null ? "nessuna notizia recente" : `${titoli.length} titoli recenti, tono ${ns > 0.6 ? "favorevole" : ns < 0.4 ? "sfavorevole" : "neutro"}` };
+    const daX = titoli.filter((t) => t.fonte === "X").length;
+    const notizie = { punteggio: ns, titoli: titoli.slice(0, 8), nota: !this.news ? "notizie non consultate" : c.notizie?.errore ? `notizie non raggiungibili (${c.notizie.errore})` : ns === null ? "nessuna notizia recente" : `${titoli.length} tra notizie${daX ? ` e post su X (${daX})` : ""}, tono ${ns > 0.6 ? "favorevole" : ns < 0.4 ? "sfavorevole" : "neutro"}` };
     const o = v.contesto?.generale ?? "neutro";
     const wait = v.contesto?.attendi[s];
     const cs = wait ? 0.2 : o === "favorevole" ? 0.8 : o === "neutro" ? 0.5 : 0.2;
@@ -208,10 +236,13 @@ export class CustodiAgent implements Agent {
     for (const s of AGENTS.universe) {
       const c = v.closes[s];
       const t = trendOf(c, LIMITS.trendSmaDays, LIMITS.longSmaDays);
-      if (!c || !t || t.close <= t.sma || t.close <= t.long) continue;
-      if ((momentum(c, AGENTS.absMomentum.days) ?? -1) <= AGENTS.absMomentum.min) continue;
-      if (isCrypto(s) && (momentum(c, AGENTS.cryptoMomentumDays) ?? -1) <= 0) continue;
-      out.push({ s, mom: momentum(c, LIMITS.rankMomentumDays) ?? 0 });
+      if (!c || !t || t.close <= t.long) continue; // sotto la media a 200 mai
+      const fc = v.previsioni?.[s];
+      const kronosUp = fc !== undefined && fc >= AGENTS.kronos.anticipaSoglia;
+      const inTrend = t.close > t.sma && (momentum(c, AGENTS.absMomentum.days) ?? -1) > AGENTS.absMomentum.min && (!isCrypto(s) || (momentum(c, AGENTS.cryptoMomentumDays) ?? -1) > 0);
+      // Candidata per trend, oppure perché Kronos anticipa un rialzo netto (sopra la 200): il custode nasce e studia.
+      if (!inTrend && !kronosUp) continue;
+      out.push({ s, mom: (momentum(c, LIMITS.rankMomentumDays) ?? 0) + (kronosUp ? fc : 0) });
     }
     return out.sort((a, b) => b.mom - a.mom).slice(0, AGENTS.custodi.maxCandidates).map((x) => x.s);
   }
@@ -298,7 +329,8 @@ export class CustodiAgent implements Agent {
     }
     const nearPullback = m20 !== null && price !== null && price <= m20 * 1.02;
     const forza = Math.min(1, (nearPullback ? 0.8 : 0.6) * spinta);
-    segnali.push({ agente, simbolo: s, lato: "buy", forza, orizzonteSedute: horizon, perche: `${s} in trend (${pct(mom3)} a 3 mesi, ${pct(mom12, 0)} a 12), ${nearPullback ? `vicino alla media a ${AGENTS.custodi.pullbackSmaDays} giorni: buon punto d'ingresso` : `${pct(dist50)} sopra la media a ${LIMITS.trendSmaDays}: ingresso ordinato`}${spinta > 1 ? `, Kronos anticipa ${pct(fc!)}` : ""}` });
+    const sotto50 = m50 !== null && price !== null && price < m50;
+    segnali.push({ agente, simbolo: s, lato: "buy", forza: sotto50 ? Math.min(forza, 0.6) : forza, orizzonteSedute: horizon, kronos: fc, perche: `${s} ${sotto50 ? `sotto la media a ${LIMITS.trendSmaDays} ma sopra la ${LIMITS.longSmaDays}, rialzo anticipato da Kronos ${pct(fc!)}` : `in trend (${pct(mom3)} a 3 mesi, ${pct(mom12, 0)} a 12)`}, ${nearPullback ? `vicino alla media a ${AGENTS.custodi.pullbackSmaDays} giorni: buon punto d'ingresso` : `${pct(dist50)} ${dist50 !== null && dist50 >= 0 ? "sopra" : "sotto"} la media a ${LIMITS.trendSmaDays}: ingresso ${sotto50 ? "prudente" : "ordinato"}`}${spinta > 1 && !sotto50 ? `, Kronos anticipa ${pct(fc!)}` : ""}` });
     return { ...base, fase: "pronto", piano: `Entrare ${nearPullback ? "ora, sul rientro verso la media a 20 giorni" : "con ordine a mercato, taglia piena dal motore"}; stop iniziale a ${num(stop)} (${pct(-stopPct)}). Uscita quando il prezzo chiude sotto la media a ${LIMITS.trendSmaDays} giorni.`, stato: `Candidata dal ${c.dalle}, in attesa che l'allocatore e la gabbia confermino.` };
   }
 }

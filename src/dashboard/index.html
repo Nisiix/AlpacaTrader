@@ -277,10 +277,11 @@
         </form>
       </section>
       <section class="card">
-        <h2>Telegram <small>bot per ordini, allarmi e riepilogo serale</small></h2>
+        <h2>Telegram e X <small>bot per ordini, allarmi e riepilogo; X per il sentiment dei titoli</small></h2>
         <form id="f-telegram" class="form" autocomplete="off">
           <label>Token del bot <input name="telegramBotToken" type="password" placeholder="123456789:AAAA…" spellcheck="false"></label>
           <label>Chat id <input name="telegramChatId" type="text" placeholder="si trova con «Prova» dopo aver scritto /start al bot" spellcheck="false"></label>
+          <label>X (Twitter): bearer token, facoltativo <input name="xBearerToken" type="password" placeholder="da developer.x.com; scrivi - per toglierlo" spellcheck="false"></label>
           <p class="why" id="telegram-now"></p>
           <div class="row"><button type="button" class="btn ghost" id="prova-telegram">Prova</button><button type="submit" class="btn">Salva</button></div>
           <p class="why" id="telegram-msg"></p>
@@ -346,7 +347,7 @@
     <details class="scene" id="scene-box" open>
       <summary>Vista 3D <span class="hint">agenti, regole e titoli in movimento</span></summary>
       <div id="scene"></div>
-      <p class="legend">Blocchi = titoli (altezza = peso, colore = guadagno/perdita); sfere = agenti; fili = voti; anello = regole.</p>
+      <p class="legend">La sala operativa: ogni blocco è un titolo (altezza = peso in portafoglio, verde in guadagno, rosso in perdita, grigio fuori). Accanto a ogni titolo seguito c'è il suo <b>custode</b> (blu pronto a entrare, verde in posizione, rosso in uscita, grigio in attesa) e, se lavora, l'operatore <b>intraday</b> (arancione). Le sfere in orbita sono gli agenti generali: i fili sono i loro voti, l'anello la gabbia delle regole. Passa il mouse per leggere, clicca per aprire la scheda, trascina per ruotare.</p>
     </details>
   </div>
 </main>
@@ -402,6 +403,7 @@ function placeSymbols(list) {
     const col = i % perRow, row = Math.floor(i / perRow);
     const pos = new THREE.Vector3((col - (perRow - 1) / 2) * 2.2, 0, (row - 0.5) * 2.6);
     const mesh = new THREE.Mesh(new THREE.BoxGeometry(1.3, 1, 1.3), new THREE.MeshStandardMaterial({ color: 0x3a4657, roughness: 0.5, metalness: 0.1 }));
+    mesh.userData.sym = s;
     mesh.position.copy(pos); mesh.scale.y = 0.2; mesh.position.y = 0.1; scene.add(mesh);
     const el = document.createElement('div'); el.className = 'lbl'; el.textContent = s;
     const label = new CSS2DObject(el); label.position.set(pos.x, 0.6, pos.z); scene.add(label);
@@ -423,6 +425,57 @@ function placeAgents(names) {
   });
 }
 placeAgents(['trend', 'rientro', 'regime', 'orizzonte']);
+// I custodi in sala: una figura accanto al proprio titolo, colorata dalla fase; arancione l'operatore intraday.
+const FASE_COLOR = { pronto: 0x2a55c7, 'in posizione': 0x2ecc71, 'in uscita': 0xe74c3c, attende: 0x7c889b, osserva: 0x8fb0ff };
+const figures = new Map(); // simbolo -> { group, kind }
+function makeFigure(color) {
+  const g = new THREE.Group();
+  const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.6 });
+  const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.16, 0.45, 4, 10), mat); body.position.y = 0.5; g.add(body);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.15, 14, 12), new THREE.MeshStandardMaterial({ color: 0xf1d2b6, roughness: 0.8 })); head.position.y = 0.98; g.add(head);
+  g.userData.mat = mat; g.userData.bob = Math.random() * Math.PI * 2;
+  return g;
+}
+function placeFigures(st) {
+  const want = new Map();
+  for (const c of st.custodi || []) want.set(`c:${c.simbolo}`, { sym: c.simbolo, color: FASE_COLOR[c.fase] ?? 0x8fb0ff, side: -1, info: c });
+  for (const x of st.intraday || []) if (x.fase === 'in posizione' || x.fase === 'cerca ingresso') want.set(`i:${x.simbolo}`, { sym: x.simbolo, color: 0xf39c12, side: 1, info: x });
+  for (const [k, f] of figures) if (!want.has(k)) { scene.remove(f.group); figures.delete(k); }
+  for (const [k, w] of want) {
+    const s = symbols.get(w.sym); if (!s) continue;
+    let f = figures.get(k);
+    if (!f) { f = { group: makeFigure(w.color) }; scene.add(f.group); figures.set(k, f); }
+    f.group.position.set(s.pos.x + 0.95 * w.side, 0, s.pos.z + 0.75);
+    f.group.userData.mat.color.set(w.color);
+    f.group.userData.info = w.info; f.group.userData.sym = w.sym;
+  }
+}
+// Mouse sulla sala: passando sopra un titolo si legge tutto; cliccando si apre la sua scheda.
+const ray = new THREE.Raycaster(); const mouse = new THREE.Vector2();
+const hoverEl = document.createElement('div'); hoverEl.className = 'lbl'; hoverEl.style.display = 'none'; hoverEl.style.position = 'absolute'; hoverEl.style.maxWidth = '280px'; hoverEl.style.whiteSpace = 'normal'; hoverEl.style.fontSize = '12px'; host.appendChild(hoverEl);
+let hovered = null;
+function pickSymbol(ev) {
+  const r = renderer.domElement.getBoundingClientRect();
+  mouse.set(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1);
+  ray.setFromCamera(mouse, camera);
+  const hits = ray.intersectObjects([...symbols.values()].map((s) => s.mesh).concat([...figures.values()].map((f) => f.group)), true);
+  if (!hits.length) return null;
+  let o = hits[0].object; while (o && !o.userData.sym && o.parent) o = o.parent;
+  if (o?.userData?.sym) return o.userData.sym;
+  for (const [sym, s] of symbols) if (s.mesh === hits[0].object) return sym;
+  return null;
+}
+renderer.domElement.addEventListener('mousemove', (ev) => {
+  const sym = pickSymbol(ev); hovered = sym;
+  if (!sym) { hoverEl.style.display = 'none'; return; }
+  const st = status || {}; const p = (st.posizioni || []).find((x) => x.simbolo === sym); const c = (st.custodi || []).find((x) => x.simbolo === sym); const i = (st.intraday || []).find((x) => x.simbolo === sym);
+  hoverEl.innerHTML = `<b>${esc(sym)}</b> ${st.prezzi?.[sym] ? px(st.prezzi[sym]) : ''}${p ? `<br>in portafoglio: ${qty(p.quantita)} · <span class="${cls(p.variazione)}">${pct(p.variazione)}</span>` : '<br>non in portafoglio'}${c ? `<br>custode: ${FASI[c.fase] || c.fase}${c.dossier ? ` · ${Math.round(c.dossier.probabilita * 100)}% favorevole` : ''}<br><span style="opacity:.8">${esc(c.dossier?.prossimaAzione || c.piano).slice(0, 160)}</span>` : ''}${i ? `<br>intraday (${esc(i.candela)}): ${esc(i.fase)} — ${esc(i.motivo).slice(0, 120)}` : ''}<br><span style="opacity:.7">clic: apri la scheda</span>`;
+  const r = host.getBoundingClientRect();
+  hoverEl.style.left = `${Math.min(ev.clientX - r.left + 14, r.width - 300)}px`; hoverEl.style.top = `${ev.clientY - r.top + 14}px`; hoverEl.style.display = 'block';
+});
+renderer.domElement.addEventListener('mouseleave', () => { hoverEl.style.display = 'none'; hovered = null; });
+renderer.domElement.addEventListener('click', (ev) => { const sym = pickSymbol(ev); if (sym) { selectSymbol(sym); location.hash = 'titoli'; } });
+
 const beams = [];
 function beam(from, to, color, ttl = 2500) {
   const geo = new THREE.BufferGeometry().setFromPoints([from.clone(), to.clone().setY(0.8)]);
@@ -453,6 +506,8 @@ function animate() {
     s.label.position.y = s.mesh.scale.y + 0.5;
   }
   for (const a of agents.values()) { a.pulse *= 0.95; a.mesh.scale.setScalar(1 + a.pulse); }
+  for (const f of figures.values()) { f.group.userData.bob += 0.04; f.group.position.y = Math.abs(Math.sin(f.group.userData.bob)) * 0.06; f.group.rotation.y = Math.sin(f.group.userData.bob * 0.5) * 0.3; }
+  for (const [sym, s] of symbols) s.mesh.material.emissiveIntensity = sym === hovered ? 1.6 : 1;
   for (let i = beams.length - 1; i >= 0; i--) {
     const b = beams[i]; const k = (now - b.born) / b.ttl;
     if (k >= 1) { scene.remove(b.line); beams.splice(i, 1); continue; }
@@ -501,12 +556,18 @@ function sayState() {
   }
   const crypto = Object.keys(status.prezzi || {}).some((s) => s.includes('/'));
   const parts = [];
-  if (status.mercatoAperto) parts.push(status.finestraIngressi ? 'borsa aperta, finestra acquisti' : 'borsa aperta, solo vendite e stop');
-  else parts.push(crypto ? 'borsa chiusa, crypto operative' : 'borsa chiusa');
+  if (status.mercatoAperto) parts.push(status.finestraIngressi ? 'titoli: borsa aperta, si può comprare' : 'titoli: borsa aperta, solo vendite e stop');
+  else parts.push('titoli: borsa chiusa');
+  if (crypto) parts[0] += ' · crypto: sempre operative';
   if (status.allarmi?.length) {
     say.className = 'say warn';
     say.textContent = `Il motore gira, ma c'è un avviso: ${status.allarmi[0]}`;
     if (status.allarmi.length > 1) { fix.hidden = false; fix.textContent = status.allarmi.slice(1).join(' · '); }
+    return;
+  }
+  if (status.giornata?.obiettivoRaggiunto) {
+    say.className = 'say';
+    say.textContent = `Obiettivo del giorno raggiunto (${pct(status.giornata.pnlPct)}): si incassa, niente nuovi acquisti fino a domani.`;
     return;
   }
   if (status.acquistiBloccati) {
@@ -523,7 +584,7 @@ function paintMoney(st) {
   if (!c) return;
   $('#k-eq').textContent = money(c.patrimonio);
   const dayPct = c.patrimonio - c.pnlGiorno > 0 ? c.pnlGiorno / (c.patrimonio - c.pnlGiorno) : null;
-  $('#k-day').textContent = `${usd(c.pnlGiorno)}${dayPct !== null ? ` (${pct(dayPct)})` : ''}`; $('#k-day').className = `val ${cls(c.pnlGiorno)}`;
+  $('#k-day').textContent = `${usd(c.pnlGiorno)}${dayPct !== null ? ` (${pct(dayPct)})` : ''}${st.giornata ? ` · obiettivo ${pct(st.giornata.obiettivoPct)}` : ''}`; $('#k-day').className = `val ${cls(c.pnlGiorno)}`;
   $('#k-cash').textContent = money(c.contanti);
   $('#k-risk').textContent = `${Math.round((st.rischio ?? 1) * 100)}%`;
   const cmp = st.confronto;
@@ -617,7 +678,8 @@ function paintScene(st) {
     const price = st.prezzi?.[sym];
     s.el.innerHTML = `<b>${esc(sym)}</b> ${price ? fmt(price) : ''}${p ? ` · ${(share * 100).toFixed(1)}% · <span class="${cls(p.variazione)}">${pct(p.variazione)}</span>` : ''}`;
   }
-  placeAgents(Object.keys(st.agenti || {}));
+  placeAgents(Object.keys(st.agenti || {}).filter((n) => n !== 'custodi' && n !== 'intraday'));
+  placeFigures(st);
 }
 
 function paint(st) {
@@ -926,7 +988,7 @@ async function loadSettings() {
   try {
     const s = await (await fetch('/api/impostazioni')).json();
     $('#alpaca-now').textContent = s.alpacaKeyId ? `Attuali: key ${s.alpacaKeyId}, secret ${s.alpacaSecretKey}. Lascia vuoto un campo per non cambiarlo.` : 'Nessuna chiave Alpaca salvata.';
-    $('#telegram-now').textContent = s.telegramBotToken ? `Attuali: token ${s.telegramBotToken}${s.telegramChatId ? `, chat id ${s.telegramChatId}` : ', chat id mancante'}.` : 'Nessun bot Telegram salvato (i messaggi finiscono in state/telegram-outbox.log).';
+    $('#telegram-now').textContent = `${s.telegramBotToken ? `Attuali: token ${s.telegramBotToken}${s.telegramChatId ? `, chat id ${s.telegramChatId}` : ', chat id mancante'}.` : 'Nessun bot Telegram salvato (i messaggi finiscono in state/telegram-outbox.log).'} ${s.xBearerToken ? `X: token ${s.xBearerToken}.` : 'X: nessun token (solo Google News).'}`;
   } catch {}
 }
 const formData = (f) => Object.fromEntries([...new FormData(f).entries()].map(([k, v]) => [k, String(v).trim()]));
@@ -1041,7 +1103,7 @@ function addEvent(e, live) {
   renderEvents();
   if (e.tipo === 'segnale') { const a = agents.get(e.agente), s = symbols.get(e.simbolo); if (a && s) { beam(a.pos, s.pos, e.lato === 'buy' ? 0x3fb950 : 0xf85149); a.pulse = 0.6; } }
   if (e.tipo === 'agente') { const a = agents.get(e.agente); if (a) a.pulse = 0.4; }
-  if (e.tipo === 'ordine' && e.esito === 'inviato') pulse(e.simbolo, e.lato === 'buy' ? 0x3fb950 : 0xf85149);
+  if (e.tipo === 'ordine' && e.esito === 'inviato') { pulse(e.simbolo, e.lato === 'buy' ? 0x3fb950 : 0xf85149); for (const f of figures.values()) if (f.group.userData.sym === e.simbolo) f.group.userData.bob = Math.PI / 2; }
   if (e.tipo === 'rifiuto') { const s = symbols.get(e.simbolo); if (s) beam(new THREE.Vector3(s.pos.x * 1.9, 0.3, s.pos.z * 1.9), s.pos, 0xf85149, 1200); }
   if (e.tipo === 'nota' && /proiezioni/.test(e.testo || '')) { forecasts = null; if (selected) loadSymbol(selected); }
   if (e.tipo === 'prezzi' || e.simbolo === selected || (e.tipo === 'stop' && String(e.dettaglio || '').startsWith(selected + ' '))) { drawChart(); if (e.tipo !== 'prezzi') renderFeed(); }

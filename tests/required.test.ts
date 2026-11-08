@@ -33,6 +33,8 @@ describe("casi richiesti", () => {
   test("processo ucciso dopo il primo ordine: la sveglia dopo trova il lock, riconcilia, non ricompra", async () => {
     const env = makeEnv(at("15:41"));
     env.setFake((s) => (s.faults.crashAfterSubmits = 1));
+    // Il processo figlio legge i limiti dal file delle impostazioni: qui quelli storici (20% per titolo), come gli altri test.
+    writeFileSync(join(env.stateDir, "impostazioni-agenti.json"), JSON.stringify({ versione: 1, valori: { "LIMITS.maxPositionPct": 0.2, "LIMITS.maxPositions": 5 } }));
     const args = ["bun", join(ROOT, "src/cli/once.ts"), "--fake", "--now", at("15:41").toISOString(), "--state", env.stateDir, "--logs", env.logsDir];
     const killed = Bun.spawnSync(args, { stdout: "pipe", stderr: "pipe" });
     expect(killed.signalCode).toBe("SIGKILL");

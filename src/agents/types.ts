@@ -21,6 +21,8 @@ export interface Signal {
   frazione?: number;
   // Voto di un'operazione intraday: la proposta che ne nasce si chiude in giornata.
   intraday?: boolean;
+  // Proiezione di Kronos che sostiene il voto (rendimento a `horizon` sedute), se c'è.
+  kronos?: number;
 }
 
 export interface AgentView {
@@ -39,6 +41,8 @@ export interface AgentView {
   // Borsa aperta adesso e finestra degli ingressi sui titoli: l'allocatore non spreca posti su titoli non negoziabili.
   mercatoAperto?: boolean;
   finestraIngressi?: boolean;
+  // Giornata: guadagno dal patrimonio di ieri e stato dell'obiettivo giornaliero (raggiunto → si incassa, niente nuovi ingressi).
+  giornata?: { pnlPct: number; obiettivoRaggiunto: boolean; perditaOltre: boolean };
 }
 
 export type Outlook = "favorevole" | "neutro" | "sfavorevole";

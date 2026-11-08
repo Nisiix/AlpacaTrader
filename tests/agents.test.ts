@@ -150,7 +150,9 @@ describe("agenti", () => {
     const k = new KronosAgent(async () => UNIVERSE.map((s, i) => ({ simbolo: s, rendimentoPrevisto: s === "NVDA" ? 0.05 : s === "GLD" ? -0.04 : 0.001 * (i + 1) })));
     const r = await k.observe(view({ positions: [{ symbol: "GLD", qty: 5, avgEntryPrice: 370, currentPrice: 380, marketValue: 1900 }] }));
     expect(r.segnali.map((s) => `${s.lato} ${s.simbolo}`).sort()).toEqual(["buy NVDA", "sell GLD"]);
-    expect(r.segnali.every((s) => s.forza === 0.5)).toBe(true);
+    // La forza del rialzo cresce con la proiezione (0,5 + 5 × rendimento), il ribasso resta 0,5.
+    expect(r.segnali.find((s) => s.simbolo === "NVDA")!.forza).toBeCloseTo(0.75, 6);
+    expect(r.segnali.find((s) => s.simbolo === "GLD")!.forza).toBe(0.5);
   });
 });
 
@@ -162,7 +164,10 @@ describe("allocatore", () => {
     expect(both.proposte[0]!.qty).toBe(33); // 20%
   });
 
-  test("volatilità di portafoglio: cinque posizioni piene supererebbero il 12% annuo, le taglie si riducono in proporzione", () => {
+  test("volatilità di portafoglio (se attiva): cinque posizioni piene supererebbero il 12% annuo, le taglie si riducono in proporzione", () => {
+    const wasOn = AGENTS.volTarget.enabled;
+    AGENTS.volTarget.enabled = true;
+    try {
     const sig = (s: string) => ({ agente: "t", simbolo: s, lato: "buy" as const, forza: 1, orizzonteSedute: 60, perche: "" });
     // Titoli nervosi (3% al giorno): il tetto per titolo è 8,3%, cinque insieme farebbero ~16% annuo: si scende a 12%.
     const v = view();
@@ -178,6 +183,9 @@ describe("allocatore", () => {
     for (const s of ["SPY", "QQQ", "AAPL", "MSFT", "NVDA"]) vc.closes[s] = syntheticCloses(PRICES[s]!, 0.005, 260);
     const calm = allocate(vc, { t: { segnali: ["SPY", "QQQ", "AAPL", "MSFT", "NVDA"].map(sig) } }, { t: 1 });
     expect(calm.proposte.some((p) => p.expect!.includes("ridotto"))).toBe(false);
+    } finally {
+      AGENTS.volTarget.enabled = wasOn;
+    }
   });
 
   test("somma i segnali pesati; vende sotto -0,5, compra sopra 0,5 con il peso obiettivo ridotto dal rischio", () => {
@@ -319,7 +327,7 @@ describe("motore", () => {
   });
 
   test("il riepilogo elenca il profitto e la perdita di ogni vendita del giorno, il totale e il conto per agente", () => {
-    const base = { versione: 1 as const, aggiornato: "2026-09-24T20:10:00.000Z", giro: "g", mercatoAperto: false, finestraIngressi: false, conto: null, posizioni: [], prezzi: {}, rischio: 1, pesi: {}, agenti: {}, segnali: [], punteggi: [], ordini: [], rifiuti: [], contesto: null, inAttesa: [], stopSuAlpaca: null, acquistiBloccati: null, lezioniAttive: [], allarmi: [], diario: { stato: "x", statistiche: { trade: 0, vinti: 0, percVinti: null, mediaVincita: null, mediaPerdita: null, attesa: null, campione: "nessuno" as const } }, confronto: null, ultimoRiepilogo: null, tradeChiusiOggi: [], custodi: [], intraday: [], universo: { titoli: [], crypto: [], fonteCrypto: null, aggiornatoCrypto: null }, kronos: { stato: "non configurato", proiezioniDel: null, simboli: 0 } };
+    const base = { versione: 1 as const, aggiornato: "2026-09-24T20:10:00.000Z", giro: "g", mercatoAperto: false, finestraIngressi: false, conto: null, posizioni: [], prezzi: {}, rischio: 1, pesi: {}, agenti: {}, segnali: [], punteggi: [], ordini: [], rifiuti: [], contesto: null, inAttesa: [], stopSuAlpaca: null, acquistiBloccati: null, lezioniAttive: [], allarmi: [], diario: { stato: "x", statistiche: { trade: 0, vinti: 0, percVinti: null, mediaVincita: null, mediaPerdita: null, attesa: null, campione: "nessuno" as const } }, confronto: null, ultimoRiepilogo: null, tradeChiusiOggi: [], custodi: [], intraday: [], universo: { titoli: [], crypto: [], fonteCrypto: null, aggiornatoCrypto: null }, kronos: { stato: "non configurato", proiezioniDel: null, simboli: 0 }, giornata: { pnlPct: 0, obiettivoPct: 0.01, perditaMaxPct: 0.02, obiettivoRaggiunto: false, perditaOltre: false } };
     const st: AgentsStatus = {
       ...base,
       pnlOggi: {
@@ -533,6 +541,32 @@ describe("crypto", () => {
     const r = new TrendAgent().observe(view({ falling: ["TLT"], positions: [{ symbol: "TLT", qty: 10, avgEntryPrice: 95, currentPrice: 80, marketValue: 800 }] }));
     expect(r.segnali.filter((s) => s.lato === "buy").map((s) => s.simbolo)).not.toContain("IWM");
     expect(r.segnali.find((s) => s.lato === "sell")?.simbolo).toBe("TLT");
+  });
+});
+
+describe("taglia proporzionale alla fiducia in Kronos (valori di serie: 10% per titolo)", () => {
+  test("proiezione netta → peso pieno; incerta → ridotta; assente → quota fissa; mai oltre il 10%", () => {
+    const saved = { by: AGENTS.sizing.byKronos, max: LIMITS.maxPositionPct, n: LIMITS.maxPositions };
+    AGENTS.sizing.byKronos = true; LIMITS.maxPositionPct = 0.1; LIMITS.maxPositions = 8;
+    try {
+      const sig = (s: string) => [{ agente: "trend", simbolo: s, lato: "buy" as const, forza: 1, orizzonteSedute: 60, perche: "" }];
+      const weightFor = (s: string, prev?: Record<string, number>) => {
+        const v = view({ positions: [], previsioni: prev });
+        const a = allocate(v, { trend: { segnali: sig(s) } }, { trend: 1 });
+        const p = a.proposte[0]!;
+        return (p.qty * v.prices[s]!) / v.account.equity;
+      };
+      const pieno = weightFor("SPY", { SPY: 0.1 }); // 10% in 5 sedute con volatilità 1%: quasi certo
+      const incerto = weightFor("SPY", { SPY: 0.0005 });
+      const senza = weightFor("SPY");
+      expect(pieno).toBeLessThanOrEqual(0.1 + 1e-9);
+      expect(pieno).toBeGreaterThan(0.09);
+      expect(incerto).toBeLessThan(pieno * 0.5);
+      expect(incerto).toBeGreaterThan(0.03);
+      expect(senza).toBeCloseTo(pieno * AGENTS.sizing.noForecast, 2);
+    } finally {
+      AGENTS.sizing.byKronos = saved.by; LIMITS.maxPositionPct = saved.max; LIMITS.maxPositions = saved.n;
+    }
   });
 });
 

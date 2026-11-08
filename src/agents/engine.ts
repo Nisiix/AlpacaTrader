@@ -79,6 +79,7 @@ export interface AgentsStatus {
   intraday: IntradayStato[];
   universo: { titoli: string[]; crypto: string[]; fonteCrypto: string | null; aggiornatoCrypto: string | null };
   kronos: { stato: string; proiezioniDel: string | null; simboli: number };
+  giornata: { pnlPct: number; obiettivoPct: number; perditaMaxPct: number; obiettivoRaggiunto: boolean; perditaOltre: boolean };
 }
 
 export const statusPath = (stateDir: string) => join(stateDir, "agents-status.json");
@@ -101,6 +102,8 @@ export interface EngineCache {
   universeInfo?: { fonte: string; aggiornato: string; coppie: string[] };
   // Proiezioni del giorno (Kronos): si calcolano una volta sulle barre giornaliere e si riusano a ogni giro.
   previsioni?: { date: string; data: Record<string, KronosForecastPath> };
+  // Avviso Telegram dell'obiettivo/perdita del giorno: una volta sola al giorno.
+  giornataAvvisata?: string;
 }
 
 export const emptyCache = (): EngineCache => ({ closes: {}, bars: {}, ultimoRiepilogo: null });
@@ -271,6 +274,24 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
       buyBlock = ev.buyBlock;
       if (ev.newlyTripped) await alarm("Interruttore scattato", `${ev.newlyTripped}. Acquisti fermi per ${LIMITS.breakerRearmSessions} giorni di borsa; vendite e stop restano attivi.`);
     }
+    // Obiettivo giornaliero: patrimonio contro la chiusura di ieri. Raggiunto → niente nuovi acquisti fino a domani e
+    // l'intraday incassa; perdita oltre la soglia → niente nuovi acquisti (gli stop proteggono il resto).
+    const pnlPct = snap.account.lastEquity > 0 ? snap.account.equity / snap.account.lastEquity - 1 : 0;
+    const giornata = { pnlPct, obiettivoRaggiunto: AGENTS.daily.enabled && pnlPct >= AGENTS.daily.targetPct, perditaOltre: AGENTS.daily.enabled && pnlPct <= -AGENTS.daily.maxLossPct };
+    if (!buyBlock && giornata.obiettivoRaggiunto) {
+      buyBlock = `obiettivo giornaliero raggiunto (${(pnlPct * 100).toFixed(2)}% ≥ ${(AGENTS.daily.targetPct * 100).toFixed(1)}%): niente nuovi acquisti fino a domani, si incassa`;
+      if (cache.giornataAvvisata !== `${today}-obiettivo`) {
+        cache.giornataAvvisata = `${today}-obiettivo`;
+        const r = await deps.notifier.send(deps.redactor.apply(`🎯 Agenti · ${buyBlock}`));
+        if (!r.ok) log.error(`Telegram non ha ricevuto l'avviso: ${r.error}`);
+      }
+    } else if (!buyBlock && giornata.perditaOltre) {
+      buyBlock = `perdita del giorno oltre la soglia (${(pnlPct * 100).toFixed(2)}% ≤ -${(AGENTS.daily.maxLossPct * 100).toFixed(1)}%): niente nuovi acquisti fino a domani`;
+      if (cache.giornataAvvisata !== `${today}-perdita`) {
+        cache.giornataAvvisata = `${today}-perdita`;
+        await alarm("Perdita del giorno oltre la soglia", buyBlock);
+      }
+    }
     const lessonsNow = activeLessons(lessonsFile, today);
     const jr = readJournal(deps.stateDir, startedAt);
     const journal = jr.file;
@@ -287,7 +308,7 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
       log.info(m);
       bus.emit("nota", { testo: m });
     });
-    const view: AgentView = { today, now: startedAt, prices: snap.prices, closes, indicators, positions: snap.positions, account: snap.account, journal, previsioni, mercatoAperto: snap.clock.isOpen, finestraIngressi: inEntryWindow(startedAt) && snap.clock.isOpen };
+    const view: AgentView = { today, now: startedAt, prices: snap.prices, closes, indicators, positions: snap.positions, account: snap.account, journal, previsioni, mercatoAperto: snap.clock.isOpen, finestraIngressi: inEntryWindow(startedAt) && snap.clock.isOpen, giornata };
     const reports: Record<string, AgentReport> = {};
     const agentStatus: AgentsStatus["agenti"] = {};
     // Il contesto economico si valuta per primo: decide dove si aspetta e di quali proiezioni fidarsi.
@@ -442,6 +463,7 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
       intraday: Object.values(reports).flatMap((r) => r.intraday ?? []),
       universo: { titoli: AGENTS.universe.filter((s) => !isCrypto(s)), crypto: AGENTS.universe.filter(isCrypto), fonteCrypto: cache.universeInfo?.fonte ?? null, aggiornatoCrypto: cache.universeInfo?.aggiornato ?? null },
       kronos: { stato: deps.kronosStato?.() ?? (deps.forecaster ? "attivo" : "non configurato"), proiezioniDel: cache.previsioni?.date ?? null, simboli: Object.keys(cache.previsioni?.data ?? {}).length },
+      giornata: { pnlPct, obiettivoPct: AGENTS.daily.targetPct, perditaMaxPct: AGENTS.daily.maxLossPct, obiettivoRaggiunto: giornata.obiettivoRaggiunto, perditaOltre: giornata.perditaOltre },
     };
     writeJsonAtomic(statusPath(deps.stateDir), status);
     log.info(`giro ${giro}: ${status.segnali.length} segnali, ${alloc.proposte.length} proposte, ${outcomes.length} ordini, ${cage.rejected.length} rifiuti, rischio ${alloc.rischio}`);

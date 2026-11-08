@@ -4,7 +4,8 @@
 // gabbia, invia, e aggiorna la dashboard locale. Kronos: il sidecar Python lo accende il motore da solo, se installato.
 import { HorizonAgent } from "../agents/horizon.ts";
 import { ClaudeMacro, ContextAgent } from "../agents/context.ts";
-import { CustodiAgent, googleNews } from "../agents/custode.ts";
+import { CustodiAgent, combinedNews, googleNews, xNews } from "../agents/custode.ts";
+import { loadSecrets } from "../deps.ts";
 import { IntradayAgent } from "../agents/intraday.ts";
 import { ExitAgent } from "../agents/exits.ts";
 import { spawnRunner } from "../brain/claude.ts";
@@ -39,7 +40,11 @@ try {
   if (AGENTS.context.enabled) agents.push(new ContextAgent(AGENTS.context.useClaude && !args.fake ? new ClaudeMacro(deps.stateDir, spawnRunner, deps.now) : null));
   if (args.profitto || AGENTS.takeProfit.enabled) agents.push(new TakeProfitAgent());
   // I custodi studiano il loro titolo tra un giro e l'altro: nel vero leggono anche le notizie (Google News), nel finto no.
-  if (AGENTS.custodi.enabled) agents.push(new CustodiAgent(args.fake ? null : googleNews()));
+  if (AGENTS.custodi.enabled) {
+    const xToken = args.fake ? "" : (await loadSecrets(false))?.xBearerToken ?? "";
+    agents.push(new CustodiAgent(args.fake ? null : combinedNews([googleNews(), ...(xToken ? [xNews(xToken)] : [])])));
+    if (!args.fake) console.log(`notizie: Google News${xToken ? " + X" : " (X: nessun token in secrets.ts)"}`);
+  }
   // Intraday: operazioni che si chiudono in giornata, su candele scelte dall'agente (5 min / 15 min / 4 ore).
   if (AGENTS.intraday.enabled) agents.push(new IntradayAgent((s, tf, n) => deps.broker.getIntradayBars(s, tf, n)));
 

@@ -18,8 +18,10 @@ export const CRYPTO_QTY_DECIMALS = 6;
 export const CRYPTO_STOP_LIMIT_GAP = 0.005;
 
 export const LIMITS = {
-  maxPositions: 5,
-  maxPositionPct: 0.2,
+  // Scelta dell'utente: al massimo il 10% del patrimonio per titolo, e meno se la proiezione di Kronos è incerta
+  // (vedi AGENTS.sizing); fino a 8 titoli insieme.
+  maxPositions: 8,
+  maxPositionPct: 0.1,
   // Stop di protezione: non è più l'uscita normale (quella è il trend), serve solo contro i crolli.
   // Distanza = multiplo × volatilità giornaliera × √giorni, arrotondata al mezzo punto e tenuta tra min e max.
   stop: { volMultiple: 2.5, horizonDays: 5, minPct: 0.05, maxPct: 0.1 },
@@ -123,7 +125,17 @@ export const AGENTS = {
   // Crypto solo in trend: oltre alle medie e al momentum a 12 mesi, rendimento a 3 mesi positivo.
   cryptoMomentumDays: 63,
   // Volatilità di portafoglio obiettivo (annua): oltre, le taglie nuove si riducono in proporzione.
-  volTarget: { enabled: true, annual: 0.12, corr: 0.8 },
+  // Spento per scelta dell'utente: il motore punta al massimo profitto dentro l'obiettivo giornaliero (AGENTS.daily),
+  // non a una volatilità annua. Restano i tetti per titolo (20%, rischio giornaliero per posizione) e la gabbia.
+  volTarget: { enabled: false, annual: 0.12, corr: 0.8 },
+  // Obiettivo giornaliero: raggiunto il guadagno del giorno (patrimonio contro la chiusura di ieri) niente nuovi acquisti
+  // fino a domani e le operazioni intraday incassano; oltre la perdita massima del giorno niente nuovi acquisti (le
+  // posizioni restano protette dagli stop). I profitti restano nel conto e le taglie sono percentuali del patrimonio
+  // corrente: il guadagno di oggi si reinveste da solo domani.
+  daily: { enabled: true, targetPct: 0.01, maxLossPct: 0.02 },
+  // Taglia proporzionale alla fiducia: la probabilità che la proiezione di Kronos si avveri (rendimento atteso diviso la
+  // volatilità sull'orizzonte) porta il peso da minFactor (fiducia 50%) a 1 (fiducia ≥ fullAt); senza proiezione vale noForecast.
+  sizing: { byKronos: true, minFactor: 0.4, fullAt: 0.8, noForecast: 0.6 },
   // Titoli che gli agenti possono comprare: senza IWM e TLT (attesa nulla o negativa con obiettivo +3% / stop -3%).
   // Le crypto entrano con enableCrypto (di serie nel motore degli agenti, --no-crypto per toglierle; --crypto altrove):
   // nel backtest ago 2025 - nov 2026 hanno tolto 5-6 punti.
@@ -152,7 +164,8 @@ export const AGENTS = {
   // calcolano una volta al giorno sulle barre giornaliere e restano in state/previsioni.json (anche per la dashboard).
   // Kronos è la fonte principale per anticipare la direzione: una proiezione oltre anticipaSoglia (in valore assoluto)
   // vale come segnale di rialzo o ribasso in arrivo: sblocca l'attesa del contesto (rialzo) o ferma gli ingressi (ribasso).
-  kronos: { topShare: 0.25, horizon: 5, timeoutMs: 600_000, port: 8765, model: "small" as "mini" | "small" | "base", lookback: 400, samples: 3, anticipaSoglia: 0.01 },
+  // maxAbs: proiezioni oltre questa misura (in valore assoluto) sono rumore del modello e non si usano.
+  kronos: { topShare: 0.25, horizon: 5, timeoutMs: 600_000, port: 8765, model: "small" as "mini" | "small" | "base", lookback: 400, samples: 3, anticipaSoglia: 0.01, maxAbs: 0.25 },
   // Riepilogo su Telegram una volta al giorno, alla prima passata dopo quest'ora di Roma.
   summaryAfter: "22:05",
   // Presa di profitto parziale (agente "profitto"): a +3% vende metà e lascia correre il resto col trend. Scelta col

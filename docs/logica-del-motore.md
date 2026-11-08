@@ -30,15 +30,20 @@ festivi: quello che cambia è cosa la gabbia lascia passare (i titoli azionari s
 7. **Gli agenti osservano** la stessa vista (prezzi, chiusure, indicatori, posizioni, diario, proiezioni, contesto) e
    votano. Nessun agente ordina niente.
 8. **L'allocatore** somma i voti pesati per titolo. Sopra +0,5 si compra, sotto −0,5 si vende; le regole vincolanti
-   (stop, obiettivo, fine giornata, proiezione contraria) vendono senza voto. Decide il peso di ogni posizione (massimo
-   20% del conto, meno se il titolo è nervoso; comparti a taglia ridotta per rientro e intraday) e riduce tutto se la
-   volatilità di portafoglio supera il 12% annuo. A borsa chiusa non spreca posti sui titoli azionari: i posti liberi
-   vanno alle crypto.
+   (stop, obiettivo, fine giornata, proiezione contraria) vendono senza voto. Decide il peso di ogni posizione: **al
+   massimo il 10% del conto** (meno se il titolo è nervoso), **proporzionale alla fiducia nella proiezione di Kronos**
+   (probabilità che si avveri = rendimento atteso / volatilità sull'orizzonte: 50% → 40% del peso, ≥ 80% → peso pieno,
+   senza proiezione 60%). Fino a 8 titoli. Il limite di volatilità annua (12%) è spento per scelta dell'utente. A borsa
+   chiusa non spreca posti sui titoli azionari: i posti liberi vanno alle crypto.
 9. **La gabbia** (`src/cage.ts`) è il codice che dice l'ultima parola: titoli solo a borsa aperta (crypto sempre),
-   niente short, niente leva, solo azioni intere (crypto frazionarie, minimo 10 $), massimo 5 posizioni, massimo 20% per
-   titolo, gruppi correlati limitati, compra solo chi chiude sopra le medie a 50 e 200 giorni, niente acquisti nel giorno
-   della Fed o nei 2 giorni prima di una trimestrale, lezioni del registro, stop loss e uscita di trend eseguiti dal
-   codice. Un acquisto per titolo al giorno (l'ID dell'ordine lo impedisce).
+   niente short, niente leva, solo azioni intere (crypto frazionarie, minimo 10 $), massimo 8 posizioni, massimo 10% per
+   titolo, gruppi correlati limitati, mai sotto la media a 200 giorni; sopra la 50 **oppure** con un rialzo netto
+   anticipato da Kronos (≥ +1%: un solo pattern contrario è prudenza, non blocco); niente acquisti nel giorno della Fed o
+   nei 2 giorni prima di una trimestrale (non per l'intraday, che si chiude in giornata), lezioni del registro, stop loss e
+   uscita di trend eseguiti dal codice. Un acquisto per titolo al giorno (l'ID dell'ordine lo impedisce).
+   **Obiettivo giornaliero**: raggiunto il +1% del patrimonio rispetto alla chiusura di ieri, niente nuovi acquisti fino a
+   domani e l'intraday incassa; oltre il −2% niente nuovi acquisti (gli stop proteggono il resto). I profitti restano nel
+   conto e le taglie sono percentuali del patrimonio corrente: si reinvestono da soli.
 10. **Invio** degli ordini ammessi, stop GTC su Alpaca per ogni posizione (scalato sulla volatilità, 5–10%; sulle crypto
     `stop_limit`), diario aggiornato con le esecuzioni, lezioni, stato per la dashboard, eventi nel registro, Telegram.
 11. **Riepilogo** su Telegram dopo le 22:05 con il conto di profitto e perdita del giorno: ogni vendita in $ e %, il
@@ -55,14 +60,15 @@ festivi: quello che cambia è cosa la gabbia lascia passare (i titoli azionari s
 | **uscite** | ogni posizione: stop sulla volatilità, massimo visto, proiezione di Kronos | **vincolante**: stop, presa di profitto, proiezione negativa → vende |
 | **profitto** | posizioni a +3% | vende metà e lascia correre il resto (walk-forward: più vinti, perdita massima minore) |
 | **contesto** | vedi sopra | niente ordini: esposizione × 0,75 (neutro) o × 0,5 (sfavorevole); chi aspetta |
-| **kronos** | proiezioni a 5 sedute, solo il 25% più nette e nel verso del trend | compra/vende (0,5) |
+| **kronos** | proiezioni a 5 sedute; scarta quelle oltre ±25% (rumore), classifica rialzi e ribassi separatamente e tiene il 25% più netto di ciascuno | compra (0,5 → 1 con la proiezione) sopra la media a 200; vende (0,5) i titoli in portafoglio con ribasso anticipato |
 | **custodi** | **un investitore per ogni titolo o crypto in trend** (o in portafoglio): nessun numero fisso, tanti quanti sono i titoli che meritano attenzione, zero se il mercato non offre niente | vedi sotto |
 | **intraday** | candele a 5 min / 15 min / 4 ore, scelte dalla volatilità | operazioni che si chiudono in giornata, vedi sotto |
 
 ### Il custode
 
 Nasce quando un titolo rispetta i criteri del trend (sopra le medie, slancio a 12 mesi positivo; per le crypto anche a
-3 mesi) o quando è in portafoglio; muore dopo 12 giri fuori dai criteri. Dichiara sempre:
+3 mesi), **oppure quando Kronos anticipa un rialzo netto su un titolo sopra la media a 200**, o quando è in portafoglio;
+muore dopo 12 giri fuori dai criteri. Dichiara sempre:
 
 - **Tesi**: perché il titolo merita attenzione (medie, slancio).
 - **Piano**: entrare ora (meglio sul rientro verso la media a 20 giorni: forza 0,8; ingresso ordinato 0,6; prezzo oltre il
@@ -74,8 +80,8 @@ Nasce quando un titolo rispetta i criteri del trend (sopra le medie, slancio a 1
   - Kronos (45%): probabilità di rialzo = rendimento atteso a 5 sedute diviso la volatilità sull'orizzonte (normale).
   - Grafico (25%): massimi e minimi crescenti o calanti, rottura dei massimi a 20 sedute, medie allineate, rientro sulla
     media a 20, eccesso oltre il 15% sopra la 50, RSI(14) oltre 75 o sotto 30, compressione di volatilità, slancio a 3 mesi.
-  - Notizie (15%): titoli recenti da Google News (ogni ora), tono da parole chiave (rally, ETF, approvazione… contro hack,
-    crollo, causa…).
+  - Notizie (15%): titoli recenti da Google News e, con un bearer token in Impostazioni, i post su X (ogni ora), tono da
+    parole chiave (rally, ETF, approvazione… contro hack, crollo, causa…).
   - Contesto (15%): favorevole 0,8 / neutro 0,5 / sfavorevole o in attesa 0,2.
 - **Memoria del titolo**: dal diario, i trade passati su quel simbolo (quanti, vinti, media, quanti chiusi dallo stop, quale
   ingresso ha reso di più). Con 3 o più trade in perdita il custode entra con **metà taglia e forza ridotta**; con storia
@@ -87,8 +93,11 @@ e non si modulano.
 
 ### L'intraday
 
-Opera solo nel verso del trend giornaliero (prezzo sopra le medie a 50 e 200) e mai contro una proiezione di Kronos
-negativa; i candidati sono ordinati per proiezione.
+Decide **Kronos, non il contesto macro**: entra se Kronos vede un rialzo (≥ +0,5%) oppure, senza proiezione contraria, se il
+giornaliero è in trend; mai contro un ribasso previsto. I pattern di più orizzonti sono prudenza: giornaliero sotto le medie,
+settimanale in calo (un mese sotto −2%, o negativo con medie brevi girate), intraday con le candele per lo più sotto la
+media a 20 → **due contrari = fuori, uno contrario = metà taglia e serve un Kronos netto (≥ +1%)**. I candidati sono
+ordinati per proiezione.
 
 - **Candela**: volatilità giornaliera a 20 giorni ≥ 3% → 5 minuti; ≥ 1,5% → 15 minuti; altrimenti 4 ore.
 - **Ingresso**: rottura dei massimi delle 20 candele precedenti con un movimento di almeno mezzo ATR, oppure rientro sulla

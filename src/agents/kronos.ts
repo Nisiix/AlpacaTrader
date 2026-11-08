@@ -47,19 +47,27 @@ export class KronosAgent implements Agent {
       }
     }
     if (!fc.length) return { segnali: [], note: [v.previsioni ? "nessuna proiezione per i titoli di oggi" : "nessuna proiezione: Kronos in avvio o non installato"] };
-    const valid = fc.filter((f) => Number.isFinite(f.rendimentoPrevisto)).sort((a, b) => Math.abs(b.rendimentoPrevisto) - Math.abs(a.rendimentoPrevisto));
-    const keep = Math.max(1, Math.round(valid.length * AGENTS.kronos.topShare));
+    // Le proiezioni assurde (oltre maxAbs) sono rumore: fuori. Rialzi e ribassi si classificano separatamente, così i
+    // ribassi enormi di qualche piccola non nascondono i rialzi credibili.
+    const sane = fc.filter((f) => Number.isFinite(f.rendimentoPrevisto) && Math.abs(f.rendimentoPrevisto) <= AGENTS.kronos.maxAbs);
+    const scartate = fc.length - sane.length;
+    const ups = sane.filter((f) => f.rendimentoPrevisto >= AGENTS.kronos.anticipaSoglia).sort((a, b) => b.rendimentoPrevisto - a.rendimentoPrevisto);
+    const downs = sane.filter((f) => f.rendimentoPrevisto <= -AGENTS.kronos.anticipaSoglia).sort((a, b) => a.rendimentoPrevisto - b.rendimentoPrevisto);
+    const keepUp = Math.max(1, Math.round(ups.length * AGENTS.kronos.topShare));
+    const keepDown = Math.max(1, Math.round(downs.length * AGENTS.kronos.topShare));
     const segnali: Signal[] = [];
     const held = new Set(v.positions.filter((p) => p.qty > 0).map((p) => p.symbol));
-    for (const f of valid.slice(0, keep)) {
+    for (const f of ups.slice(0, keepUp)) {
       const c = v.closes[f.simbolo];
       const m200 = c ? sma(c, LIMITS.longSmaDays) : null;
       const price = v.prices[f.simbolo] ?? c?.[c.length - 1];
       if (m200 === null || price === undefined) continue;
-      const up = f.rendimentoPrevisto > 0;
-      if (up && price > m200) segnali.push({ agente: this.name, simbolo: f.simbolo, lato: "buy", forza: 0.5, orizzonteSedute: AGENTS.kronos.horizon, perche: `Kronos prevede ${(f.rendimentoPrevisto * 100).toFixed(1)}% a ${AGENTS.kronos.horizon} sedute, tra le previsioni più nette, con trend di lungo periodo positivo` });
-      else if (!up && held.has(f.simbolo)) segnali.push({ agente: this.name, simbolo: f.simbolo, lato: "sell", forza: 0.5, orizzonteSedute: AGENTS.kronos.horizon, perche: `Kronos prevede ${(f.rendimentoPrevisto * 100).toFixed(1)}% a ${AGENTS.kronos.horizon} sedute su un titolo in portafoglio` });
+      // Rialzo anticipato: si compra solo con il trend di lungo periodo positivo (sopra la media a 200); la forza cresce con la proiezione.
+      if (price > m200) segnali.push({ agente: this.name, simbolo: f.simbolo, lato: "buy", forza: Math.min(1, 0.5 + f.rendimentoPrevisto * 5), orizzonteSedute: AGENTS.kronos.horizon, kronos: f.rendimentoPrevisto, perche: `Kronos anticipa ${(f.rendimentoPrevisto * 100).toFixed(1)}% a ${AGENTS.kronos.horizon} sedute, tra i rialzi più netti, con trend di lungo periodo positivo` });
     }
-    return { segnali, note: [`${valid.length} previsioni, tenute le ${keep} più nette`] };
+    for (const f of downs.slice(0, keepDown)) {
+      if (held.has(f.simbolo)) segnali.push({ agente: this.name, simbolo: f.simbolo, lato: "sell", forza: 0.5, orizzonteSedute: AGENTS.kronos.horizon, kronos: f.rendimentoPrevisto, perche: `Kronos anticipa ${(f.rendimentoPrevisto * 100).toFixed(1)}% a ${AGENTS.kronos.horizon} sedute su un titolo in portafoglio` });
+    }
+    return { segnali, note: [`${sane.length} previsioni usabili${scartate ? ` (${scartate} scartate perché oltre ±${(AGENTS.kronos.maxAbs * 100).toFixed(0)}%)` : ""}, ${ups.length} rialzi e ${downs.length} ribassi oltre la soglia, votati ${segnali.length}`] };
   }
 }

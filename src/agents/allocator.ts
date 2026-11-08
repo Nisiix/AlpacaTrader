@@ -17,6 +17,10 @@ export interface Score {
   pesoMassimo?: number;
   // Se tutti i voti di acquisto sono intraday, l'operazione lo è (si chiude in giornata).
   intraday?: boolean;
+  // La proiezione di Kronos più netta tra i voti d'acquisto.
+  kronos?: number;
+  // Probabilità che la proiezione si avveri (decide la taglia).
+  fiducia?: number | null;
 }
 
 export interface Allocation {
@@ -53,6 +57,7 @@ export function scoreSignals(signals: Signal[], weights: Record<string, number>)
     if (s.lato === "buy") {
       sc.compra += w;
       sc.intraday = sc.compra === w ? !!s.intraday : sc.intraday && !!s.intraday;
+      if (s.kronos !== undefined && (sc.kronos === undefined || s.kronos > sc.kronos)) sc.kronos = s.kronos;
       // Un voto senza limite di taglia (es. il trend) toglie il limite; se tutti i voti lo hanno, vale il più piccolo.
       if (s.pesoMassimo === undefined) sc.pesoMassimo = Infinity;
       else if (sc.pesoMassimo !== Infinity) sc.pesoMassimo = Math.min(sc.pesoMassimo ?? Infinity, s.pesoMassimo);
@@ -64,6 +69,23 @@ export function scoreSignals(signals: Signal[], weights: Record<string, number>)
   }
   for (const sc of by.values()) if (sc.pesoMassimo === Infinity) delete sc.pesoMassimo;
   return [...by.values()].sort((a, b) => b.punteggio - a.punteggio);
+}
+
+// Fiducia nella proiezione di Kronos: P(rendimento > 0) = Φ(atteso / (volatilità × √orizzonte)). Da lì il fattore di taglia.
+export function kronosConfidence(view: AgentView, symbol: string): { p: number | null; factor: number } {
+  const fc = view.previsioni?.[symbol];
+  const vol = view.closes[symbol] ? dailyVol(view.closes[symbol]!, LIMITS.volLookbackDays) : null;
+  const c = AGENTS.sizing;
+  if (fc === undefined || vol === null || vol <= 0) return { p: null, factor: c.noForecast };
+  const z = fc / (vol * Math.sqrt(AGENTS.kronos.horizon));
+  const p = 0.5 * (1 + erf(z / Math.SQRT2));
+  const t = Math.max(0, Math.min(1, (p - 0.5) / (c.fullAt - 0.5)));
+  return { p, factor: c.minFactor + (1 - c.minFactor) * t };
+}
+function erf(x: number) {
+  const t = 1 / (1 + 0.3275911 * Math.abs(x));
+  const y = 1 - ((((1.061405429 * t - 1.453152027) * t + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * Math.exp(-x * x);
+  return x >= 0 ? y : -y;
 }
 
 // Volatilità annua attesa del portafoglio: √252 × corr × Σ peso × volatilità giornaliera (corr < 1 sconta la diversificazione).
@@ -122,6 +144,12 @@ export function allocate(view: AgentView, reports: Record<string, AgentReport>, 
     if (!p && slots <= 0) continue;
     let w = maxWeightFor(view.closes[sc.simbolo]).max * rischio * (AGENTS.scaleByScore ? Math.min(1, sc.punteggio) : 1);
     if (sc.pesoMassimo !== undefined) w = Math.min(w, sc.pesoMassimo);
+    // Taglia proporzionale alla fiducia nella proiezione di Kronos: più è probabile che il rialzo si avveri, più si investe.
+    if (AGENTS.sizing.byKronos) {
+      const f = kronosConfidence(view, sc.simbolo);
+      sc.fiducia = f.p;
+      w *= f.factor;
+    }
     if (!p) slots--;
     wanted.push({ sc, w, p });
   }
@@ -143,7 +171,7 @@ export function allocate(view: AgentView, reports: Record<string, AgentReport>, 
     if (delta / equity < AGENTS.minAddPct) continue;
     const qty = roundQty(sc.simbolo, delta / price);
     if (qty <= 0 || (isCrypto(sc.simbolo) && qty * price < CRYPTO_MIN_NOTIONAL)) continue;
-    proposte.push({ symbol: sc.simbolo, side: "buy", qty, why: sc.perche.join(" · "), confidence: conf(sc.punteggio), expect: `${sc.intraday ? "intraday: " : ""}peso obiettivo ${(w * scale * 100).toFixed(1)}% del conto${scale < 1 ? ` (ridotto per la volatilità di portafoglio, obiettivo ${(AGENTS.volTarget.annual * 100).toFixed(0)}% annuo)` : ""}`, intraday: sc.intraday || undefined });
+    proposte.push({ symbol: sc.simbolo, side: "buy", qty, why: sc.perche.join(" · "), confidence: conf(sc.punteggio), expect: `${sc.intraday ? "intraday: " : ""}peso obiettivo ${(w * scale * 100).toFixed(1)}% del conto${sc.fiducia !== undefined ? ` (fiducia nella proiezione ${sc.fiducia === null ? "n.d." : `${(sc.fiducia * 100).toFixed(0)}%`})` : ""}${scale < 1 ? ` (ridotto per la volatilità di portafoglio, obiettivo ${(AGENTS.volTarget.annual * 100).toFixed(0)}% annuo)` : ""}`, intraday: sc.intraday || undefined, kronos: sc.kronos });
   }
   return { proposte, punteggi, rischio, pesi: weights, inAttesa };
 }

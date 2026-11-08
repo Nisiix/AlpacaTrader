@@ -184,7 +184,7 @@ describe("6. metodo dichiarato", () => {
       s.closes.TLT = [90, 90, 90];
     });
     const res = await runWake(env.deps());
-    expect(reasonFor(res, "IWM")).toContain("sotto la media a 50 giorni");
+    expect(reasonFor(res, "IWM")).toMatch(/sotto la media a (50|200) giorni/);
     expect(reasonFor(res, "TLT")).toContain("storico insufficiente");
     expect(env.broker.load().orders).toHaveLength(0);
   });
