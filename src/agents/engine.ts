@@ -303,7 +303,7 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
         // A borsa chiusa si toccano solo gli stop delle crypto; quelli dei titoli restano com'erano.
         const manageable = equitiesOpen ? pos : pos.filter((p) => isCrypto(p.symbol));
         const relevantOpen = equitiesOpen ? open : open.filter((o) => isCrypto(o.symbol));
-        stops = await manageStops(deps.broker, giro, manageable, relevantOpen, log, closes, AGENTS.exit.enabled ? AGENTS.exit.stopPct : undefined);
+        stops = await manageStops(deps.broker, giro, manageable, relevantOpen, log, closes, AGENTS.exit.enabled && AGENTS.exit.stopMode === "fisso" ? AGENTS.exit.stopPct : undefined);
       } catch (e) {
         stops = { ok: [], placed: [], cancelled: [], errors: [`Alpaca non risponde: ${(e as Error).message}`] };
       }

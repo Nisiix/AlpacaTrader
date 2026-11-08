@@ -1,4 +1,4 @@
-import { AGENTS, LIMITS } from "../config.ts";
+import { AGENTS, LIMITS, isCrypto } from "../config.ts";
 import { momentum, trendOf } from "../indicators.ts";
 import { clamp01, type Agent, type AgentReport, type AgentView, type Signal } from "./types.ts";
 
@@ -11,13 +11,25 @@ export class TrendAgent implements Agent {
     const segnali: Signal[] = [];
     const held = new Set(v.positions.filter((p) => p.qty > 0).map((p) => p.symbol));
     const candidates: { s: string; mom: number }[] = [];
+    const filtered: string[] = [];
     // Si compra solo nell'universo degli agenti; si sorveglia anche ciò che è in portafoglio da prima (es. IWM, TLT).
     for (const s of new Set([...AGENTS.universe, ...held])) {
       const c = v.closes[s];
       const t = trendOf(c, LIMITS.trendSmaDays, LIMITS.longSmaDays);
       if (!c || t === null) continue;
       if (t.close > t.sma && t.close > t.long && (v.prices[s] ?? t.close) > t.sma) {
-        if (AGENTS.universe.includes(s)) candidates.push({ s, mom: momentum(c, LIMITS.rankMomentumDays) ?? 0 });
+        if (!AGENTS.universe.includes(s)) continue;
+        // Momentum assoluto: rendimento a 12 mesi positivo, altrimenti liquidità. Crypto: anche a 3 mesi.
+        const abs = momentum(c, AGENTS.absMomentum.days);
+        if (abs === null || abs <= AGENTS.absMomentum.min) {
+          filtered.push(`${s} (12 mesi ${abs === null ? "n.d." : `${(abs * 100).toFixed(0)}%`})`);
+          continue;
+        }
+        if (isCrypto(s) && (momentum(c, AGENTS.cryptoMomentumDays) ?? -1) <= 0) {
+          filtered.push(`${s} (3 mesi negativi)`);
+          continue;
+        }
+        candidates.push({ s, mom: momentum(c, LIMITS.rankMomentumDays) ?? 0 });
       }
       else if (held.has(s) && t.close < t.sma) segnali.push({ agente: this.name, simbolo: s, lato: "sell", forza: 1, orizzonteSedute: AGENTS.horizonSessions, perche: `chiusura ${t.close.toFixed(2)} sotto la media a ${LIMITS.trendSmaDays} giorni (${t.sma.toFixed(2)}): il trend è finito` });
     }
@@ -29,6 +41,6 @@ export class TrendAgent implements Agent {
       const forza = clamp01(rank * (mom >= 0 ? 1 : 0.6));
       segnali.push({ agente: this.name, simbolo: s, lato: "buy", forza, orizzonteSedute: AGENTS.horizonSessions, perche: `sopra le medie a ${LIMITS.trendSmaDays} e ${LIMITS.longSmaDays} giorni, momentum a 6 mesi ${(mom * 100).toFixed(1)}% (${i + 1}° su ${candidates.length})` });
     });
-    return { segnali, note: [`${candidates.length} titoli in trend su ${AGENTS.universe.length}`] };
+    return { segnali, note: [`${candidates.length} titoli in trend su ${AGENTS.universe.length}${filtered.length ? ` · fermati dal momentum assoluto: ${filtered.join(", ")}` : ""}`] };
   }
 }

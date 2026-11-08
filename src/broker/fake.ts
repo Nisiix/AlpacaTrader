@@ -49,7 +49,7 @@ export function defaultFakeState(): FakeState {
   };
 }
 
-const FAKE_VOL: Record<string, number> = { SPY: 0.01, QQQ: 0.013, IWM: 0.015, AAPL: 0.017, MSFT: 0.015, NVDA: 0.03, GLD: 0.01, TLT: 0.009, TSLA: 0.035, "BTC/USD": 0.025, "ETH/USD": 0.035 };
+export const FAKE_VOL: Record<string, number> = { SPY: 0.01, QQQ: 0.013, IWM: 0.015, AAPL: 0.017, MSFT: 0.015, NVDA: 0.03, GLD: 0.01, TLT: 0.009, TSLA: 0.035, "BTC/USD": 0.025, "ETH/USD": 0.035 };
 
 // Storico finto deterministico: trend in salita del 10% e oscillazioni ± pari alla volatilità del titolo.
 export function syntheticCloses(price: number, vol: number, days: number): number[] {

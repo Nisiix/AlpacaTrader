@@ -1,36 +1,39 @@
 import { AGENTS, LIMITS } from "../config.ts";
-import { sma } from "../indicators.ts";
+import { rsi, sma } from "../indicators.ts";
+import { addTradingDays } from "../slots.ts";
 import { type Agent, type AgentReport, type AgentView, type Signal } from "./types.ts";
 
-// Rientro sul trend: un titolo sopra la media a 200 giorni che dopo una corsa torna vicino alla media a 50.
-// Compra "sul ritracciamento" invece che sui massimi: è il complemento del trend puro.
+// Rientro = mean reversion di Connors, come comparto separato a breve orizzonte: compra un titolo sopra la media a 200
+// quando l'RSI(2) scende sotto 10 (ipervenduto di breve), con taglia piccola; esce quando l'RSI(2) torna sopra 70 o
+// dopo maxHoldSessions sedute. Gli obiettivi brevi stanno bene qui, non sul trend.
 export class PullbackAgent implements Agent {
   readonly name = "rientro";
 
   observe(v: AgentView): AgentReport {
     const segnali: Signal[] = [];
-    const { nearPct, runUpPct, lookback } = AGENTS.pullback;
+    const { rsiDays, rsiEntry, rsiExit, maxHoldSessions, maxWeight } = AGENTS.pullback;
+    const held = new Set(v.positions.filter((p) => p.qty > 0).map((p) => p.symbol));
     for (const s of AGENTS.universe) {
+      if (held.has(s)) continue;
       const c = v.closes[s];
-      if (!c || c.length < LIMITS.longSmaDays + lookback) continue;
-      const m50 = sma(c, LIMITS.trendSmaDays);
+      if (!c || c.length < LIMITS.longSmaDays + 1) continue;
       const m200 = sma(c, LIMITS.longSmaDays);
       const price = v.prices[s] ?? c[c.length - 1]!;
-      if (m50 === null || m200 === null || price <= m200) continue;
-      const near = price >= m50 && price <= m50 * (1 + nearPct);
-      if (!near) continue;
-      // Nelle ultime `lookback` sedute il titolo doveva essere ben sopra la sua media a 50 di allora.
-      let ranUp = false;
-      for (let i = c.length - lookback; i < c.length; i++) {
-        const mm = sma(c.slice(0, i + 1), LIMITS.trendSmaDays);
-        if (mm !== null && c[i]! >= mm * (1 + runUpPct)) {
-          ranUp = true;
-          break;
-        }
-      }
-      if (!ranUp) continue;
-      const dist = price / m50 - 1;
-      segnali.push({ agente: this.name, simbolo: s, lato: "buy", forza: 0.7, orizzonteSedute: AGENTS.horizonSessions, perche: `sopra la media a 200, tornato a ${(dist * 100).toFixed(1)}% dalla media a 50 dopo una corsa di almeno il ${runUpPct * 100}%` });
+      const r = rsi([...c.slice(0, -1), price], rsiDays);
+      if (m200 === null || r === null || price <= m200 || r >= rsiEntry) continue;
+      segnali.push({ agente: this.name, simbolo: s, lato: "buy", forza: 0.7, orizzonteSedute: maxHoldSessions, pesoMassimo: maxWeight, perche: `RSI(${rsiDays}) a ${r.toFixed(0)} sopra la media a 200: ipervenduto di breve, rientro con taglia ridotta` });
+    }
+    // Le uscite valgono solo per i trade aperti dal rientro da solo: quelli del trend li gestisce il trend.
+    for (const t of v.journal.trade) {
+      if (t.stato !== "aperto" || !held.has(t.simbolo)) continue;
+      const agenti = t.contesto?.agenti ?? [];
+      if (agenti.length !== 1 || agenti[0] !== this.name) continue;
+      const c = v.closes[t.simbolo];
+      const price = v.prices[t.simbolo] ?? c?.[c.length - 1];
+      const r = c && price ? rsi([...c.slice(0, -1), price], rsiDays) : null;
+      const due = addTradingDays(t.apertoIl.slice(0, 10), maxHoldSessions);
+      if (r !== null && r >= rsiExit) segnali.push({ agente: this.name, simbolo: t.simbolo, lato: "sell", forza: 1, orizzonteSedute: 0, vincolante: true, perche: `RSI(${rsiDays}) a ${r.toFixed(0)}: il rientro ha fatto il suo lavoro` });
+      else if (v.today >= due) segnali.push({ agente: this.name, simbolo: t.simbolo, lato: "sell", forza: 1, orizzonteSedute: 0, vincolante: true, perche: `${maxHoldSessions} sedute dal rientro senza RSI sopra ${rsiExit}: si esce` });
     }
     return { segnali };
   }

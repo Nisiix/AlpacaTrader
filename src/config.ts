@@ -47,7 +47,7 @@ export const LIMITS = {
 };
 
 // Storico giornaliero da chiedere: media a 200 giorni più margine per festività.
-export const DAILY_BARS_DAYS = 260;
+export const DAILY_BARS_DAYS = 320; // media a 200 + momentum a 12 mesi (252) con margine
 
 // Le decisioni di ingresso e le uscite di trend si prendono solo a questa sveglia, sulle chiusure complete.
 export const ENTRY_SLOT: SlotKind = "open";
@@ -113,7 +113,14 @@ export const JOURNAL = {
 // A un mese la direzione "sale" ha ragione nel 61-67% dei casi sullo storico 2020-2026: è l'orizzonte scelto.
 export const AGENTS = {
   tickMinutes: 5,
-  horizonSessions: 20,
+  // Riesame del trade a 60 sedute (un trimestre): la letteratura sul momentum lavora su 1-12 mesi, non su 20 sedute.
+  horizonSessions: 60,
+  // Momentum assoluto (dual momentum): si compra solo se il rendimento a 12 mesi è positivo; altrimenti liquidità.
+  absMomentum: { days: 252, min: 0 },
+  // Crypto solo in trend: oltre alle medie e al momentum a 12 mesi, rendimento a 3 mesi positivo.
+  cryptoMomentumDays: 63,
+  // Volatilità di portafoglio obiettivo (annua): oltre, le taglie nuove si riducono in proporzione.
+  volTarget: { enabled: true, annual: 0.12, corr: 0.8 },
   // Titoli che gli agenti possono comprare: senza IWM e TLT (attesa nulla o negativa con obiettivo +3% / stop -3%).
   // Le crypto si aggiungono con --crypto (enableCrypto): nel backtest ago 2025 - nov 2026 hanno tolto 5-6 punti.
   // La gabbia accetta comunque vendite su tutto UNIVERSE ∪ CRYPTO.
@@ -130,8 +137,9 @@ export const AGENTS = {
   minAddPct: 0.02,
   // Regime: con SPY sotto la media a 200 giorni l'esposizione si dimezza; con volatilità alta pure.
   regime: { bearScale: 0.5, highVolDaily: 0.015, highVolScale: 0.5 },
-  // Rientro sul trend: prezzo tra la media a 50 e il 2% sopra, dopo che nelle ultime 20 sedute era almeno il 4% sopra.
-  pullback: { nearPct: 0.02, runUpPct: 0.04, lookback: 20 },
+  // Rientro (mean reversion di Connors): RSI(2) sotto 10 con prezzo sopra la media a 200; uscita a RSI(2) sopra 70 o dopo
+  // 5 sedute; taglia piccola (5% del conto): gli obiettivi brevi funzionano sulla mean reversion, non sul trend.
+  pullback: { rsiDays: 2, rsiEntry: 10, rsiExit: 70, maxHoldSessions: 5, maxWeight: 0.05 },
   // Pesi degli agenti dal diario: scendono se un agente perde con un campione almeno indicativo, salgono se vince con campione affidabile.
   weights: { base: 1, losing: 0.5, winning: 1.2 },
   // Kronos (sidecar Python, opzionale): si considerano solo le previsioni più nette (quota) e solo se concordano col trend.
@@ -145,7 +153,13 @@ export const AGENTS = {
   // che c'è altro da prendere: allora si lascia correre con uno stop che segue il massimo e non restituisce più del
   // rischio (giveBackPct), mai sotto il carico + lockPct. Proiezione negativa: si esce subito, in guadagno o in perdita.
   // Stop a -3%: con -2% NVDA (3% di volatilità al giorno) usciva sul rumore. Obiettivo +4% dove le barriere lo pagano.
-  exit: { enabled: true, stopPct: 0.03, targetPct: 0.03, targetBySymbol: { GLD: 0.04, MSFT: 0.04, QQQ: 0.04 } as Record<string, number>, giveBackPct: 0.02, lockPct: 0.005 },
+  // mode "trend": niente obiettivo fisso, stop che segue il massimo a trailAtr × ATR (ATR ≈ prezzo × volatilità giornaliera);
+  // mode "obiettivo": incasso a targetPct (per titolo) con trailing solo se la proiezione dice di continuare.
+  // stopMode "volatilita": stop a 2,5 × vol × √5 tra il 5% e il 10% (stops.ts), con taglia già ridotta dalla volatilità;
+  // stopMode "fisso": stopPct. La letteratura (Lei-Li, Han-Zhou-Zhu) dà ragione agli stop larghi scalati sulla volatilità.
+  // trailAtr 0 = nessun trailing: nel backtest 2024-2026 il trailing a 3 ATR dal massimo toglieva 19 punti (usciva sul rumore
+  // mentre il trend continuava); l'uscita di trend resta quella della gabbia (chiusura sotto la media a 50).
+  exit: { enabled: true, mode: "trend" as "trend" | "obiettivo", stopMode: "volatilita" as "volatilita" | "fisso", stopPct: 0.03, trailAtr: 0, targetPct: 0.03, targetBySymbol: { GLD: 0.04, MSFT: 0.04, QQQ: 0.04 } as Record<string, number>, giveBackPct: 0.02, lockPct: 0.005 },
   // Contesto economico (agente "contesto"): prima di ogni trade. Regole sui dati di mercato e sul calendario eventi sempre;
   // in più, se c'è `claude -p`, una lettura della situazione economica con ricerca web ogni refreshHours (cache in state/macro.json).
   // Sfavorevole: esposizione × unfavorableScale, nessun ingresso nuovo e niente fiducia nella proiezione per quel settore
@@ -159,3 +173,6 @@ export const AGENTS = {
 export function enableCrypto() {
   for (const c of CRYPTO) if (!AGENTS.universe.includes(c)) AGENTS.universe.push(c);
 }
+
+// Backtest: costi per lato (spread + slippage sul feed IEX) in punti base, applicati a ogni esecuzione.
+export const BACKTEST = { costBps: 5 };

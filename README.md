@@ -21,20 +21,22 @@ il lock e gli ID deterministici evitano doppioni anche con le sveglie classiche.
 
 | Agente | Cosa guarda | Segnali |
 |---|---|---|
-| `trend` | chiusura sopra le medie a 50 e 200 giorni, momentum a 6 mesi | compra i migliori 5 (forza 1 → 0,5 per classifica); vende chi ha in mano sotto la 50 |
-| `rientro` | sopra la 200, tornato entro il 2% dalla media a 50 dopo una corsa di almeno il 4% in 20 sedute | compra (forza 0,7) |
+| `trend` | chiusura sopra le medie a 50 e 200 giorni, **rendimento a 12 mesi positivo** (momentum assoluto, altrimenti liquidità), classifica per momentum a 6 mesi; crypto anche a 3 mesi positivi | compra i migliori 5 (forza 1 → 0,5 per classifica); vende chi ha in mano sotto la 50 |
+| `rientro` | mean reversion di Connors: RSI(2) sotto 10 con prezzo sopra la media a 200 | compra (0,7) con **taglia massima 5%**; esce (vincolante) a RSI(2) sopra 70 o dopo 5 sedute, solo per i trade aperti da lui solo |
 | `regime` | SPY contro la sua media a 200 giorni e la volatilità a 20 giorni | nessun ordine: dimezza l'esposizione ammessa quando il mercato è debole o nervoso |
-| `orizzonte` | trade aperti da 20 sedute | vende (0,8 se lo slancio è finito, 0,4 se il trend regge: allora decide il trend) |
+| `orizzonte` | trade aperti da **60 sedute** (un trimestre) | vende (0,8) solo se lo slancio è finito; se il trend regge tace |
 | `contesto` | **prima di ogni trade**: situazione economica generale e per settore (regole sui dati: SPY e media a 200, volatilità, oro e obbligazioni in salita con SPY in calo, titoli del settore sotto la 50, Fed nei prossimi 2 giorni; più, se c'è `claude -p`, una lettura con ricerca web ogni 6 ore in `state/macro.json`) | nessun ordine: esposizione × 0,75 (neutro) o × 0,5 (sfavorevole); con contesto sfavorevole nel settore **non si apre niente e si aspetta la candela successiva**; la proiezione di Kronos guida ingressi e uscite **solo** con contesto favorevole |
-| `uscite` | ogni posizione: perdita dal carico, guadagno, massimo visto, proiezione di Kronos se il contesto si fida | **vincolante** (non si vota): vende a -3%; a +3% (+4% su GLD, MSFT, QQQ) incassa, salvo proiezione positiva: allora segue il massimo e vende se restituisce il 2% (mai sotto carico +0,5%); proiezione negativa: esce subito |
+| `uscite` | ogni posizione: perdita dal carico, massimo visto, proiezione di Kronos se il contesto si fida | **vincolante** (non si vota). Di serie (`mode: "trend"`): stop **scalato sulla volatilità** (2,5 × vol × √5, tra 5% e 10%, anche come stop GTC su Alpaca), nessun obiettivo (l'uscita normale è il trend della gabbia), proiezione negativa: esce subito. Opzioni: `trailAtr` per uscire anche a N ATR dal massimo; `mode: "obiettivo"` per la vecchia politica a +3%/+4% con stop fisso -3% |
 | `kronos` (opzionale) | previsioni del modello a 5 sedute, solo il 25% più nette e nel verso del trend | compra/vende (0,5); le stesse proiezioni guidano `uscite` |
 | `profitto` (opzionale, `--profitto`) | guadagno oltre +2% | vende (1) |
 
 L'**allocatore** somma i segnali pesati (peso 1 per tutti finché il diario non ha un campione; poi 0,5 a chi perde,
 1,2 a chi vince con campione affidabile), compra sopra 0,5 e vende sotto -0,5; il peso obiettivo di un titolo è il massimo
-della gabbia (20%, meno se volatile) × rischio del regime × punteggio. Poi tutto passa dalla **gabbia** (`src/cage.ts`):
+della gabbia (20%, meno se volatile) × rischio del regime e del contesto, con il tetto del comparto (5% per il rientro);
+poi la **volatilità di portafoglio**: se le posizioni volute supererebbero il 12% annuo (√252 × 0,8 × Σ peso × volatilità),
+le taglie nuove scendono in proporzione. Poi tutto passa dalla **gabbia** (`src/cage.ts`):
 acquisti solo nella finestra 15:40-17:30 di Roma e una sola volta al giorno per titolo, vendite e stop a mercato aperto.
-Lo stop GTC su Alpaca sta al 3% dal carico (`AGENTS.exit.stopPct`); la politica di uscita si regola in `src/config.ts` (`AGENTS.exit`).
+Lo stop GTC su Alpaca è scalato sulla volatilità (5-10%); la politica di uscita si regola in `src/config.ts` (`AGENTS.exit`).
 Gli agenti comprano solo in `AGENTS.universe` (SPY QQQ AAPL MSFT NVDA GLD: niente IWM e TLT, che con obiettivo +3% e
 stop -3% hanno attesa nulla o negativa); una posizione vecchia resta sorvegliata e vendibile.
 
@@ -42,6 +44,7 @@ stop -3% hanno attesa nulla o negativa); una posizione vecchia resta sorvegliata
 quantità frazionarie (6 decimali, minimo 10 $), stop su Alpaca come `stop_limit` (Alpaca non accetta lo `stop` a
 mercato sulle crypto) con limite mezzo punto sotto. Le posizioni crypto di Alpaca (`BTCUSD`) sono normalizzate a `BTC/USD`.
 L'interruttore a -5% dal massimo si **riarma da solo dopo 5 giorni di borsa** (nel backtest: da +4,3% a +17,7%).
+Il backtest applica 5 punti base di costi per lato e confronta con SPY, 60/40 e GTAA di Faber sullo stesso universo.
 
 Ogni cosa che succede finisce nel **registro eventi** `state/events/AAAA-MM-GG.jsonl` (prezzi, segnali, rischio,
 allocazione, ordini, rifiuti, stop, trade, allarmi) e nello stato `state/agents-status.json`. La **dashboard**
@@ -63,22 +66,26 @@ irm https://raw.githubusercontent.com/Nisiix/AlpacaTrader/ccr-f218832d-solbom/in
 powershell -ExecutionPolicy Bypass -File installa-windows.ps1
 ```
 
-### Backtest del motore (550 sedute, dati Alpaca, esecuzione alla chiusura, senza costi)
+### Backtest del motore (dati Alpaca, esecuzione alla chiusura, costi 5 punti base per lato)
 
-Configurazione attuale: universo senza IWM/TLT, contesto economico (regole), stop -3%, obiettivo +3% (+4% GLD/MSFT/QQQ).
-Le crypto hanno storico Alpaca più corto e restano fuori da questa tabella (vedi `docs/`).
+Configurazione di serie: momentum assoluto a 12 mesi, rientro RSI(2) a taglia ridotta, regime, orizzonte 60 sedute, contesto
+economico (regole), volatilità di portafoglio 12%, stop sulla volatilità, uscita di trend della gabbia.
 
-| Variante | Rendimento | Perdita max | Trade | Vinti | Attesa/trade | Durata media |
+| Periodo | Variante | Rendimento | Perdita max | Trade | Vinti | Attesa/trade |
 |---|---|---|---|---|---|---|
-| Gabbia + metodo trend (sveglie), interruttore a riarmo automatico | +17,65% | -8,72% | 208 ordini | – | – | – |
-| Agenti: trend, rientro, regime, orizzonte, contesto, pesi dal diario (stop gabbia 5-10%) | +14,17% | -5,73% | 71 | 28% | +0,79% | 28 g |
-| Agenti + presa di profitto secca a +2% | +11,91% | -5,76% | 110 | 48% | +0,52% | 14 g |
-| **Agenti + uscite: stop -3%, obiettivo +3%/+4% (configurazione di serie)** | +11,49% | **-5,11%** | 152 | 47% | +0,42% | 10 g |
-| Agenti + uscite: stop -3%, obiettivo +4% | +12,01% | -7,82% | 161 | 43% | +0,39% | 11 g |
-| SPY comprato e tenuto / 60-40 | +35,18% / +18,22% | | | | | |
+| 2024-2026 (497 sedute) | **di serie** | **+17,6%** | **-5,6%** | 66 | 30% | +1,36% |
+| | SPY / 60-40 / GTAA Faber | +26,0% / +15,5% / +15,6% | | | | |
+| | + trailing a 3 ATR dal massimo | -1,2% | -7,7% | 76 | 29% | -0,42% |
+| | vecchia politica: obiettivo +3%/+4%, stop fisso -3% | +10,5% | -7,9% | 170 | 46% | +0,44% |
+| | presa di profitto secca +2% | +11,7% | -5,5% | 82 | 41% | +0,71% |
+| 2021-2026 (1327 sedute) | **di serie** | **+66,2%** | **-7,9%** | 165 | 40% | +2,06% |
+| | SPY / 60-40 / GTAA Faber | +79,8% / +34,3% / +84,7% | SPY -25% nel 2022 | | | |
+| | + trailing a 3 ATR | +30,6% | -9,5% | 230 | 40% | +0,89% |
+| | vecchia politica: obiettivo +3%/+4%, stop fisso -3% | +44,5% | -7,4% | 431 | 51% | +0,69% |
+| | presa di profitto secca +2% | +50,1% | -7,4% | 200 | 44% | +1,51% |
 
-Senza l'agente contesto le stesse varianti rendono 2-6 punti in più (uscite +3%: +14,8%) con esposizione più alta:
-il contesto costa rendimento nei periodi rialzisti e compra protezione in quelli deboli.
+Qualunque vantaggio di backtest va tagliato del 25-50% (McLean-Pontiff). Le crypto (`--crypto`) restano fuori di serie:
+nel loro periodo (2025-2026) tolgono rendimento in ogni variante.
 
 ## Sveglie (modalità classica)
 

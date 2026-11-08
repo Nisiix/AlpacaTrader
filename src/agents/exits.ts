@@ -1,8 +1,13 @@
-import { AGENTS } from "../config.ts";
+import { AGENTS, LIMITS } from "../config.ts";
+import { dailyVol } from "../indicators.ts";
+import { stopPctFor } from "../stops.ts";
 import type { Agent, AgentReport, AgentView, Signal } from "./types.ts";
 
 export interface ExitPolicy {
-  stopPct: number; // perdita massima dal carico
+  mode: "trend" | "obiettivo";
+  stopMode: "volatilita" | "fisso";
+  trailAtr: number; // modalità trend: stop che segue il massimo a trailAtr × ATR
+  stopPct: number; // perdita massima dal carico (stopMode fisso)
   targetPct: number; // guadagno a cui si incassa, se la proiezione non dice di continuare
   targetBySymbol?: Record<string, number>; // obiettivi diversi per titolo (dove le barriere pagano di più)
   giveBackPct: number; // quanto può restituire dal massimo chi continua
@@ -17,7 +22,7 @@ export class ExitAgent implements Agent {
 
   observe(v: AgentView): AgentReport {
     const segnali: Signal[] = [];
-    const { stopPct, giveBackPct, lockPct } = this.policy;
+    const { giveBackPct, lockPct } = this.policy;
     const pct = (x: number) => `${(x * 100).toFixed(1)}%`;
     for (const p of v.positions) {
       if (p.qty <= 0 || p.avgEntryPrice <= 0) continue;
@@ -27,12 +32,25 @@ export class ExitAgent implements Agent {
       const peak = Math.max(trade?.massimo ?? 0, price, p.avgEntryPrice);
       const forecast = v.previsioni?.[p.symbol];
       const sell = (perche: string) => segnali.push({ agente: this.name, simbolo: p.symbol, lato: "sell", forza: 1, orizzonteSedute: 0, perche, vincolante: true });
+      // Il rientro ha le sue uscite brevi: qui restano solo lo stop e la proiezione.
+      const soloRientro = trade?.contesto?.agenti?.length === 1 && trade.contesto.agenti[0] === "rientro";
+      const stopPct = this.policy.stopMode === "fisso" ? this.policy.stopPct : stopPctFor(v.closes[p.symbol]);
       if (gain <= -stopPct) {
-        sell(`perdita ${pct(gain)} oltre lo stop del ${pct(stopPct)}`);
+        sell(`perdita ${pct(gain)} oltre lo stop del ${pct(stopPct)}${this.policy.stopMode === "fisso" ? "" : " (scalato sulla volatilità)"}`);
         continue;
       }
       if (forecast !== undefined && forecast < 0) {
         sell(`proiezione negativa (${pct(forecast)}) su un titolo in portafoglio: si esce ${gain >= 0 ? "in guadagno" : "limitando la perdita"} (${pct(gain)})`);
+        continue;
+      }
+      if (soloRientro) continue;
+      if (this.policy.mode === "trend") {
+        // Si lascia correre: l'uscita normale è quella di trend della gabbia. Con trailAtr > 0 si esce anche se dal massimo
+        // il prezzo torna indietro di trailAtr × ATR (ATR ≈ prezzo × volatilità).
+        if (this.policy.trailAtr <= 0) continue;
+        const vol = (v.closes[p.symbol] ? dailyVol(v.closes[p.symbol]!, LIMITS.volLookbackDays) : null) ?? LIMITS.fallbackDailyVol;
+        const trail = Math.min(0.25, this.policy.trailAtr * vol);
+        if (peak > p.avgEntryPrice && price <= peak * (1 - trail)) sell(`dal massimo ${peak.toFixed(2)} il prezzo è sceso del ${pct(1 - price / peak)} (oltre ${this.policy.trailAtr} ATR = ${pct(trail)}): il trend si è girato, si esce a ${pct(gain)}`);
         continue;
       }
       const targetPct = this.policy.targetBySymbol?.[p.symbol] ?? this.policy.targetPct;
@@ -47,6 +65,8 @@ export class ExitAgent implements Agent {
       if (price <= floor) sell(`dal massimo ${peak.toFixed(2)} il prezzo è tornato a ${price.toFixed(2)}: si incassa ${pct(gain)} prima di restituire più del ${pct(giveBackPct)}`);
     }
     const targets = Object.entries(this.policy.targetBySymbol ?? {}).map(([k, t]) => `${k} ${pct(t)}`).join(", ");
-    return { segnali, note: segnali.length ? undefined : [`stop ${pct(stopPct)}, obiettivo ${pct(this.policy.targetPct)}${targets ? ` (${targets})` : ""}, restituzione massima ${pct(giveBackPct)}`] };
+    const stopNote = this.policy.stopMode === "fisso" ? `stop ${pct(this.policy.stopPct)}` : `stop sulla volatilità (${pct(LIMITS.stop.minPct)}-${pct(LIMITS.stop.maxPct)})`;
+    const exitNote = this.policy.mode === "trend" ? (this.policy.trailAtr > 0 ? `uscita anche a ${this.policy.trailAtr} ATR dal massimo` : "nessun obiettivo: esce il trend della gabbia") : `obiettivo ${pct(this.policy.targetPct)}${targets ? ` (${targets})` : ""}, restituzione massima ${pct(giveBackPct)}`;
+    return { segnali, note: segnali.length ? undefined : [`${stopNote}, ${exitNote}`] };
   }
 }

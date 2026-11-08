@@ -15,6 +15,21 @@ export function dailyVol(closes: number[], n: number): number | null {
   return Math.sqrt(r.reduce((a, b) => a + (b - mean) ** 2, 0) / (r.length - 1));
 }
 
+// RSI di Wilder a n periodi sulle chiusure (RSI(2) per la mean reversion di Connors).
+export function rsi(closes: number[], n: number): number | null {
+  if (closes.length < n + 1) return null;
+  let gain = 0, loss = 0;
+  for (let i = closes.length - n; i < closes.length; i++) {
+    const d = closes[i]! - closes[i - 1]!;
+    if (d >= 0) gain += d;
+    else loss -= d;
+  }
+  if (gain === 0 && loss === 0) return 50;
+  if (loss === 0) return 100;
+  const rs = gain / n / (loss / n);
+  return 100 - 100 / (1 + rs);
+}
+
 export function momentum(closes: number[], n: number): number | null {
   if (closes.length < n + 1) return null;
   const a = closes[closes.length - 1 - n]!;

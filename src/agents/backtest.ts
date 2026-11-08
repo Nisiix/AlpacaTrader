@@ -1,7 +1,8 @@
 import { evaluateBreaker, type BreakerFile } from "../breaker.ts";
 import { applyCage } from "../cage.ts";
 import { MIX } from "../benchmark.ts";
-import { AGENTS, LIMITS, UNIVERSE } from "../config.ts";
+import { AGENTS, BACKTEST, LIMITS, UNIVERSE } from "../config.ts";
+import { sma } from "../indicators.ts";
 import { indicatorsFor } from "../indicators.ts";
 import { emptyJournal, learnFromJournal, learningStatus, statsOf, type JournalFile, type Stats, type Trade } from "../journal.ts";
 import { activeLessons, emptyLessons, learnFromStopLoss } from "../lessons.ts";
@@ -36,6 +37,37 @@ export interface AgentsBacktestResult {
   finalWeights: Record<string, number>;
   learningFrom: string | null; // da quando il diario ha iniziato a pesare gli agenti
   avgHoldDays: number;
+  costs: number; // costi pagati in totale (frazione del capitale iniziale)
+  gtaaReturn: number; // Faber GTAA sullo stesso universo e periodo, stessi costi
+}
+
+// Faber GTAA (2007): ogni titolo dell'universo a peso uguale quando il prezzo è sopra la media a 10 mesi (210 sedute),
+// altrimenti liquidità; ribilanciamento a fine mese (ogni 21 sedute). È il confronto onesto per un sistema di trend.
+export function gtaaBenchmark(closes: Record<string, number[]>, symbols: string[], first: number, len: number, startEquity = 100_000): number {
+  const syms = symbols.filter((s) => closes[s]);
+  let cash = startEquity;
+  const pos = new Map<string, number>();
+  for (let day = first; day < len; day++) {
+    const price = (s: string) => closes[s]![day]!;
+    if ((day - first) % 21 !== 0) continue;
+    const equity = cash + [...pos].reduce((a, [s, q]) => a + q * price(s), 0);
+    const inTrend = syms.filter((s) => {
+      const m = sma(closes[s]!.slice(0, day + 1), 210);
+      return m !== null && price(s) > m;
+    });
+    const target = inTrend.length ? equity / syms.length : 0;
+    for (const s of syms) {
+      const want = inTrend.includes(s) ? target / price(s) : 0;
+      const have = pos.get(s) ?? 0;
+      const delta = want - have;
+      if (Math.abs(delta * price(s)) < equity * 0.005) continue;
+      cash -= delta * price(s) + Math.abs(delta * price(s)) * (BACKTEST.costBps / 10_000);
+      pos.set(s, want);
+    }
+  }
+  const last = len - 1;
+  const final = cash + [...pos].reduce((a, [s, q]) => a + q * closes[s]![last]!, 0);
+  return final / startEquity - 1;
 }
 
 // Il motore degli agenti rigiocato sulle chiusure: ogni seduta vale una passata nella finestra di ingresso,
@@ -54,8 +86,14 @@ export function runAgentsBacktest(closes: Record<string, number[]>, startEquity 
   let date = startDate;
   let exposureSum = 0;
   let weights: Record<string, number> = {};
-  const r: AgentsBacktestResult = { days: 0, totalReturn: 0, spyReturn: 0, mixReturn: 0, maxDrawdown: 0, buys: 0, sells: 0, trendExits: 0, stopOuts: 0, agentSells: 0, exitRuleSells: 0, breakerTrips: 0, rejectedByCage: {}, avgExposure: 0, stats: statsOf([]), perAgent: {}, finalWeights: {}, learningFrom: null, avgHoldDays: 0 };
-  const first = LIMITS.longSmaDays;
+  const r: AgentsBacktestResult = { days: 0, totalReturn: 0, spyReturn: 0, mixReturn: 0, maxDrawdown: 0, buys: 0, sells: 0, trendExits: 0, stopOuts: 0, agentSells: 0, exitRuleSells: 0, breakerTrips: 0, rejectedByCage: {}, avgExposure: 0, stats: statsOf([]), perAgent: {}, finalWeights: {}, learningFrom: null, avgHoldDays: 0, costs: 0, gtaaReturn: 0 };
+  // Si parte quando ci sono abbastanza barre per la media a 200 e per il momentum a 12 mesi.
+  const first = Math.max(LIMITS.longSmaDays, AGENTS.absMomentum.days + 1);
+  const cost = (value: number) => {
+    const c = Math.abs(value) * (BACKTEST.costBps / 10_000);
+    r.costs += c / startEquity;
+    return c;
+  };
   const names = agents.map((a) => a.name);
 
   for (let day = first; day < len; day++, date = addTradingDays(date, 1)) {
@@ -98,7 +136,7 @@ export function runAgentsBacktest(closes: Record<string, number[]>, startEquity 
       if (o.side === "buy") {
         p.avg = (p.avg * p.qty + price * o.qty) / (p.qty + o.qty);
         p.qty += o.qty;
-        cash -= o.qty * price;
+        cash -= o.qty * price + cost(o.qty * price);
         r.buys++;
         const agenti = alloc.punteggi.find((s) => s.simbolo === o.symbol)?.agenti ?? [];
         if (open) {
@@ -110,7 +148,7 @@ export function runAgentsBacktest(closes: Record<string, number[]>, startEquity 
         }
       } else {
         p.qty -= o.qty;
-        cash += o.qty * price;
+        cash += o.qty * price - cost(o.qty * price);
         r.sells++;
         if (o.source === "uscita-trend") r.trendExits++;
         if (o.source === "modello") r.agentSells++;
@@ -155,5 +193,6 @@ export function runAgentsBacktest(closes: Record<string, number[]>, startEquity 
   r.finalWeights = weights;
   const closed = journal.trade.filter((t) => t.stato === "chiuso");
   r.avgHoldDays = closed.length ? closed.reduce((a, t) => a + (t.giorni ?? 0), 0) / closed.length : 0;
+  r.gtaaReturn = gtaaBenchmark(closes, SYMBOLS.filter((s) => !s.includes("/")), first, len, startEquity);
   return r;
 }

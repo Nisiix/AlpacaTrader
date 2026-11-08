@@ -15,8 +15,9 @@ import { TrendAgent } from "../src/agents/trend.ts";
 import type { Agent, AgentView } from "../src/agents/types.ts";
 import { evaluateBreaker } from "../src/breaker.ts";
 import { applyCage } from "../src/cage.ts";
-import { syntheticCloses } from "../src/broker/fake.ts";
-import { LIMITS, UNIVERSE, enableCrypto } from "../src/config.ts";
+import { FAKE_VOL, syntheticCloses } from "../src/broker/fake.ts";
+import { AGENTS, LIMITS, UNIVERSE, enableCrypto } from "../src/config.ts";
+import { stopPctFor } from "../src/stops.ts";
 import { startDashboard } from "../src/dashboard/server.ts";
 import { indicatorsFor } from "../src/indicators.ts";
 import { emptyJournal, type JournalFile } from "../src/journal.ts";
@@ -71,26 +72,46 @@ describe("agenti", () => {
     expect(buys.length).toBe(LIMITS.maxPositions);
     expect(buys[0]!.forza).toBe(1);
     expect(buys.at(-1)!.forza).toBeCloseTo(0.5, 5);
-    expect(buys.every((s) => s.orizzonteSedute === 20)).toBe(true);
+    expect(buys.every((s) => s.orizzonteSedute === 60)).toBe(true);
     expect(r.segnali.find((s) => s.lato === "sell")?.simbolo).toBe("TLT");
   });
 
-  test("rientro: sopra la 200, tornato vicino alla 50 dopo una corsa", () => {
+  test("rientro (Connors): RSI(2) sotto 10 sopra la media a 200 compra con taglia ridotta; esce a RSI sopra 70 o dopo 5 sedute", () => {
+    // Trend in salita, poi due sedute di calo: RSI(2) a zero, prezzo ancora sopra la media a 200.
     const c = syntheticCloses(100, 0, 260);
-    // Corsa: 10 sedute fa chiudeva il 6% sopra la media a 50; oggi è tornato a +1% dalla media.
-    const boosted = [...c];
-    for (let i = 240; i < 252; i++) boosted[i] = c[i]! * 1.08;
+    c[258] = c[257]! * 0.99;
+    c[259] = c[258]! * 0.99;
     const v = view();
-    v.closes.SPY = boosted;
-    const m50 = boosted.slice(-50).reduce((a, b) => a + b, 0) / 50;
-    v.prices.SPY = m50 * 1.01;
-    const r = new PullbackAgent().observe(v);
-    expect(r.segnali.map((s) => s.simbolo)).toContain("SPY");
-    expect(r.segnali.find((s) => s.simbolo === "SPY")!.forza).toBe(0.7);
-    // Senza corsa precedente non è un rientro.
     v.closes.SPY = c;
-    v.prices.SPY = (c.slice(-50).reduce((a, b) => a + b, 0) / 50) * 1.01;
-    expect(new PullbackAgent().observe(v).segnali.find((s) => s.simbolo === "SPY")).toBeUndefined();
+    v.prices.SPY = c[259]!;
+    const r = new PullbackAgent().observe(v);
+    const sig = r.segnali.find((s) => s.simbolo === "SPY")!;
+    expect(sig.lato).toBe("buy");
+    expect(sig.pesoMassimo).toBe(0.05);
+    expect(sig.orizzonteSedute).toBe(5);
+    // Niente rientro se il titolo sale: RSI alto.
+    expect(new PullbackAgent().observe(view()).segnali.filter((s) => s.lato === "buy")).toEqual([]);
+    // Trade aperto dal solo rientro: con RSI(2) tornato alto esce (vincolante); quello del trend no.
+    const j = emptyJournal();
+    j.trade.push({ id: "r", simbolo: "QQQ", stato: "aperto", apertoIl: "2026-09-22T14:00:00Z", comprate: 1, costo: 500, vendute: 0, incassato: 0, quantita: 1, contesto: { setup: "", momentum20: null, volGiornaliera: null, distanzaMedia: null, fiducia: null, attesa: "", perche: "", agenti: ["rientro"] } });
+    j.trade.push({ id: "t", simbolo: "AAPL", stato: "aperto", apertoIl: "2026-09-22T14:00:00Z", comprate: 1, costo: 240, vendute: 0, incassato: 0, quantita: 1, contesto: { setup: "", momentum20: null, volGiornaliera: null, distanzaMedia: null, fiducia: null, attesa: "", perche: "", agenti: ["trend"] } });
+    const pos = [{ symbol: "QQQ", qty: 1, avgEntryPrice: 500, currentPrice: 520, marketValue: 520 }, { symbol: "AAPL", qty: 1, avgEntryPrice: 240, currentPrice: 250, marketValue: 250 }];
+    const vq = view({ journal: j, positions: pos });
+    const q = syntheticCloses(520, 0, 260);
+    q[258] = q[257]! * 1.01;
+    q[259] = q[258]! * 1.01; // due rialzi: RSI(2) a 100
+    vq.closes.QQQ = q;
+    vq.prices.QQQ = q[259]! * 1.01;
+    const out = new PullbackAgent().observe(vq);
+    expect(out.segnali.filter((s) => s.lato === "sell").map((s) => s.simbolo)).toEqual(["QQQ"]);
+    expect(out.segnali[0]!.vincolante).toBe(true);
+    // Dopo 5 sedute esce comunque.
+    const j2 = emptyJournal();
+    j2.trade.push({ ...j.trade[0]!, apertoIl: "2026-09-10T14:00:00Z" });
+    const v2 = view({ journal: j2, positions: [pos[0]!] });
+    v2.closes.QQQ = (() => { const q = syntheticCloses(520, 0, 260); q[258] = 515; q[259] = 510; return q; })();
+    v2.prices.QQQ = 510;
+    expect(new PullbackAgent().observe(v2).segnali[0]!.perche).toContain("5 sedute");
   });
 
   test("regime: SPY sotto la media a 200 dimezza il rischio, sopra lo lascia intero", () => {
@@ -100,18 +121,17 @@ describe("agenti", () => {
     expect(r.note?.[0]).toContain("sotto la media a 200");
   });
 
-  test("orizzonte: a 20 sedute dall'ingresso chiede di uscire, forte se lo slancio è finito, debole se il trend regge", () => {
+  test("orizzonte: a 60 sedute dall'ingresso chiede di uscire solo se lo slancio è finito; se il trend regge tace", () => {
     const j = emptyJournal();
-    j.trade.push({ id: "x", simbolo: "AAPL", stato: "aperto", apertoIl: "2026-08-20T14:00:00Z", comprate: 10, costo: 2400, vendute: 0, incassato: 0, quantita: 10, contesto: null });
-    j.trade.push({ id: "y", simbolo: "MSFT", stato: "aperto", apertoIl: "2026-09-20T14:00:00Z", comprate: 10, costo: 4800, vendute: 0, incassato: 0, quantita: 10, contesto: null });
+    j.trade.push({ id: "x", simbolo: "AAPL", stato: "aperto", apertoIl: "2026-06-01T14:00:00Z", comprate: 10, costo: 2400, vendute: 0, incassato: 0, quantita: 10, contesto: null });
+    j.trade.push({ id: "y", simbolo: "MSFT", stato: "aperto", apertoIl: "2026-09-01T14:00:00Z", comprate: 10, costo: 4800, vendute: 0, incassato: 0, quantita: 10, contesto: null });
     const pos = [
       { symbol: "AAPL", qty: 10, avgEntryPrice: 240, currentPrice: 250, marketValue: 2500 },
       { symbol: "MSFT", qty: 10, avgEntryPrice: 480, currentPrice: 480, marketValue: 4800 },
     ];
-    const strong = new HorizonAgent().observe(view({ journal: j, positions: pos }));
-    expect(strong.segnali.map((s) => s.simbolo)).toEqual(["AAPL"]); // MSFT è entrato da 4 giorni
-    expect(strong.segnali[0]!.forza).toBe(0.4);
-    const tired = new HorizonAgent().observe(view({ journal: j, positions: pos, falling: ["AAPL"] }));
+    expect(new HorizonAgent().observe(view({ journal: j, positions: pos })).segnali).toEqual([]); // AAPL in trend: si tiene
+    const tired = new HorizonAgent().observe(view({ journal: j, positions: pos, falling: ["AAPL", "MSFT"] }));
+    expect(tired.segnali.map((s) => s.simbolo)).toEqual(["AAPL"]); // MSFT è entrato da 17 sedute: non è ancora il momento
     expect(tired.segnali[0]!.forza).toBe(0.8);
   });
 
@@ -130,6 +150,31 @@ describe("agenti", () => {
 });
 
 describe("allocatore", () => {
+  test("comparto a taglia ridotta: solo il rientro vota → peso al 5%; se vota anche il trend il limite cade", () => {
+    const only = allocate(view(), { r: { segnali: [{ agente: "r", simbolo: "SPY", lato: "buy", forza: 0.7, orizzonteSedute: 5, pesoMassimo: 0.05, perche: "" }] } }, { r: 1 });
+    expect(only.proposte[0]!.qty).toBe(8); // 5% di 100.000 $ a 600 $
+    const both = allocate(view(), { r: { segnali: [{ agente: "r", simbolo: "SPY", lato: "buy", forza: 0.7, orizzonteSedute: 5, pesoMassimo: 0.05, perche: "" }] }, t: { segnali: [{ agente: "t", simbolo: "SPY", lato: "buy", forza: 1, orizzonteSedute: 60, perche: "" }] } }, { r: 1, t: 1 });
+    expect(both.proposte[0]!.qty).toBe(33); // 20%
+  });
+
+  test("volatilità di portafoglio: cinque posizioni piene supererebbero il 12% annuo, le taglie si riducono in proporzione", () => {
+    const sig = (s: string) => ({ agente: "t", simbolo: s, lato: "buy" as const, forza: 1, orizzonteSedute: 60, perche: "" });
+    // Titoli nervosi (3% al giorno): il tetto per titolo è 8,3%, cinque insieme farebbero ~16% annuo: si scende a 12%.
+    const v = view();
+    for (const s of ["SPY", "QQQ", "AAPL", "MSFT", "NVDA"]) v.closes[s] = syntheticCloses(PRICES[s]!, 0.03, 260);
+    const a = allocate(v, { t: { segnali: ["SPY", "QQQ", "AAPL", "MSFT", "NVDA"].map(sig) } }, { t: 1 });
+    expect(a.proposte.length).toBe(5);
+    expect(a.proposte.every((p) => p.expect!.includes("ridotto per la volatilità di portafoglio"))).toBe(true);
+    const total = a.proposte.reduce((x, p) => x + p.qty * PRICES[p.symbol]!, 0) / 100_000;
+    expect(total).toBeLessThan(0.36);
+    expect(total).toBeGreaterThan(0.25);
+    // Con titoli tranquilli (0,5% al giorno: cinque al 20% fanno ~6% annuo) non si riduce.
+    const vc = view();
+    for (const s of ["SPY", "QQQ", "AAPL", "MSFT", "NVDA"]) vc.closes[s] = syntheticCloses(PRICES[s]!, 0.005, 260);
+    const calm = allocate(vc, { t: { segnali: ["SPY", "QQQ", "AAPL", "MSFT", "NVDA"].map(sig) } }, { t: 1 });
+    expect(calm.proposte.some((p) => p.expect!.includes("ridotto"))).toBe(false);
+  });
+
   test("somma i segnali pesati; vende sotto -0,5, compra sopra 0,5 con il peso obiettivo ridotto dal rischio", () => {
     const v = view({ positions: [{ symbol: "TLT", qty: 100, avgEntryPrice: 95, currentPrice: 90, marketValue: 9000 }] });
     const reports = {
@@ -296,7 +341,7 @@ describe("backtest del motore", () => {
     const closes: Record<string, number[]> = {};
     for (const s of UNIVERSE) closes[s] = syntheticCloses(PRICES[s]!, 0.01, 320);
     const r = runAgentsBacktest(closes, 100_000, "2026-01-05");
-    expect(r.days).toBe(320 - LIMITS.longSmaDays);
+    expect(r.days).toBe(320 - Math.max(LIMITS.longSmaDays, AGENTS.absMomentum.days + 1));
     expect(r.buys).toBeGreaterThan(0);
     expect(r.avgExposure).toBeGreaterThan(0.3);
     expect(r.totalReturn).toBeGreaterThan(0);
@@ -316,22 +361,24 @@ describe("uscite (regole vincolanti)", () => {
   const pos = (symbol: string, avg: number, price: number) => ({ symbol, qty: 10, avgEntryPrice: avg, currentPrice: price, marketValue: price * 10 });
   const openTrade = (simbolo: string, massimo?: number) => ({ id: simbolo, simbolo, stato: "aperto" as const, apertoIl: "2026-09-01T14:00:00Z", comprate: 10, costo: 1000, vendute: 0, incassato: 0, quantita: 10, contesto: null, massimo });
 
-  test("stop a -3% vende; sotto l'obiettivo tace; a +3% senza proiezione incassa", () => {
+  const OLD = { ...AGENTS.exit, mode: "obiettivo" as const, stopMode: "fisso" as const };
+
+  test("politica a obiettivo: stop fisso -3% vende; sotto l'obiettivo tace; a +3% senza proiezione incassa", () => {
     const j = emptyJournal();
     j.trade.push(openTrade("AAPL"), openTrade("MSFT"), openTrade("SPY"));
     const v = view({ positions: [pos("AAPL", 100, 96.9), pos("MSFT", 100, 101), pos("SPY", 100, 103.1)], journal: j });
     v.prices.AAPL = 96.9; v.prices.MSFT = 101; v.prices.SPY = 103.1;
-    const r = new ExitAgent().observe(v);
+    const r = new ExitAgent(OLD).observe(v);
     expect(r.segnali.map((s) => s.simbolo).sort()).toEqual(["AAPL", "SPY"]);
     // MSFT ha obiettivo +4%: a +3,5% non incassa ancora.
     const j4 = emptyJournal();
     j4.trade.push(openTrade("MSFT"));
     const v4 = view({ positions: [pos("MSFT", 100, 103.5)], journal: j4 });
     v4.prices.MSFT = 103.5;
-    expect(new ExitAgent().observe(v4).segnali).toEqual([]);
+    expect(new ExitAgent(OLD).observe(v4).segnali).toEqual([]);
     v4.prices.MSFT = 104.1;
     v4.positions[0]!.currentPrice = 104.1;
-    expect(new ExitAgent().observe(v4).segnali.length).toBe(1);
+    expect(new ExitAgent(OLD).observe(v4).segnali.length).toBe(1);
     expect(r.segnali.every((s) => s.vincolante && s.lato === "sell")).toBe(true);
     expect(r.segnali.find((s) => s.simbolo === "AAPL")!.perche).toContain("oltre lo stop");
     expect(r.segnali.find((s) => s.simbolo === "SPY")!.perche).toContain("si incassa");
@@ -342,14 +389,40 @@ describe("uscite (regole vincolanti)", () => {
     j.trade.push(openTrade("SPY", 106));
     const run = view({ positions: [pos("SPY", 100, 104.5)], journal: j, previsioni: { SPY: 0.01 } });
     run.prices.SPY = 104.5; // dal massimo 106 ha restituito l'1,4%: si tiene
-    expect(new ExitAgent().observe(run).segnali).toEqual([]);
+    expect(new ExitAgent(OLD).observe(run).segnali).toEqual([]);
     run.prices.SPY = 103.8; // restituito il 2,1%: si incassa
-    expect(new ExitAgent().observe(run).segnali[0]?.perche).toContain("prima di restituire");
+    expect(new ExitAgent(OLD).observe(run).segnali[0]?.perche).toContain("prima di restituire");
     const j2 = emptyJournal();
     j2.trade.push(openTrade("SPY", 103.2));
     const low = view({ positions: [pos("SPY", 100, 100.3)], journal: j2, previsioni: { SPY: 0.01 } });
     low.prices.SPY = 100.3; // massimo 103,2 × 0,98 = 101,1 ma il pavimento è carico + 0,5% = 100,5: sotto, si vende
-    expect(new ExitAgent().observe(low).segnali.length).toBe(1);
+    expect(new ExitAgent(OLD).observe(low).segnali.length).toBe(1);
+  });
+
+  test("politica di serie (trend): stop sulla volatilità (5-10%), niente obiettivo né trailing; con trailAtr 3 esce a 3 ATR dal massimo", () => {
+    const j = emptyJournal();
+    j.trade.push(openTrade("SPY", 110));
+    // Di serie: a +6,5% dal carico e 3,2% sotto il massimo non succede niente (esce il trend della gabbia, non qui).
+    const v = view({ positions: [pos("SPY", 100, 106.5)], journal: j });
+    v.prices.SPY = 106.5;
+    expect(new ExitAgent().observe(v).segnali).toEqual([]);
+    // Con il trailing a 3 ATR (SPY sintetico ~1% di volatilità: 3%): a 107,5 (2,3% sotto il massimo) si tiene, a 106,5 si esce.
+    const TRAIL = { ...AGENTS.exit, trailAtr: 3 };
+    v.prices.SPY = 107.5;
+    v.positions[0]!.currentPrice = 107.5;
+    expect(new ExitAgent(TRAIL).observe(v).segnali).toEqual([]);
+    v.prices.SPY = 106.5;
+    v.positions[0]!.currentPrice = 106.5;
+    expect(new ExitAgent(TRAIL).observe(v).segnali[0]!.perche).toContain("il trend si è girato");
+    // Stop: -3% non basta più (stop sulla volatilità almeno 5%); -5,5% sì.
+    const j2 = emptyJournal();
+    j2.trade.push(openTrade("SPY"));
+    const s1 = view({ positions: [pos("SPY", 100, 96.9)], journal: j2 });
+    s1.prices.SPY = 96.9;
+    expect(new ExitAgent().observe(s1).segnali).toEqual([]);
+    s1.prices.SPY = 94.5;
+    s1.positions[0]!.currentPrice = 94.5;
+    expect(new ExitAgent().observe(s1).segnali[0]!.perche).toContain("scalato sulla volatilità");
   });
 
   test("proiezione negativa: esce subito, anche in perdita piccola; l'allocatore esegue il vincolo senza voto", () => {
@@ -365,12 +438,14 @@ describe("uscite (regole vincolanti)", () => {
     expect(a.punteggi.find((p) => p.simbolo === "NVDA")!.agenti).toEqual(["trend"]); // il vincolo non entra nei punteggi
   });
 
-  test("nel motore lo stop GTC su Alpaca sta al 3% dal carico e il massimo visto finisce nel diario", async () => {
+  test("nel motore lo stop GTC su Alpaca è scalato sulla volatilità (5-10%) e il massimo visto finisce nel diario", async () => {
     const env = makeEnv(day("2026-09-24", "15:41"));
     const r = await runTick(engineDeps(env, [new TrendAgent(), new RegimeAgent(), new ExitAgent()]));
     const sym = r.status_file!.posizioni[0]!.simbolo;
     const stop = openStopsFor(env, sym)[0]!;
-    expect(stop.stopPrice).toBeCloseTo(PRICES[sym]! * 0.97, 1);
+    const pct = stopPctFor(syntheticCloses(PRICES[sym]!, FAKE_VOL[sym] ?? 0.02, 320));
+    expect(pct).toBeGreaterThanOrEqual(0.05);
+    expect(stop.stopPrice).toBeCloseTo(PRICES[sym]! * (1 - pct), 1);
     const journal = JSON.parse(readFileSync(join(env.stateDir, "journal.json"), "utf8")) as JournalFile;
     // Il massimo si aggiorna alla passata successiva, con il prezzo del momento.
     env.setFake((s) => {
@@ -412,7 +487,7 @@ describe("crypto", () => {
     expect(crypto[0]!.id).toMatch(/^agenti-2026-09-27-(BTC|ETH)USD-buy$/);
     const stop = openStopsFor(env, "BTC/USD")[0]!;
     expect(stop.type).toBe("stop_limit");
-    expect(stop.stopPrice).toBeCloseTo(76_000 * 0.97, 0);
+    expect(stop.stopPrice).toBeLessThan(76_000 * 0.95);
     expect(Number.isInteger(stop.qty)).toBe(false);
   });
 

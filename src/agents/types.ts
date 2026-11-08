@@ -13,6 +13,8 @@ export interface Signal {
   perche: string;
   // Regola di rischio, non opinione: l'allocatore la esegue senza sommarla agli altri voti.
   vincolante?: boolean;
+  // Comparto a taglia ridotta (es. il rientro): peso massimo del titolo se lo votano solo segnali con questo limite.
+  pesoMassimo?: number;
 }
 
 export interface AgentView {

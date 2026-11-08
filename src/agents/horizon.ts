@@ -3,9 +3,9 @@ import { momentum, sma } from "../indicators.ts";
 import { addTradingDays } from "../slots.ts";
 import type { Agent, AgentReport, AgentView, Signal } from "./types.ts";
 
-// Orizzonte: a 20 sedute dall'ingresso il trade si rimette in discussione. Se il titolo ha perso slancio
-// (sotto la media a 50 o momentum a 20 sedute negativo) chiede di uscire; altrimenti lascia che il trend
-// lo tenga in portafoglio (il segnale di vendita è debole e il trend, se è ancora forte, lo supera).
+// Orizzonte: a horizonSessions sedute dall'ingresso (un trimestre) il trade si rimette in discussione. Se il titolo ha
+// perso slancio (sotto la media a 50 o momentum a 20 sedute negativo) chiede di uscire; se il trend regge non dice niente
+// e il titolo resta finché dura (la letteratura sul momentum: continuazione da 1 a 12 mesi).
 export class HorizonAgent implements Agent {
   readonly name = "orizzonte";
 
@@ -22,15 +22,9 @@ export class HorizonAgent implements Agent {
       const mom = c ? momentum(c, 20) : null;
       const price = v.prices[t.simbolo] ?? held.currentPrice;
       const tired = (m50 !== null && price < m50) || (mom !== null && mom < 0);
+      if (!tired) continue;
       const gain = ((price / (t.costo / t.comprate) - 1) * 100).toFixed(1);
-      segnali.push({
-        agente: this.name,
-        simbolo: t.simbolo,
-        lato: "sell",
-        forza: tired ? 0.8 : 0.4,
-        orizzonteSedute: AGENTS.horizonSessions,
-        perche: `${AGENTS.horizonSessions} sedute dall'ingresso (${t.apertoIl.slice(0, 10)}, ${gain}%): ${tired ? "slancio finito, si esce" : "ancora in trend, si tiene solo se il trend lo conferma"}`,
-      });
+      segnali.push({ agente: this.name, simbolo: t.simbolo, lato: "sell", forza: 0.8, orizzonteSedute: AGENTS.horizonSessions, perche: `${AGENTS.horizonSessions} sedute dall'ingresso (${t.apertoIl.slice(0, 10)}, ${gain}%) e slancio finito: si esce` });
     }
     return { segnali };
   }

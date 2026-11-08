@@ -1,6 +1,7 @@
 import type { ProposedOrder } from "../brain/types.ts";
 import { maxWeightFor } from "../cage.ts";
 import { AGENTS, CRYPTO_MIN_NOTIONAL, LIMITS, isCrypto } from "../config.ts";
+import { dailyVol } from "../indicators.ts";
 import { roundQty } from "../broker/types.ts";
 import { learningStatus, statsOf, type JournalFile } from "../journal.ts";
 import type { AgentReport, AgentView, Signal } from "./types.ts";
@@ -12,6 +13,8 @@ export interface Score {
   vende: number;
   agenti: string[];
   perche: string[];
+  // Se tutti i voti di acquisto vengono da comparti a taglia ridotta, il peso massimo che chiedono.
+  pesoMassimo?: number;
 }
 
 export interface Allocation {
@@ -45,14 +48,26 @@ export function scoreSignals(signals: Signal[], weights: Record<string, number>)
     if (s.vincolante) continue;
     const sc = by.get(s.simbolo) ?? { simbolo: s.simbolo, punteggio: 0, compra: 0, vende: 0, agenti: [], perche: [] };
     const w = (weights[s.agente] ?? AGENTS.weights.base) * s.forza;
-    if (s.lato === "buy") sc.compra += w;
-    else sc.vende += w;
+    if (s.lato === "buy") {
+      sc.compra += w;
+      // Un voto senza limite di taglia (es. il trend) toglie il limite; se tutti i voti lo hanno, vale il più piccolo.
+      if (s.pesoMassimo === undefined) sc.pesoMassimo = Infinity;
+      else if (sc.pesoMassimo !== Infinity) sc.pesoMassimo = Math.min(sc.pesoMassimo ?? Infinity, s.pesoMassimo);
+    } else sc.vende += w;
     sc.punteggio = sc.compra - sc.vende;
     if (!sc.agenti.includes(s.agente)) sc.agenti.push(s.agente);
     sc.perche.push(`${s.agente}: ${s.perche}`);
     by.set(s.simbolo, sc);
   }
+  for (const sc of by.values()) if (sc.pesoMassimo === Infinity) delete sc.pesoMassimo;
   return [...by.values()].sort((a, b) => b.punteggio - a.punteggio);
+}
+
+// Volatilità annua attesa del portafoglio: √252 × corr × Σ peso × volatilità giornaliera (corr < 1 sconta la diversificazione).
+export function portfolioVol(weights: Record<string, number>, closes: Record<string, number[]>): number {
+  let sum = 0;
+  for (const [s, w] of Object.entries(weights)) sum += w * ((closes[s] ? dailyVol(closes[s]!, LIMITS.volLookbackDays) : null) ?? LIMITS.fallbackDailyVol);
+  return Math.sqrt(252) * AGENTS.volTarget.corr * sum;
 }
 
 // Dai punteggi agli ordini proposti. La gabbia (applyCage) resta a valle: qui si decide solo quanto si vorrebbe.
@@ -82,7 +97,9 @@ export function allocate(view: AgentView, reports: Record<string, AgentReport>, 
       proposte.push({ symbol: sc.simbolo, side: "sell", qty: p.qty, why: sc.perche.join(" · "), confidence: conf(-sc.punteggio), expect: `uscita: punteggio ${sc.punteggio.toFixed(2)}` });
     }
   }
+  // Prima i pesi obiettivo di chi si vuole comprare, poi un solo fattore di scala se la volatilità di portafoglio supera l'obiettivo.
   let slots = LIMITS.maxPositions - held.size;
+  const wanted: { sc: Score; w: number; p?: { qty: number } }[] = [];
   for (const sc of punteggi) {
     if (sc.punteggio < AGENTS.buyScore) break;
     if (forced.has(sc.simbolo)) continue;
@@ -95,15 +112,30 @@ export function allocate(view: AgentView, reports: Record<string, AgentReport>, 
     if (!price || price <= 0) continue;
     const p = held.get(sc.simbolo);
     if (!p && slots <= 0) continue;
-    const w = maxWeightFor(view.closes[sc.simbolo]).max * rischio * (AGENTS.scaleByScore ? Math.min(1, sc.punteggio) : 1);
-    const target = w * equity;
+    let w = maxWeightFor(view.closes[sc.simbolo]).max * rischio * (AGENTS.scaleByScore ? Math.min(1, sc.punteggio) : 1);
+    if (sc.pesoMassimo !== undefined) w = Math.min(w, sc.pesoMassimo);
+    if (!p) slots--;
+    wanted.push({ sc, w, p });
+  }
+  let scale = 1;
+  if (AGENTS.volTarget.enabled && equity > 0) {
+    const heldW: Record<string, number> = {};
+    for (const p of held.values()) if (!wanted.some((x) => x.sc.simbolo === p.symbol)) heldW[p.symbol] = (p.qty * (view.prices[p.symbol] ?? p.currentPrice)) / equity;
+    const newW: Record<string, number> = Object.fromEntries(wanted.map((x) => [x.sc.simbolo, x.w]));
+    const volHeld = portfolioVol(heldW, view.closes);
+    const volNew = portfolioVol(newW, view.closes);
+    const room = Math.max(0, AGENTS.volTarget.annual - volHeld);
+    if (volNew > room) scale = volNew > 0 ? room / volNew : 0;
+  }
+  for (const { sc, w, p } of wanted) {
+    const price = view.prices[sc.simbolo]!;
+    const target = w * scale * equity;
     const have = p ? p.qty * price : 0;
     const delta = target - have;
     if (delta / equity < AGENTS.minAddPct) continue;
     const qty = roundQty(sc.simbolo, delta / price);
     if (qty <= 0 || (isCrypto(sc.simbolo) && qty * price < CRYPTO_MIN_NOTIONAL)) continue;
-    if (!p) slots--;
-    proposte.push({ symbol: sc.simbolo, side: "buy", qty, why: sc.perche.join(" · "), confidence: conf(sc.punteggio), expect: `tenere circa ${AGENTS.horizonSessions} sedute; peso obiettivo ${(w * 100).toFixed(1)}% del conto` });
+    proposte.push({ symbol: sc.simbolo, side: "buy", qty, why: sc.perche.join(" · "), confidence: conf(sc.punteggio), expect: `peso obiettivo ${(w * scale * 100).toFixed(1)}% del conto${scale < 1 ? ` (ridotto per la volatilità di portafoglio, obiettivo ${(AGENTS.volTarget.annual * 100).toFixed(0)}% annuo)` : ""}` });
   }
   return { proposte, punteggi, rischio, pesi: weights, inAttesa };
 }

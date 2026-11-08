@@ -2,7 +2,7 @@ import type { ProposedOrder } from "./brain/types.ts";
 import type { Position } from "./broker/types.ts";
 import { evaluateBreaker, type BreakerFile } from "./breaker.ts";
 import { applyCage, maxWeightFor } from "./cage.ts";
-import { LIMITS, UNIVERSE } from "./config.ts";
+import { BACKTEST, LIMITS, UNIVERSE } from "./config.ts";
 import { momentum, trendOf } from "./indicators.ts";
 import { MIX } from "./benchmark.ts";
 import { activeLessons, emptyLessons, learnFromStopLoss } from "./lessons.ts";
@@ -102,13 +102,14 @@ export function runBacktest(closes: Record<string, number[]>, startEquity = 100_
     for (const o of cage.orders) {
       const price = prices[o.symbol]!;
       const p = positions.get(o.symbol) ?? { qty: 0, avg: 0 };
+      const fee = o.qty * price * (BACKTEST.costBps / 10_000);
       if (o.side === "buy") {
         p.avg = (p.avg * p.qty + price * o.qty) / (p.qty + o.qty);
         p.qty += o.qty;
-        cash -= o.qty * price;
+        cash -= o.qty * price + fee;
       } else {
         p.qty -= o.qty;
-        cash += o.qty * price;
+        cash += o.qty * price - fee;
         if (o.source === "uscita-trend") r.trendExits++;
         if (o.source === "stop-loss") {
           r.stopOuts++;

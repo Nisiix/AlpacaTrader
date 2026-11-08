@@ -580,3 +580,35 @@ Fonti principali: [Moskowitz-Ooi-Pedersen](https://papers.ssrn.com/abstract=2089
 [McLean-Pontiff](https://Www.Gwern.net/doc/economics/2016-mclean.pdf) · [Liu-Tsyvinski, crypto](https://econpapers.repec.org/RePEc:oup:rfinst:v:34:y:2021:i:6:p:2689-2727) ·
 [Parametri instabili in crypto](https://arxiv.org/pdf/2009.12155v1.pdf) · [TSFM in finanza, 2025](https://arxiv.org/abs/2511.18578) · [Test indipendente di Kronos](https://dev.to/alexbsolodev/we-tested-the-viral-ai-chart-model-on-dates-it-cant-have-seen-no-edge-4n1g) ·
 [freqtrade, strategy 101](https://docs.freqtrade.io/en/2025.3/strategy-101/) · [Hummingbot, intervista market maker](https://hummingbot.org/blog/interview-with-liquidity-miner-dominator008/) · [Lumibot](https://gittrend.io/repo/Lumiwealth/lumibot).
+
+---
+
+## Addendum (8 novembre, sera): gli otto cambiamenti della letteratura, applicati e misurati
+
+| # | Cambiamento | Dove | Esito nel backtest |
+|---|---|---|---|
+| 1 | Uscita di trend al posto dell'obiettivo fisso | `AGENTS.exit.mode: "trend"`: nessun obiettivo, esce il trend della gabbia (chiusura sotto la 50); trailing a N ATR disponibile ma **spento** | il trailing a 3 ATR dal massimo toglie 19 punti su 2024-2026 (-1,2% contro +17,6%) e 36 su 2021-2026: usciva sul rumore mentre il trend continuava. L'uscita di trend sola è la migliore |
+| 2 | Stop largo scalato sulla volatilità | `stopMode: "volatilita"`: 2,5 × vol × √5 tra 5% e 10%, anche su Alpaca; taglia già ridotta dalla volatilità | con lo stop fisso -3% la stessa configurazione rende +10,5% (2024-26) e +44,5% (2021-26) contro +17,6% e +66,2% |
+| 3 | Volatilità di portafoglio obiettivo | `AGENTS.volTarget` 12% annuo: le taglie nuove scendono se Σ peso × vol × √252 × 0,8 supera l'obiettivo | perdita massima -5,6% / -7,9% con esposizione 42-50% |
+| 4 | Orizzonte più lungo | `horizonSessions` 60; l'orizzonte vende solo se lo slancio è finito | durata media dei trade 27-29 giorni (era 9-10) |
+| 5 | Momentum assoluto | `AGENTS.absMomentum`: rendimento a 12 mesi > 0, altrimenti liquidità | nel 2022 il motore sta in liquidità: perdita massima -7,9% contro il -25% di SPY |
+| 6 | Rientro come comparto breve | `pullback`: RSI(2) < 10 sopra la 200, taglia 5%, uscita a RSI > 70 o 5 sedute | pochi trade, neutro sul totale |
+| 7 | Crypto solo in trend | medie + 12 mesi + 3 mesi positivi; `--crypto` | ancora negative nel 2025-26: restano opzionali |
+| 8 | Confronto onesto | costi 5 pb per lato, GTAA di Faber sullo stesso universo, finestra 2021-2026 con il 2022, avviso del taglio 25-50% | sotto |
+
+### Risultati (esecuzione alla chiusura, 5 punti base per lato)
+
+| Periodo | Di serie | SPY | 60/40 | GTAA | Perdita max (di serie / SPY) |
+|---|---|---|---|---|---|
+| 2024-2026, 497 sedute | **+17,6%** (66 trade, 30% vinti, +1,36% a trade, costi 1,2%) | +26,0% | +15,5% | +15,6% | -5,6% / ~-19% |
+| 2021-2026, 1327 sedute | **+66,2%** (165 trade, 40% vinti, +2,06% a trade, costi 3,2%) | +79,8% | +34,3% | +84,7% | -7,9% / ~-25% |
+
+Il motore di serie batte il 60/40 in entrambi i periodi, pareggia GTAA sul breve e gli sta sotto sul lungo (GTAA è
+investito molto di più, e di conseguenza oscilla di più), con un terzo della perdita massima di SPY. Il 30-40% di vinti con
+attesa +1,4/+2,1% per trade è la firma del trend following: si perde spesso poco e si vince raramente molto. È l'opposto
+della richiesta "3-4% a trade costante", ma è l'unico profilo che i dati e la letteratura sostengono.
+
+### Lo script per il progetto in locale
+
+`installa-windows.ps1` (nel repo) crea il progetto in `D:\Applicazioni\WebDev\Bot alpaca agents`, aggiorna il branch se la
+cartella esiste già, installa, crea `secrets.ts`, lancia i test e mette il collegamento sul desktop. Vedi README.
