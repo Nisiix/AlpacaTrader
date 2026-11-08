@@ -128,6 +128,12 @@ export class ContextAgent implements Agent {
     let generale = rules.generale;
     const settori: Record<string, Outlook> = { ...(rules.settori as Record<string, Outlook>) };
     const motivi = [rules.motivo];
+    // Fear & Greed delle crypto: con avidità estrema il settore crypto non è "favorevole" (euforia = prudenza).
+    const fg = v.fonti?.paura;
+    if (fg) {
+      motivi.push(`Fear & Greed crypto ${fg.valore} (${fg.classe})`);
+      if (fg.valore >= 80) settori.crypto = worst(settori.crypto ?? "favorevole", "neutro");
+    }
     if (reading && this.macro) {
       fonte = `regole + ${this.macro.name}`;
       generale = worst(generale, reading.generale);

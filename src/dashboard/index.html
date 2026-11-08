@@ -100,12 +100,19 @@
   .lbl.desk-lbl { background:rgba(255,255,255,.88); color:#1f2937; font-size:11px; line-height:1.2; text-align:center; border:1px solid #d1d5db; }
   .lbl.desk-lbl span { color:#6b7280; }
   .lbl.dept-lbl { background:#1f2937; color:#fff; font-size:13px; font-weight:600; padding:4px 10px; }
-  .office-card { position:absolute; top:12px; right:12px; width:340px; max-height:calc(100% - 24px); overflow:auto; background:var(--card); color:var(--ink); border:1px solid var(--line); border-radius:14px; padding:14px 16px; box-shadow:0 8px 30px rgba(0,0,0,.18); z-index:5; font-size:14px; }
+  .office-card { position:absolute; top:54px; right:12px; width:340px; max-height:calc(100% - 66px); overflow:auto; background:var(--card); color:var(--ink); border:1px solid var(--line); border-radius:14px; padding:14px 16px; box-shadow:0 8px 30px rgba(0,0,0,.18); z-index:5; font-size:14px; }
   .office-card h3 { margin:4px 0 2px; font-size:17px; } .office-card p { margin:8px 0; } .office-card ul { margin:4px 0; padding-left:18px; }
   .office-card .portrait { width:150px; height:170px; margin:0 auto; background:linear-gradient(#eef2f7,#dfe5ec); border-radius:12px; overflow:hidden; }
   .office-card .x { position:absolute; top:8px; right:8px; border:0; background:var(--card-2); border-radius:999px; width:28px; height:28px; cursor:pointer; color:var(--ink); }
   .office-card td { padding:4px 4px; font-size:13px; } .office-card .agent-c { color:var(--agent); font-weight:600; }
-  @media (max-width: 700px) { .office-card { left:8px; right:8px; width:auto; } }
+  @media (max-width: 700px) { .office-card { left:8px; right:8px; width:auto; top:auto; bottom:8px; max-height:58%; } .office-card .portrait { width:110px; height:120px; } }
+  .scene-nav { position:absolute; top:10px; left:10px; right:10px; display:flex; gap:6px; z-index:4; overflow-x:auto; scrollbar-width:none; pointer-events:auto; }
+  .scene-nav::-webkit-scrollbar { display:none; }
+  .scene-nav button { flex:0 0 auto; font:inherit; font-size:13px; padding:6px 12px; border-radius:999px; border:1px solid rgba(0,0,0,.08); background:rgba(255,255,255,.92); color:#1f2937; cursor:pointer; box-shadow:0 2px 6px rgba(0,0,0,.08); }
+  .scene-nav button:active { transform:scale(.97); }
+  .scene-nav button[data-zoom] { width:36px; padding:6px 0; font-weight:700; }
+  .scene-help { position:absolute; left:10px; bottom:10px; z-index:2; font-size:12px; color:#334155; background:rgba(255,255,255,.85); padding:4px 10px; border-radius:999px; pointer-events:none; }
+  #scene canvas { touch-action:none; }
   /* Telefono: menu a schede scorrevole, niente scorrimento orizzontale della pagina, tabelle scorrevoli dentro la card. */
   main > *, .cols > *, .stack > *, .title-grid > * { min-width:0; }
   @media (max-width: 700px) {
@@ -159,6 +166,10 @@
   .chart-wrap { position:relative; }
   #chart { width:100%; height:400px; display:block; border-radius:10px; background:var(--card-2); cursor:crosshair; }
   #tip { position:absolute; pointer-events:none; background:var(--ink); color:var(--card); font-size:13px; padding:6px 9px; border-radius:8px; display:none; white-space:nowrap; z-index:2; }
+  .tf-row { display:flex; gap:6px; flex-wrap:wrap; margin:0 0 8px; align-items:center; }
+  .tf-row button { font:inherit; font-size:13px; padding:4px 11px; border-radius:999px; border:1px solid var(--line); background:var(--card); color:var(--ink-2); cursor:pointer; }
+  .tf-row button[aria-pressed="true"] { background:var(--ink); color:var(--card); border-color:var(--ink); }
+  .tf-row .why { margin-left:auto; }
   .legend-row { display:flex; gap:14px; flex-wrap:wrap; color:var(--ink-3); font-size:13px; margin-top:8px; }
   .legend-row i { display:inline-block; width:14px; height:0; border-top:2px solid; vertical-align:middle; margin-right:5px; }
   .verdict { font-size:18px; font-weight:600; line-height:1.3; letter-spacing:-.01em; }
@@ -267,8 +278,9 @@
       <div class="chips" id="chips" role="group" aria-label="scegli il titolo"></div>
       <div class="title-grid">
         <div>
+          <div class="tf-row" id="tf-row" role="group" aria-label="candele"><button type="button" data-tf="giorno">Giorno</button><button type="button" data-tf="4Hour">4 ore</button><button type="button" data-tf="1Hour">1 ora</button><button type="button" data-tf="15Min">15 min</button><button type="button" data-tf="5Min">5 min</button><span class="why" id="tf-note"></span></div>
           <div class="chart-wrap"><canvas id="chart" aria-label="grafico a candele"></canvas><div id="tip"></div></div>
-          <div class="legend-row"><span><i style="border-color:#8a94a6"></i>media 20</span><span><i style="border-color:var(--agent)"></i>media 50</span><span><i style="border-color:#b08900"></i>media 200</span><span><i style="border-color:var(--ink); border-top-style:dashed"></i>carico</span><span><i style="border-color:var(--down); border-top-style:dashed"></i>stop</span><span><i style="border-color:var(--up); border-top-style:dotted"></i>scenario Kronos</span><span>▲▼ operazioni</span></div>
+          <div class="legend-row" id="legend-row"><span><i style="border-color:#8a94a6"></i><span id="lg-a">media 20</span></span><span><i style="border-color:var(--agent)"></i><span id="lg-b">media 50</span></span><span><i style="border-color:#b08900"></i><span id="lg-c">media 200</span></span><span><i style="border-color:var(--ink); border-top-style:dashed"></i>carico</span><span><i style="border-color:var(--down); border-top-style:dashed"></i>stop</span><span><i style="border-color:var(--up); border-top-style:dotted"></i>scenario Kronos, cono 50% e 80%</span><span>▲▼ operazioni</span></div>
           <p class="why" id="chart-note" style="margin-top:8px"></p>
           <div id="feed" style="margin-top:10px"></div>
         </div>
@@ -380,9 +392,9 @@
       <h3>3. Le pagine</h3>
       <ul>
         <li><b>Oggi</b>: la frase di stato (motore, Alpaca, borsa, Kronos), patrimonio e giornata, profitto e perdita di oggi (per vendita e per agente), posizioni aperte, cosa ha deciso l'ultimo giro, le operazioni intraday quando ce ne sono, le simulazioni dopo il limite del giorno e, in fondo, il <b>registro</b> della giornata («Importanti» mostra ordini, posizioni, rifiuti, stop e avvisi; le azioni ripetute a ogni giro compaiono una volta sola, con quante volte e da che ora).</li>
-        <li><b>Titoli</b>: i titoli in tre gruppi (in portafoglio, sotto osservazione, nel radar). Per ciascuno: candele, medie 20/50/200, carico e stop, la candela di oggi in formazione, le scelte del motore di oggi (puntini voti, frecce ordini, × rifiuti), lo scenario di Kronos con il cono d'incertezza e il dossier del custode. «Chiedi agli agenti adesso» fa una valutazione a secco: nessun ordine parte dalla pagina.</li>
+        <li><b>Titoli</b>: i titoli in tre gruppi (in portafoglio, sotto osservazione, nel radar). Per ciascuno: candele, medie 20/50/200, carico e stop, la candela di oggi in formazione, le scelte del motore di oggi (puntini voti, frecce ordini, × rifiuti), lo scenario di Kronos con il cono di probabilità (fasce 50% e 80%, con la probabilità di finire sopra o sotto il prezzo di adesso) e il dossier del custode. Sopra il grafico si scelgono le candele: giorno, 4 ore, 1 ora, 15 e 5 minuti; sulle candele brevi le medie sono EMA 9, EMA 20 e media 50 e Kronos prevede le prossime 12 candele. «Chiedi agli agenti adesso» fa una valutazione a secco: nessun ordine parte dalla pagina.</li>
         <li><b>Agenti → Squadra</b>: il capo ufficio con il giudizio su ogni agente (vinti, risultato, richiami, consigli), i custodi con la probabilità favorevole e la prossima azione, chi ha votato nell'ultimo giro con i punteggi per titolo e, aprendo la tendina, tutti i voti con il motivo.</li>
-        <li><b>Agenti → Ufficio 3D</b>: la stessa squadra come impiegati alle loro postazioni. In fondo la Direzione e la lavagna con successi e insuccessi di ogni agente, il capo nella stanza di vetro; poi i Custodi (la camicia dice la fase: blu pronto, verde in posizione, rosso in uscita, grigio in attesa) e la Sala intraday (arancione). Chi vota alza la mano, chi compra o vende si alza e lo schermo lampeggia. Oltre la porta, la <b>Sala caffè</b>: chi non ha niente da fare ci va e parla con i colleghi; appena ha un trade da aprire torna alla scrivania. Mouse sopra per leggere, clic per la scheda.</li>
+        <li><b>Agenti → Ufficio 3D</b>: la stessa squadra come impiegati alle loro postazioni. In fondo la Direzione e la lavagna con successi e insuccessi di ogni agente, il capo nella stanza di vetro; poi i Custodi (la camicia dice la fase: blu pronto, verde in posizione, rosso in uscita, grigio in attesa) e la Sala intraday (arancione). Chi vota alza la mano, chi compra o vende si alza e lo schermo lampeggia. Oltre la porta, la <b>Sala caffè</b>: chi non ha niente da fare ci va e parla con i colleghi; appena ha un trade da aprire torna alla scrivania. Mouse sopra per leggere, clic per la scheda. I pulsanti in alto portano a ogni reparto (Direzione, Custodi, Intraday, Sala caffè, Capo) e zoomano; da telefono un dito ruota, due dita zoomano e spostano.</li>
         <li><b>Impostazioni</b>: le <b>schede degli agenti</b> per regolare i parametri (valgono dal giro successivo), le <b>chiavi</b> di Alpaca, Telegram e X con il riavvio del motore, e questa guida.</li>
         <li><b>Pagina pubblica</b>: con «Pagina pubblica su GitHub Pages» nella scheda Motore e gabbia, il PC pubblica ogni N minuti un'istantanea in sola lettura, da aprire anche dal telefono. È visibile a chiunque abbia il link; chiavi e modifiche restano solo sulla dashboard del PC.</li>
       </ul>
@@ -472,7 +484,8 @@ const agentName = (n) => AGENT_NAMES[n] ?? n;
 const host = $('#scene');
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(2, window.devicePixelRatio));
-renderer.shadowMap.enabled = true;
+renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
 host.appendChild(renderer.domElement);
 const labels = new CSS2DRenderer();
 labels.domElement.style.position = 'absolute'; labels.domElement.style.top = '0'; labels.domElement.style.pointerEvents = 'none'; labels.domElement.style.zIndex = '1';
@@ -481,15 +494,27 @@ const scene = new THREE.Scene();
 scene.background = new THREE.Color(0xdfe5ec);
 const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 200);
 const controls = new OrbitControls(camera, renderer.domElement);
-controls.enableDamping = true; controls.maxPolarAngle = Math.PI / 2.15; controls.minDistance = 4; controls.maxDistance = 60;
-scene.add(new THREE.HemisphereLight(0xffffff, 0xb8a990, 1.4));
-const sun = new THREE.DirectionalLight(0xffffff, 1.6); sun.position.set(-8, 16, 10); sun.castShadow = true;
-sun.shadow.mapSize.set(2048, 2048); Object.assign(sun.shadow.camera, { left: -30, right: 30, top: 30, bottom: -30 }); scene.add(sun);
+controls.enableDamping = true; controls.dampingFactor = 0.08; controls.maxPolarAngle = Math.PI / 2.15; controls.minDistance = 2.5; controls.maxDistance = 70;
+// Navigazione: un dito o tasto sinistro ruota; due dita zoomano e spostano; tasto destro (o Maiusc) sposta; rotella zooma.
+controls.screenSpacePanning = false; controls.panSpeed = 0.9; controls.rotateSpeed = 0.7; controls.zoomSpeed = 1.1;
+controls.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN };
+controls.zoomToCursor = true;
+scene.add(new THREE.HemisphereLight(0xfffaf0, 0xa89880, 1.15));
+// luce del giorno dalle finestre a sinistra, morbida, con ombre
+const sun = new THREE.DirectionalLight(0xfff4e0, 1.5); sun.position.set(-14, 16, 8); sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048); sun.shadow.bias = -0.0004; sun.shadow.radius = 4; Object.assign(sun.shadow.camera, { left: -35, right: 35, top: 35, bottom: -35 }); scene.add(sun);
+const fill = new THREE.DirectionalLight(0xdbe7ff, 0.35); fill.position.set(12, 10, -6); scene.add(fill);
+// Texture disegnate a mano (niente file esterni): parquet dell'ufficio, piastrelle della sala caffè.
+function canvasTex(draw, w = 512, h = 512) { const cv = document.createElement('canvas'); cv.width = w; cv.height = h; draw(cv.getContext('2d'), w, h); const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 4; return t; }
+const woodTex = canvasTex((c, w, h) => { const rows = 8; for (let r = 0; r < rows; r++) { let x0 = (r % 2) * -w / 3; while (x0 < w) { const len = w / 1.5; const tone = 180 + Math.floor(Math.random() * 30); c.fillStyle = `rgb(${tone},${Math.floor(tone * 0.78)},${Math.floor(tone * 0.55)})`; c.fillRect(x0, (r * h) / rows, len - 2, h / rows - 2); for (let g = 0; g < 6; g++) { c.strokeStyle = `rgba(90,60,30,${0.05 + Math.random() * 0.06})`; c.beginPath(); const yy = (r * h) / rows + Math.random() * (h / rows); c.moveTo(x0, yy); c.bezierCurveTo(x0 + len / 3, yy + 3, x0 + (2 * len) / 3, yy - 3, x0 + len, yy); c.stroke(); } x0 += len; } } });
+const tileTex = canvasTex((c, w, h) => { const n = 8; for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) { c.fillStyle = (i + j) % 2 ? '#e9dcc8' : '#d8c6ab'; c.fillRect((i * w) / n, (j * h) / n, w / n - 2, h / n - 2); } });
 const mat = (color, o = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.75, ...o });
 const box = (w, h, d, m) => { const x = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m); x.castShadow = true; x.receiveShadow = true; return x; };
 const M = { floor: mat(0xcbb79a), wall: mat(0xf3f1ec), desk: mat(0xe9e4da), leg: mat(0x6b7280), chair: mat(0x374151), skin: mat(0xe8c4a2), hair: mat(0x3b2a20), pants: mat(0x2f3b52), screenFrame: mat(0x1f2937), board: mat(0xffffff), boardFrame: mat(0x9ca3af), plant: mat(0x3f8f5a), pot: mat(0xc9c3b8) };
 const room = new THREE.Group(); scene.add(room);
-const floor = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), M.floor); floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; room.add(floor);
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshStandardMaterial({ map: woodTex, roughness: 0.62, metalness: 0.02 })); floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; room.add(floor);
+// arredo che dipende dalla pianta: tappeti dei reparti, finestre, lampade, battiscopa
+const decor = new THREE.Group(); scene.add(decor);
 const backWall = box(1, 4.2, 0.2, M.wall); room.add(backWall);
 const sideWall = box(0.2, 4.2, 1, M.wall); room.add(sideWall);
 
@@ -659,11 +684,14 @@ function layout(groups) {
     const rows = Math.ceil(g.items.length / cols);
     deptLabel(g.name, -((cols - 1) * SPX) / 2 - 1.6, z);
     g.items.forEach((it, i) => { const c = i % cols, r = Math.floor(i / cols); placed.set(it.key, new THREE.Vector3((c - (cols - 1) / 2) * SPX, 0, z + r * SPZ)); });
+    zones.set(g.name, { center: new THREE.Vector3(0, 0, z + ((rows - 1) * SPZ) / 2 - 0.4), size: Math.max(cols * SPX, rows * SPZ + 2) });
     z += rows * SPZ + 1.4;
   }
   const w = cols * SPX + 4, d = z + 3;
   roomSize = { w, d };
   floor.scale.set(w + 4, d + 8, 1); floor.position.set(0, 0, d / 2 - 3);
+  woodTex.repeat.set((w + 4) / 3, (d + 8) / 3);
+  buildDecor(groups, cols, w, d);
   backWall.scale.x = w + 4; backWall.position.set(0, 2.1, -4.3);
   sideWall.scale.z = d + 8; sideWall.position.set(-(w + 4) / 2, 2.1, d / 2 - 3);
   board.position.set(0, 2.25, -4.17);
@@ -672,7 +700,44 @@ function layout(groups) {
   glass.position.set(w / 2 - 1.2, 1.1, -2.7);
   deptLabel('Capo ufficio', w / 2 - 1.2, -2.0);
   caffeBox = buildCaffe(Math.max(4, placed.size - 1), w, d);
+  zones.set('Capo', { center: new THREE.Vector3(w / 2 - 1.2, 0, -2.7), size: 4 });
+  zones.set('Sala caffè', { center: new THREE.Vector3(caffeBox.x0 + caffeBox.cw / 2, 0, -4.2 + caffeBox.cd / 2), size: Math.max(caffeBox.cw, caffeBox.cd) });
+  zones.set('Tutto', { center: new THREE.Vector3((caffeBox.cw + 2) / 2, 0, d / 2 - 2), size: Math.max(w + caffeBox.cw + 2, d) });
   return placed;
+}
+const zones = new Map(); // nome della zona -> { center, size }: i pulsanti di navigazione ci volano sopra
+const RUG = { Direzione: 0x334155, Custodi: 0x1e3a5f, 'Sala intraday': 0x7c4a12 };
+function buildDecor(groups, cols, w, d) {
+  decor.clear();
+  // tappeti sotto ogni reparto
+  let z = 0;
+  for (const g of groups) {
+    if (!g.items.length) continue;
+    const rows = Math.ceil(g.items.length / cols);
+    const rug = new THREE.Mesh(new THREE.PlaneGeometry(cols * SPX + 0.6, rows * SPZ + 0.3), new THREE.MeshStandardMaterial({ color: RUG[g.name] ?? 0x475569, roughness: 0.95 }));
+    rug.rotation.x = -Math.PI / 2; rug.position.set(0, 0.006, z + ((rows - 1) * SPZ) / 2 - 0.45); rug.receiveShadow = true; decor.add(rug);
+    // lampade a sospensione sopra ogni fila
+    for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c += 2) {
+      const lamp = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.05, 0.3), new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0xfff3d6, emissiveIntensity: 0.9 }));
+      lamp.position.set((c - (cols - 1) / 2) * SPX + SPX / 2, 3.3, z + r * SPZ - 0.4); decor.add(lamp);
+      const wire = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.9, 4), M.leg); wire.position.set(lamp.position.x, 3.75, lamp.position.z); decor.add(wire);
+    }
+    z += rows * SPZ + 1.4;
+  }
+  // finestre sulla parete di sinistra: vetro luminoso con telaio e davanzale
+  const xw = -(w + 4) / 2 + 0.11;
+  const glassM = new THREE.MeshStandardMaterial({ color: 0xcfe8ff, emissive: 0xbfdcff, emissiveIntensity: 0.55, roughness: 0.15 });
+  for (let zz = -2.5; zz < d + 1; zz += 3.2) {
+    const pane = new THREE.Mesh(new THREE.PlaneGeometry(2.2, 1.9), glassM); pane.rotation.y = Math.PI / 2; pane.position.set(xw, 2.2, zz); decor.add(pane);
+    const frameV = box(0.05, 1.9, 0.06, mat(0xe5e7eb)); frameV.position.set(xw + 0.02, 2.2, zz); decor.add(frameV);
+    const frameH = box(0.05, 0.06, 2.2, mat(0xe5e7eb)); frameH.position.set(xw + 0.02, 2.2, zz); decor.add(frameH);
+    const sill = box(0.18, 0.05, 2.3, mat(0xd6d3d1)); sill.position.set(xw + 0.08, 1.22, zz); decor.add(sill);
+  }
+  // battiscopa
+  const base = box(w + 4, 0.12, 0.04, mat(0x6b5b4b)); base.position.set(0, 0.06, -4.18); decor.add(base);
+  const baseL = box(0.04, 0.12, d + 8, mat(0x6b5b4b)); baseL.position.set(-(w + 4) / 2 + 0.12, 0.06, d / 2 - 3); decor.add(baseL);
+  // un paio di piante grandi negli angoli
+  for (const [px_, pz_] of [[-(w + 4) / 2 + 0.7, -3.6], [-(w + 4) / 2 + 0.7, d - 0.5]]) { const pot = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.22, 0.55, 14), M.pot); pot.position.set(px_, 0.27, pz_); pot.castShadow = true; decor.add(pot); for (let k = 0; k < 3; k++) { const leaf = new THREE.Mesh(new THREE.SphereGeometry(0.42 - k * 0.08, 12, 10), M.plant); leaf.position.set(px_ + (k - 1) * 0.12, 0.95 + k * 0.35, pz_); leaf.castShadow = true; decor.add(leaf); } }
 }
 const glass = new THREE.Group(); scene.add(glass);
 { const gm = new THREE.MeshStandardMaterial({ color: 0xbfe3ff, transparent: true, opacity: 0.22, roughness: 0.1 });
@@ -691,7 +756,8 @@ function buildCaffe(n, officeW, officeD) {
   const cw = 7.4, cd = Math.max(9, rows * 2.7 + 5.2);
   const x0 = officeW / 2 + 2; // la parete divisoria
   const cx = x0 + cw / 2, z0 = -4.2;
-  const fl = new THREE.Mesh(new THREE.PlaneGeometry(cw, cd), MC.floor); fl.rotation.x = -Math.PI / 2; fl.position.set(cx, 0.005, z0 + cd / 2); fl.receiveShadow = true; caffe.add(fl);
+  tileTex.repeat.set(cw / 2, cd / 2);
+  const fl = new THREE.Mesh(new THREE.PlaneGeometry(cw, cd), new THREE.MeshStandardMaterial({ map: tileTex, roughness: 0.4 })); fl.rotation.x = -Math.PI / 2; fl.position.set(cx, 0.005, z0 + cd / 2); fl.receiveShadow = true; caffe.add(fl);
   // pareti: divisoria con la porta, fondo, lato
   const door = 2.0, wallH = 3.2, zMid = z0 + cd / 2;
   const half = (cd - door) / 2;
@@ -978,6 +1044,31 @@ function animate() {
   if (portrait.on) { portrait.model.rotation.y += dt * 0.8; portrait.renderer.render(portrait.scene, portrait.camera); }
   controls.update(); renderer.render(scene, camera); labels.render(scene, camera);
 }
+// Volo verso una zona (pulsanti sopra la scena) e zoom con i pulsanti + e −.
+function flyToZone(name) {
+  const z = zones.get(name); if (!z) return;
+  const dist = Math.max(5, z.size * 0.95);
+  fly = { t0: performance.now(), fromT: controls.target.clone(), toT: new THREE.Vector3(z.center.x, 0.8, z.center.z), fromP: camera.position.clone(), toP: new THREE.Vector3(z.center.x + dist * 0.25, dist * 0.62, z.center.z + dist * 0.78) };
+}
+function zoomBy(k) {
+  const dir = camera.position.clone().sub(controls.target);
+  const len = Math.max(controls.minDistance, Math.min(controls.maxDistance, dir.length() * k));
+  fly = { t0: performance.now(), fromT: controls.target.clone(), toT: controls.target.clone(), fromP: camera.position.clone(), toP: controls.target.clone().add(dir.setLength(len)) };
+}
+{
+  const bar = document.createElement('div'); bar.className = 'scene-nav'; bar.setAttribute('role', 'toolbar'); bar.setAttribute('aria-label', 'vai a');
+  bar.innerHTML = ['Tutto', 'Direzione', 'Custodi', 'Sala intraday', 'Sala caffè', 'Capo'].map((n) => `<button type="button" data-zone="${n}">${n === 'Sala intraday' ? 'Intraday' : n}</button>`).join('') + '<button type="button" data-zoom="0.75" aria-label="avvicina">＋</button><button type="button" data-zoom="1.33" aria-label="allontana">−</button>';
+  host.appendChild(bar);
+  for (const b of bar.querySelectorAll('button')) b.addEventListener('click', () => { if (b.dataset.zone) { closeCard(); flyToZone(b.dataset.zone); } else zoomBy(Number(b.dataset.zoom)); });
+  const help = document.createElement('div'); help.className = 'scene-help';
+  help.textContent = matchMedia('(pointer: coarse)').matches ? 'un dito: ruota · due dita: zoom e sposta · tocca un agente per la scheda' : 'trascina: ruota · tasto destro: sposta · rotella: zoom · clic su un agente: scheda';
+  host.appendChild(help);
+}
+// La telecamera non esce dall'edificio: il punto guardato resta dentro la pianta.
+controls.addEventListener('change', () => {
+  const t = controls.target, minX = -roomSize.w / 2 - 2, maxX = roomSize.w / 2 + 2 + (caffeBox.cw || 0) + 2;
+  t.x = Math.max(minX, Math.min(maxX, t.x)); t.z = Math.max(-4, Math.min(roomSize.d + 2, t.z)); t.y = Math.max(0, Math.min(3, t.y));
+});
 let fly = null;
 function flyTo(group) {
   const p = group.position;
@@ -1204,6 +1295,11 @@ function paintCustodi(st) {
 
 let selected = null;
 let bars = [];          // barre del titolo scelto
+let tf = 'giorno';      // candele del grafico: giorno, 4Hour, 1Hour, 15Min, 5Min
+let tfForecast = null;  // proiezione di Kronos sulle prossime candele intraday
+let tfNote = '';
+try { tf = localStorage.getItem('agenti.candele') || 'giorno'; } catch {}
+const TF_LABEL = { giorno: 'giorno', '4Hour': '4 ore', '1Hour': '1 ora', '15Min': '15 min', '5Min': '5 min' };
 let forecasts = null;   // /api/previsioni
 let journal = null;     // /api/journal
 let valutazione = null; // ultima valutazione a secco
@@ -1237,9 +1333,11 @@ function selectSymbol(sym) {
   loadSymbol(sym);
 }
 async function loadSymbol(sym) {
+  if (window.STATIC_MODE) tf = 'giorno';
+  tfNote = '';
   try {
     const [b, f, j] = await Promise.all([
-      fetch(`/api/bars?simbolo=${encodeURIComponent(sym)}`).then((r) => r.json()),
+      tf === 'giorno' ? fetch(`/api/bars?simbolo=${encodeURIComponent(sym)}`).then((r) => r.json()) : fetch(`/api/candele?simbolo=${encodeURIComponent(sym)}&tf=${tf}`).then((r) => r.json()).then((d) => { if (d.errore) { tfNote = d.errore; return { barre: [] }; } tfForecast = d.previsione || null; tfNote = d.nota || ''; return d; }),
       forecasts ? Promise.resolve(forecasts) : fetch('/api/previsioni').then((r) => r.json()),
       fetch('/api/journal').then((r) => r.json()),
     ]);
@@ -1249,13 +1347,23 @@ async function loadSymbol(sym) {
   paintTitle();
 }
 setInterval(() => { forecasts = null; }, 10 * 60_000);
+// Candele intraday: si rileggono ogni minuto mentre la pagina Titoli è aperta.
+setInterval(() => { if (tf !== 'giorno' && selected && currentPage === 'titoli') loadSymbol(selected); }, 60_000);
+function paintTf() {
+  for (const b of $('#tf-row').querySelectorAll('button')) { b.setAttribute('aria-pressed', String(b.dataset.tf === tf)); b.hidden = window.STATIC_MODE && b.dataset.tf !== 'giorno'; }
+  $('#tf-note').textContent = tfNote;
+  const [a, b2, c] = tf === 'giorno' ? ['media 20', 'media 50', 'media 200'] : ['EMA 9', 'EMA 20', 'media 50'];
+  $('#lg-a').textContent = a; $('#lg-b').textContent = b2; $('#lg-c').textContent = c;
+}
+for (const b of $('#tf-row').querySelectorAll('button')) b.addEventListener('click', () => { tf = b.dataset.tf; try { localStorage.setItem('agenti.candele', tf); } catch {} tfForecast = null; bars = []; paintTf(); drawChart(); if (selected) loadSymbol(selected); });
+paintTf();
 
 function tradesFor(sym) {
   const out = [];
   for (const t of journal?.trade || []) {
     if (t.simbolo !== sym) continue;
-    for (const a of t.acquisti || []) out.push({ date: a.data.slice(0, 10), side: 'buy', qty: a.quantita, price: a.prezzo });
-    for (const v of t.vendite || []) out.push({ date: v.data.slice(0, 10), side: 'sell', qty: v.quantita, price: v.prezzo, pnl: (v.prezzo - v.carico) * v.quantita });
+    for (const a of t.acquisti || []) out.push({ date: a.data.slice(0, 10), at: a.data, side: 'buy', qty: a.quantita, price: a.prezzo });
+    for (const v of t.vendite || []) out.push({ date: v.data.slice(0, 10), at: v.data, side: 'sell', qty: v.quantita, price: v.prezzo, pnl: (v.prezzo - v.carico) * v.quantita });
     if (!(t.acquisti || []).length) out.push({ date: t.apertoIl.slice(0, 10), side: 'buy', qty: t.comprate, price: t.costo / t.comprate });
     if (!(t.vendite || []).length && t.stato === 'chiuso' && t.chiusoIl) out.push({ date: t.chiusoIl.slice(0, 10), side: 'sell', qty: t.vendute, price: t.prezzoUscita, pnl: t.incassato - t.costo });
   }
@@ -1274,6 +1382,10 @@ const romeDate = (iso) => new Date(iso).toLocaleDateString('sv-SE', { timeZone: 
 const todayRome = () => romeDate(new Date().toISOString());
 // La candela di oggi, viva: si forma con i prezzi letti dal motore a ogni giro (eventi "prezzi"), più l'ultimo prezzo dello stato.
 function liveBar(sym) {
+  if (tf !== 'giorno') { // candela intraday in formazione: dall'ultima chiusura al prezzo di adesso
+    const p = status?.prezzi?.[sym]; const lastB = bars.at(-1); if (!p || !lastB) return null;
+    return { date: new Date().toISOString(), open: lastB.close, high: Math.max(lastB.close, p), low: Math.min(lastB.close, p), close: p, live: true, letture: 1 };
+  }
   const today = todayRome();
   const ps = allEvents.filter((e) => e.tipo === 'prezzi' && romeDate(e.t) === today && e.prezzi?.[sym]).map((e) => e.prezzi[sym]).reverse();
   const last = status?.prezzi?.[sym]; if (last && romeDate(status.aggiornato) === today) ps.push(last);
@@ -1289,6 +1401,8 @@ function actionsFor(sym) {
   return allEvents.filter((e) => romeDate(e.t) === today && ACTION_KINDS.has(e.tipo) && (e.simbolo === sym || (e.tipo === 'stop' && String(e.dettaglio || '').startsWith(sym + ' '))));
 }
 
+let chartProb = null;
+function erfJs(x) { const t = 1 / (1 + 0.3275911 * Math.abs(x)); const y = 1 - ((((1.061405429 * t - 1.453152027) * t + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * Math.exp(-x * x); return x >= 0 ? y : -y; }
 // Il grafico: ultime 120 candele, medie 20/50/200, carico e stop, il percorso previsto da Kronos con il cono di incertezza, le operazioni.
 let chartGeom = null;
 function drawChart() {
@@ -1301,7 +1415,8 @@ function drawChart() {
   if (!N) { ctx.fillStyle = cssVar('--ink-3'); ctx.fillText(status ? 'Le barre arrivano con il primo giro riuscito del motore.' : 'Nessun dato.', 16, 28); chartGeom = null; return; }
   const lb = liveBar(selected);
   const view = [...all.slice(-(lb ? N - 1 : N)), ...(lb ? [lb] : [])]; const closesAll = all.map((b) => b.close);
-  const fc = forecasts?.previsioni?.[selected]; const path = fc?.percorso || [];
+  const intra = tf !== 'giorno';
+  const fc = intra ? tfForecast : forecasts?.previsioni?.[selected]; const path = fc?.percorso || [];
   const vol = dailyVolOf(closesAll);
   const last = all[all.length - 1].close;
   const pos = (status?.posizioni || []).find((p) => p.simbolo === selected);
@@ -1310,49 +1425,65 @@ function drawChart() {
   const stop = carico !== null ? carico * (1 - stopPct) : null;
   const H_FC = path.length; const slots = view.length + H_FC + 1;
   let lo = Math.min(...view.map((b) => b.low)), hi = Math.max(...view.map((b) => b.high));
-  for (let k = 0; k < path.length; k++) { const band = vol * Math.sqrt(k + 1) * 1.65; lo = Math.min(lo, last * (1 + path[k] - band)); hi = Math.max(hi, last * (1 + path[k] + band)); }
+  for (let k = 0; k < path.length; k++) { const band = vol * Math.sqrt(k + 1) * 1.2816; lo = Math.min(lo, last * (1 + path[k] - band)); hi = Math.max(hi, last * (1 + path[k] + band)); }
   if (stop !== null) lo = Math.min(lo, stop); if (carico !== null) hi = Math.max(hi, carico);
   const pad = (hi - lo) * 0.06 || hi * 0.02; lo -= pad; hi += pad;
   const L = 8, R = 84, T = 14, B = 26; const pw = W - L - R, ph = H - T - B;
-  const x = (i) => L + ((i + 0.5) / slots) * pw; const y = (v) => T + (1 - (v - lo) / (hi - lo)) * ph;
-  const cw = Math.max(2, (pw / slots) * 0.62);
+  // Il futuro ha una zona sua (un quarto del grafico): il cono si legge anche con 120 candele di storia.
+  const histW = H_FC ? pw * 0.76 : pw, fcW = pw - histW;
+  const x = (i) => i < view.length ? L + ((i + 0.5) / view.length) * histW : L + histW + ((i - view.length + 0.5) / (H_FC + 0.3)) * fcW;
+  const y = (v) => T + (1 - (v - lo) / (hi - lo)) * ph;
+  const cw = Math.max(2, (histW / view.length) * 0.62);
   // griglia e scala
   ctx.strokeStyle = cssVar('--line'); ctx.fillStyle = cssVar('--ink-3'); ctx.lineWidth = 1; ctx.textAlign = 'left';
   for (let g = 0; g <= 5; g++) { const v = lo + ((hi - lo) * g) / 5; const yy = y(v); ctx.beginPath(); ctx.moveTo(L, yy); ctx.lineTo(W - R, yy); ctx.stroke(); ctx.fillText(px(v), W - R + 6, yy + 4); }
   // date (ogni ~20 barre)
   ctx.textAlign = 'center';
-  for (let i = 0; i < view.length; i += Math.ceil(view.length / 6)) ctx.fillText(view[i].date.slice(5), x(i), H - 8);
+  const lab = (d) => intra ? new Date(d).toLocaleString('it-IT', { timeZone: 'Europe/Rome', ...(tf === '4Hour' ? { day: '2-digit', month: '2-digit', hour: '2-digit' } : { hour: '2-digit', minute: '2-digit' }) }) : d.slice(5);
+  for (let i = 0; i < view.length; i += Math.ceil(view.length / 6)) ctx.fillText(lab(view[i].date), x(i), H - 8);
   // zona futura
   const F0 = view.length; // prima colonna del futuro
-  if (H_FC) { ctx.fillStyle = cssVar('--agent-bg'); ctx.globalAlpha = 0.35; ctx.fillRect(x(F0 - 0.5), T, x(slots - 0.5) - x(F0 - 0.5), ph); ctx.globalAlpha = 1; ctx.fillStyle = cssVar('--ink-3'); ctx.fillText(`prossime ${H_FC} sedute`, (x(F0) + x(slots - 1)) / 2, H - 8); }
+  if (H_FC) { ctx.fillStyle = cssVar('--agent-bg'); ctx.globalAlpha = 0.35; ctx.fillRect(L + histW, T, fcW, ph); ctx.globalAlpha = 1; ctx.fillStyle = cssVar('--ink-3'); ctx.fillText(intra ? `prossime ${H_FC} candele` : `prossime ${H_FC} sedute`, (x(F0) + x(slots - 1)) / 2, H - 8); }
   // medie
   const nClosed = view.length - (lb ? 1 : 0);
-  const line = (n, color, dash) => { ctx.beginPath(); ctx.strokeStyle = color; ctx.lineWidth = 1.5; ctx.setLineDash(dash || []); let started = false; for (let i = 0; i < nClosed; i++) { const gi = all.length - nClosed + i; const v = smaAt(closesAll, gi, n); if (v === null) continue; const xx = x(i), yy = y(v); if (!started) { ctx.moveTo(xx, yy); started = true; } else ctx.lineTo(xx, yy); } ctx.stroke(); ctx.setLineDash([]); };
-  line(200, '#b08900'); line(50, cssVar('--agent')); line(20, '#8a94a6', [2, 3]);
+  // medie: sul giornaliero 20/50/200; sulle candele brevi EMA 9 e 20 (quelle che usa l'intraday) e media 50.
+  const emaSeries = (n) => { const k = 2 / (n + 1); const out = []; let e = null; closesAll.forEach((c, i) => { if (i < n - 1) { out.push(null); return; } if (e === null) e = closesAll.slice(0, n).reduce((a, b) => a + b, 0) / n; else e = c * k + e * (1 - k); out.push(e); }); return out; };
+  const line = (n, color, dash, exp = false) => { const es = exp ? emaSeries(n) : null; ctx.beginPath(); ctx.strokeStyle = color; ctx.lineWidth = 1.5; ctx.setLineDash(dash || []); let started = false; for (let i = 0; i < nClosed; i++) { const gi = all.length - nClosed + i; const v = exp ? es[gi] : smaAt(closesAll, gi, n); if (v === null || v === undefined) continue; const xx = x(i), yy = y(v); if (!started) { ctx.moveTo(xx, yy); started = true; } else ctx.lineTo(xx, yy); } ctx.stroke(); ctx.setLineDash([]); };
+  if (intra) { line(50, '#b08900'); line(20, cssVar('--agent'), null, true); line(9, '#8a94a6', [2, 3], true); }
+  else { line(200, '#b08900'); line(50, cssVar('--agent')); line(20, '#8a94a6', [2, 3]); }
   // candele
   const up = cssVar('--up'), down = cssVar('--down');
   view.forEach((b, i) => { const c = b.close >= b.open ? up : down; ctx.strokeStyle = c; ctx.fillStyle = c; ctx.lineWidth = 1; const xx = x(i); ctx.beginPath(); ctx.moveTo(xx, y(b.high)); ctx.lineTo(xx, y(b.low)); ctx.stroke(); const top = y(Math.max(b.open, b.close)), bot = y(Math.min(b.open, b.close)); if (b.live) { ctx.lineWidth = 1.5; ctx.strokeRect(xx - cw / 2, top, cw, Math.max(1, bot - top)); ctx.globalAlpha = 0.35; ctx.fillRect(xx - cw / 2, top, cw, Math.max(1, bot - top)); ctx.globalAlpha = 1; } else ctx.fillRect(xx - cw / 2, top, cw, Math.max(1, bot - top)); });
-  if (lb) { ctx.fillStyle = cssVar('--ink-3'); ctx.textAlign = 'center'; ctx.fillText('oggi', x(view.length - 1), T + 10); ctx.beginPath(); ctx.strokeStyle = cssVar('--line'); ctx.setLineDash([2, 3]); ctx.moveTo(x(view.length - 1), T + 14); ctx.lineTo(x(view.length - 1), T + ph); ctx.stroke(); ctx.setLineDash([]); }
+  if (lb) { ctx.fillStyle = cssVar('--ink-3'); ctx.textAlign = 'center'; ctx.fillText(intra ? 'ora' : 'oggi', x(view.length - 1), T + 10); ctx.beginPath(); ctx.strokeStyle = cssVar('--line'); ctx.setLineDash([2, 3]); ctx.moveTo(x(view.length - 1), T + 14); ctx.lineTo(x(view.length - 1), T + ph); ctx.stroke(); ctx.setLineDash([]); }
   // livelli
   const hline = (v, color, dash, label) => { if (v === null || v === undefined) return; ctx.beginPath(); ctx.strokeStyle = color; ctx.lineWidth = 1.2; ctx.setLineDash(dash); ctx.moveTo(L, y(v)); ctx.lineTo(W - R, y(v)); ctx.stroke(); ctx.setLineDash([]); ctx.fillStyle = color; ctx.textAlign = 'left'; ctx.fillText(label, L + 6, y(v) - 4); };
   hline(carico, cssVar('--ink'), [6, 4], `carico ${px(carico)}`);
   hline(stop, down, [6, 4], `stop ${px(stop)} (${pct(-stopPct)})`);
-  // scenario Kronos: percorso previsto e cono
+  // scenario Kronos: percorso previsto e cono di probabilità (fascia 50% più scura, 80% più chiara); a destra la
+  // probabilità che a fine orizzonte il prezzo stia sopra o sotto quello di adesso.
   if (H_FC) {
-    ctx.beginPath(); ctx.fillStyle = up; ctx.globalAlpha = 0.12;
     const x0 = x(F0 - 1 - (lb ? 1 : 0));
-    ctx.moveTo(x0, y(last));
-    for (let k = 0; k < H_FC; k++) ctx.lineTo(x(F0 + k), y(last * (1 + path[k] + vol * Math.sqrt(k + 1) * 1.65)));
-    for (let k = H_FC - 1; k >= 0; k--) ctx.lineTo(x(F0 + k), y(last * (1 + path[k] - vol * Math.sqrt(k + 1) * 1.65)));
-    ctx.closePath(); ctx.fill(); ctx.globalAlpha = 1;
-    ctx.beginPath(); ctx.strokeStyle = fc.rendimentoPrevisto >= 0 ? up : down; ctx.lineWidth = 2; ctx.setLineDash([3, 4]); ctx.moveTo(x0, y(last));
+    const toward = fc.rendimentoPrevisto >= 0 ? up : down;
+    const band = (z, alpha) => { ctx.beginPath(); ctx.fillStyle = toward; ctx.globalAlpha = alpha; ctx.moveTo(x0, y(last)); for (let k = 0; k < H_FC; k++) ctx.lineTo(x(F0 + k), y(last * (1 + path[k] + vol * Math.sqrt(k + 1) * z))); for (let k = H_FC - 1; k >= 0; k--) ctx.lineTo(x(F0 + k), y(last * (1 + path[k] - vol * Math.sqrt(k + 1) * z))); ctx.closePath(); ctx.fill(); ctx.globalAlpha = 1; };
+    band(1.2816, 0.10); band(0.6745, 0.16);
+    ctx.beginPath(); ctx.strokeStyle = toward; ctx.lineWidth = 2; ctx.setLineDash([3, 4]); ctx.moveTo(x0, y(last));
     for (let k = 0; k < H_FC; k++) ctx.lineTo(x(F0 + k), y(last * (1 + path[k])));
     ctx.stroke(); ctx.setLineDash([]);
-    for (let k = 0; k < H_FC; k++) { ctx.beginPath(); ctx.fillStyle = fc.rendimentoPrevisto >= 0 ? up : down; ctx.arc(x(F0 + k), y(last * (1 + path[k])), 3, 0, Math.PI * 2); ctx.fill(); }
-    ctx.fillStyle = fc.rendimentoPrevisto >= 0 ? up : down; ctx.textAlign = 'right'; ctx.fillText(`Kronos ${pct(fc.rendimentoPrevisto)} → ${px(last * (1 + fc.rendimentoPrevisto))}`, x(slots - 1) + cw, y(last * (1 + path[H_FC - 1])) - 10);
-  }
+    for (let k = 0; k < H_FC; k++) { ctx.beginPath(); ctx.fillStyle = toward; ctx.arc(x(F0 + k), y(last * (1 + path[k])), 2.5, 0, Math.PI * 2); ctx.fill(); }
+    const sd = vol * Math.sqrt(H_FC); const pUp = sd > 0 ? 0.5 * (1 + erfJs(path[H_FC - 1] / sd / Math.SQRT2)) : 0.5;
+    // In alto nella zona del futuro: dove porta Kronos e la probabilità di finire sopra o sotto il prezzo di adesso.
+    const xr = L + pw - 4;
+    ctx.textAlign = 'right'; ctx.font = 'bold 12px Figtree, system-ui, sans-serif';
+    ctx.fillStyle = toward; ctx.fillText(`Kronos ${pct(fc.rendimentoPrevisto)} → ${px(last * (1 + fc.rendimentoPrevisto))}`, xr, T + 14);
+    ctx.fillStyle = up; ctx.fillText(`↑ ${Math.round(pUp * 100)}% sopra`, xr, T + 30);
+    ctx.fillStyle = down; ctx.fillText(`↓ ${Math.round((1 - pUp) * 100)}% sotto`, xr, T + 46);
+    ctx.font = '11px Figtree, system-ui, sans-serif'; ctx.fillStyle = cssVar('--ink-3');
+    ctx.fillText('fasce 50% e 80%', xr, T + ph - 6);
+    ctx.font = '12px Figtree, system-ui, sans-serif';
+    chartProb = pUp;
+  } else chartProb = null;
   // operazioni
-  for (const t of tradesFor(selected)) { let i = view.findIndex((b) => b.date >= t.date); if (i < 0 && t.date > view[view.length - 1].date) i = view.length - 1; if (i < 0 || (lb && i === view.length - 1)) continue; ctx.fillStyle = t.side === 'buy' ? up : down; ctx.textAlign = 'center'; ctx.font = 'bold 14px Figtree, system-ui, sans-serif'; ctx.fillText(t.side === 'buy' ? '▲' : '▼', x(i), t.side === 'buy' ? y(view[i].low) + 16 : y(view[i].high) - 6); ctx.font = '12px Figtree, system-ui, sans-serif'; }
+  for (const t of tradesFor(selected)) { const td = intra ? t.at : t.date; if (!td) continue; let i = intra ? view.findIndex((b, j) => !b.live && b.date <= td && (!view[j + 1] || view[j + 1].date > td)) : view.findIndex((b) => b.date >= td); if (!intra && i < 0 && td > view[view.length - 1].date) i = view.length - 1; if (i < 0 || (lb && i === view.length - 1)) continue; ctx.fillStyle = t.side === 'buy' ? up : down; ctx.textAlign = 'center'; ctx.font = 'bold 14px Figtree, system-ui, sans-serif'; ctx.fillText(t.side === 'buy' ? '▲' : '▼', x(i), t.side === 'buy' ? y(view[i].low) + 16 : y(view[i].high) - 6); ctx.font = '12px Figtree, system-ui, sans-serif'; }
   // Le scelte di oggi sul titolo: voti (puntini), ordini (frecce piene), rifiuti (×), vicino alla candela di oggi.
   const acts = actionsFor(selected);
   if (acts.length) {
@@ -1367,16 +1498,16 @@ function drawChart() {
     }
     ctx.font = '12px Figtree, system-ui, sans-serif';
   }
-  chartGeom = { x, y, N: view.length, slots, view, path, last, vol, L, R, W, H, T, ph, lb };
+  chartGeom = { x, y, N: view.length, slots, view, path, last, vol, L, R, W, H, T, ph, lb, histW, fcW };
 }
 $('#chart').addEventListener('mousemove', (ev) => {
   const g = chartGeom; const tip = $('#tip'); if (!g) { tip.style.display = 'none'; return; }
   const rect = ev.currentTarget.getBoundingClientRect(); const mx = ev.clientX - rect.left, my = ev.clientY - rect.top;
-  const i = Math.floor(((mx - g.L) / (g.W - g.L - g.R)) * g.slots);
+  const rel = mx - g.L; const i = rel < g.histW ? Math.floor((rel / g.histW) * g.N) : g.N + Math.floor(((rel - g.histW) / g.fcW) * (g.path.length + 0.3));
   if (i < 0 || i >= g.slots) { tip.style.display = 'none'; return; }
   let html;
-  if (i < g.N) { const b = g.view[i]; const acts = b.live ? actionsFor(selected) : []; html = `<b>${b.date}${b.live ? ` · in formazione (${b.letture} letture)` : ''}</b><br>apertura ${px(b.open)} · massimo ${px(b.high)}<br>minimo ${px(b.low)} · ${b.live ? 'ultimo' : 'chiusura'} ${px(b.close)} <span class="${cls(b.close - b.open)}">${pct(b.close / b.open - 1)}</span>${acts.length ? `<br>${acts.length} azioni oggi: vedi sotto il grafico` : ''}`; }
-  else { const k = i - g.N; if (k >= g.path.length) { tip.style.display = 'none'; return; } const band = g.vol * Math.sqrt(k + 1) * 1.65; html = `<b>Scenario Kronos, seduta +${k + 1}</b><br>atteso ${px(g.last * (1 + g.path[k]))} (${pct(g.path[k])})<br>fascia ${px(g.last * (1 + g.path[k] - band))} – ${px(g.last * (1 + g.path[k] + band))}`; }
+  if (i < g.N) { const b = g.view[i]; const acts = b.live ? actionsFor(selected) : []; html = `<b>${tf === 'giorno' ? b.date : new Date(b.date).toLocaleString('it-IT', { timeZone: 'Europe/Rome', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}${b.live ? ` · in formazione (${b.letture} letture)` : ''}</b><br>apertura ${px(b.open)} · massimo ${px(b.high)}<br>minimo ${px(b.low)} · ${b.live ? 'ultimo' : 'chiusura'} ${px(b.close)} <span class="${cls(b.close - b.open)}">${pct(b.close / b.open - 1)}</span>${acts.length ? `<br>${acts.length} azioni oggi: vedi sotto il grafico` : ''}`; }
+  else { const k = i - g.N; if (k >= g.path.length) { tip.style.display = 'none'; return; } const s1 = g.vol * Math.sqrt(k + 1); const pU = 0.5 * (1 + erfJs(g.path[k] / s1 / Math.SQRT2)); html = `<b>Scenario Kronos, ${tf === 'giorno' ? 'seduta' : 'candela'} +${k + 1}</b><br>atteso ${px(g.last * (1 + g.path[k]))} (${pct(g.path[k])})<br>50%: ${px(g.last * (1 + g.path[k] - s1 * 0.6745))} – ${px(g.last * (1 + g.path[k] + s1 * 0.6745))}<br>80%: ${px(g.last * (1 + g.path[k] - s1 * 1.2816))} – ${px(g.last * (1 + g.path[k] + s1 * 1.2816))}<br><span class="up">↑ ${Math.round(pU * 100)}%</span> · <span class="down">↓ ${Math.round((1 - pU) * 100)}%</span>`; }
   tip.innerHTML = html; tip.style.display = 'block';
   tip.style.left = `${Math.min(mx + 14, g.W - 230)}px`; tip.style.top = `${Math.max(4, my - 60)}px`;
 });
@@ -1388,8 +1519,12 @@ function paintTitle() {
   const st = status; const price = st?.prezzi?.[selected] ?? bars.at(-1)?.close ?? null;
   $('#t-price').textContent = price !== null ? `${px(price)} $` : '–';
   drawChart();
+  paintTf();
   const fc = forecasts?.previsioni?.[selected];
-  $('#chart-note').textContent = fc ? `Kronos: ${pct(fc.rendimentoPrevisto)} in ${forecasts.orizzonte} sedute (proiezione del ${forecasts.giorno}).${(st?.kronos?.scartate || []).includes(selected) ? ' Fuori misura: il motore non la usa, è rumore del modello.' : ''}` : `Kronos: ${st?.kronos?.stato || 'nessuna proiezione'}.`;
+  const prob = chartProb !== null ? ` Probabilità a fine orizzonte: ${Math.round(chartProb * 100)}% sopra il prezzo di adesso, ${Math.round((1 - chartProb) * 100)}% sotto (dalla volatilità delle candele).` : '';
+  $('#chart-note').textContent = tf !== 'giorno'
+    ? (tfForecast ? `Kronos sulle prossime ${tfForecast.percorso.length} candele da ${TF_LABEL[tf]}: ${pct(tfForecast.rendimentoPrevisto)}.${prob}` : `Candele da ${TF_LABEL[tf]}${tfNote ? ` · ${tfNote}` : ': proiezione di Kronos non disponibile per queste candele.'}`)
+    : fc ? `Kronos: ${pct(fc.rendimentoPrevisto)} in ${forecasts.orizzonte} sedute (proiezione del ${forecasts.giorno}).${(st?.kronos?.scartate || []).includes(selected) ? ' Fuori misura: il motore non la usa, è rumore del modello.' : ''}${prob}` : `Kronos: ${st?.kronos?.stato || 'nessuna proiezione'}.`;
   $('#live-note').textContent = lastTick ? `in diretta · giro ${hhmm(lastTick.t)}` : '';
   renderFeed();
   if (valutazione) return paintVerdict(valutazione);

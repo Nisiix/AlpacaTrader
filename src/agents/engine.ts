@@ -10,6 +10,7 @@ import type { KronosForecastPath } from "../kronos-sidecar.ts";
 import { stopPctFor } from "../stops.ts";
 import type { CustodeStato } from "./custode.ts";
 import type { IntradayStato } from "./intraday.ts";
+import type { FontiDati } from "./fonti.ts";
 import { applyLessons, coffeeBreak, teamLessons, type CaffeReport } from "./caffe.ts";
 import { attive, explore, radar, readEsplorazione, scoutVotes, writeEsplorazione, type Scoperta } from "./esplorazione.ts";
 import { refreshCryptoUniverse, type TopFetcher } from "./universe.ts";
@@ -46,6 +47,8 @@ export interface EngineDeps {
   // Proiezioni (Kronos) per l'agente delle uscite e per l'agente kronos; assente = nessuna proiezione.
   // Riceve anche le barre giornaliere già scaricate (il sidecar lavora su quelle). Un numero = solo rendimento finale.
   forecaster?: (symbols: string[], bars: Record<string, Bar[]>) => Promise<Record<string, number | KronosForecastPath>>;
+  // Fonti esterne gratuite (Fear & Greed, funding): se assenti si va avanti senza.
+  fonti?: { read(): Promise<FontiDati> };
   // Una riga sullo stato di Kronos per la dashboard (attivo, in avvio, non installato).
   kronosStato?: () => string;
   // Universo crypto dinamico: coppie di Alpaca nella top N per capitalizzazione. fetchTop null = solo lista Alpaca.
@@ -93,6 +96,7 @@ export interface AgentsStatus {
   capo: CapoReport;
   // Sala caffè: chi è in pausa e chi alla scrivania, cosa si dicono, le lezioni di squadra.
   caffe?: CaffeReport;
+  fonti?: FontiDati;
   // Esplorazione del radar da parte degli agenti in pausa.
   esplorazione?: { ultimoGiro: string | null; esito: string | null; daEsaminareOggi: number; attive: Scoperta[]; recenti: Scoperta[] };
 }
@@ -386,7 +390,11 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
       log.info(m);
       bus.emit("nota", { testo: m });
     }
-    const view: AgentView = { today, now: startedAt, prices: snap.prices, closes, indicators, positions: snap.positions, account: snap.account, journal, previsioni, mercatoAperto: snap.clock.isOpen, finestraIngressi: inEntryWindow(startedAt) && snap.clock.isOpen, giornata };
+    let fonti: FontiDati | undefined;
+    try {
+      fonti = deps.fonti ? await deps.fonti.read() : undefined;
+    } catch {}
+    const view: AgentView = { today, now: startedAt, prices: snap.prices, closes, indicators, positions: snap.positions, account: snap.account, journal, previsioni, mercatoAperto: snap.clock.isOpen, finestraIngressi: inEntryWindow(startedAt) && snap.clock.isOpen, giornata, fonti };
     const reports: Record<string, AgentReport> = {};
     const agentStatus: AgentsStatus["agenti"] = {};
     // Il contesto economico si valuta per primo: decide dove si aspetta e di quali proiezioni fidarsi.
@@ -585,6 +593,7 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
       giornata: { pnlPct, obiettivoPct: AGENTS.daily.targetPct, perditaMaxPct: AGENTS.daily.maxLossPct, obiettivoRaggiunto: giornata.obiettivoRaggiunto, perditaOltre: giornata.perditaOltre },
       simulazioni,
       capo,
+      fonti: fonti ? { paura: fonti.paura, funding: Object.fromEntries(AGENTS.universe.filter((u) => fonti!.funding[u] !== undefined).map((u) => [u, fonti!.funding[u]!])), errori: fonti.errori } : undefined,
       caffe: coffeeBreak({ now: deps.now(), reports, held: new Set([...positions.map((p) => p.symbol), ...cage.orders.filter((o) => o.side === "buy").map((o) => o.symbol)]), previsioni: view.previsioni, scartate, lezioni, capo, applicati: applicatiCaffe, giro: (cache.giriCaffe = (cache.giriCaffe ?? 0) + 1), primaInPausa: new Set((cache.caffePresenti ?? "").split(",").filter(Boolean)), esploratori: scout.esploratori }),
     };
     // Esplorazione: con qualcuno in pausa, ogni mezz'ora si passa in rassegna un pezzo del radar.

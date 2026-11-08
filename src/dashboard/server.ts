@@ -17,6 +17,8 @@ export interface DashboardOptions {
   hostname?: string;
   // Valutazione a secco di un titolo con gli agenti del motore (solo quando la dashboard gira dentro bun run agents).
   valuta?: (symbol: string) => Promise<Valutazione>;
+  // Candele intraday (5Min, 15Min, 1Hour, 4Hour) dal broker e proiezione di Kronos sulle prossime candele.
+  candele?: (symbol: string, timeframe: string) => Promise<{ barre: { date: string; open: number; high: number; low: number; close: number; volume: number }[]; previsione: { rendimentoPrevisto: number; percorso: number[] } | null; nota?: string }>;
 }
 
 const html = () => readFileSync(join(import.meta.dir, "index.html"), "utf8");
@@ -65,6 +67,17 @@ export function startDashboard(o: DashboardOptions) {
         const ultime = Number(url.searchParams.get("ultime") ?? 0);
         if (!sym && ultime > 0) return Response.json({ aggiornato: r.value.aggiornato, barre: Object.fromEntries(Object.entries(all).map(([k, v]) => [k, v.slice(-Math.min(ultime, 120))])) });
         return Response.json(sym ? { aggiornato: r.value.aggiornato, simbolo: sym, barre: all[sym] ?? [] } : { aggiornato: r.value.aggiornato, simboli: Object.keys(all) });
+      }
+      if (url.pathname === "/api/candele") {
+        const sym = url.searchParams.get("simbolo");
+        const tf = url.searchParams.get("tf") ?? "";
+        if (!sym || !["5Min", "15Min", "1Hour", "4Hour"].includes(tf)) return Response.json({ errore: "servono simbolo e tf (5Min, 15Min, 1Hour, 4Hour)" }, { status: 400 });
+        if (!o.candele) return Response.json({ errore: "le candele intraday arrivano solo con il motore acceso (bun run agents)" }, { status: 503 });
+        try {
+          return Response.json({ simbolo: sym, tf, ...(await o.candele(sym, tf)) });
+        } catch (e) {
+          return Response.json({ errore: (e as Error).message }, { status: 502 });
+        }
       }
       if (url.pathname === "/api/previsioni") {
         const r = readJson(forecastsPath(o.stateDir), isObject) as { kind: string; value?: any };

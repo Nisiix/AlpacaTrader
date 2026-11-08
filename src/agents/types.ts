@@ -25,6 +25,8 @@ export interface Signal {
   kronos?: number;
 }
 
+import type { FontiDati } from "./fonti.ts";
+
 export interface AgentView {
   today: string; // YYYY-MM-DD ora di Roma
   now: Date;
@@ -43,6 +45,8 @@ export interface AgentView {
   finestraIngressi?: boolean;
   // Giornata: guadagno dal patrimonio di ieri e stato dell'obiettivo giornaliero (raggiunto → si incassa, niente nuovi ingressi).
   giornata?: { pnlPct: number; obiettivoRaggiunto: boolean; perditaOltre: boolean };
+  // Fonti esterne (Fear & Greed delle crypto, funding dei perpetui): contorno per contesto e dossier.
+  fonti?: FontiDati;
 }
 
 export type Outlook = "favorevole" | "neutro" | "sfavorevole";

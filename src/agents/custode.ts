@@ -2,6 +2,7 @@ import { AGENTS, LIMITS, isCrypto } from "../config.ts";
 import { dailyVol, momentum, rsi, sma, trendOf } from "../indicators.ts";
 import { stopPctFor } from "../stops.ts";
 import { controTendenza, pesoControTendenza } from "./fiducia.ts";
+import { crowdAdjustment } from "./fonti.ts";
 import { clamp01, type Agent, type AgentReport, type AgentView, type Signal } from "./types.ts";
 
 // I custodi: un investitore per ogni crypto che il motore segue. Ognuno guarda un solo titolo e ragiona come un
@@ -101,6 +102,17 @@ export function xNews(bearer: string, timeoutMs = 10_000): NewsFetcher {
       .sort((a, b) => (b.public_metrics?.like_count ?? 0) - (a.public_metrics?.like_count ?? 0))
       .slice(0, 10)
       .map((t) => ({ titolo: t.text.replace(/\s+/g, " ").slice(0, 200), fonte: "X", quando: t.created_at ?? "" }));
+  };
+}
+
+// Notizie di Alpaca (Benzinga), con le stesse chiavi del conto: titoli e crypto, le più recenti per prime.
+export function alpacaNews(keyId: string, secret: string, timeoutMs = 10_000): NewsFetcher {
+  return async (symbol) => {
+    const sym = symbol.replace("/", "");
+    const res = await fetch(`https://data.alpaca.markets/v1beta1/news?symbols=${encodeURIComponent(sym)}&limit=10&sort=desc`, { signal: AbortSignal.timeout(timeoutMs), headers: { "APCA-API-KEY-ID": keyId, "APCA-API-SECRET-KEY": secret } });
+    if (!res.ok) throw new Error(`Alpaca news ${res.status}`);
+    const data = (await res.json()) as { news?: { headline: string; source?: string; created_at?: string }[] };
+    return (data.news ?? []).map((n) => ({ titolo: n.headline, fonte: n.source ? `${n.source} (Alpaca)` : "Benzinga (Alpaca)", quando: n.created_at ?? "" }));
   };
 }
 
@@ -209,8 +221,9 @@ export class CustodiAgent implements Agent {
     const notizie = { punteggio: ns, titoli: titoli.slice(0, 8), nota: !this.news ? "notizie non consultate" : c.notizie?.errore ? `notizie non raggiungibili (${c.notizie.errore})` : ns === null ? "nessuna notizia recente" : `${titoli.length} tra notizie${daX ? ` e post su X (${daX})` : ""}, tono ${ns > 0.6 ? "favorevole" : ns < 0.4 ? "sfavorevole" : "neutro"}` };
     const o = v.contesto?.generale ?? "neutro";
     const wait = v.contesto?.attendi[s];
-    const cs = wait ? 0.2 : o === "favorevole" ? 0.8 : o === "neutro" ? 0.5 : 0.2;
-    const contesto = { punteggio: cs, nota: wait ? wait : `contesto ${o}` };
+    const crowd = crowdAdjustment(v.fonti, s, fc);
+    const cs = Math.max(0, Math.min(1, (wait ? 0.2 : o === "favorevole" ? 0.8 : o === "neutro" ? 0.5 : 0.2) + crowd.delta));
+    const contesto = { punteggio: cs, nota: [wait ? wait : `contesto ${o}`, ...crowd.nota].join(" · ") };
     const memoria = symbolMemory(v.journal, s);
     // Pesi: Kronos 45 (la fonte principale per anticipare), tecnica 25, notizie 15, contesto 15; le fonti mancanti
     // ridistribuiscono il loro peso.

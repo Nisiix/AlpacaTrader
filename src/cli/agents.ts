@@ -4,7 +4,8 @@
 // gabbia, invia, e aggiorna la dashboard locale. Kronos: il sidecar Python lo accende il motore da solo, se installato.
 import { HorizonAgent } from "../agents/horizon.ts";
 import { ClaudeMacro, ContextAgent } from "../agents/context.ts";
-import { CustodiAgent, combinedNews, googleNews, xNews } from "../agents/custode.ts";
+import { CustodiAgent, alpacaNews, combinedNews, googleNews, xNews } from "../agents/custode.ts";
+import { FontiEsterne } from "../agents/fonti.ts";
 import { loadSecrets } from "../deps.ts";
 import { IntradayAgent } from "../agents/intraday.ts";
 import { ExitAgent } from "../agents/exits.ts";
@@ -45,9 +46,11 @@ try {
   if (args.profitto || AGENTS.takeProfit.enabled) agents.push(new TakeProfitAgent());
   // I custodi studiano il loro titolo tra un giro e l'altro: nel vero leggono anche le notizie (Google News), nel finto no.
   if (AGENTS.custodi.enabled) {
-    const xToken = args.fake ? "" : (await loadSecrets(false))?.xBearerToken ?? "";
-    agents.push(new CustodiAgent(args.fake ? null : combinedNews([googleNews(), ...(xToken ? [xNews(xToken)] : [])])));
-    if (!args.fake) console.log(`notizie: Google News${xToken ? " + X" : " (X: nessun token in secrets.ts)"}`);
+    const sec = args.fake ? null : await loadSecrets(false);
+    const xToken = sec?.xBearerToken ?? "";
+    const alp = sec?.alpacaKeyId && sec?.alpacaSecretKey ? alpacaNews(sec.alpacaKeyId, sec.alpacaSecretKey) : null;
+    agents.push(new CustodiAgent(args.fake ? null : combinedNews([googleNews(), ...(alp ? [alp] : []), ...(xToken ? [xNews(xToken)] : [])])));
+    if (!args.fake) console.log(`notizie: Google News${alp ? " + Alpaca/Benzinga" : ""}${xToken ? " + X" : " (X: nessun token in secrets.ts)"}`);
   }
 
   // Kronos: un sidecar già acceso (--kronos url o KRONOS_URL), altrimenti lo avvia il motore dal venv di tools/kronos.
@@ -82,12 +85,38 @@ try {
     kronosStato: kronos ? () => kronos!.stato : undefined,
     // Nel finto niente rete: solo le coppie del broker finto.
     cryptoUniverse: args.noCrypto ? undefined : { fetchTop: args.fake ? null : coingeckoTop() },
+    // Fear & Greed e funding: fonti gratuite senza chiavi, solo nel vero.
+    fonti: args.fake ? undefined : new FontiEsterne(),
   };
   console.log(`motore degli agenti${args.fake ? " (finto)" : ""}: ${agents.map((a) => a.name).join(", ")} · stato in ${deps.stateDir}${kronos ? ` · kronos ${kronos.stato}` : ""}`);
 
   let dash: ReturnType<typeof startDashboard> | null = null;
   if (!args.noDashboard && !args.once) {
-    dash = startDashboard({ port: args.port ?? AGENTS.dashboardPort, stateDir: deps.stateDir, bus, valuta: (s) => valutaTitolo(engine, cache, s) });
+    // Candele intraday per il grafico, con la proiezione di Kronos sulle prossime candele (in memoria finché non chiude
+    // una candela nuova: il sidecar non si interroga a ogni richiesta della pagina).
+    const kfChart = kronos ? intradayForecaster(kronos) : null;
+    const memo = new Map<string, { at: number; barre: any[]; previsione: any; ultima: string }>();
+    const candele = async (sym: string, tf: string) => {
+      const key = `${sym}|${tf}`;
+      const m = memo.get(key);
+      if (m && Date.now() - m.at < 60_000) return { barre: m.barre, previsione: m.previsione };
+      const b = (await deps.broker.getIntradayBars([sym], tf, 160))[sym] ?? [];
+      const barre = b.map((x) => ({ date: x.t, open: x.open, high: x.high, low: x.low, close: x.close, volume: x.volume }));
+      const ultima = b.at(-1)?.t ?? "";
+      let previsione = m && m.ultima === ultima ? m.previsione : null;
+      let nota: string | undefined;
+      if (!previsione && kfChart && b.length >= 60) {
+        try {
+          const f = (await kfChart({ [sym]: b }, Number(tf.endsWith("Min") ? tf.replace("Min", "") : Number(tf.replace("Hour", "")) * 60), 12))[sym];
+          previsione = f ? { rendimentoPrevisto: f.rendimentoPrevisto, percorso: f.percorso } : null;
+        } catch (e) {
+          nota = `Kronos: ${(e as Error).message}`;
+        }
+      }
+      memo.set(key, { at: Date.now(), barre, previsione, ultima });
+      return { barre, previsione, ...(nota ? { nota } : {}) };
+    };
+    dash = startDashboard({ port: args.port ?? AGENTS.dashboardPort, stateDir: deps.stateDir, bus, valuta: (s) => valutaTitolo(engine, cache, s), candele });
     console.log(`dashboard su ${dash.url}`);
   }
   if (args.once) {
