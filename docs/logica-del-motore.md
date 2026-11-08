@@ -211,32 +211,58 @@ rimasto (azioni fino a 30 minuti dalla chiusura vera; crypto entro la durata mas
 1. **Grafico della candela**: EMA 9 sopra EMA 20 e prezzo sopra la 9, oppure rottura dei massimi delle 20 candele o
    rientro sulla media a 20; mai oltre 3 ATR sopra (si insegue). Se il grafico non è ancora allineato **decide Kronos da
    solo**: serve una probabilità più alta (65%) e la taglia si dimezza (è un'inversione anticipata).
-2. **Kronos**: una proiezione per titolo e candela, letta a ogni orizzonte che sta nel tempo rimasto. Per ognuno: rialzo
-   previsto e probabilità. Vale solo se il rialzo copre **2 volte i costi**; si sceglie la **coppia candela + orizzonte
-   con la probabilità più alta** (almeno 55%). Fino a 40 coppie titolo-candela per analisi, prima rotture e rientri, poi
-   medie in ordine, poi i casi in cui decide Kronos da solo.
-3. **Obiettivo = il rialzo che Kronos prevede** sull'orizzonte scelto, mai sotto il minimo dei costi (azioni 0,3%,
+2. **Kronos, e quale time frame**: una proiezione per titolo e candela, letta a ogni orizzonte che sta nel tempo rimasto
+   (da 15 minuti a 8 ore). Candele e orizzonti diversi si confrontano sulla stessa scala, la **probabilità di un
+   guadagno netto dei costi**: Φ((rialzo previsto − costi) / (volatilità delle candele × √candele)), moltiplicata per
+   l'**affidabilità misurata di Kronos su quella candela** (il cervello conta quante volte ha preso la direzione giusta;
+   un campione piccolo resta vicino al valore atteso del 55%). Se su una candela Kronos indovina come una moneta, quella
+   candela non fa più entrare e si sceglie un'altra. Esempio vero: sulle 5 minuti Kronos ha preso la direzione 27 volte
+   su 100 (63 valutate) → affidabilità ×0, gli ingressi passano a 15 minuti e 1 ora. Il rialzo deve coprire **2 volte i
+   costi** e la probabilità essere almeno 55% (65% se decide Kronos da solo). Fino a 40 coppie titolo-candela per analisi.
+3. **Coerenza tra le candele**: le altre candele già proiettate, lette allo stesso orizzonte, non devono prevedere un
+   calo; se sì, il segnale è rumore della candela e non si entra.
+4. **Triple Screen (Elder): le candele superiori decidono la direzione.** Per un ingresso su 5 o 15 minuti si leggono
+   Kronos su **1 ora e 4 ore** (su 1 ora: 4 ore), all'orizzonte più lungo nel tempo rimasto:
+   - se prevedono un **calo oltre i costi**, il rialzo breve va controcorrente: **non si entra**;
+   - se prevedono un **rialzo netto** probabile, il trade diventa **di trend**: obiettivo finale e orizzonte delle candele
+     superiori, **stop della loro candela** (deciso adesso, mai allargato dopo) e taglia ridotta in proporzione allo stop,
+     così il rischio in euro resta quello del trade breve;
+   - altrimenti è un trade breve.
+5. **Obiettivo = il rialzo che Kronos prevede** sull'orizzonte scelto, mai sotto il minimo dei costi (azioni 0,3%,
    crypto 1,2%). **Stop** = 1,2 ATR della candela (minimo 0,4% azioni, 1% crypto). Si entra solo se l'obiettivo vale
    almeno **1,2 volte lo stop**.
-4. **Taglia**: 10% del conto × fiducia (55% → metà, 70% → piena); il grafico della candela superiore sotto la sua media
-   e il Kronos a 5 sedute contrario la dimezzano ciascuno.
+6. **Aspettativa positiva (Thorp)**: probabilità × guadagno netto − (1 − probabilità) × perdita allo stop (costi
+   compresi) deve essere maggiore di zero.
+7. **Taglia**: 10% del conto × fiducia (55% → metà, 70% → piena); il grafico della candela superiore sotto la sua media
+   (se non è un trade di trend) e il Kronos a 5 sedute contrario la dimezzano ciascuno; uno stop più largo la riduce in
+   proporzione; dopo **3 operazioni intraday in perdita di fila** nella giornata, ancora × 0,5. Il richiamo del capo
+   (×0,6) e la prudenza della sala caffè (×0,85) riducono la **taglia**, non la forza del voto: l'ingresso resta deciso
+   da Kronos.
 
-Esempio: Kronos vede +1,5% in 15 minuti sulle candele da 5 minuti di BTC, con probabilità alta; stop 1% → si entra con
-obiettivo +1,5% e controllo sulle candele da 1 minuto. Se il prezzo arriva all'obiettivo e Kronos non vede altro, si
-incassa: un trade di pochi minuti. (Verificato nel motore vero, `tests/intraday-motore.test.ts`.)
+Esempio: Kronos vede +1,5% in 15 minuti sulle candele da 5 minuti di BTC, con probabilità alta; su 1 ora e 4 ore niente
+di contrario; stop 1% → si entra con obiettivo +1,5% e controllo sulle candele da 1 minuto. Se il prezzo arriva
+all'obiettivo e Kronos non vede altro, si incassa: un trade di pochi minuti. Se invece su 1 ora Kronos vede +1,8% in 8
+ore, lo stesso ingresso diventa un trade di trend con obiettivo +1,8% e stop della candela da 1 ora. (Verificato nel
+motore vero, `tests/intraday-motore.test.ts`.)
 
 ### Mentre è aperta (a ogni giro, ogni 5 minuti)
 
 La posizione si segue sulla **candela più breve** (5 min → 1 min, 15 min → 5 min, 1 ora → 15 min, 4 ore → 1 ora), con
-Kronos sull'orizzonte d'ingresso:
+Kronos sull'orizzonte d'ingresso, e sulle **candele superiori** (1 ora, 4 ore):
 
-- **all'obiettivo**: se Kronos lì vede ancora salire (≥ 60%) **si lascia correre** e lo stop sale sopra il carico; se no
-  si incassa;
+- **trade di trend** (le candele superiori restano a favore): valgono solo obiettivo, stop e fine giornata. Un calo
+  previsto sulla candela da 1 minuto, l'orizzonte breve scaduto o la media breve persa **non lo chiudono**: sono le false
+  perdite di pochi minuti dentro un movimento che continua sulle ore. Un trade nato breve diventa di trend se a metà
+  strada le candele superiori iniziano a vedere il rialzo continuare (lo stop resta dov'è);
+- se le candele superiori **girano al ribasso**, il trade torna alle regole brevi qui sotto;
+- **all'obiettivo**: se Kronos vede ancora salire (candela breve ≥ 60% o candele superiori a favore) **si lascia correre**
+  e lo stop sale sopra il carico; se no si incassa;
 - Kronos vede un calo che azzererebbe il guadagno → **protezione del profitto**, si incassa;
 - in perdita, Kronos vede un calo verso lo stop con rialzo al 35% o meno → **si taglia prima**;
 - **orizzonte scaduto** (1,5 volte quello d'ingresso) senza obiettivo e senza rialzo probabile → si chiude;
-- due candele chiuse sotto la media a 20 → il movimento è finito; stop;
-- limite del giorno raggiunto → si incassa.
+- due candele chiuse sotto la media a 20 → il movimento è finito, ma **solo se il prezzo era stato sopra la media**: un
+  ingresso deciso da Kronos sotto la media (ripartenza anticipata) non si chiude per la ragione per cui è entrato;
+- stop; limite del giorno raggiunto → si incassa.
 
 ### A fine finestra: chiudere o continuare
 
@@ -283,6 +309,11 @@ d'opinione prima di una candela giornaliera nuova: escono solo stop e regole vin
   fino a domani: gli agenti continuano **in simulazione** (operazioni virtuali misurate) e l'intraday incassa. Nessun
   limite alla perdita del giorno: proteggono stop e uscite.
 - **Interruttore** (−5% dal massimo): spento di serie, attivabile dalle impostazioni come freno d'emergenza.
+- **Regola del 6% (Elder)**: perdite realizzate del mese oltre il 6% del patrimonio → niente nuovi acquisti fino al mese
+  dopo (vendite e stop restano attivi).
+- **Niente medie al ribasso (Livermore)**: nessuna aggiunta a una posizione in perdita.
+- **Prezzi degli ordini con i decimali giusti**: azioni 2 (4 sotto il dollaro), crypto 4 cifre significative fino a 9
+  decimali (lo stop di PEPE a 0,0000045 non diventa più 0).
 - **Ordini**: un ID per giro (un nuovo tentativo non si duplica; Alpaca rifiuta l'ID già usato), verifica dopo un timeout,
   stop tolto prima di una vendita, quantità crypto troncate al milionesimo, briciole senza stop.
 - **Un solo processo** sullo stato (`state/run.lock`). Dopo un riavvio il motore riparte da `state/`.
@@ -295,20 +326,39 @@ d'opinione prima di una candela giornaliera nuova: escono solo stop e regole vin
 - **Cervello delle previsioni**: quanto vale ogni modello, per il giornaliero e per ogni candela.
 - **Memoria per titolo** dei custodi.
 - **Registro degli errori**: solo sicurezza (dopo uno stop, dopo due rifiuti di Alpaca).
+- **Biblioteca degli agenti** (`src/agents/biblioteca.ts`): i principi dei libri di trading più noti tradotti in regole
+  che tutti gli agenti condividono, perché passano dagli stessi controlli. Elder (Triple Screen, regole del 2% e del 6%),
+  Lefèvre/Livermore (taglia le perdite, lascia correre, mai medie al ribasso), Thorp (aspettativa positiva), Tharp
+  (rischio costante per operazione), Douglas e Kahneman (probabilità, niente rincorsa dopo le perdite), Murphy (trend,
+  medie, più time frame), Covel/Faith (trend following con stop ATR), O'Neil (titoli forti, perdite tagliate), Schwager
+  (gestione del rischio), Taleb (diffidare delle previsioni estreme), Lo (mercati adattivi: pesare ciò che funziona),
+  Malkiel (costi e rumore). Graham (margine di sicurezza sui bilanci) non si applica a orizzonti da minuti a giorni. Gli
+  agenti non «leggono» i libri: ogni principio è un controllo del codice, visibile in Ufficio → Biblioteca.
+- **Kronos e i prezzi minuscoli**: Kronos normalizza ogni serie con (x − media) / (dev. std + 1e-5); su PEPE (0,000005 $)
+  la deviazione standard è 1e-7 e la serie diventava piatta, con proiezioni fuori misura. Le serie sotto 1 $ ora arrivano
+  al modello scalate (ultima chiusura = 100): i rendimenti non cambiano.
 
 ---
 
 ## 10. Dove vedere tutto
 
-Dashboard su `http://127.0.0.1:8787` (anche da telefono e, in sola lettura, sulla pagina pubblica di GitHub Pages):
+Dashboard su `http://127.0.0.1:8787` (anche da telefono e, in sola lettura, sulla pagina pubblica di GitHub Pages).
+Menu a sinistra (sul telefono si apre con ☰):
 
-- **Dashboard**: frase di stato, soldi, situazione in breve (posizioni, operazioni di oggi, contesto, Kronos con i
-  campioni, agenti con la prossima analisi d'ingresso, esplorazione), **cervello delle previsioni**;
-- **Titoli**: grafico con candele giorno, 4 ore, 1 ora, 15 e 5 minuti e lo scenario di Kronos; dialogo «Analisi
-  investimento» / «Riepilogo investimento»; la parte **Oggi** (profitto e perdita, posizioni, ultimo giro, intraday,
-  simulazioni, registro);
-- **Agenti**: squadra, capo ufficio, custodi, sala caffè, esplorazione, ufficio 3D;
-- **Impostazioni**: schede degli agenti con i parametri, chiavi, riavvio, guida.
+- **Dashboard**: frase di stato; capitale (patrimonio totale, investito, liquidità, risultato sulle posizioni aperte,
+  oggi, rischio, confronto con SPY); **rendimento per periodo** (oggi, 7 e 30 giorni, mese, anno, tutto o date a
+  scelta: variazione del patrimonio dallo storico di Alpaca, realizzato, operazioni chiuse e vinte, migliore e
+  peggiore, ribasso massimo, grafico del patrimonio, giorno per giorno); profitto e perdita di oggi, ultimo giro,
+  situazione in breve, registro della giornata;
+- **Ufficio**: la mappa 3D con gli agenti (clic per la scheda: situazione, ragionamento, giudizio del capo,
+  impostazioni) e sotto capo ufficio, custodi, ultimo giro con punteggi e voti, esplorazione, sala caffè, **cervello
+  delle previsioni** e **biblioteca degli agenti**;
+- **Investimenti**: card dei titoli in portafoglio e in osservazione; clic per il **grafico** (TradingView Lightweight
+  Charts, Apache 2.0, incluso nel repository) con time frame 1m, 5m, 15m, 1h, 4h, 1G, medie, volumi, carico, stop,
+  obiettivo, operazioni e la **proiezione dei modelli con il cono** al 50% e all'80%; le candele da 1 e 5 minuti si
+  aggiornano ogni 15 secondi; poi operazioni intraday, simulazioni e tabella delle posizioni;
+- **Impostazioni**: schede degli agenti con i parametri, chiavi, riavvio;
+- **Guida**.
 
 Telegram riceve ordini, allarmi e il riepilogo serale.
 
