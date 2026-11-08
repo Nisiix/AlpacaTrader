@@ -1,0 +1,1478 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agenti Alpaca</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap">
+<style>
+  :root {
+    --bg:#eef1f6; --card:#ffffff; --card-2:#f6f8fb; --ink:#16233b; --ink-2:#4a576b; --ink-3:#7c889b; --line:#dbe1ea;
+    --up:#137a52; --up-bg:#e3f3ec; --down:#b4332a; --down-bg:#f9e6e3; --agent:#2a55c7; --agent-bg:#e6ecfb;
+    --warn:#8a5a00; --warn-bg:#fff2d6; --ok:#137a52; --radius:14px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg:#0f141c; --card:#161d28; --card-2:#1c2533; --ink:#e8edf5; --ink-2:#b4bfcf; --ink-3:#7f8ca0; --line:#263142;
+      --up:#4fcf95; --up-bg:#15372a; --down:#ff8a7a; --down-bg:#45201c; --agent:#8fb0ff; --agent-bg:#1f2c4a; --warn:#ffd27a; --warn-bg:#3d2f10; --ok:#4fcf95;
+    }
+  }
+  * { box-sizing:border-box; }
+  html { -webkit-text-size-adjust:100%; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 "Figtree", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; font-variant-numeric: tabular-nums; }
+  a { color:inherit; }
+  main { max-width:1240px; margin:0 auto; padding:20px 16px 48px; display:grid; gap:16px; }
+  h1 { font-size:15px; font-weight:600; margin:0; color:var(--ink-2); display:flex; align-items:center; gap:10px; }
+  h2 { font-size:17px; font-weight:600; margin:0 0 10px; letter-spacing:-.01em; }
+  h2 small { font-weight:400; color:var(--ink-3); font-size:14px; margin-left:8px; }
+  p { margin:0; }
+  .top { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+  .top .when { color:var(--ink-3); font-size:14px; }
+  .nav { display:flex; gap:4px; flex-wrap:wrap; }
+  .nav a { text-decoration:none; font-size:14px; padding:6px 12px; border-radius:999px; color:var(--ink-2); }
+  .nav a[aria-current="page"] { background:var(--ink); color:var(--card); font-weight:600; }
+  .nav a:hover:not([aria-current="page"]) { background:var(--card); }
+  .nav a:focus-visible { outline:2px solid var(--agent); outline-offset:2px; }
+  .page { display:none; } .page.on { display:block; }
+  .page[data-page="3d"] #scene { height:calc(100vh - 260px); min-height:420px; }
+  .dot { width:10px; height:10px; border-radius:50%; background:var(--down); display:inline-block; box-shadow:0 0 0 3px var(--down-bg); }
+  .dot.on { background:var(--ok); box-shadow:0 0 0 3px var(--up-bg); }
+
+  /* La frase di stato: la cosa più importante della pagina, detta in parole semplici. */
+  .hero { background:var(--card); border-radius:var(--radius); padding:22px 24px; border:1px solid var(--line); display:grid; gap:18px; }
+  .hero .say { font-size:clamp(20px, 2.6vw, 28px); line-height:1.25; font-weight:600; letter-spacing:-.015em; max-width:34ch; }
+  .hero .say.warn { color:var(--warn); }
+  .hero .say.bad { color:var(--down); }
+  .hero .fix { color:var(--ink-2); max-width:70ch; }
+  .money { display:flex; gap:28px; flex-wrap:wrap; align-items:flex-end; }
+  .money .big { font-size:clamp(28px, 3.4vw, 40px); font-weight:700; letter-spacing:-.02em; line-height:1; }
+  .money .lab { color:var(--ink-3); font-size:13px; margin-bottom:6px; }
+  .money .val { font-size:20px; font-weight:600; }
+  .money .sub { color:var(--ink-2); font-size:14px; margin-top:4px; }
+
+  .cols { display:grid; grid-template-columns: 1fr 1fr; gap:16px; }
+  @media (max-width: 900px) { .cols { grid-template-columns:1fr; } }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:var(--radius); padding:18px 20px; }
+  .stack { display:grid; gap:16px; align-content:start; }
+  .empty { color:var(--ink-3); padding:8px 0; max-width:60ch; }
+
+  table { width:100%; border-collapse:collapse; font-size:14px; }
+  th { text-align:left; font-weight:500; color:var(--ink-3); padding:6px 8px 8px; border-bottom:1px solid var(--line); font-size:13px; }
+  td { padding:9px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
+  tr:last-child td { border-bottom:0; }
+  td.n, th.n { text-align:right; white-space:nowrap; }
+  td b, .sym { font-weight:600; }
+  .up { color:var(--up); } .down { color:var(--down); }
+  .pill { display:inline-block; padding:2px 9px; border-radius:999px; font-size:13px; font-weight:500; background:var(--card-2); color:var(--ink-2); white-space:nowrap; }
+  .pill.up { background:var(--up-bg); color:var(--up); } .pill.down { background:var(--down-bg); color:var(--down); }
+  .pill.agent { background:var(--agent-bg); color:var(--agent); } .pill.warn { background:var(--warn-bg); color:var(--warn); }
+  .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  .why { color:var(--ink-2); font-size:14px; }
+  .pnl-line { display:flex; gap:24px; flex-wrap:wrap; margin-bottom:10px; }
+  .pnl-line .lab { color:var(--ink-3); font-size:13px; } .pnl-line .val { font-size:20px; font-weight:600; }
+
+  .bar { position:relative; height:8px; background:var(--card-2); border-radius:4px; overflow:hidden; min-width:90px; }
+  .bar i { position:absolute; top:0; bottom:0; left:50%; background:var(--up); border-radius:4px; }
+  .bar i.down { background:var(--down); }
+  .decision { padding:10px 0; border-bottom:1px solid var(--line); display:grid; gap:4px; }
+  .decision:last-child { border-bottom:0; }
+  .decision .head { display:flex; justify-content:space-between; gap:10px; align-items:baseline; }
+
+  details.scene { background:var(--card); border:1px solid var(--line); border-radius:var(--radius); overflow:hidden; }
+  details.scene summary { cursor:pointer; padding:16px 20px; font-weight:600; list-style:none; display:flex; justify-content:space-between; align-items:center; }
+  details.scene summary::-webkit-details-marker { display:none; }
+  details.scene summary span.hint { color:var(--ink-3); font-weight:400; font-size:14px; }
+  details.scene summary:focus-visible { outline:2px solid var(--agent); outline-offset:-2px; }
+  #scene { position:relative; height:480px; background:#dfe5ec; }
+  #scene canvas { display:block; }
+  .lbl { color:#e6edf3; font-size:11px; background:rgba(11,15,22,.7); padding:2px 5px; border-radius:4px; white-space:nowrap; pointer-events:none; }
+  .lbl.agent { color:#8fb0ff; }
+  .lbl.desk-lbl { background:rgba(255,255,255,.88); color:#1f2937; font-size:11px; line-height:1.2; text-align:center; border:1px solid #d1d5db; }
+  .lbl.desk-lbl span { color:#6b7280; }
+  .lbl.dept-lbl { background:#1f2937; color:#fff; font-size:13px; font-weight:600; padding:4px 10px; }
+  .office-card { position:absolute; top:12px; right:12px; width:340px; max-height:calc(100% - 24px); overflow:auto; background:var(--card); color:var(--ink); border:1px solid var(--line); border-radius:14px; padding:14px 16px; box-shadow:0 8px 30px rgba(0,0,0,.18); z-index:5; font-size:14px; }
+  .office-card h3 { margin:4px 0 2px; font-size:17px; } .office-card p { margin:8px 0; } .office-card ul { margin:4px 0; padding-left:18px; }
+  .office-card .portrait { width:150px; height:170px; margin:0 auto; background:linear-gradient(#eef2f7,#dfe5ec); border-radius:12px; overflow:hidden; }
+  .office-card .x { position:absolute; top:8px; right:8px; border:0; background:var(--card-2); border-radius:999px; width:28px; height:28px; cursor:pointer; color:var(--ink); }
+  .office-card td { padding:4px 4px; font-size:13px; } .office-card .agent-c { color:var(--agent); font-weight:600; }
+  @media (max-width: 700px) { .office-card { left:8px; right:8px; width:auto; } }
+  .lbl.bubble { background:#fff; font-weight:700; font-size:12px; border:1px solid #d1d5db; box-shadow:0 2px 6px rgba(0,0,0,.15); }
+  .legend { padding:10px 20px 14px; color:var(--ink-3); font-size:13px; }
+
+  .filters { display:flex; gap:6px; }
+  .filters button { font:inherit; font-size:13px; padding:4px 12px; border-radius:999px; border:1px solid var(--line); background:var(--card); color:var(--ink-2); cursor:pointer; }
+  .filters button[aria-pressed="true"] { background:var(--ink); color:var(--card); border-color:var(--ink); }
+  .filters button:focus-visible { outline:2px solid var(--agent); outline-offset:2px; }
+  #events { max-height:420px; overflow:auto; font-size:14px; }
+  #events .ev { display:grid; grid-template-columns: 58px 1fr; gap:10px; padding:7px 0; border-bottom:1px solid var(--line); }
+  #events .ev:last-child { border-bottom:0; }
+  #events time { color:var(--ink-3); font-size:13px; padding-top:2px; }
+  #events .ev.quiet { color:var(--ink-3); }
+  #events .ev.alarm { color:var(--down); }
+  /* Scheda per titolo: candele, livelli, scenari di Kronos, verdetto degli agenti. */
+  .chips { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px; }
+  .chip { font:inherit; font-size:14px; padding:6px 12px; border-radius:999px; border:1px solid var(--line); background:var(--card); color:var(--ink); cursor:pointer; display:inline-flex; gap:8px; align-items:center; }
+  .chip[aria-pressed="true"] { background:var(--ink); color:var(--card); border-color:var(--ink); }
+  .chip[aria-pressed="true"] .up, .chip[aria-pressed="true"] .down { color:inherit; opacity:.85; }
+  .chip .k { width:7px; height:7px; border-radius:50%; background:var(--agent); display:inline-block; }
+  .chip.held { border-color:var(--up); background:var(--up-bg); color:var(--up); font-weight:600; }
+  .chip.watch { border-color:var(--agent); color:var(--agent); background:var(--agent-bg); }
+  .chip.idle { color:var(--ink-3); background:transparent; }
+  .chip[aria-pressed="true"].held, .chip[aria-pressed="true"].watch, .chip[aria-pressed="true"].idle { background:var(--ink); color:var(--card); border-color:var(--ink); }
+  .chip-groups { display:grid; gap:8px; margin-bottom:14px; }
+  .chip-group { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  .chip-group .glab { font-size:13px; color:var(--ink-3); min-width:132px; }
+  .chip:focus-visible { outline:2px solid var(--agent); outline-offset:2px; }
+  .title-grid { display:grid; grid-template-columns: minmax(0, 1.7fr) minmax(300px, 1fr); gap:18px; }
+  @media (max-width: 1000px) { .title-grid { grid-template-columns:1fr; } }
+  .chart-wrap { position:relative; }
+  #chart { width:100%; height:400px; display:block; border-radius:10px; background:var(--card-2); cursor:crosshair; }
+  #tip { position:absolute; pointer-events:none; background:var(--ink); color:var(--card); font-size:13px; padding:6px 9px; border-radius:8px; display:none; white-space:nowrap; z-index:2; }
+  .legend-row { display:flex; gap:14px; flex-wrap:wrap; color:var(--ink-3); font-size:13px; margin-top:8px; }
+  .legend-row i { display:inline-block; width:14px; height:0; border-top:2px solid; vertical-align:middle; margin-right:5px; }
+  .verdict { font-size:18px; font-weight:600; line-height:1.3; letter-spacing:-.01em; }
+  .verdict.up { color:var(--up); } .verdict.down { color:var(--down); }
+  .btn { font:inherit; font-size:14px; font-weight:600; padding:9px 16px; border-radius:10px; border:0; background:var(--agent); color:#fff; cursor:pointer; }
+  .btn:disabled { opacity:.6; cursor:progress; }
+  .btn:focus-visible { outline:2px solid var(--ink); outline-offset:2px; }
+  .kv { display:grid; grid-template-columns: auto 1fr; gap:4px 14px; font-size:14px; }
+  .kv dt { color:var(--ink-3); } .kv dd { margin:0; }
+  .vote { padding:8px 0; border-top:1px solid var(--line); font-size:14px; }
+  .custode-card { border:1px solid var(--line); border-radius:10px; padding:12px 14px; display:grid; gap:6px; font-size:14px; background:var(--card-2); }
+  .custode-card .h { display:flex; justify-content:space-between; gap:10px; align-items:baseline; }
+  .custode-list { display:grid; gap:10px; }
+  .custode-list button { text-align:left; font:inherit; background:var(--card-2); border:1px solid var(--line); border-radius:10px; padding:10px 12px; color:var(--ink); cursor:pointer; }
+  .custode-list button:hover { border-color:var(--agent); }
+  .form { display:grid; gap:12px; max-width:520px; }
+  .form label { display:grid; gap:4px; font-size:14px; color:var(--ink-2); }
+  .form input, .form select { font:inherit; padding:9px 11px; border-radius:10px; border:1px solid var(--line); background:var(--card-2); color:var(--ink); }
+  .form input:focus-visible, .form select:focus-visible { outline:2px solid var(--agent); outline-offset:1px; }
+  .btn.ghost { background:var(--card-2); color:var(--ink); border:1px solid var(--line); }
+  code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size:13px; background:var(--card-2); padding:1px 5px; border-radius:5px; }
+  .guide h3 { font-size:15px; margin:18px 0 6px; } .guide p, .guide li { max-width:80ch; color:var(--ink-2); } .guide ol, .guide ul { padding-left:22px; margin:6px 0; } .guide li { margin:4px 0; }
+  .schede { display:grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap:14px; }
+  .scheda { border:1px solid var(--line); border-radius:12px; padding:14px 16px; background:var(--card-2); display:grid; gap:8px; align-content:start; }
+  .scheda h3 { margin:0; font-size:16px; } .scheda .ruolo { color:var(--ink-2); font-size:14px; } .scheda details { font-size:14px; } .scheda summary { cursor:pointer; color:var(--agent); }
+  .scheda .prm { display:grid; grid-template-columns: 1fr 120px; gap:6px 10px; align-items:center; font-size:14px; padding:4px 0; border-top:1px solid var(--line); }
+  .scheda .prm small { display:block; color:var(--ink-3); font-size:12px; }
+  .scheda .prm input, .scheda .prm select { font:inherit; font-size:14px; padding:5px 8px; border-radius:8px; border:1px solid var(--line); background:var(--card); color:var(--ink); width:100%; }
+  .scheda .prm.cambiato input, .scheda .prm.cambiato select { border-color:var(--agent); }
+  .scheda .msg { font-size:13px; color:var(--ink-2); min-height:1em; }
+  @media (prefers-reduced-motion: reduce) { * { transition:none !important; } }
+</style>
+<script type="importmap">{ "imports": { "three": "./vendor/three.module.js", "three/addons/": "./vendor/addons/" } }</script>
+</head>
+<body>
+<main>
+  <div class="top">
+    <h1><span class="dot" id="live" title="collegamento in diretta"></span>Agenti Alpaca <span class="pill">conto paper</span></h1>
+    <nav class="nav" aria-label="sezioni">
+      <a href="#panoramica" data-page="panoramica">Panoramica</a>
+      <a href="#titoli" data-page="titoli">Titoli</a>
+      <a href="#agenti" data-page="agenti">Agenti</a>
+      <a href="#cronologia" data-page="cronologia">Cronologia</a>
+      <a href="#3d" data-page="3d">Ufficio 3D</a>
+      <a href="#impostazioni" data-page="impostazioni">Impostazioni</a>
+      <a href="#guida" data-page="guida">Guida</a>
+    </nav>
+    <span class="when" id="when">in attesa dello stato…</span>
+  </div>
+
+  <section class="hero" aria-live="polite">
+    <p class="say" id="say">Sto leggendo lo stato del motore…</p>
+    <p class="fix" id="fix" hidden></p>
+    <div class="money" id="money" hidden>
+      <div><div class="lab">Patrimonio</div><div class="big" id="k-eq">–</div></div>
+      <div><div class="lab">Oggi</div><div class="val" id="k-day">–</div></div>
+      <div><div class="lab">Liquidità</div><div class="val" id="k-cash">–</div></div>
+      <div><div class="lab">Rischio ammesso</div><div class="val" id="k-risk">–</div></div>
+      <div id="k-cmp-wrap"><div class="lab">Dall'inizio, contro SPY</div><div class="val" id="k-cmp">–</div></div>
+    </div>
+  </section>
+
+  <!-- Panoramica: soldi, posizioni, cosa è successo nell'ultimo giro. -->
+  <div class="page" data-page="panoramica">
+    <div class="cols">
+      <div class="stack">
+        <section class="card">
+          <h2>Profitto e perdita di oggi</h2>
+          <div id="pnl"></div>
+        </section>
+        <section class="card">
+          <h2>Posizioni aperte <small id="pos-n"></small></h2>
+          <div id="positions"></div>
+        </section>
+      </div>
+      <div class="stack">
+        <section class="card">
+          <h2>Ultimo giro degli agenti</h2>
+          <div class="row" id="context" style="margin-bottom:10px"></div>
+          <div id="decisions"></div>
+        </section>
+        <section class="card">
+          <h2>Operazioni intraday <small>si aprono e si chiudono in giornata</small></h2>
+          <div id="intraday"></div>
+        </section>
+        <section class="card" id="sim-card" hidden>
+          <h2>Simulazioni di oggi <small>dopo l'obiettivo del giorno: cosa avrebbero comprato gli agenti e come sta andando</small></h2>
+          <div id="simulazioni"></div>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <!-- Titoli: il grafico e il verdetto, titolo per titolo. -->
+  <div class="page" data-page="titoli">
+    <section class="card" id="titoli">
+      <h2>Titolo per titolo <small id="live-note"></small></h2>
+      <div class="chips" id="chips" role="group" aria-label="scegli il titolo"></div>
+      <div class="title-grid">
+        <div>
+          <div class="chart-wrap"><canvas id="chart" aria-label="grafico a candele"></canvas><div id="tip"></div></div>
+          <div class="legend-row"><span><i style="border-color:#8a94a6"></i>media 20</span><span><i style="border-color:var(--agent)"></i>media 50</span><span><i style="border-color:#b08900"></i>media 200</span><span><i style="border-color:var(--ink); border-top-style:dashed"></i>carico</span><span><i style="border-color:var(--down); border-top-style:dashed"></i>stop</span><span><i style="border-color:var(--up); border-top-style:dotted"></i>scenario Kronos</span><span>▲▼ operazioni</span></div>
+          <p class="why" id="chart-note" style="margin-top:8px"></p>
+          <div id="feed" style="margin-top:10px"></div>
+        </div>
+        <div class="stack" style="gap:12px">
+          <div class="row" style="justify-content:space-between">
+            <div><div class="lab" style="color:var(--ink-3); font-size:13px">Ultimo prezzo</div><div class="val" style="font-size:22px; font-weight:700" id="t-price">–</div></div>
+            <button class="btn" id="ask">Chiedi agli agenti adesso</button>
+          </div>
+          <p class="verdict" id="verdict">Scegli un titolo.</p>
+          <div id="verdict-body"></div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- Agenti: chi sono, cosa seguono, come votano. -->
+  <div class="page" data-page="agenti">
+    <div class="cols">
+      <div class="stack">
+        <section class="card">
+          <h2>Capo ufficio <small>controlla risultati, richiama e consiglia</small></h2>
+          <div id="capo"></div>
+        </section>
+        <section class="card">
+          <h2>Custodi <small>un investitore per ogni titolo in trend</small></h2>
+          <div class="custode-list" id="custodi"></div>
+        </section>
+      </div>
+      <div class="stack">
+        <section class="card">
+          <h2>Agenti dell'ultimo giro</h2>
+          <div class="row" id="agents"></div>
+          <p class="why" id="journal" style="margin-top:10px"></p>
+        </section>
+        <section class="card">
+          <h2>Punteggi <small>sopra +0,5 si compra, sotto −0,5 si vende</small></h2>
+          <div id="scores"></div>
+        </section>
+        <section class="card">
+          <h2>Voti dell'ultimo giro</h2>
+          <div id="votes"></div>
+        </section>
+      </div>
+    </div>
+    <section class="card" style="margin-top:16px">
+      <h2>Schede degli agenti <small>cosa fanno e come si regolano; le modifiche valgono dal giro successivo</small></h2>
+      <div id="schede" class="schede"></div>
+    </section>
+  </div>
+
+  <!-- Impostazioni: chiavi di Alpaca e Telegram. -->
+  <div class="page" data-page="impostazioni">
+    <div class="cols">
+      <section class="card">
+        <h2>Alpaca <small>conto paper, chiavi che iniziano con PK</small></h2>
+        <form id="f-alpaca" class="form" autocomplete="off">
+          <label>Key id <input name="alpacaKeyId" type="text" placeholder="" spellcheck="false"></label>
+          <label>Secret <input name="alpacaSecretKey" type="password" placeholder="" spellcheck="false"></label>
+          <p class="why" id="alpaca-now"></p>
+          <div class="row"><button type="button" class="btn ghost" id="prova-alpaca">Prova</button><button type="submit" class="btn">Salva</button></div>
+          <p class="why" id="alpaca-msg"></p>
+        </form>
+      </section>
+      <section class="card">
+        <h2>Telegram e X <small>bot per ordini, allarmi e riepilogo; X per il sentiment dei titoli</small></h2>
+        <form id="f-telegram" class="form" autocomplete="off">
+          <label>Token del bot <input name="telegramBotToken" type="password" placeholder="123456789:AAAA…" spellcheck="false"></label>
+          <label>Chat id <input name="telegramChatId" type="text" placeholder="si trova con «Prova» dopo aver scritto /start al bot" spellcheck="false"></label>
+          <label>X (Twitter): bearer token, facoltativo <input name="xBearerToken" type="password" placeholder="da developer.x.com; scrivi - per toglierlo" spellcheck="false"></label>
+          <p class="why" id="telegram-now"></p>
+          <div class="row"><button type="button" class="btn ghost" id="prova-telegram">Prova</button><button type="submit" class="btn">Salva</button></div>
+          <p class="why" id="telegram-msg"></p>
+        </form>
+      </section>
+    </div>
+    <section class="card" style="margin-top:16px">
+      <h2>Motore</h2>
+      <div class="row"><button type="button" class="btn" id="riavvia">Riavvia il motore</button><span class="why" id="riavvia-msg">Applica codice e chiavi nuove: il motore finisce il giro, esce e avvia-bot.cmd lo rilancia da solo.</span></div>
+    </section>
+    <p class="why" style="margin-top:12px">Le chiavi si salvano in <code>secrets.ts</code> sul tuo PC e non escono mai da qui; in lettura sono mascherate. Il motore le legge all'avvio: dopo un salvataggio premi «Riavvia il motore». Alpaca accetta solo chiavi del conto paper.</p>
+  </div>
+
+  <!-- Guida: come funziona e come si usa. -->
+  <div class="page" data-page="guida">
+    <section class="card guide">
+      <h2>Guida</h2>
+      <h3>1. Mettere in moto</h3>
+      <ol>
+        <li><b>Chiavi.</b> In <a href="#impostazioni">Impostazioni</a> inserisci key id e secret del conto <b>paper</b> di Alpaca (app.alpaca.markets → Paper → API Keys) e, se vuoi gli avvisi, il token del bot Telegram (da @BotFather). Scrivi <code>/start</code> al bot, poi «Prova»: il chat id viene trovato da solo. «Salva» scrive <code>secrets.ts</code>.</li>
+        <li><b>Kronos.</b> Una volta sola: doppio clic su <code>installa-kronos.cmd</code> (serve Python 3.10+ con «Add to PATH»). Da lì il motore accende il sidecar da solo; i pesi del modello arrivano al primo avvio (1-2 minuti).</li>
+        <li><b>Avvio.</b> Doppio clic su <code>avvia-bot.cmd</code>: il motore fa un giro ogni 5 minuti e questa pagina si aggiorna da sola. Per ripartire da zero: <code>chiudi-posizioni.cmd</code> (vende tutto, toglie gli stop), poi riavvia.</li>
+      </ol>
+      <h3>2. Cosa fa il motore a ogni giro</h3>
+      <p>Rinnova l'universo (titoli fissi + crypto della top 100 negoziabili su Alpaca), legge conto e prezzi, scarica le candele giornaliere, chiede a Kronos le proiezioni (una volta al giorno), valuta il contesto, fa votare gli agenti, somma i voti, passa dalla gabbia delle regole, invia gli ordini ammessi, mette gli stop su Alpaca, aggiorna diario e stato. La gabbia ammette acquisti di titoli solo a borsa aperta e di crypto sempre; massimo 5 posizioni, 20% per titolo, solo in trend. Dettagli in <code>docs/logica-del-motore.md</code>.</p>
+      <h3>3. Le pagine</h3>
+      <ul>
+        <li><b>Panoramica</b>: la frase di stato (motore, Alpaca, borsa, Kronos), patrimonio e giornata, profitto e perdita di oggi (realizzato per vendita e per agente, non realizzato), posizioni, cosa ha deciso l'ultimo giro, operazioni intraday.</li>
+        <li><b>Titoli</b>: i titoli in tre gruppi (in portafoglio, sotto osservazione, nel radar). Per ciascuno: candele, medie 20/50/200, carico e stop, la candela di oggi in formazione, le scelte del motore di oggi (puntini voti, frecce ordini, × rifiuti) e lo scenario di Kronos con il cono d'incertezza. «Chiedi agli agenti adesso» fa una valutazione a secco: nessun ordine parte dalla pagina.</li>
+        <li><b>Agenti</b>: i custodi con dossier (probabilità favorevole, prossima azione, grafico, Kronos, notizie, contesto, memoria del titolo), gli agenti dell'ultimo giro, punteggi e voti, e le <b>schede</b> per regolare i parametri di ogni agente.</li>
+        <li><b>Cronologia</b>: il registro degli eventi del giorno («Importanti» mostra ordini, posizioni, rifiuti, stop e avvisi).</li>
+        <li><b>Capo ufficio</b> (pagina Agenti e nell'ufficio, nella stanza di vetro): rivede i trade chiusi di ogni agente, loda chi vince, richiama chi perde e gli impone una soglia minima di Kronos e voti più deboli finché i risultati non tornano buoni; i consigli vengono dai trade vincenti degli altri.</li>
+        <li><b>Pagina pubblica</b>: dalle schede (Motore e gabbia) si può pubblicare ogni N minuti un'istantanea in sola lettura su GitHub Pages, per seguire gli agenti da fuori casa. È visibile a chiunque abbia il link.</li>
+        <li><b>Ufficio 3D</b>: gli agenti come impiegati alle loro postazioni. In fondo la Direzione (gli agenti generali) e la lavagna con successi e insuccessi di ogni agente; poi i Custodi (una scrivania per titolo seguito, la camicia dice la fase: blu pronto, verde in posizione, rosso in uscita, grigio in attesa) e la Sala intraday (arancione). Chi vota alza la mano, chi compra o vende si alza e lo schermo lampeggia. Mouse sopra per leggere, clic per aprire.</li>
+      </ul>
+      <h3>4. Gli agenti in breve</h3>
+      <ul>
+        <li><b>Trend</b> compra chi chiude sopra le medie a 50 e 200 con rendimento a 12 mesi positivo; vende sotto la 50. <b>Rientro</b> compra gli ipervenduti di breve dentro un trend lungo. <b>Regime</b> riduce le taglie se il mercato è brutto. <b>Uscite</b> e <b>Presa di profitto</b> sono regole vincolanti: stop sulla volatilità, metà a +3%.</li>
+        <li><b>Contesto</b> legge il clima; non decide da solo: se <b>Kronos</b> anticipa un rialzo il settore debole non ferma l'ingresso, se anticipa un ribasso si aspetta.</li>
+        <li><b>Custodi</b>: un investitore per ogni titolo in trend, senza numero fisso. Tesi, piano, rischio, dossier e memoria dei trade passati su quel titolo.</li>
+        <li><b>Intraday</b>: candele a 5 min / 15 min / 4 ore scelte dalla volatilità; obiettivo e stop dall'ATR; chiusura entro la giornata.</li>
+      </ul>
+      <h3>5. Se qualcosa non va</h3>
+      <ul>
+        <li>«Alpaca rifiuta le chiavi»: rigenera key id e secret <i>insieme</i> nel conto paper e salvali in Impostazioni, poi riavvia.</li>
+        <li>«Il motore sembra fermo»: la finestra del bot è chiusa o il PC dorme; rilancia <code>avvia-bot.cmd</code>.</li>
+        <li>Kronos «non installato» o «non risponde»: <code>installa-kronos.cmd</code>, poi guarda <code>logs/kronos-AAAA-MM-GG.log</code>.</li>
+        <li>Niente messaggi Telegram: in Impostazioni «Prova» invia un messaggio di verifica; i messaggi non inviati finiscono in <code>state/telegram-outbox.log</code>.</li>
+      </ul>
+    </section>
+  </div>
+
+  <!-- Cronologia: il registro degli eventi. -->
+  <div class="page" data-page="cronologia">
+    <section class="card">
+      <div class="top" style="margin-bottom:10px">
+        <h2 style="margin:0">Cronologia</h2>
+        <div class="filters" role="group" aria-label="filtro eventi">
+          <button type="button" data-f="important" aria-pressed="true">Importanti</button>
+          <button type="button" data-f="all" aria-pressed="false">Tutto</button>
+        </div>
+      </div>
+      <div id="events"></div>
+    </section>
+  </div>
+
+  <!-- Ufficio 3D: pagina a sé. -->
+  <div class="page" data-page="3d">
+    <details class="scene" id="scene-box" open>
+      <summary>Ufficio degli agenti <span class="hint">trascina per girare, rotella per avvicinarti</span></summary>
+      <div id="scene"></div>
+      <p class="legend">In fondo la <b>Direzione</b> (gli agenti generali) davanti alla <b>lavagna dei risultati</b>; poi i <b>Custodi</b>, una scrivania per titolo seguito, con la camicia del colore della fase (blu pronto, verde in posizione, rosso in uscita, grigio in attesa) e lo schermo con prezzo e andamento; infine la <b>Sala intraday</b> (arancione). Chi vota alza la mano, chi compra o vende si alza e lo schermo lampeggia. Mouse sopra per leggere, clic per aprire.</p>
+    </details>
+  </div>
+</main>
+
+<script>
+// Modalità statica (GitHub Pages): la pagina legge l'istantanea che il motore pubblica in data/*.json. Sola lettura.
+window.STATIC_MODE = !!window.__STATIC__ || /github\.io$/.test(location.hostname);
+if (window.STATIC_MODE) {
+  const realFetch = window.fetch.bind(window);
+  const cache = {};
+  const get = (f) => (cache[f] ??= realFetch(`data/${f}?t=${Math.floor(Date.now() / 60000)}`).then((r) => r.json()));
+  setInterval(() => { for (const k of Object.keys(cache)) delete cache[k]; }, 55_000);
+  const json = (v, status = 200) => new Response(JSON.stringify(v), { status, headers: { 'content-type': 'application/json' } });
+  window.fetch = async (url, init) => {
+    const u = new URL(String(url), location.href);
+    const i = u.pathname.indexOf('/api/');
+    if (i < 0) return realFetch(url, init);
+    const path = u.pathname.slice(i);
+    if (init?.method && init.method !== 'GET') return json({ ok: false, errore: 'pagina pubblica in sola lettura: modifiche e prove si fanno dalla dashboard sul PC' }, 403);
+    if (path === '/api/status') return json(await get('status.json'));
+    if (path === '/api/events') return json(await get('events.json'));
+    if (path === '/api/previsioni') return json(await get('previsioni.json'));
+    if (path === '/api/journal') return json(await get('journal.json'));
+    if (path === '/api/agenti/schede') return json(await get('schede.json'));
+    if (path === '/api/bars') {
+      const b = await get('bars.json'); const sym = u.searchParams.get('simbolo');
+      return json(sym ? { aggiornato: b.aggiornato, simbolo: sym, barre: b.barre[sym] ?? [] } : { aggiornato: b.aggiornato, barre: b.barre });
+    }
+    return json({ errore: 'non disponibile nella pagina pubblica' }, 404);
+  };
+}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
+
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+// Messaggi d'errore di Alpaca salvati prima della correzione lato motore: il JSON diventa una frase leggibile.
+const ERR_IT = [[/qty must be (>|\u003e) 0/i, () => 'quantità troppo piccola (resto frazionario)'], [/insufficient balance for (\w+)(?: \(requested: ([\d.]+), available: ([\d.]+)\))?/i, (m) => `saldo insufficiente di ${m[1]}${m[2] ? ` (chiesti ${m[2]}, disponibili ${m[3]})` : ''}`], [/insufficient buying power/i, () => 'liquidità insufficiente'], [/unauthorized|forbidden/i, () => 'chiavi rifiutate'], [/market is closed/i, () => 'mercato chiuso']];
+function cleanErr(t) {
+  return String(t ?? '').replace(/Alpaca (\d{3}) su \S+: (\{.*?\})(?=\n|$|\s*·|\s*;)/gs, (all, code, json) => {
+    let msg = json, num = '';
+    try { const j = JSON.parse(json); msg = j.message ?? json; num = j.code ? ` (codice ${j.code})` : ''; } catch { const m = json.match(/"message":"([^"]*)/); if (m) msg = m[1]; }
+    for (const [re, f] of ERR_IT) { const m = String(msg).match(re); if (m) { msg = f(m); break; } }
+    return `Alpaca ${code}: ${msg}${num}`;
+  }).replace(/\n/g, ' · ');
+}
+const fmt = (x, d = 2) => (x === null || x === undefined || Number.isNaN(x)) ? '–' : Number(x).toLocaleString('it-IT', { minimumFractionDigits: d, maximumFractionDigits: d });
+const pct = (x) => (x === null || x === undefined) ? '–' : `${x >= 0 ? '+' : ''}${(x * 100).toFixed(2).replace('.', ',')}%`;
+const usd = (x) => (x === null || x === undefined) ? '–' : `${x >= 0 ? '+' : ''}${fmt(x)} $`;
+const money = (x) => `${fmt(x)} $`;
+const px = (x) => (x === null || x === undefined || Number.isNaN(x)) ? '–' : fmt(x, Math.abs(x) >= 100 ? 2 : Math.abs(x) >= 1 ? 3 : Math.abs(x) >= 0.01 ? 4 : 6);
+const cls = (x) => x > 0 ? 'up' : x < 0 ? 'down' : '';
+const qty = (q) => Number.isInteger(q) ? String(q) : String(Number(q)).replace('.', ',');
+const hhmm = (iso) => new Date(iso).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+const DEFAULT_SYMBOLS = ['SPY', 'QQQ', 'AAPL', 'MSFT', 'NVDA', 'GLD', 'BTC/USD', 'ETH/USD', 'IWM', 'TLT'];
+const AGENT_NAMES = { trend: 'Trend', rientro: 'Rientro', regime: 'Regime', orizzonte: 'Orizzonte', uscite: 'Uscite', contesto: 'Contesto', profitto: 'Presa di profitto', kronos: 'Kronos', custodi: 'Custodi', intraday: 'Intraday' };
+const agentName = (n) => AGENT_NAMES[n] ?? n;
+
+// ---------- ufficio 3D: gli agenti come impiegati alle loro postazioni ----------
+// Tre reparti: la Direzione (gli agenti generali, vicino alla lavagna), i Custodi (una scrivania per titolo seguito, lo
+// schermo mostra titolo, prezzo e andamento) e la Sala intraday (operatori in arancione). La lavagna sul muro riassume
+// successi e insuccessi di ogni agente dal diario dei trade. Mouse sopra una postazione per leggere, clic per aprirla.
+const host = $('#scene');
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(2, window.devicePixelRatio));
+renderer.shadowMap.enabled = true;
+host.appendChild(renderer.domElement);
+const labels = new CSS2DRenderer();
+labels.domElement.style.position = 'absolute'; labels.domElement.style.top = '0'; labels.domElement.style.pointerEvents = 'none'; labels.domElement.style.zIndex = '1';
+host.appendChild(labels.domElement);
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xdfe5ec);
+const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 200);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.maxPolarAngle = Math.PI / 2.15; controls.minDistance = 4; controls.maxDistance = 60;
+scene.add(new THREE.HemisphereLight(0xffffff, 0xb8a990, 1.4));
+const sun = new THREE.DirectionalLight(0xffffff, 1.6); sun.position.set(-8, 16, 10); sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048); Object.assign(sun.shadow.camera, { left: -30, right: 30, top: 30, bottom: -30 }); scene.add(sun);
+const mat = (color, o = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.75, ...o });
+const box = (w, h, d, m) => { const x = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m); x.castShadow = true; x.receiveShadow = true; return x; };
+const M = { floor: mat(0xcbb79a), wall: mat(0xf3f1ec), desk: mat(0xe9e4da), leg: mat(0x6b7280), chair: mat(0x374151), skin: mat(0xe8c4a2), hair: mat(0x3b2a20), pants: mat(0x2f3b52), screenFrame: mat(0x1f2937), board: mat(0xffffff), boardFrame: mat(0x9ca3af), plant: mat(0x3f8f5a), pot: mat(0xc9c3b8) };
+const room = new THREE.Group(); scene.add(room);
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), M.floor); floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; room.add(floor);
+const backWall = box(1, 4.2, 0.2, M.wall); room.add(backWall);
+const sideWall = box(0.2, 4.2, 1, M.wall); room.add(sideWall);
+
+// La lavagna: una texture disegnata su canvas, ridisegnata a ogni stato.
+const boardCanvas = document.createElement('canvas'); boardCanvas.width = 1400; boardCanvas.height = 760;
+const boardTex = new THREE.CanvasTexture(boardCanvas); boardTex.colorSpace = THREE.SRGBColorSpace;
+const board = new THREE.Group();
+const boardFace = new THREE.Mesh(new THREE.PlaneGeometry(7, 3.8), new THREE.MeshBasicMaterial({ map: boardTex }));
+boardFace.position.z = 0.045; board.add(box(7.3, 4.1, 0.06, M.boardFrame)); board.add(boardFace);
+board.userData.kind = 'lavagna'; boardFace.userData.kind = 'lavagna';
+room.add(board);
+
+function drawBoard(st, journal) {
+  const c = boardCanvas.getContext('2d'); const W = boardCanvas.width, H = boardCanvas.height;
+  c.fillStyle = '#fbfbf8'; c.fillRect(0, 0, W, H);
+  c.fillStyle = '#1f3a8a'; c.font = 'bold 54px "Comic Sans MS", "Segoe Print", Figtree, sans-serif'; c.fillText('Lavagna dei risultati', 40, 76);
+  const day = st?.pnlOggi; const tot = day ? day.realizzato + day.nonRealizzato : 0;
+  c.font = '34px "Segoe Print", Figtree, sans-serif'; c.fillStyle = tot >= 0 ? '#15803d' : '#b91c1c';
+  c.fillText(`Oggi ${tot >= 0 ? '+' : ''}${tot.toFixed(2)} $`, W - 420, 72);
+  // Per agente: trade chiusi vinti/persi e risultato in $, dal diario (gli agenti che avevano votato l'ingresso).
+  const per = new Map();
+  for (const t of journal?.trade || []) {
+    if (t.stato !== 'chiuso') continue;
+    const pnl = (t.incassato ?? 0) - (t.costo ?? 0);
+    for (const a of (t.contesto?.agenti?.length ? t.contesto.agenti : ['senza agente'])) {
+      const g = per.get(a) ?? { v: 0, p: 0, pnl: 0 }; if (pnl > 0) g.v++; else g.p++; g.pnl += pnl; per.set(a, g);
+    }
+  }
+  for (const [a, g] of Object.entries(day?.perAgente || {})) if (!per.has(a)) per.set(a, { v: 0, p: 0, pnl: 0, oggi: g.pnl });
+  const rows = [...per.entries()].sort((a, b) => b[1].pnl - a[1].pnl).slice(0, 11);
+  c.strokeStyle = '#94a3b8'; c.lineWidth = 2; c.beginPath(); c.moveTo(40, 100); c.lineTo(W - 40, 100); c.stroke();
+  c.fillStyle = '#475569'; c.font = '28px "Segoe Print", Figtree, sans-serif';
+  const cols = [40, 560, 730, 900, 1080];
+  ['Agente', 'Vinti', 'Persi', '% vinti', 'Risultato'].forEach((h, i) => c.fillText(h, cols[i], 140));
+  if (!rows.length) { c.fillStyle = '#64748b'; c.font = '32px "Segoe Print", Figtree, sans-serif'; c.fillText('Nessun trade chiuso ancora: la lavagna si riempie', 40, 230); c.fillText('man mano che gli agenti chiudono le operazioni.', 40, 280); }
+  rows.forEach(([a, g], i) => {
+    const y = 192 + i * 50; const n = g.v + g.p;
+    c.fillStyle = '#0f172a'; c.font = '32px "Segoe Print", Figtree, sans-serif';
+    c.fillText(a.replace(/^custode /, '◆ '), cols[0], y);
+    c.fillStyle = '#15803d'; c.fillText(String(g.v), cols[1], y);
+    c.fillStyle = '#b91c1c'; c.fillText(String(g.p), cols[2], y);
+    c.fillStyle = '#0f172a'; c.fillText(n ? `${Math.round((g.v / n) * 100)}%` : '–', cols[3], y);
+    c.fillStyle = g.pnl >= 0 ? '#15803d' : '#b91c1c'; c.fillText(`${g.pnl >= 0 ? '+' : ''}${g.pnl.toFixed(2)} $`, cols[4], y);
+    // barretta vinti/persi
+    if (n) { c.fillStyle = '#16a34a'; c.fillRect(cols[1] - 120, y - 22, (g.v / n) * 100, 10); c.fillStyle = '#dc2626'; c.fillRect(cols[1] - 120 + (g.v / n) * 100, y - 22, (g.p / n) * 100, 10); }
+  });
+  boardTex.needsUpdate = true;
+}
+
+// Un impiegato seduto, rivolto verso chi guarda: volto (occhi, sopracciglia, naso, bocca, orecchie), capelli, busto con la
+// camicia del colore del suo stato, braccia verso la tastiera. L'aspetto (pelle, capelli, occhiali) dipende dal nome.
+const SKINS = [0xf1c9a5, 0xe0ac86, 0xc68b62, 0x8d5a3b, 0xf5d6c0];
+const HAIRS = [0x2b1d16, 0x5a3a22, 0x8a5a2b, 0xc8a165, 0x1a1a1a, 0x7d7d7d];
+const hashOf = (s) => [...String(s)].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 7);
+function makeHead(look) {
+  const g = new THREE.Group();
+  const skinM = mat(SKINS[look % SKINS.length]);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.15, 22, 18), skinM); head.scale.set(1, 1.12, 1); head.castShadow = true; g.add(head);
+  const hairM = mat(HAIRS[(look >> 3) % HAIRS.length]);
+  const hair = new THREE.Mesh(new THREE.SphereGeometry(0.158, 22, 18, 0, Math.PI * 2, 0, Math.PI / 2.1), hairM); hair.scale.set(1, 1.12, 1); hair.rotation.x = -0.45; g.add(hair);
+  const dark = mat(0x1f2937), white = mat(0xffffff);
+  for (const sx of [-1, 1]) {
+    const eyeW = new THREE.Mesh(new THREE.SphereGeometry(0.028, 12, 10), white); eyeW.position.set(0.052 * sx, 0.03, 0.128); eyeW.scale.z = 0.5; g.add(eyeW);
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.015, 10, 8), dark); eye.position.set(0.052 * sx, 0.03, 0.141); g.add(eye);
+    const brow = box(0.055, 0.012, 0.012, hairM); brow.castShadow = false; brow.position.set(0.052 * sx, 0.07, 0.138); brow.rotation.z = 0.12 * sx; g.add(brow);
+    const ear = new THREE.Mesh(new THREE.SphereGeometry(0.032, 10, 8), skinM); ear.position.set(0.148 * sx, 0.0, 0.0); ear.scale.set(0.5, 1, 0.8); g.add(ear);
+  }
+  const nose = new THREE.Mesh(new THREE.ConeGeometry(0.02, 0.06, 8), skinM); nose.rotation.x = Math.PI / 2; nose.position.set(0, -0.005, 0.155); g.add(nose);
+  const mouth = new THREE.Mesh(new THREE.TorusGeometry(0.035, 0.008, 6, 12, Math.PI), mat(0xa0453f)); mouth.rotation.z = Math.PI; mouth.position.set(0, -0.06, 0.137); g.add(mouth);
+  if (look % 4 === 1) { // occhiali
+    const frame = mat(0x111827);
+    for (const sx of [-1, 1]) { const lens = new THREE.Mesh(new THREE.TorusGeometry(0.03, 0.005, 6, 16), frame); lens.position.set(0.052 * sx, 0.03, 0.15); g.add(lens); }
+    const bridge = box(0.04, 0.006, 0.006, frame); bridge.castShadow = false; bridge.position.set(0, 0.035, 0.152); g.add(bridge);
+  }
+  g.userData = { mouth, brows: g.children.filter((c) => c.geometry?.type === 'BoxGeometry') };
+  return g;
+}
+function makeEmployee(shirt, look = 0, suit = false) {
+  const g = new THREE.Group();
+  const shirtM = mat(shirt);
+  const torso = box(0.42, 0.55, 0.26, suit ? mat(0x1f2937) : shirtM); torso.position.set(0, 0.95, 0); g.add(torso);
+  if (suit) { // giacca scura, camicia bianca e cravatta del colore di stato
+    const shirtFront = box(0.12, 0.4, 0.02, mat(0xffffff)); shirtFront.position.set(0, 1.0, 0.135); g.add(shirtFront);
+    const tie = box(0.05, 0.32, 0.02, shirtM); tie.position.set(0, 0.98, 0.15); g.add(tie);
+  }
+  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.06, 0.1, 10), M.skin); neck.position.set(0, 1.26, 0); g.add(neck);
+  const headG = makeHead(look); headG.position.set(0, 1.4, 0); g.add(headG);
+  const head = headG;
+  const thighs = box(0.4, 0.14, 0.42, M.pants); thighs.position.set(0, 0.64, 0.17); g.add(thighs);
+  const shins = box(0.36, 0.5, 0.13, M.pants); shins.position.set(0, 0.36, 0.38); g.add(shins);
+  const arms = [];
+  for (const sx of [-1, 1]) {
+    const upper = box(0.1, 0.34, 0.1, suit ? mat(0x1f2937) : shirtM); upper.position.set(0.26 * sx, 1.0, 0.04); upper.rotation.x = -0.5; g.add(upper);
+    const fore = box(0.09, 0.09, 0.34, M.skin); fore.position.set(0.24 * sx, 0.84, 0.3); g.add(fore);
+    arms.push(fore);
+  }
+  g.userData = { shirtM, head, arms, torso, t: Math.random() * 10, raise: 0, stand: 0, bow: 0 };
+  return g;
+}
+function makeChair() {
+  const g = new THREE.Group();
+  const seat = box(0.5, 0.08, 0.5, M.chair); seat.position.y = 0.55; g.add(seat);
+  const back = box(0.5, 0.6, 0.07, M.chair); back.position.set(0, 0.9, -0.24); g.add(back);
+  const post = box(0.06, 0.5, 0.06, M.leg); post.position.y = 0.28; g.add(post);
+  return g;
+}
+// Lo schermo: titolo, prezzo, variazione e una piccola linea del prezzo, disegnati su canvas.
+function makeScreen() {
+  const cv = document.createElement('canvas'); cv.width = 256; cv.height = 160;
+  const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace;
+  const g = new THREE.Group();
+  const frame = box(0.9, 0.58, 0.05, M.screenFrame); g.add(frame);
+  const face = new THREE.Mesh(new THREE.PlaneGeometry(0.84, 0.52), new THREE.MeshBasicMaterial({ map: tex })); face.position.z = 0.028; g.add(face);
+  // anche il retro mostra lo schermo: dall'alto si legge senza girare attorno alla scrivania
+  const back = new THREE.Mesh(new THREE.PlaneGeometry(0.84, 0.52), new THREE.MeshBasicMaterial({ map: tex })); back.position.z = -0.028; back.rotation.y = Math.PI; g.add(back);
+  const stand = box(0.06, 0.25, 0.06, M.screenFrame); stand.position.y = -0.4; g.add(stand);
+  g.userData = { cv, tex, flash: 0 };
+  return g;
+}
+function drawScreen(scr, title, line2, change, series, accent) {
+  const c = scr.userData.cv.getContext('2d');
+  const flash = scr.userData.flash;
+  c.fillStyle = flash > 0.05 ? (scr.userData.flashColor || '#14532d') : '#0b1220'; c.fillRect(0, 0, 256, 160);
+  c.fillStyle = '#e5edf7'; c.font = 'bold 26px Figtree, sans-serif'; c.fillText(title, 12, 32);
+  c.fillStyle = '#93a4ba'; c.font = '18px Figtree, sans-serif'; c.fillText(line2 || '', 12, 56);
+  if (change !== null && change !== undefined) { c.fillStyle = change >= 0 ? '#4ade80' : '#f87171'; c.font = 'bold 20px Figtree, sans-serif'; c.fillText(`${change >= 0 ? '+' : ''}${(change * 100).toFixed(2)}%`, 160, 32); }
+  if (series && series.length > 1) {
+    const lo = Math.min(...series), hi = Math.max(...series), span = hi - lo || 1;
+    c.strokeStyle = accent || (series.at(-1) >= series[0] ? '#4ade80' : '#f87171'); c.lineWidth = 3; c.beginPath();
+    series.forEach((v, i) => { const x = 12 + (i / (series.length - 1)) * 232, y = 148 - ((v - lo) / span) * 76; i ? c.lineTo(x, y) : c.moveTo(x, y); });
+    c.stroke();
+  }
+  scr.userData.tex.needsUpdate = true;
+}
+// Una postazione completa: scrivania, schermo, sedia, impiegato, targhetta.
+function makeDesk(key, big = false) {
+  const g = new THREE.Group();
+  const look = hashOf(key);
+  const top = box(big ? 2.0 : 1.5, 0.06, big ? 1.0 : 0.8, big ? mat(0x8b5e3c) : M.desk); top.position.y = 0.76; g.add(top);
+  for (const [x, z] of [[-0.7, -0.35], [0.7, -0.35], [-0.7, 0.35], [0.7, 0.35]]) { const l = box(0.05, 0.74, 0.05, M.leg); l.position.set(x * (big ? 1.3 : 1), 0.37, z * (big ? 1.2 : 1)); g.add(l); }
+  const kb = box(0.5, 0.03, 0.16, M.screenFrame); kb.position.set(0, 0.8, -0.12); g.add(kb);
+  const scr = makeScreen(); scr.position.set(0, 1.18, 0.22); scr.rotation.y = Math.PI; g.add(scr);
+  if (look % 5 === 2 || big) { const pot = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.06, 0.14, 12), M.pot); pot.position.set(0.6, 0.86, 0.25); g.add(pot); const leaf = new THREE.Mesh(new THREE.SphereGeometry(0.14, 10, 8), M.plant); leaf.position.set(0.6, 1.02, 0.25); g.add(leaf); }
+  if (look % 3 === 0) { const mug = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.09, 12), mat(0xf8fafc)); mug.position.set(-0.55, 0.84, -0.1); g.add(mug); }
+  const chair = makeChair(); chair.position.set(0, 0, -0.85); g.add(chair);
+  const emp = makeEmployee(0x2a55c7, look, big); emp.position.set(0, 0, -0.85); g.add(emp);
+  // il busto guarda lo schermo davanti a sé (verso +z): braccia sulla tastiera
+  for (const a of emp.userData.arms) a.position.z = 0.3;
+  const el = document.createElement('div'); el.className = 'lbl desk-lbl';
+  const tag = new CSS2DObject(el); tag.position.set(0, 2.05, -0.6); g.add(tag);
+  g.userData = { scr, emp, el, tag };
+  return g;
+}
+
+const desks = new Map(); // chiave -> { group, info }
+const deptLabels = [];
+function deptLabel(text, x, z) { const el = document.createElement('div'); el.className = 'lbl dept-lbl'; el.textContent = text; const o = new CSS2DObject(el); o.position.set(x, 2.6, z); scene.add(o); deptLabels.push(o); }
+const SPX = 2.2, SPZ = 2.6;
+let roomSize = { w: 10, d: 10 };
+function layout(groups) {
+  // groups: [{ name, items: [{ key, ... }] }] → righe di scrivanie, un reparto dopo l'altro, dalla lavagna verso la finestra.
+  for (const o of deptLabels) scene.remove(o); deptLabels.length = 0;
+  const cols = Math.max(4, Math.min(10, Math.ceil(Math.sqrt(groups.reduce((a, g) => a + g.items.length, 0) * 1.5))));
+  let z = 0; const placed = new Map();
+  for (const g of groups) {
+    if (!g.items.length) continue;
+    const rows = Math.ceil(g.items.length / cols);
+    deptLabel(g.name, -((cols - 1) * SPX) / 2 - 1.6, z);
+    g.items.forEach((it, i) => { const c = i % cols, r = Math.floor(i / cols); placed.set(it.key, new THREE.Vector3((c - (cols - 1) / 2) * SPX, 0, z + r * SPZ)); });
+    z += rows * SPZ + 1.4;
+  }
+  const w = cols * SPX + 4, d = z + 3;
+  roomSize = { w, d };
+  floor.scale.set(w + 4, d + 8, 1); floor.position.set(0, 0, d / 2 - 3);
+  backWall.scale.x = w + 4; backWall.position.set(0, 2.1, -4.3);
+  sideWall.scale.z = d + 8; sideWall.position.set(-(w + 4) / 2, 2.1, d / 2 - 3);
+  board.position.set(0, 2.25, -4.17);
+  // l'ufficio del capo: a destra della lavagna, con pareti di vetro
+  placed.set('capo', new THREE.Vector3(w / 2 - 1.2, 0, -2.7));
+  glass.position.set(w / 2 - 1.2, 1.1, -2.7);
+  deptLabel('Capo ufficio', w / 2 - 1.2, -2.0);
+  return placed;
+}
+const glass = new THREE.Group(); scene.add(glass);
+{ const gm = new THREE.MeshStandardMaterial({ color: 0xbfe3ff, transparent: true, opacity: 0.22, roughness: 0.1 });
+  const fr = mat(0x9ca3af);
+  const front = new THREE.Mesh(new THREE.BoxGeometry(2.8, 2.2, 0.04), gm); front.position.set(0, 0, 1.45); glass.add(front);
+  const side = new THREE.Mesh(new THREE.BoxGeometry(0.04, 2.2, 2.9), gm); side.position.set(-1.4, 0, 0); glass.add(side);
+  const rail = box(2.8, 0.05, 0.06, fr); rail.position.set(0, 1.1, 1.45); glass.add(rail); }
+let lastLayoutKey = '';
+function fitCamera() {
+  const { w, d } = roomSize;
+  controls.target.set(0, 1, d / 2 - 2);
+  camera.position.set(w * 0.25, Math.max(7, Math.max(w, d) * 0.6), d + Math.max(4, w * 0.3));
+}
+
+const histOf = (sym) => (window.__bars?.[sym] || []).slice(-30);
+const FASE_SHIRT = { pronto: 0x2a55c7, 'in posizione': 0x16a34a, 'in uscita': 0xdc2626, attende: 0x94a3b8, osserva: 0x60a5fa };
+const ROLE = { trend: 'trend', rientro: 'rientro', regime: 'clima di mercato', orizzonte: 'orizzonte', uscite: 'uscite e stop', contesto: 'contesto economico', profitto: 'presa di profitto', kronos: 'previsioni Kronos' };
+
+function paintScene(st) {
+  const general = Object.keys(st.agenti || {}).filter((n) => n !== 'custodi' && n !== 'intraday');
+  const cust = st.custodi || [];
+  const intra = (st.intraday || []).filter((x) => x.fase === 'in posizione' || x.fase === 'cerca ingresso').slice(0, 20);
+  const groups = [
+    { name: 'Direzione', items: general.map((n) => ({ key: `a:${n}`, kind: 'agente', n })) },
+    { name: 'Custodi', items: cust.map((c) => ({ key: `c:${c.simbolo}`, kind: 'custode', c })) },
+    { name: 'Sala intraday', items: intra.map((x) => ({ key: `i:${x.simbolo}`, kind: 'intraday', x })) },
+  ];
+  const keys = groups.flatMap((g) => g.items.map((i) => i.key)).join('|') + '|capo';
+  let pos = null;
+  if (keys !== lastLayoutKey) {
+    pos = layout(groups);
+    for (const [k, d] of desks) if (!pos.has(k)) { scene.remove(d.group); desks.delete(k); }
+    for (const [k, p] of pos) { let d = desks.get(k); if (!d) { d = { group: makeDesk(k, k === 'capo') }; scene.add(d.group); desks.set(k, d); } d.group.position.copy(p); }
+    if (!lastLayoutKey) fitCamera();
+    lastLayoutKey = keys;
+  }
+  const held = new Map((st.posizioni || []).map((p) => [p.simbolo, p]));
+  for (const g of groups) for (const it of g.items) {
+    const d = desks.get(it.key); if (!d) continue; const u = d.group.userData; d.info = it;
+    if (it.kind === 'agente') {
+      const a = st.agenti[it.n]; const err = !!a.errore;
+      u.emp.userData.shirtM.color.set(err ? 0xdc2626 : a.segnali ? 0x1d4ed8 : 0x64748b);
+      drawScreen(u.scr, agentName(it.n), err ? 'errore' : `${a.segnali} segnali`, null, null);
+      u.el.innerHTML = `<b>${esc(agentName(it.n))}</b>`;
+    } else if (it.kind === 'custode') {
+      const c = it.c; const p = held.get(c.simbolo); const prob = c.dossier ? Math.round(c.dossier.probabilita * 100) : null;
+      u.emp.userData.shirtM.color.set(FASE_SHIRT[c.fase] ?? 0x60a5fa);
+      drawScreen(u.scr, c.simbolo, `${px(st.prezzi?.[c.simbolo])}${prob !== null ? ` · ${prob}%` : ''}`, p ? p.variazione : null, histOf(c.simbolo).map((b) => b.close));
+      u.el.innerHTML = `<b>${esc(c.simbolo)}</b>${prob !== null ? ` <span>${prob}%</span>` : ''}`;
+    } else {
+      const x = it.x;
+      u.emp.userData.shirtM.color.set(0xf59e0b);
+      drawScreen(u.scr, x.simbolo, `${x.candela} · ${x.fase}`, x.ingresso && x.prezzo ? x.prezzo / x.ingresso - 1 : null, histOf(x.simbolo).map((b) => b.close), '#fbbf24');
+      u.el.innerHTML = `<b>${esc(x.simbolo)}</b> <span>${esc(x.candela)}</span>`;
+    }
+  }
+  const cd = desks.get('capo');
+  if (cd) {
+    cd.info = { kind: 'capo' }; const u = cd.group.userData; const cp = st.capo; const rich = (cp?.valutazioni || []).filter((v) => v.giudizio === 'richiamato');
+    u.emp.userData.shirtM.color.set(rich.length ? 0xdc2626 : 0x15803d);
+    drawScreen(u.scr, 'Capo ufficio', rich.length ? `${rich.length} richiami` : 'tutti in regola', null, null);
+    u.el.innerHTML = `<b>Capo ufficio</b><br><span>${rich.length ? `richiama ${esc(rich.map((v) => v.agente).join(', ')).slice(0, 40)}` : 'controlla il lavoro'}</span>`;
+  }
+  drawBoard(st, journal);
+  if (cardKey) renderCard();
+}
+
+// Mouse: sopra una postazione si legge cosa fa; clic → scheda del titolo o pagina Agenti.
+const ray = new THREE.Raycaster(); const mouse = new THREE.Vector2();
+const hoverEl = document.createElement('div'); hoverEl.className = 'lbl'; Object.assign(hoverEl.style, { display: 'none', position: 'absolute', maxWidth: '300px', whiteSpace: 'normal', fontSize: '12px', zIndex: 3 }); host.appendChild(hoverEl);
+function pickDesk(ev) {
+  const r = renderer.domElement.getBoundingClientRect();
+  mouse.set(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1);
+  ray.setFromCamera(mouse, camera);
+  const hits = ray.intersectObjects([...[...desks.values()].map((d) => d.group), board], true);
+  for (const h of hits) { let o = h.object; while (o) { if (o === board) return { board: true }; for (const d of desks.values()) if (d.group === o) return d; o = o.parent; } }
+  return null;
+}
+let hoveredDesk = null;
+renderer.domElement.addEventListener('mousemove', (ev) => {
+  const d = pickDesk(ev); hoveredDesk = d && !d.board ? d : null;
+  if (!d) { hoverEl.style.display = 'none'; return; }
+  let html;
+  if (d.board) html = '<b>Lavagna dei risultati</b><br>trade chiusi vinti e persi per agente, dal diario; in alto il risultato di oggi';
+  else if (d.info?.kind === 'capo') html = `<b>Capo ufficio</b><br>${esc(status?.capo?.sintesi || 'controlla il lavoro degli agenti')}<br><span style="opacity:.7">clic: apri la scheda</span>`;
+  else if (d.info.kind === 'agente') { const a = status?.agenti?.[d.info.n] || {}; html = `<b>${esc(agentName(d.info.n))}</b> · ${esc(ROLE[d.info.n] || '')}<br>${a.errore ? `<span class="down">${esc(a.errore)}</span>` : `${a.segnali} segnali nell'ultimo giro`}${a.note?.length ? `<br><span style="opacity:.8">${esc(a.note.join(' · ')).slice(0, 220)}</span>` : ''}<br><span style="opacity:.7">clic: pagina Agenti</span>`; }
+  else if (d.info.kind === 'custode') { const c = d.info.c; html = `<b>Custode di ${esc(c.simbolo)}</b> · ${esc(FASI[c.fase] || c.fase)}${c.dossier ? ` · ${Math.round(c.dossier.probabilita * 100)}% favorevole` : ''}<br>${esc(c.dossier?.prossimaAzione || c.piano).slice(0, 220)}<br><span style="opacity:.7">clic: apri il titolo</span>`; }
+  else { const x = d.info.x; html = `<b>Operatore intraday ${esc(x.simbolo)}</b> · candele ${esc(x.candela)}<br>${esc(x.fase)}: ${esc(x.motivo).slice(0, 200)}<br><span style="opacity:.7">clic: apri il titolo</span>`; }
+  hoverEl.innerHTML = html;
+  const r = host.getBoundingClientRect();
+  hoverEl.style.left = `${Math.min(ev.clientX - r.left + 14, r.width - 320)}px`; hoverEl.style.top = `${ev.clientY - r.top + 14}px`; hoverEl.style.display = 'block';
+});
+renderer.domElement.addEventListener('mouseleave', () => { hoverEl.style.display = 'none'; hoveredDesk = null; });
+renderer.domElement.addEventListener('click', (ev) => {
+  const d = pickDesk(ev); if (!d || d.board) return;
+  for (const [k, x] of desks) if (x === d) openCard(k);
+});
+
+// Gli eventi in diretta muovono le persone: chi vota alza la mano, chi compra o vende si alza e lo schermo lampeggia.
+function deskFor(e) {
+  if (e.agente && desks.has(`a:${e.agente}`)) return desks.get(`a:${e.agente}`);
+  if (e.agente?.startsWith('custode ')) return desks.get(`c:${e.agente.slice(8)}`);
+  if (e.agente === 'intraday') return desks.get(`i:${e.simbolo}`);
+  return desks.get(`c:${e.simbolo}`) || desks.get(`i:${e.simbolo}`);
+}
+function bubble(d, text, color) {
+  const el = document.createElement('div'); el.className = 'lbl bubble'; el.textContent = text; el.style.color = color;
+  const o = new CSS2DObject(el); o.position.set(0, 2.3, 0); d.group.add(o);
+  bubbles.push({ o, d, born: performance.now() });
+}
+const bubbles = [];
+function sceneEvent(e) {
+  if (e.tipo === 'segnale') { const d = deskFor(e); if (d) { d.group.userData.emp.userData.raise = 1; bubble(d, e.lato === 'buy' ? 'compra!' : 'vendi!', e.lato === 'buy' ? '#15803d' : '#b91c1c'); } }
+  if (e.tipo === 'ordine' && e.esito === 'inviato') { for (const d of desks.values()) if (d.info?.c?.simbolo === e.simbolo || d.info?.x?.simbolo === e.simbolo) { d.group.userData.emp.userData.stand = 1; const s = d.group.userData.scr; s.userData.flash = 1; s.userData.flashColor = e.lato === 'buy' ? '#14532d' : '#7f1d1d'; bubble(d, `${e.lato === 'buy' ? 'COMPRATO' : 'VENDUTO'} ${e.simbolo}`, e.lato === 'buy' ? '#15803d' : '#b91c1c'); } }
+  if (e.tipo === 'rifiuto') { const d = deskFor(e); if (d) bubble(d, 'fermato dalle regole', '#a16207'); }
+  if (e.tipo === 'capo') {
+    const cd = desks.get('capo'); if (cd) { cd.group.userData.emp.userData.stand = 1; bubble(cd, (e.richiamati || []).length ? `Richiamo a ${e.richiamati.map((r) => r.agente).join(', ')}!` : 'Bravi tutti!', (e.richiamati || []).length ? '#b91c1c' : '#15803d'); }
+    for (const r of e.richiamati || []) { const d = desks.get(`a:${r.agente}`) || (r.agente.startsWith('custode ') ? desks.get(`c:${r.agente.slice(8)}`) : null); if (d) { d.group.userData.emp.userData.bow = 1; bubble(d, 'ricevuto, capo', '#334155'); } }
+  }
+}
+
+// Dati per schermi e lavagna: le ultime 30 chiusure di ogni titolo e il diario dei trade.
+async function loadOfficeData() {
+  try {
+    const [b, j] = await Promise.all([fetch('/api/bars?ultime=30').then((r) => r.json()), fetch('/api/journal').then((r) => r.json())]);
+    window.__bars = b.barre || {}; journal = j;
+    if (status) paintScene(status);
+  } catch {}
+}
+setInterval(() => { if (currentPage === '3d') loadOfficeData(); }, 120_000);
+
+function resize() {
+  const w = host.clientWidth, h = host.clientHeight;
+  if (!w || !h) return;
+  renderer.setSize(w, h); labels.setSize(w, h); camera.aspect = w / h; camera.updateProjectionMatrix();
+}
+new ResizeObserver(resize).observe(host); resize();
+const sceneBox = $('#scene-box');
+sceneBox.addEventListener('toggle', resize);
+let currentPage = 'panoramica';
+const clock = new THREE.Clock();
+function animate() {
+  requestAnimationFrame(animate);
+  if (currentPage !== '3d' || !sceneBox.open) return;
+  const dt = Math.min(0.05, clock.getDelta()); const now = performance.now();
+  for (const d of desks.values()) {
+    const e = d.group.userData.emp.userData; e.t += dt;
+    // digitare: gli avambracci si alzano e abbassano a turno; la testa guarda lo schermo e ogni tanto si gira
+    e.arms[0].position.y = 0.84 + Math.max(0, Math.sin(e.t * 9)) * 0.03;
+    e.arms[1].position.y = 0.84 + Math.max(0, Math.sin(e.t * 9 + 1.6)) * 0.03;
+    e.head.rotation.y = Math.sin(e.t * 0.4) * 0.25;
+    if (e.raise > 0) { e.arms[1].position.y = 0.84 + e.raise * 0.55; e.arms[1].position.z = 0.3 - e.raise * 0.2; e.raise = Math.max(0, e.raise - dt * 0.6); }
+    if (e.bow > 0) { e.head.rotation.x = e.bow * 0.5; e.bow = Math.max(0, e.bow - dt * 0.4); } else e.head.rotation.x = 0;
+    if (e.stand > 0) { d.group.userData.emp.position.y = e.stand * 0.35; e.stand = Math.max(0, e.stand - dt * 0.5); } else d.group.userData.emp.position.y = 0;
+    e.torso.material.emissive?.setHex(d === hoveredDesk ? 0x333333 : 0x000000);
+    const s = d.group.userData.scr; if (s.userData.flash > 0) { s.userData.flash = Math.max(0, s.userData.flash - dt * 0.5); if (s.userData.flash === 0 && status) paintScene(status); }
+  }
+  for (let i = bubbles.length - 1; i >= 0; i--) { const b = bubbles[i]; const k = (now - b.born) / 2500; if (k >= 1) { b.d.group.remove(b.o); b.o.element.remove(); bubbles.splice(i, 1); continue; } b.o.position.y = 2.3 + k * 0.6; b.o.element.style.opacity = String(1 - k); }
+  if (fly) { const k = Math.min(1, (now - fly.t0) / 900); const ease = k * (2 - k); controls.target.lerpVectors(fly.fromT, fly.toT, ease); camera.position.lerpVectors(fly.fromP, fly.toP, ease); if (k >= 1) fly = null; }
+  if (portrait.on) { portrait.model.rotation.y += dt * 0.8; portrait.renderer.render(portrait.scene, portrait.camera); }
+  controls.update(); renderer.render(scene, camera); labels.render(scene, camera);
+}
+let fly = null;
+function flyTo(group) {
+  const p = group.position;
+  fly = { t0: performance.now(), fromT: controls.target.clone(), toT: new THREE.Vector3(p.x, 1.1, p.z), fromP: camera.position.clone(), toP: new THREE.Vector3(p.x + 1.6, 2.6, p.z + 3.2) };
+}
+
+// La scheda dell'agente nell'ufficio: un ritratto 3D che gira, ruolo, come decide, parametri, risultati e giudizio del capo.
+const card = document.createElement('aside'); card.className = 'office-card'; card.hidden = true; host.appendChild(card);
+const portrait = { on: false, renderer: new THREE.WebGLRenderer({ antialias: true, alpha: true }), scene: new THREE.Scene(), camera: new THREE.PerspectiveCamera(30, 1, 0.1, 20), model: null };
+portrait.renderer.setPixelRatio(Math.min(2, window.devicePixelRatio)); portrait.renderer.setSize(150, 170);
+portrait.scene.add(new THREE.HemisphereLight(0xffffff, 0xb8a990, 1.6)); { const l = new THREE.DirectionalLight(0xffffff, 1.4); l.position.set(2, 3, 4); portrait.scene.add(l); }
+portrait.camera.position.set(0, 1.25, 2.6); portrait.camera.lookAt(0, 1.05, 0);
+let cardKey = null; let cards = null;
+async function openCard(key) {
+  cardKey = key; const d = desks.get(key); if (d) flyTo(d.group);
+  if (!cards) { try { cards = (await (await fetch('/api/agenti/schede')).json()).schede; } catch { cards = []; } }
+  const u = d?.group.userData;
+  if (portrait.model) portrait.scene.remove(portrait.model);
+  portrait.model = makeEmployee(u ? u.emp.userData.shirtM.color.getHex() : 0x2a55c7, hashOf(key), key === 'capo');
+  portrait.scene.add(portrait.model); portrait.on = true;
+  card.hidden = false; renderCard();
+}
+function closeCard() { cardKey = null; card.hidden = true; portrait.on = false; }
+function renderCard() {
+  const d = desks.get(cardKey); if (!d) return closeCard();
+  const st = status || {}; const it = d.info || {}; const capo = st.capo;
+  const sched = (name) => (cards || []).find((c) => c.agente === name);
+  const val = (name) => (capo?.valutazioni || []).find((v) => v.agente === name);
+  const fmtP = (p) => (p.tipo === 'percento' ? `${(p.attuale * 100).toFixed(2).replace(/\.?0+$/, '')}%` : p.tipo === 'bool' ? (p.attuale ? 'sì' : 'no') : String(p.attuale));
+  let title, sub, body = '', name;
+  if (it.kind === 'capo') {
+    title = 'Capo ufficio'; sub = 'controlla il lavoro degli agenti';
+    body = `<p>${esc(capo?.sintesi || '')}</p>${capo?.sogliaKronos !== null && capo?.sogliaKronos !== undefined ? `<p class="why">Lezione per tutti: Kronos ≥ ${pct(capo.sogliaKronos)}${capo.ingressoMigliore ? ` · ingresso migliore: ${esc(capo.ingressoMigliore)}` : ''}</p>` : ''}
+      ${(capo?.valutazioni || []).map((v) => `<div class="vote"><b>${esc(v.agente)}</b> <span class="pill ${v.giudizio === 'richiamato' ? 'down' : v.giudizio === 'ottimo' || v.giudizio === 'bene' ? 'up' : ''}">${esc(v.giudizio)}</span> <span class="why">${v.vinti}/${v.trade} vinti · ${usd(v.risultato)}</span><br><span class="why">${esc(v.messaggio)}</span>${v.consigli.length ? `<ul>${v.consigli.map((c) => `<li class="why">${esc(c)}</li>`).join('')}</ul>` : ''}</div>`).join('') || '<p class="why">Nessun trade chiuso ancora.</p>'}`;
+  } else {
+    let who;
+    if (it.kind === 'agente') { name = it.n; who = it.n; const a = st.agenti?.[it.n] || {}; title = agentName(it.n); sub = ROLE[it.n] || ''; body = `<p class="why">${a.errore ? `<span class="down">${esc(a.errore)}</span>` : `${a.segnali ?? 0} segnali nell'ultimo giro`}${a.note?.length ? ` · ${esc(a.note.join(' · ')).slice(0, 260)}` : ''}</p>`; }
+    else if (it.kind === 'custode') { name = 'custodi'; who = `custode ${it.c.simbolo}`; const c = it.c; title = `Custode di ${c.simbolo}`; sub = FASI[c.fase] || c.fase; body = `${c.dossier ? `<p><b class="${c.dossier.probabilita >= 0.6 ? 'up' : c.dossier.probabilita < 0.45 ? 'down' : ''}">${Math.round(c.dossier.probabilita * 100)}% favorevole</b> · ${esc(c.dossier.prossimaAzione)}</p>` : ''}<p class="why"><b>Tesi.</b> ${esc(c.tesi)}</p><p class="why"><b>Piano.</b> ${esc(c.piano)}</p><p class="why"><b>Rischio.</b> ${esc(c.rischio)}</p>${c.dossier?.memoria?.trade ? `<p class="why"><b>Memoria.</b> ${esc(c.dossier.memoria.lezione)}</p>` : ''}`; }
+    else { name = 'intraday'; who = 'intraday'; const x = it.x; title = `Operatore intraday ${x.simbolo}`; sub = `candele ${x.candela} · ${x.fase}`; body = `<p class="why">${esc(x.motivo)}</p>${x.obiettivo ? `<p class="why">Ingresso ${px(x.ingresso)} · obiettivo <span class="up">${px(x.obiettivo)}</span> · stop <span class="down">${px(x.stop)}</span></p>` : ''}`; }
+    const v = val(who);
+    if (v) body += `<div class="vote"><b>Giudizio del capo:</b> <span class="pill ${v.giudizio === 'richiamato' ? 'down' : v.giudizio === 'ottimo' || v.giudizio === 'bene' ? 'up' : ''}">${esc(v.giudizio)}</span> <span class="why">${v.vinti}/${v.trade} vinti · ${usd(v.risultato)}</span><br><span class="why">${esc(v.messaggio)}</span>${v.consigli.length ? `<ul>${v.consigli.map((c) => `<li class="why">${esc(c)}</li>`).join('')}</ul>` : ''}</div>`;
+    const sc = sched(name);
+    if (sc) body += `<details open><summary>Impostazioni (${sc.parametri.length})</summary><p class="why">${esc(sc.come)}</p><table>${sc.parametri.map((p) => `<tr><td class="why">${esc(p.etichetta)}</td><td class="n ${p.cambiato ? 'agent-c' : ''}">${esc(fmtP(p))}</td></tr>`).join('')}</table></details>`;
+  }
+  card.innerHTML = `<button type="button" class="x" aria-label="chiudi">✕</button><div class="portrait"></div><h3>${esc(title)}</h3><div class="why">${esc(sub)}</div>${body}
+    <div class="row" style="margin-top:10px">${it.kind === 'custode' || it.kind === 'intraday' ? '<button type="button" class="btn" data-go="titolo">Apri il grafico</button>' : ''}${name || it.kind === 'capo' ? '<button type="button" class="btn ghost" data-go="schede">Modifica le impostazioni</button>' : ''}</div>`;
+  card.querySelector('.portrait').appendChild(portrait.renderer.domElement);
+  card.querySelector('.x').addEventListener('click', closeCard);
+  card.querySelector('[data-go="titolo"]')?.addEventListener('click', () => { selectSymbol(it.kind === 'custode' ? it.c.simbolo : it.x.simbolo); location.hash = 'titoli'; });
+  card.querySelector('[data-go="schede"]')?.addEventListener('click', () => { location.hash = 'agenti'; setTimeout(() => $('#schede')?.scrollIntoView({ behavior: 'smooth' }), 300); });
+}
+animate();
+
+// ---------- la frase di stato ----------
+let status = null;
+let lastTick = null;   // ultimo evento "tick" visto
+let lastAlarm = null;  // ultimo allarme visto
+const minutesAgo = (iso) => Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+const ago = (iso) => { const m = minutesAgo(iso); return m < 1 ? 'adesso' : m === 1 ? '1 minuto fa' : m < 60 ? `${m} minuti fa` : m < 120 ? '1 ora fa' : `${Math.round(m / 60)} ore fa`; };
+
+function sayState() {
+  const say = $('#say'), fix = $('#fix');
+  say.className = 'say'; fix.hidden = true;
+  const brokerDown = lastAlarm && /Errore del broker|Alpaca non risponde/i.test(`${lastAlarm.titolo} ${lastAlarm.dettaglio}`) && (!status || new Date(lastAlarm.t) > new Date(status.aggiornato));
+  if (brokerDown) {
+    const unauthorized = /401|unauthorized/i.test(lastAlarm.dettaglio);
+    say.className = 'say bad';
+    say.textContent = unauthorized ? 'Alpaca rifiuta le chiavi: gli agenti non possono operare.' : 'Alpaca non risponde: gli agenti aspettano il prossimo giro.';
+    fix.hidden = false;
+    fix.textContent = unauthorized
+      ? `Controlla alpacaKeyId e alpacaSecretKey in secrets.ts (chiavi del conto paper, iniziano con PK) e riavvia il motore. Ultimo tentativo ${ago(lastAlarm.t)}.`
+      : `Il motore riprova da solo a ogni giro. Dettaglio: ${cleanErr(lastAlarm.dettaglio)}`;
+    return;
+  }
+  const last = status?.aggiornato ?? lastTick?.t;
+  if (!status || status.versione !== 1) {
+    say.className = 'say warn';
+    say.textContent = lastTick ? 'Il motore è partito ma non ha ancora completato un giro.' : 'Il motore degli agenti non è acceso.';
+    fix.hidden = false;
+    fix.textContent = lastTick ? `Primo giro iniziato ${ago(lastTick.t)}.` : 'Avvialo con avvia-bot.cmd.';
+    return;
+  }
+  const stale = minutesAgo(last) > 12;
+  if (stale) {
+    say.className = 'say warn';
+    say.textContent = `Il motore sembra fermo: l'ultimo giro è di ${ago(last)}.`;
+    fix.hidden = false; fix.textContent = 'Riavvialo con avvia-bot.cmd.';
+    return;
+  }
+  const crypto = Object.keys(status.prezzi || {}).some((s) => s.includes('/'));
+  const parts = [];
+  if (status.mercatoAperto) parts.push(status.finestraIngressi ? 'titoli: borsa aperta, si può comprare' : 'titoli: borsa aperta, solo vendite e stop');
+  else parts.push('titoli: borsa chiusa');
+  if (crypto) parts[0] += ' · crypto: sempre operative';
+  if (status.allarmi?.length) {
+    say.className = 'say warn';
+    say.textContent = `Il motore gira, ma c'è un avviso: ${cleanErr(status.allarmi[0]).split(' · ')[0]}`;
+    const rest = [...cleanErr(status.allarmi[0]).split(' · ').slice(1), ...status.allarmi.slice(1).map(cleanErr)];
+    if (rest.length) { fix.hidden = false; fix.textContent = rest.join(' · '); }
+    return;
+  }
+  if (status.giornata?.obiettivoRaggiunto) {
+    say.className = 'say';
+    say.textContent = `Obiettivo del giorno raggiunto (${pct(status.giornata.pnlPct)}): per oggi gli agenti continuano in simulazione, si riparte domani.`;
+    return;
+  }
+  if (status.acquistiBloccati) {
+    say.className = 'say warn';
+    say.textContent = `Il motore gira, acquisti sospesi: ${status.acquistiBloccati}`;
+    return;
+  }
+  say.textContent = `Motore acceso · ${parts[0]}${status.kronos?.proiezioniDel ? ' · Kronos attivo' : ''}.`;
+}
+
+function paintMoney(st) {
+  const c = st.conto;
+  $('#money').hidden = !c;
+  if (!c) return;
+  $('#k-eq').textContent = money(c.patrimonio);
+  const dayPct = c.patrimonio - c.pnlGiorno > 0 ? c.pnlGiorno / (c.patrimonio - c.pnlGiorno) : null;
+  $('#k-day').textContent = `${usd(c.pnlGiorno)}${dayPct !== null ? ` (${pct(dayPct)})` : ''}${st.giornata && st.giornata.obiettivoPct > 0 ? ` · tetto ${pct(st.giornata.obiettivoPct)}` : ''}`; $('#k-day').className = `val ${cls(c.pnlGiorno)}`;
+  $('#k-cash').textContent = money(c.contanti);
+  $('#k-risk').textContent = `${Math.round((st.rischio ?? 1) * 100)}%`;
+  const cmp = st.confronto;
+  $('#k-cmp-wrap').hidden = !cmp;
+  if (cmp) { $('#k-cmp').innerHTML = `<span class="${cls(cmp.conto)}">${pct(cmp.conto)}</span> <span class="why">contro ${pct(cmp.spy)}</span>`; }
+}
+
+function paintPositions(st) {
+  const pos = st.posizioni || [];
+  $('#pos-n').textContent = pos.length ? `${pos.length}` : '';
+  if (!pos.length) {
+    const crypto = Object.keys(st.prezzi || {}).some((s) => s.includes('/'));
+    $('#positions').innerHTML = `<p class="empty">Nessuna posizione aperta.</p>`;
+    return;
+  }
+  const eq = st.conto?.patrimonio || 1;
+  $('#positions').innerHTML = `<table><thead><tr><th>Titolo</th><th class="n">Quantità</th><th class="n">Carico</th><th class="n">Ora</th><th class="n">Guadagno</th><th class="n">Peso</th></tr></thead><tbody>${pos.map((p) => {
+    const gain = (p.prezzoAttuale - p.prezzoCarico) * p.quantita;
+    return `<tr><td><b>${esc(p.simbolo)}</b></td><td class="n">${qty(p.quantita)}</td><td class="n">${fmt(p.prezzoCarico)}</td><td class="n">${fmt(p.prezzoAttuale)}</td><td class="n ${cls(gain)}">${usd(gain)}<br><span class="why">${pct(p.variazione)}</span></td><td class="n">${(p.valore / eq * 100).toFixed(1).replace('.', ',')}%</td></tr>`;
+  }).join('')}</tbody></table>`;
+}
+
+function paintPnl(st) {
+  const pl = st.pnlOggi;
+  if (!pl) { $('#pnl').innerHTML = '<p class="empty">Nessun dato.</p>'; return; }
+  const total = pl.realizzato + pl.nonRealizzato;
+  let html = `<div class="pnl-line"><div><div class="lab">Incassato oggi</div><div class="val ${cls(pl.realizzato)}">${usd(pl.realizzato)}</div></div><div><div class="lab">Sulle posizioni aperte</div><div class="val ${cls(pl.nonRealizzato)}">${usd(pl.nonRealizzato)}</div></div><div><div class="lab">Totale giornata</div><div class="val ${cls(total)}">${usd(total)}</div></div></div>`;
+  if (!pl.vendite.length && !pl.acquisti.length) html += `<p class="empty">Nessuna operazione oggi.</p>`;
+  if (pl.vendite.length) {
+    html += `<table><thead><tr><th>Vendita</th><th class="n">Carico → uscita</th><th class="n">Risultato</th></tr></thead><tbody>${pl.vendite.map((v) => `<tr><td><b>${esc(v.simbolo)}</b> ${qty(v.quantita)}${v.chiuso ? '' : ' <span class="pill">parziale</span>'}<br><span class="why">${esc(v.motivo)}${v.agenti?.length ? ` · voto di ${v.agenti.map(agentName).join(', ')}` : ''}</span></td><td class="n">${fmt(v.carico)} → ${fmt(v.prezzo)}</td><td class="n ${cls(v.pnl)}"><b>${usd(v.pnl)}</b><br><span class="why">${pct(v.risultato)}</span></td></tr>`).join('')}</tbody></table>`;
+  }
+  const per = Object.entries(pl.perAgente || {});
+  if (per.length) html += `<div class="row" style="margin-top:12px"><span class="why">Per agente:</span>${per.sort((a, b) => b[1].pnl - a[1].pnl).map(([a, g]) => `<span class="pill ${cls(g.pnl)}">${agentName(a)} ${usd(g.pnl)}</span>`).join('')}</div>`;
+  if (pl.acquisti?.length) html += `<p class="why" style="margin-top:10px">Comprato oggi: ${pl.acquisti.map((a) => `<b>${esc(a.simbolo)}</b> ${qty(a.quantita)} a ${fmt(a.prezzo)}`).join(', ')}.</p>`;
+  $('#pnl').innerHTML = html;
+}
+
+function paintDecisions(st) {
+  const cx = st.contesto;
+  const tone = cx?.generale === 'favorevole' ? 'up' : cx?.generale === 'sfavorevole' ? 'down' : '';
+  $('#context').innerHTML = cx
+    ? `<span class="pill ${tone}" title="${esc(cx.motivo)}">contesto ${esc(cx.generale)}</span>${Object.entries(cx.settori || {}).filter(([, o]) => o !== 'favorevole').map(([k, o]) => `<span class="pill ${o === 'sfavorevole' ? 'down' : ''}">${esc(k)} ${esc(o)}</span>`).join('')}${(st.inAttesa || []).map((w) => `<span class="pill warn" title="${esc(w.motivo)}">${esc(w.simbolo)} in attesa</span>`).join('')}`
+    : '';
+  const items = [];
+  for (const o of st.ordini || []) {
+    const ok = o.esito.startsWith('inviato');
+    items.push(`<div class="decision"><div class="head"><span><span class="pill ${o.lato === 'buy' ? 'up' : 'down'}">${o.lato === 'buy' ? 'Comprato' : 'Venduto'}</span> <b>${qty(o.quantita)} ${esc(o.simbolo)}</b></span><span class="pill ${ok ? '' : 'warn'}">${ok ? 'ordine inviato' : esc(cleanErr(o.esito))}</span></div><div class="why">${esc(o.perche)}</div></div>`);
+  }
+  // I rifiuti con lo stesso motivo stanno su una riga sola: "mercato chiuso" per cinque titoli è una notizia, non cinque.
+  const byReason = new Map();
+  for (const r of st.rifiuti || []) (byReason.get(r.reason) ?? byReason.set(r.reason, []).get(r.reason)).push(r);
+  for (const [reason, rs] of byReason) {
+    const what = rs.map((r) => `${r.side === 'buy' ? 'acquisto' : 'vendita'} ${qty(r.qty)} ${esc(r.symbol)}`);
+    items.push(`<div class="decision"><div class="head"><span><span class="pill">Fermato dalle regole</span> <b>${rs.length === 1 ? what[0] : `${rs.length} ordini`}</b></span></div><div class="why">${esc(reason)}${rs.length > 1 ? `: ${what.join(', ')}` : ''}</div></div>`);
+  }
+  const sp = st.stopSuAlpaca;
+  if (sp && (sp.placed.length || sp.cancelled.length || sp.errors.length)) {
+    items.push(`<div class="decision"><div class="head"><span><span class="pill agent">Stop di protezione</span></span></div><div class="why">${sp.placed.length ? `Messi: ${sp.placed.map(esc).join(', ')}. ` : ''}${sp.cancelled.length ? `Tolti: ${sp.cancelled.map(esc).join(', ')}. ` : ''}${sp.errors.length ? `<span class="down">${sp.errors.map((x) => esc(cleanErr(x))).join('; ')}</span>` : ''}</div></div>`);
+  }
+  $('#decisions').innerHTML = items.join('') || `<p class="empty">Nessun ordine nell'ultimo giro.${sp ? ` Stop attivi: ${[...sp.ok, ...sp.placed].length || 'nessuno'}.` : ''}</p>`;
+}
+
+function paintScores(st) {
+  const sc = (st.punteggi || []).slice().sort((a, b) => Math.abs(b.punteggio) - Math.abs(a.punteggio));
+  if (!sc.length) { $('#scores').innerHTML = '<p class="empty">Nessun segnale.</p>'; return; }
+  const max = Math.max(1, ...sc.map((s) => Math.abs(s.punteggio)));
+  $('#scores').innerHTML = `<table><tbody>${sc.map((s) => {
+    const w = Math.abs(s.punteggio) / max * 50;
+    const bar = s.punteggio >= 0 ? `left:50%; width:${w}%` : `left:${50 - w}%; width:${w}%`;
+    return `<tr><td style="width:84px"><b>${esc(s.simbolo)}</b></td><td style="width:34%"><div class="bar" title="sopra +0,5 si compra, sotto −0,5 si vende"><i class="${cls(s.punteggio)}" style="${bar}"></i></div></td><td class="n ${cls(s.punteggio)}" style="width:70px">${s.punteggio >= 0 ? '+' : ''}${s.punteggio.toFixed(2).replace('.', ',')}</td><td class="why">${(s.agenti || []).map(agentName).join(', ')}</td></tr>`;
+  }).join('')}</tbody></table>`;
+}
+
+function paintAgents(st) {
+  const rows = Object.entries(st.agenti || {});
+  $('#agents').innerHTML = rows.length ? rows.map(([n, a]) => `<span class="pill ${a.errore ? 'down' : a.segnali ? 'agent' : ''}" title="${esc(a.errore || (a.note || []).join(' · ') || 'nessuna nota')}">${agentName(n)} ${a.errore ? '!' : a.segnali}${st.pesi?.[n] && st.pesi[n] !== 1 ? ` · peso ${String(st.pesi[n]).replace('.', ',')}` : ''}</span>`).join('') : '<p class="empty">Nessun dato.</p>';
+  const d = st.diario?.statistiche;
+  $('#journal').innerHTML = `${d ? `Trade chiusi ${d.trade}${d.trade ? `, vinti ${d.vinti}, media ${pct(d.attesa)}` : ''}.` : ''}${st.kronos ? ` Kronos: ${esc(st.kronos.stato)}${st.kronos.proiezioniDel ? ` (${st.kronos.simboli} proiezioni)` : ''}.` : ''}${st.universo?.crypto?.length ? ` Crypto seguite: ${st.universo.crypto.length}.` : ''}`;
+}
+
+
+function paint(st) {
+  status = st && st.versione === 1 ? st : null;
+  sayState();
+  if (!status) { $('#when').textContent = lastTick ? `ultimo giro iniziato ${hhmm(lastTick.t)}` : 'nessuno stato'; return; }
+  $('#when').textContent = `ultimo giro ${hhmm(status.aggiornato)} (${ago(status.aggiornato)})`;
+  paintMoney(status); paintPositions(status); paintPnl(status); paintDecisions(status); paintScores(status); paintAgents(status); paintScene(status); paintCustodi(status); paintChips(status); paintIntraday(status); paintVotes(status); paintSimulazioni(status); paintCapo(status);
+}
+async function loadStatus() {
+  try { paint(await (await fetch('/api/status')).json()); } catch (e) { $('#say').textContent = 'La dashboard non riesce a leggere lo stato.'; $('#fix').hidden = false; $('#fix').textContent = e.message; }
+}
+
+// ---------- scheda per titolo ----------
+const FASI = { osserva: 'osserva', pronto: 'pronto a entrare', 'in posizione': 'in posizione', 'in uscita': 'in uscita', attende: 'in attesa' };
+const faseCls = (f) => f === 'in posizione' || f === 'pronto' ? 'up' : f === 'in uscita' ? 'down' : f === 'attende' ? 'warn' : '';
+function paintCustodi(st) {
+  const list = st.custodi || [];
+  $('#custodi').innerHTML = list.length ? list.map((c) => { const p = c.dossier ? Math.round(c.dossier.probabilita * 100) : null; return `<button type="button" data-sym="${esc(c.simbolo)}"><div class="row" style="justify-content:space-between"><span><b>${esc(c.simbolo)}</b>${p !== null ? ` <b class="${p >= 60 ? 'up' : p < 45 ? 'down' : ''}">${p}%</b>` : ''}</span><span class="pill ${faseCls(c.fase)}">${FASI[c.fase] || esc(c.fase)}</span></div><div class="why" style="margin-top:4px">${esc(c.dossier?.prossimaAzione || c.stato)}</div></button>`; }).join('')
+    : `<p class="empty">Nessun custode attivo: nasce uno per ogni crypto in trend (sopra le medie, slancio a 3 e 12 mesi positivo) o in portafoglio. ${st.universo?.crypto?.length ? `Universo di oggi: ${st.universo.crypto.length} coppie${st.universo.fonteCrypto ? ` (${esc(st.universo.fonteCrypto)})` : ''}.` : ''}</p>`;
+  for (const b of $('#custodi').querySelectorAll('button')) b.addEventListener('click', () => { selectSymbol(b.dataset.sym); location.hash = 'titoli'; });
+}
+
+let selected = null;
+let bars = [];          // barre del titolo scelto
+let forecasts = null;   // /api/previsioni
+let journal = null;     // /api/journal
+let valutazione = null; // ultima valutazione a secco
+function symbolsOf(st) {
+  const held = (st?.posizioni || []).map((p) => p.simbolo);
+  const cust = (st?.custodi || []).map((c) => c.simbolo);
+  const uni = [...(st?.universo?.titoli || []), ...(st?.universo?.crypto || [])];
+  return [...new Set([...held, ...cust, ...uni, ...Object.keys(st?.prezzi || {})])];
+}
+function paintChips(st) {
+  const syms = symbolsOf(st);
+  if (!selected || !syms.includes(selected)) { selected = (st.posizioni?.[0]?.simbolo) || (st.custodi?.[0]?.simbolo) || syms[0] || null; if (selected) loadSymbol(selected); }
+  // Tre gruppi: dove gli agenti hanno investito, cosa stanno osservando (custodi, voti d'acquisto, in attesa), il resto del radar.
+  const held = new Map((st.posizioni || []).map((p) => [p.simbolo, p]));
+  const cust = new Map((st.custodi || []).map((c) => [c.simbolo, c]));
+  const voted = new Set((st.segnali || []).filter((x) => x.lato === 'buy').map((x) => x.simbolo));
+  const waiting = new Set((st.inAttesa || []).map((w) => w.simbolo));
+  const groups = { held: [], watch: [], idle: [] };
+  for (const s of syms) groups[held.has(s) ? 'held' : cust.has(s) || voted.has(s) || waiting.has(s) ? 'watch' : 'idle'].push(s);
+  const chip = (s, kind) => { const p = held.get(s), c = cust.get(s); const tag = p ? `<span>${pct(p.variazione)}</span>` : c?.dossier ? `<span>${Math.round(c.dossier.probabilita * 100)}%</span>` : waiting.has(s) ? '<span>in attesa</span>' : voted.has(s) ? '<span>votato</span>' : ''; return `<button type="button" class="chip ${kind}" data-sym="${esc(s)}" aria-pressed="${s === selected}" title="${p ? 'in portafoglio' : c ? `custode: ${FASI[c.fase] || c.fase}` : waiting.has(s) ? 'in attesa del contesto' : voted.has(s) ? 'votato dagli agenti nell\u2019ultimo giro' : 'nel radar, nessuna azione'}">${c ? '<span class="k"></span>' : ''}${esc(s)}${tag}</button>`; };
+  const labels = { held: `In portafoglio (${groups.held.length})`, watch: `Sotto osservazione (${groups.watch.length})`, idle: `Nel radar (${groups.idle.length})` };
+  $('#chips').className = 'chip-groups';
+  $('#chips').innerHTML = ['held', 'watch', 'idle'].filter((k) => groups[k].length).map((k) => `<div class="chip-group"><span class="glab">${labels[k]}</span>${groups[k].map((s) => chip(s, k)).join('')}</div>`).join('');
+  for (const b of $('#chips').querySelectorAll('.chip')) b.addEventListener('click', () => selectSymbol(b.dataset.sym));
+  if (selected) paintTitle();
+}
+function selectSymbol(sym) {
+  if (!sym) return;
+  selected = sym; valutazione = null;
+  for (const b of $('#chips').querySelectorAll('.chip')) b.setAttribute('aria-pressed', String(b.dataset.sym === sym));
+  loadSymbol(sym);
+}
+async function loadSymbol(sym) {
+  try {
+    const [b, f, j] = await Promise.all([
+      fetch(`/api/bars?simbolo=${encodeURIComponent(sym)}`).then((r) => r.json()),
+      forecasts ? Promise.resolve(forecasts) : fetch('/api/previsioni').then((r) => r.json()),
+      fetch('/api/journal').then((r) => r.json()),
+    ]);
+    if (sym !== selected) return;
+    bars = b.barre || []; forecasts = f; journal = j;
+  } catch { bars = []; }
+  paintTitle();
+}
+setInterval(() => { forecasts = null; }, 10 * 60_000);
+
+function tradesFor(sym) {
+  const out = [];
+  for (const t of journal?.trade || []) {
+    if (t.simbolo !== sym) continue;
+    for (const a of t.acquisti || []) out.push({ date: a.data.slice(0, 10), side: 'buy', qty: a.quantita, price: a.prezzo });
+    for (const v of t.vendite || []) out.push({ date: v.data.slice(0, 10), side: 'sell', qty: v.quantita, price: v.prezzo, pnl: (v.prezzo - v.carico) * v.quantita });
+    if (!(t.acquisti || []).length) out.push({ date: t.apertoIl.slice(0, 10), side: 'buy', qty: t.comprate, price: t.costo / t.comprate });
+    if (!(t.vendite || []).length && t.stato === 'chiuso' && t.chiusoIl) out.push({ date: t.chiusoIl.slice(0, 10), side: 'sell', qty: t.vendute, price: t.prezzoUscita, pnl: t.incassato - t.costo });
+  }
+  return out;
+}
+const smaAt = (arr, i, n) => i + 1 < n ? null : arr.slice(i + 1 - n, i + 1).reduce((a, b) => a + b, 0) / n;
+function dailyVolOf(closes, n = 20) {
+  const w = closes.slice(-(n + 1)); const r = [];
+  for (let i = 1; i < w.length; i++) if (w[i - 1] > 0 && w[i] > 0) r.push(Math.log(w[i] / w[i - 1]));
+  if (r.length < 2) return 0.02;
+  const m = r.reduce((a, b) => a + b, 0) / r.length;
+  return Math.sqrt(r.reduce((a, b) => a + (b - m) ** 2, 0) / (r.length - 1));
+}
+const cssVar = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const romeDate = (iso) => new Date(iso).toLocaleDateString('sv-SE', { timeZone: 'Europe/Rome' });
+const todayRome = () => romeDate(new Date().toISOString());
+// La candela di oggi, viva: si forma con i prezzi letti dal motore a ogni giro (eventi "prezzi"), più l'ultimo prezzo dello stato.
+function liveBar(sym) {
+  const today = todayRome();
+  const ps = allEvents.filter((e) => e.tipo === 'prezzi' && romeDate(e.t) === today && e.prezzi?.[sym]).map((e) => e.prezzi[sym]).reverse();
+  const last = status?.prezzi?.[sym]; if (last && romeDate(status.aggiornato) === today) ps.push(last);
+  if (!ps.length) return null;
+  const prev = bars.at(-1)?.close;
+  if (bars.at(-1)?.date >= today) return null;
+  return { date: today, open: prev ?? ps[0], high: Math.max(prev ?? ps[0], ...ps), low: Math.min(prev ?? ps[0], ...ps), close: ps[ps.length - 1], live: true, letture: ps.length };
+}
+// Le scelte di oggi del motore su questo titolo: voti, ordini, rifiuti, stop, trade.
+const ACTION_KINDS = new Set(['segnale', 'ordine', 'rifiuto', 'trade', 'stop']);
+function actionsFor(sym) {
+  const today = todayRome();
+  return allEvents.filter((e) => romeDate(e.t) === today && ACTION_KINDS.has(e.tipo) && (e.simbolo === sym || (e.tipo === 'stop' && String(e.dettaglio || '').startsWith(sym + ' '))));
+}
+
+// Il grafico: ultime 120 candele, medie 20/50/200, carico e stop, il percorso previsto da Kronos con il cono di incertezza, le operazioni.
+let chartGeom = null;
+function drawChart() {
+  const cv = $('#chart'); const dpr = Math.min(2, window.devicePixelRatio || 1);
+  const W = cv.clientWidth, H = cv.clientHeight; if (!W) return;
+  cv.width = W * dpr; cv.height = H * dpr;
+  const ctx = cv.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, H);
+  const all = bars; const N = Math.min(120, all.length);
+  ctx.font = '12px Figtree, system-ui, sans-serif';
+  if (!N) { ctx.fillStyle = cssVar('--ink-3'); ctx.fillText(status ? 'Le barre arrivano con il primo giro riuscito del motore.' : 'Nessun dato.', 16, 28); chartGeom = null; return; }
+  const lb = liveBar(selected);
+  const view = [...all.slice(-(lb ? N - 1 : N)), ...(lb ? [lb] : [])]; const closesAll = all.map((b) => b.close);
+  const fc = forecasts?.previsioni?.[selected]; const path = fc?.percorso || [];
+  const vol = dailyVolOf(closesAll);
+  const last = all[all.length - 1].close;
+  const pos = (status?.posizioni || []).find((p) => p.simbolo === selected);
+  const stopPct = valutazione?.livelli?.stopPct ?? Math.min(0.10, Math.max(0.05, Math.round(2.5 * vol * Math.sqrt(5) * 200) / 200));
+  const carico = pos?.prezzoCarico ?? null;
+  const stop = carico !== null ? carico * (1 - stopPct) : null;
+  const H_FC = path.length; const slots = view.length + H_FC + 1;
+  let lo = Math.min(...view.map((b) => b.low)), hi = Math.max(...view.map((b) => b.high));
+  for (let k = 0; k < path.length; k++) { const band = vol * Math.sqrt(k + 1) * 1.65; lo = Math.min(lo, last * (1 + path[k] - band)); hi = Math.max(hi, last * (1 + path[k] + band)); }
+  if (stop !== null) lo = Math.min(lo, stop); if (carico !== null) hi = Math.max(hi, carico);
+  const pad = (hi - lo) * 0.06 || hi * 0.02; lo -= pad; hi += pad;
+  const L = 8, R = 84, T = 14, B = 26; const pw = W - L - R, ph = H - T - B;
+  const x = (i) => L + ((i + 0.5) / slots) * pw; const y = (v) => T + (1 - (v - lo) / (hi - lo)) * ph;
+  const cw = Math.max(2, (pw / slots) * 0.62);
+  // griglia e scala
+  ctx.strokeStyle = cssVar('--line'); ctx.fillStyle = cssVar('--ink-3'); ctx.lineWidth = 1; ctx.textAlign = 'left';
+  for (let g = 0; g <= 5; g++) { const v = lo + ((hi - lo) * g) / 5; const yy = y(v); ctx.beginPath(); ctx.moveTo(L, yy); ctx.lineTo(W - R, yy); ctx.stroke(); ctx.fillText(px(v), W - R + 6, yy + 4); }
+  // date (ogni ~20 barre)
+  ctx.textAlign = 'center';
+  for (let i = 0; i < view.length; i += Math.ceil(view.length / 6)) ctx.fillText(view[i].date.slice(5), x(i), H - 8);
+  // zona futura
+  const F0 = view.length; // prima colonna del futuro
+  if (H_FC) { ctx.fillStyle = cssVar('--agent-bg'); ctx.globalAlpha = 0.35; ctx.fillRect(x(F0 - 0.5), T, x(slots - 0.5) - x(F0 - 0.5), ph); ctx.globalAlpha = 1; ctx.fillStyle = cssVar('--ink-3'); ctx.fillText(`prossime ${H_FC} sedute`, (x(F0) + x(slots - 1)) / 2, H - 8); }
+  // medie
+  const nClosed = view.length - (lb ? 1 : 0);
+  const line = (n, color, dash) => { ctx.beginPath(); ctx.strokeStyle = color; ctx.lineWidth = 1.5; ctx.setLineDash(dash || []); let started = false; for (let i = 0; i < nClosed; i++) { const gi = all.length - nClosed + i; const v = smaAt(closesAll, gi, n); if (v === null) continue; const xx = x(i), yy = y(v); if (!started) { ctx.moveTo(xx, yy); started = true; } else ctx.lineTo(xx, yy); } ctx.stroke(); ctx.setLineDash([]); };
+  line(200, '#b08900'); line(50, cssVar('--agent')); line(20, '#8a94a6', [2, 3]);
+  // candele
+  const up = cssVar('--up'), down = cssVar('--down');
+  view.forEach((b, i) => { const c = b.close >= b.open ? up : down; ctx.strokeStyle = c; ctx.fillStyle = c; ctx.lineWidth = 1; const xx = x(i); ctx.beginPath(); ctx.moveTo(xx, y(b.high)); ctx.lineTo(xx, y(b.low)); ctx.stroke(); const top = y(Math.max(b.open, b.close)), bot = y(Math.min(b.open, b.close)); if (b.live) { ctx.lineWidth = 1.5; ctx.strokeRect(xx - cw / 2, top, cw, Math.max(1, bot - top)); ctx.globalAlpha = 0.35; ctx.fillRect(xx - cw / 2, top, cw, Math.max(1, bot - top)); ctx.globalAlpha = 1; } else ctx.fillRect(xx - cw / 2, top, cw, Math.max(1, bot - top)); });
+  if (lb) { ctx.fillStyle = cssVar('--ink-3'); ctx.textAlign = 'center'; ctx.fillText('oggi', x(view.length - 1), T + 10); ctx.beginPath(); ctx.strokeStyle = cssVar('--line'); ctx.setLineDash([2, 3]); ctx.moveTo(x(view.length - 1), T + 14); ctx.lineTo(x(view.length - 1), T + ph); ctx.stroke(); ctx.setLineDash([]); }
+  // livelli
+  const hline = (v, color, dash, label) => { if (v === null || v === undefined) return; ctx.beginPath(); ctx.strokeStyle = color; ctx.lineWidth = 1.2; ctx.setLineDash(dash); ctx.moveTo(L, y(v)); ctx.lineTo(W - R, y(v)); ctx.stroke(); ctx.setLineDash([]); ctx.fillStyle = color; ctx.textAlign = 'left'; ctx.fillText(label, L + 6, y(v) - 4); };
+  hline(carico, cssVar('--ink'), [6, 4], `carico ${px(carico)}`);
+  hline(stop, down, [6, 4], `stop ${px(stop)} (${pct(-stopPct)})`);
+  // scenario Kronos: percorso previsto e cono
+  if (H_FC) {
+    ctx.beginPath(); ctx.fillStyle = up; ctx.globalAlpha = 0.12;
+    const x0 = x(F0 - 1 - (lb ? 1 : 0));
+    ctx.moveTo(x0, y(last));
+    for (let k = 0; k < H_FC; k++) ctx.lineTo(x(F0 + k), y(last * (1 + path[k] + vol * Math.sqrt(k + 1) * 1.65)));
+    for (let k = H_FC - 1; k >= 0; k--) ctx.lineTo(x(F0 + k), y(last * (1 + path[k] - vol * Math.sqrt(k + 1) * 1.65)));
+    ctx.closePath(); ctx.fill(); ctx.globalAlpha = 1;
+    ctx.beginPath(); ctx.strokeStyle = fc.rendimentoPrevisto >= 0 ? up : down; ctx.lineWidth = 2; ctx.setLineDash([3, 4]); ctx.moveTo(x0, y(last));
+    for (let k = 0; k < H_FC; k++) ctx.lineTo(x(F0 + k), y(last * (1 + path[k])));
+    ctx.stroke(); ctx.setLineDash([]);
+    for (let k = 0; k < H_FC; k++) { ctx.beginPath(); ctx.fillStyle = fc.rendimentoPrevisto >= 0 ? up : down; ctx.arc(x(F0 + k), y(last * (1 + path[k])), 3, 0, Math.PI * 2); ctx.fill(); }
+    ctx.fillStyle = fc.rendimentoPrevisto >= 0 ? up : down; ctx.textAlign = 'right'; ctx.fillText(`Kronos ${pct(fc.rendimentoPrevisto)} → ${px(last * (1 + fc.rendimentoPrevisto))}`, x(slots - 1) + cw, y(last * (1 + path[H_FC - 1])) - 10);
+  }
+  // operazioni
+  for (const t of tradesFor(selected)) { let i = view.findIndex((b) => b.date >= t.date); if (i < 0 && t.date > view[view.length - 1].date) i = view.length - 1; if (i < 0 || (lb && i === view.length - 1)) continue; ctx.fillStyle = t.side === 'buy' ? up : down; ctx.textAlign = 'center'; ctx.font = 'bold 14px Figtree, system-ui, sans-serif'; ctx.fillText(t.side === 'buy' ? '▲' : '▼', x(i), t.side === 'buy' ? y(view[i].low) + 16 : y(view[i].high) - 6); ctx.font = '12px Figtree, system-ui, sans-serif'; }
+  // Le scelte di oggi sul titolo: voti (puntini), ordini (frecce piene), rifiuti (×), vicino alla candela di oggi.
+  const acts = actionsFor(selected);
+  if (acts.length) {
+    const xi = x(view.length - 1); const bTop = y(view[view.length - 1].high), bBot = y(view[view.length - 1].low);
+    let upK = 0, downK = 0;
+    for (const e of acts) {
+      const buy = e.lato === 'buy' || e.stato === 'aperto'; const col = e.tipo === 'rifiuto' ? cssVar('--warn') : buy ? up : down;
+      ctx.fillStyle = col; ctx.textAlign = 'center';
+      if (e.tipo === 'ordine' || e.tipo === 'trade') { ctx.font = 'bold 15px Figtree, system-ui, sans-serif'; ctx.fillText(buy ? '▲' : '▼', xi, buy ? bBot + 16 + 14 * downK++ : bTop - 6 - 14 * upK++); }
+      else if (e.tipo === 'rifiuto') { ctx.font = 'bold 13px Figtree, system-ui, sans-serif'; ctx.fillText('×', xi, bTop - 6 - 14 * upK++); }
+      else if (e.tipo === 'segnale') { ctx.beginPath(); ctx.arc(xi, buy ? bBot + 10 + 10 * downK++ : bTop - 10 - 10 * upK++, 3, 0, Math.PI * 2); ctx.fill(); }
+    }
+    ctx.font = '12px Figtree, system-ui, sans-serif';
+  }
+  chartGeom = { x, y, N: view.length, slots, view, path, last, vol, L, R, W, H, T, ph, lb };
+}
+$('#chart').addEventListener('mousemove', (ev) => {
+  const g = chartGeom; const tip = $('#tip'); if (!g) { tip.style.display = 'none'; return; }
+  const rect = ev.currentTarget.getBoundingClientRect(); const mx = ev.clientX - rect.left, my = ev.clientY - rect.top;
+  const i = Math.floor(((mx - g.L) / (g.W - g.L - g.R)) * g.slots);
+  if (i < 0 || i >= g.slots) { tip.style.display = 'none'; return; }
+  let html;
+  if (i < g.N) { const b = g.view[i]; const acts = b.live ? actionsFor(selected) : []; html = `<b>${b.date}${b.live ? ` · in formazione (${b.letture} letture)` : ''}</b><br>apertura ${px(b.open)} · massimo ${px(b.high)}<br>minimo ${px(b.low)} · ${b.live ? 'ultimo' : 'chiusura'} ${px(b.close)} <span class="${cls(b.close - b.open)}">${pct(b.close / b.open - 1)}</span>${acts.length ? `<br>${acts.length} azioni oggi: vedi sotto il grafico` : ''}`; }
+  else { const k = i - g.N; if (k >= g.path.length) { tip.style.display = 'none'; return; } const band = g.vol * Math.sqrt(k + 1) * 1.65; html = `<b>Scenario Kronos, seduta +${k + 1}</b><br>atteso ${px(g.last * (1 + g.path[k]))} (${pct(g.path[k])})<br>fascia ${px(g.last * (1 + g.path[k] - band))} – ${px(g.last * (1 + g.path[k] + band))}`; }
+  tip.innerHTML = html; tip.style.display = 'block';
+  tip.style.left = `${Math.min(mx + 14, g.W - 230)}px`; tip.style.top = `${Math.max(4, my - 60)}px`;
+});
+$('#chart').addEventListener('mouseleave', () => { $('#tip').style.display = 'none'; });
+new ResizeObserver(() => drawChart()).observe($('#chart'));
+
+function paintTitle() {
+  if (!selected) return;
+  const st = status; const price = st?.prezzi?.[selected] ?? bars.at(-1)?.close ?? null;
+  $('#t-price').textContent = price !== null ? `${px(price)} $` : '–';
+  drawChart();
+  const fc = forecasts?.previsioni?.[selected];
+  $('#chart-note').textContent = fc ? `Kronos: ${pct(fc.rendimentoPrevisto)} in ${forecasts.orizzonte} sedute (proiezione del ${forecasts.giorno}).` : `Kronos: ${st?.kronos?.stato || 'nessuna proiezione'}.`;
+  $('#live-note').textContent = lastTick ? `in diretta · giro ${hhmm(lastTick.t)}` : '';
+  renderFeed();
+  if (valutazione) return paintVerdict(valutazione);
+  // Prima della richiesta: cosa dicono lo stato dell'ultimo giro e il custode.
+  const votes = (st?.segnali || []).filter((s) => s.simbolo === selected);
+  const score = (st?.punteggi || []).find((s) => s.simbolo === selected);
+  const cust = (st?.custodi || []).find((c) => c.simbolo === selected);
+  const pos = (st?.posizioni || []).find((p) => p.simbolo === selected);
+  const v = $('#verdict'); v.className = 'verdict';
+  v.textContent = pos ? `In portafoglio: ${qty(pos.quantita)} a ${px(pos.prezzoCarico)}, ${pct(pos.variazione)}.` : votes.length ? `Nell'ultimo giro ${votes.length === 1 ? 'un agente ha votato' : `${votes.length} agenti hanno votato`} su ${selected}${score ? ` (punteggio ${score.punteggio >= 0 ? '+' : ''}${score.punteggio.toFixed(2)})` : ''}.` : `Nessun voto su ${selected} nell'ultimo giro.`;
+  $('#verdict-body').innerHTML = `${votes.map((s) => `<div class="vote"><span class="pill agent">${agentName(s.agente)}</span> <span class="${s.lato === 'buy' ? 'up' : 'down'}"><b>${s.lato === 'buy' ? 'compra' : 'vendi'}</b></span> forza ${s.forza.toFixed(2).replace('.', ',')}<br><span class="why">${esc(s.perche)}</span></div>`).join('')}${cust ? custodeCard(cust) : ''}`;
+}
+// Il feed del titolo: cosa ha fatto il motore oggi su questo titolo, dal più recente, aggiornato in diretta.
+function renderFeed() {
+  if (!selected) return;
+  const acts = actionsFor(selected);
+  $('#feed').innerHTML = acts.length ? `<div id="feed-list">${acts.slice(0, 30).map((e) => `<div class="ev ${e.tipo === 'rifiuto' ? '' : ''}" style="display:grid; grid-template-columns:58px 1fr; gap:10px; padding:6px 0; border-top:1px solid var(--line); font-size:14px"><time style="color:var(--ink-3); font-size:13px">${hhmm(e.t)}</time><div>${describe(e)}</div></div>`).join('')}</div>` : `<p class="why">Nessuna azione del motore su ${esc(selected)} oggi.</p>`;
+}
+function custodeCard(c) {
+  const d = c.dossier;
+  const p = d ? Math.round(d.probabilita * 100) : null;
+  const src = (lab, x, nota) => `<div class="row" style="gap:6px"><span class="why" style="min-width:64px">${lab}</span><div class="bar" style="flex:1; max-width:140px"><i class="${x === null ? '' : x >= 0.5 ? '' : 'down'}" style="left:0; width:${x === null ? 0 : Math.round(x * 100)}%; background:${x === null ? 'transparent' : x >= 0.6 ? 'var(--up)' : x <= 0.4 ? 'var(--down)' : 'var(--ink-3)'}"></i></div><span class="why">${x === null ? 'n.d.' : `${Math.round(x * 100)}%`}${nota ? ` · ${esc(nota)}` : ''}</span></div>`;
+  return `<div class="custode-card"><div class="h"><b>Custode di ${esc(c.simbolo)}</b><span class="pill ${faseCls(c.fase)}">${FASI[c.fase] || esc(c.fase)}</span></div>
+    ${d ? `<div class="h"><span><b class="${p >= 60 ? 'up' : p < 45 ? 'down' : ''}" style="font-size:22px">${p}%</b> <span class="why">favorevole</span></span><span class="why">dossier delle ${hhmm(d.aggiornato)}</span></div>
+    <div><b>Prossima azione.</b> ${esc(d.prossimaAzione)}</div>
+    ${src('Grafico', d.tecnica.punteggio, d.tecnica.pattern.join(', '))}${src('Kronos', d.kronos.punteggio, d.kronos.nota)}${src('Notizie', d.notizie.punteggio, d.notizie.nota)}${src('Contesto', d.contesto.punteggio, d.contesto.nota)}
+    ${d.notizie.titoli.length ? `<details><summary class="why" style="cursor:pointer">Titoli letti (${d.notizie.titoli.length})</summary>${d.notizie.titoli.map((t) => `<div class="why">• ${esc(t.titolo)}${t.fonte ? ` — ${esc(t.fonte)}` : ''}</div>`).join('')}</details>` : ''}` : ''}
+    <div><span class="why">Tesi.</span> ${esc(c.tesi)}</div><div><span class="why">Piano.</span> ${esc(c.piano)}</div><div><span class="why">Rischio.</span> ${esc(c.rischio)}</div><div class="why">${esc(c.stato)}</div></div>`;
+}
+function paintVerdict(v) {
+  const el = $('#verdict');
+  const side = v.proposta?.lato;
+  el.className = `verdict ${v.gabbia.esito === 'passa' ? (side === 'buy' ? 'up' : 'down') : ''}`;
+  el.textContent = v.verdetto;
+  const lv = v.livelli;
+  $('#verdict-body').innerHTML = `
+    <div class="row"><span class="pill ${v.gabbia.esito === 'passa' ? 'up' : v.gabbia.esito === 'rifiuta' ? 'warn' : ''}">${v.gabbia.esito === 'passa' ? 'le regole lasciano passare' : v.gabbia.esito === 'rifiuta' ? 'fermato dalle regole' : 'nessun ordine'}</span>${v.punteggio !== null ? `<span class="pill ${cls(v.punteggio)}">punteggio ${v.punteggio >= 0 ? '+' : ''}${v.punteggio.toFixed(2).replace('.', ',')}</span>` : ''}<span class="pill">${v.mercatoAperto ? (v.finestraIngressi ? 'borsa aperta, finestra acquisti' : 'borsa aperta') : 'borsa chiusa'}</span></div>
+    ${v.gabbia.esito === 'rifiuta' ? `<p class="why">${esc(v.gabbia.motivo)}</p>` : ''}
+    <dl class="kv" style="margin:10px 0">
+      ${v.posizione ? `<dt>Posizione</dt><dd>${qty(v.posizione.quantita)} a ${px(v.posizione.carico)} → <span class="${cls(v.posizione.guadagno)}">${usd(v.posizione.guadagno)} (${pct(v.posizione.variazione)})</span></dd>` : ''}
+      <dt>Stop</dt><dd>${px(lv.stop)} (${pct(-lv.stopPct)} dal ${v.posizione ? 'carico' : 'prezzo'})</dd>
+      ${lv.obiettivo ? `<dt>Obiettivo</dt><dd>${px(lv.obiettivo)}</dd>` : ''}
+      <dt>Medie 20 / 50 / 200</dt><dd>${px(lv.media20)} / ${px(lv.media50)} / ${px(lv.media200)}</dd>
+      ${v.previsione ? `<dt>Kronos</dt><dd><span class="${cls(v.previsione.rendimentoPrevisto)}">${pct(v.previsione.rendimentoPrevisto)}</span> in ${v.previsione.orizzonte} sedute</dd>` : ''}
+      ${v.contesto ? `<dt>Contesto</dt><dd>${esc(v.contesto.generale)}${v.contesto.attendi ? ` · ${esc(v.contesto.attendi)}` : ''}</dd>` : ''}
+    </dl>
+    ${v.voti.length ? v.voti.map((s) => `<div class="vote"><span class="pill agent">${agentName(s.agente)}</span> <span class="${s.lato === 'buy' ? 'up' : 'down'}"><b>${s.lato === 'buy' ? 'compra' : 'vendi'}</b></span> forza ${s.forza.toFixed(2).replace('.', ',')}${s.vincolante ? ' <span class="pill warn">regola vincolante</span>' : ''}<br><span class="why">${esc(s.perche)}</span></div>`).join('') : '<p class="why">Nessun agente ha votato su questo titolo adesso.</p>'}
+    ${v.custode ? custodeCard(v.custode) : ''}
+    ${v.note.length ? `<p class="why">${v.note.map(esc).join(' · ')}</p>` : ''}
+    <p class="why">Valutazione a secco delle ${hhmm(v.quando)}: nessun ordine inviato.</p>`;
+  drawChart();
+}
+$('#ask').addEventListener('click', async () => {
+  if (!selected) return;
+  const b = $('#ask'); b.disabled = true; b.textContent = 'Gli agenti stanno guardando…';
+  try {
+    const r = await fetch(`/api/valuta?simbolo=${encodeURIComponent(selected)}`); const v = await r.json();
+    if (!r.ok) throw new Error(v.errore || r.statusText);
+    valutazione = v; paintVerdict(v);
+  } catch (e) { $('#verdict').className = 'verdict down'; $('#verdict').textContent = 'Valutazione non riuscita.'; $('#verdict-body').innerHTML = `<p class="why">${esc(e.message)}</p>`; }
+  b.disabled = false; b.textContent = 'Chiedi agli agenti adesso';
+});
+
+// ---------- pagine ----------
+const PAGES = ['panoramica', 'titoli', 'agenti', 'cronologia', '3d', 'impostazioni', 'guida'];
+function showPage() {
+  const h = location.hash.replace('#', '');
+  currentPage = PAGES.includes(h) ? h : 'panoramica';
+  for (const el of document.querySelectorAll('.page')) el.classList.toggle('on', el.dataset.page === currentPage);
+  for (const a of document.querySelectorAll('.nav a')) { if (a.dataset.page === currentPage) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); }
+  if (currentPage === 'titoli') { drawChart(); }
+  if (currentPage === '3d') { resize(); loadOfficeData(); }
+  if (currentPage === 'impostazioni') loadSettings();
+  if (currentPage === 'agenti' && !$('#schede').children.length) loadCards();
+  try { localStorage.setItem('agenti.pagina', currentPage); } catch {}
+}
+window.addEventListener('hashchange', showPage);
+if (!location.hash) { try { const p = localStorage.getItem('agenti.pagina'); if (p && PAGES.includes(p)) location.hash = p; } catch {} }
+showPage();
+
+function paintIntraday(st) {
+  const list = st.intraday || [];
+  const open = list.filter((x) => x.fase === 'in posizione'), rest = list.filter((x) => x.fase !== 'in posizione');
+  if (!list.length) { $('#intraday').innerHTML = '<p class="empty">Nessuna operazione intraday: fuori orario o nessun ingresso sulle candele.</p>'; return; }
+  const row = (x) => `<tr><td><b>${esc(x.simbolo)}</b><br><span class="why">${esc(x.candela)}</span></td><td><span class="pill ${x.fase === 'in posizione' ? 'up' : x.fase === 'cerca ingresso' ? 'agent' : ''}">${esc(x.fase)}</span></td><td class="n">${x.ingresso !== null ? px(x.ingresso) : '–'}</td><td class="n up">${x.obiettivo !== null ? px(x.obiettivo) : '–'}</td><td class="n down">${x.stop !== null ? px(x.stop) : '–'}</td><td class="why">${esc(x.motivo)}</td></tr>`;
+  $('#intraday').innerHTML = `<table><thead><tr><th>Titolo</th><th>Fase</th><th class="n">Ingresso</th><th class="n">Obiettivo</th><th class="n">Stop</th><th>Perché</th></tr></thead><tbody>${[...open, ...rest].slice(0, 40).map(row).join('')}</tbody></table>`;
+}
+function paintSimulazioni(st) {
+  const list = st.simulazioni || [];
+  $('#sim-card').hidden = !list.length && !st.giornata?.obiettivoRaggiunto;
+  if (!list.length) { $('#simulazioni').innerHTML = '<p class="empty">Nessuna simulazione ancora: gli agenti osservano e votano, gli acquisti che proporrebbero compaiono qui.</p>'; return; }
+  const tot = list.reduce((a, x) => a + (x.virtuale ?? 0), 0);
+  $('#simulazioni').innerHTML = `<p class="why" style="margin-bottom:8px">Esito virtuale complessivo <b class="${cls(tot)}">${usd(tot)}</b> su ${list.length} operazioni simulate (nessun ordine inviato).</p><table><thead><tr><th>Titolo</th><th class="n">Quantità</th><th class="n">Prezzo simulato</th><th class="n">Ora</th><th class="n">Virtuale</th><th>Agenti</th></tr></thead><tbody>${list.map((x) => `<tr><td><b>${esc(x.simbolo)}</b><br><span class="why">${hhmm(x.quando)}</span></td><td class="n">${qty(x.quantita)}</td><td class="n">${px(x.prezzo)}</td><td class="n">${x.prezzoOra !== null ? px(x.prezzoOra) : '–'}</td><td class="n ${cls(x.virtuale ?? 0)}">${x.virtuale !== null ? `${usd(x.virtuale)}<br><span class="why">${pct(x.risultato)}</span>` : '–'}</td><td class="why">${(x.agenti || []).map(agentName).join(', ')}</td></tr>`).join('')}</tbody></table>`;
+}
+function paintCapo(st) {
+  const c = st.capo;
+  if (!c) { $('#capo').innerHTML = '<p class="empty">Nessun dato.</p>'; return; }
+  $('#capo').innerHTML = `<p>${esc(c.sintesi)}</p>${(c.valutazioni || []).map((v) => `<div class="vote"><b>${esc(agentName(v.agente))}</b> <span class="pill ${v.giudizio === 'richiamato' ? 'down' : v.giudizio === 'ottimo' || v.giudizio === 'bene' ? 'up' : ''}">${esc(v.giudizio)}</span> <span class="why">${v.vinti}/${v.trade} vinti · ${usd(v.risultato)}</span><br><span class="why">${esc(v.messaggio)}</span>${v.consigli.length ? `<ul style="margin:4px 0; padding-left:18px">${v.consigli.map((x) => `<li class="why">${esc(x)}</li>`).join('')}</ul>` : ''}</div>`).join('')}`;
+}
+function paintVotes(st) {
+  const sig = st.segnali || [];
+  $('#votes').innerHTML = sig.length ? sig.map((s) => `<div class="vote"><span class="pill agent">${agentName(s.agente)}</span> <span class="${s.lato === 'buy' ? 'up' : 'down'}"><b>${s.lato === 'buy' ? 'compra' : 'vendi'} ${esc(s.simbolo)}</b></span> forza ${s.forza.toFixed(2).replace('.', ',')}${s.vincolante ? ' <span class="pill warn">regola</span>' : ''}${s.intraday ? ' <span class="pill">intraday</span>' : ''}<br><span class="why">${esc(s.perche)}</span></div>`).join('') : '<p class="empty">Nessun voto nell\u2019ultimo giro.</p>';
+}
+
+// ---------- impostazioni ----------
+async function loadSettings() {
+  try {
+    const s = await (await fetch('/api/impostazioni')).json();
+    $('#alpaca-now').textContent = s.alpacaKeyId ? `Attuali: key ${s.alpacaKeyId}, secret ${s.alpacaSecretKey}. Lascia vuoto un campo per non cambiarlo.` : 'Nessuna chiave Alpaca salvata.';
+    $('#telegram-now').textContent = `${s.telegramBotToken ? `Attuali: token ${s.telegramBotToken}${s.telegramChatId ? `, chat id ${s.telegramChatId}` : ', chat id mancante'}.` : 'Nessun bot Telegram salvato (i messaggi finiscono in state/telegram-outbox.log).'} ${s.xBearerToken ? `X: token ${s.xBearerToken}.` : 'X: nessun token (solo Google News).'}`;
+  } catch {}
+}
+const formData = (f) => Object.fromEntries([...new FormData(f).entries()].map(([k, v]) => [k, String(v).trim()]));
+async function saveSettings(form, msgEl) {
+  msgEl.textContent = 'Salvo…';
+  const r = await fetch('/api/impostazioni', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(formData(form)) });
+  const d = await r.json();
+  msgEl.textContent = d.ok ? `${d.cambiati.length ? `Cambiati: ${d.cambiati.join(', ')}. ` : 'Niente di nuovo. '}${d.nota}` : `Non salvato: ${d.errore}`;
+  if (d.ok) { form.reset(); loadSettings(); }
+}
+async function testSettings(form, msgEl) {
+  msgEl.textContent = 'Provo…';
+  const r = await fetch('/api/impostazioni/prova', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ...formData($('#f-alpaca')), ...formData($('#f-telegram')) }) });
+  const d = await r.json();
+  msgEl.textContent = form.id === 'f-alpaca' ? `Alpaca: ${d.alpaca}` : `Telegram: ${d.telegram}`;
+  if (d.chatId && form.id === 'f-telegram') form.elements.telegramChatId.value = d.chatId;
+}
+$('#f-alpaca').addEventListener('submit', (e) => { e.preventDefault(); saveSettings(e.target, $('#alpaca-msg')); });
+$('#f-telegram').addEventListener('submit', (e) => { e.preventDefault(); saveSettings(e.target, $('#telegram-msg')); });
+$('#prova-alpaca').addEventListener('click', () => testSettings($('#f-alpaca'), $('#alpaca-msg')));
+$('#prova-telegram').addEventListener('click', () => testSettings($('#f-telegram'), $('#telegram-msg')));
+$('#riavvia').addEventListener('click', async () => {
+  const b = $('#riavvia'); b.disabled = true;
+  try { const d = await (await fetch('/api/riavvia', { method: 'POST' })).json(); $('#riavvia-msg').textContent = d.nota; } catch (e) { $('#riavvia-msg').textContent = `Richiesta non riuscita: ${e.message}`; }
+  setTimeout(() => { b.disabled = false; }, 15000);
+});
+
+// ---------- schede degli agenti ----------
+const fmtVal = (p, v) => p.tipo === 'percento' ? String(Math.round(v * 10000) / 100) : String(v);
+const parseVal = (p, raw) => p.tipo === 'percento' ? Number(String(raw).replace(',', '.')) / 100 : p.tipo === 'bool' ? raw : String(raw).replace(',', '.');
+async function loadCards() {
+  const d = await (await fetch('/api/agenti/schede')).json();
+  $('#schede').innerHTML = d.schede.map((c) => `<form class="scheda" data-agente="${esc(c.agente)}"><h3>${esc(c.titolo)}</h3><div class="ruolo">${esc(c.ruolo)}</div><details><summary>Come decide</summary><div class="ruolo" style="margin-top:6px">${esc(c.come)}</div></details>
+    ${c.parametri.map((p) => `<label class="prm ${p.cambiato ? 'cambiato' : ''}" title="di serie: ${esc(fmtVal(p, p.diSerie))}"><span>${esc(p.etichetta)}${p.tipo === 'percento' ? ' (%)' : ''}<small>${esc(p.descrizione)}</small></span>${p.tipo === 'bool' ? `<select name="${esc(p.chiave)}" data-tipo="bool"><option value="true" ${p.attuale ? 'selected' : ''}>sì</option><option value="false" ${!p.attuale ? 'selected' : ''}>no</option></select>` : p.tipo === 'scelta' ? `<select name="${esc(p.chiave)}" data-tipo="scelta">${p.opzioni.map((o) => `<option ${o === p.attuale ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select>` : `<input name="${esc(p.chiave)}" data-tipo="${p.tipo}" value="${esc(fmtVal(p, p.attuale))}" ${p.tipo === 'ora' ? 'placeholder="HH:MM"' : `type="number" step="${p.tipo === 'intero' ? 1 : p.tipo === 'percento' ? 0.01 : (p.passo ?? 0.01)}" ${p.min !== undefined ? `min="${p.tipo === 'percento' ? p.min * 100 : p.min}"` : ''} ${p.max !== undefined ? `max="${p.tipo === 'percento' ? p.max * 100 : p.max}"` : ''}`}>`}</label>`).join('')}
+    <div class="row" style="justify-content:space-between"><button type="button" class="btn ghost reset">Di serie</button><button type="submit" class="btn">Salva</button></div><div class="msg"></div></form>`).join('');
+  for (const f of $('#schede').querySelectorAll('form')) {
+    const card = d.schede.find((c) => c.agente === f.dataset.agente);
+    f.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const body = {};
+      for (const p of card.parametri) { const el = f.elements[p.chiave]; body[p.chiave] = parseVal(p, el.value); }
+      const r = await fetch('/api/agenti/schede', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ...(await currentSaved()), ...body }) });
+      const x = await r.json();
+      f.querySelector('.msg').textContent = x.ok ? x.nota : `Non salvato: ${x.errori.join('; ')}`;
+      if (x.ok) loadCards();
+    });
+    f.querySelector('.reset').addEventListener('click', async () => {
+      const body = {};
+      for (const p of card.parametri) body[p.chiave] = '';
+      const saved = await currentSaved();
+      for (const k of Object.keys(body)) delete saved[k];
+      const r = await fetch('/api/agenti/schede', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(saved) });
+      const x = await r.json();
+      f.querySelector('.msg').textContent = x.ok ? 'Riportati ai valori di serie.' : `Errore: ${x.errori.join('; ')}`;
+      if (x.ok) loadCards();
+    });
+  }
+}
+// I valori salvati di tutte le schede (il salvataggio di una scheda non deve cancellare le altre).
+async function currentSaved() {
+  const d = await (await fetch('/api/agenti/schede')).json();
+  const out = {};
+  for (const c of d.schede) for (const p of c.parametri) if (p.cambiato) out[p.chiave] = p.attuale;
+  return out;
+}
+
+// ---------- cronologia ----------
+const evBox = $('#events');
+const IMPORTANT = new Set(['ordine', 'trade', 'allarme', 'rifiuto', 'stop', 'contesto', 'nota']);
+let filter = 'important';
+try { filter = localStorage.getItem('agenti.filtro') || 'important'; } catch {}
+const allEvents = [];
+const side = (lato) => lato === 'buy' ? 'compra' : 'vende';
+function describe(e) {
+  switch (e.tipo) {
+    case 'tick': return `Nuovo giro ${esc(e.giro)}`;
+    case 'conto': return `Patrimonio ${money(e.patrimonio)}, oggi ${usd(e.pnlGiorno)}, borsa ${e.mercatoAperto ? 'aperta' : 'chiusa'}`;
+    case 'prezzi': return `Prezzi letti: ${Object.entries(e.prezzi || {}).map(([k, v]) => `${esc(k)} ${fmt(v)}`).join(', ')}`;
+    case 'agente': return `<span class="pill agent">${agentName(e.agente)}</span> ${e.errore ? `<span class="down">${esc(cleanErr(e.errore))}</span>` : `${e.segnali === 0 ? 'nessun segnale' : `${e.segnali} segnali`}${e.rischio !== null && e.rischio !== undefined ? `, rischio ammesso ${Math.round(e.rischio * 100)}%` : ''}${e.note?.length ? `. ${e.note.map(esc).join(' ')}` : ''}`}`;
+    case 'segnale': return `<span class="pill agent">${agentName(e.agente)}</span> vota <span class="${e.lato === 'buy' ? 'up' : 'down'}"><b>${side(e.lato)} ${esc(e.simbolo)}</b></span> con forza ${Number(e.forza).toFixed(2).replace('.', ',')}: ${esc(e.perche)}`;
+    case 'contesto': return `Contesto economico <b>${esc(e.generale)}</b>: ${esc(e.motivo)}${Object.keys(e.attendi || {}).length ? `. In attesa: ${Object.keys(e.attendi).map(esc).join(', ')}` : ''}`;
+    case 'rischio': return `Rischio ammesso ${Math.round(e.rischio * 100)}%${(e.note || []).length ? `: ${e.note.map(esc).join(' ')}` : ''}`;
+    case 'allocazione': return `Proposte: ${(e.proposte || []).map((p) => `${side(p.side)} ${qty(p.qty)} ${esc(p.symbol)}`).join(', ') || 'nessuna'}`;
+    case 'ordine': return `<span class="pill ${e.lato === 'buy' ? 'up' : 'down'}">${e.lato === 'buy' ? 'Comprato' : 'Venduto'}</span> <b>${qty(e.quantita)} ${esc(e.simbolo)}</b> — ${esc(e.esito)}${e.stato ? ` (${esc(e.stato)})` : ''}${e.errore ? ` <span class="down">${esc(cleanErr(e.errore))}</span>` : ''}`;
+    case 'rifiuto': return `<span class="pill">Fermato dalle regole</span> ${side(e.lato)} ${qty(e.quantita)} <b>${esc(e.simbolo)}</b>: ${esc(e.motivo)}`;
+    case 'stop': return `Stop di protezione ${e.azione === 'piazzato' ? 'messo' : 'tolto'}: ${esc(cleanErr(e.dettaglio))}`;
+    case 'trade': return e.stato === 'aperto'
+      ? `<span class="pill up">Posizione aperta</span> <b>${esc(e.simbolo)}</b> ${qty(e.quantita)} a ${fmt(e.prezzo)}${(e.agenti || []).length ? ` su voto di ${e.agenti.map(agentName).join(', ')}` : ''}`
+      : `<span class="pill ${cls(e.risultato)}">Posizione chiusa</span> <b>${esc(e.simbolo)}</b> <span class="${cls(e.risultato)}"><b>${e.pnl !== undefined ? usd(e.pnl) : ''}</b> (${pct(e.risultato)})</span> dopo ${e.giorni} giorni: ${esc(e.uscita)}`;
+    case 'capo': return `<span class="pill agent">Capo ufficio</span> ${esc(e.sintesi)}${(e.richiamati || []).length ? ` <span class="down">Richiamati: ${e.richiamati.map((r) => esc(r.agente)).join(', ')}</span>` : ''}`;
+    case 'allarme': return `<b>${esc(e.titolo)}</b>: ${esc(cleanErr(e.dettaglio))}`;
+    default: return esc(e.testo ?? JSON.stringify(e));
+  }
+}
+function renderEvents() {
+  const list = filter === 'all' ? allEvents : allEvents.filter((e) => IMPORTANT.has(e.tipo));
+  evBox.innerHTML = list.length ? list.slice(0, 400).map((e) => `<div class="ev ${e.tipo === 'allarme' ? 'alarm' : IMPORTANT.has(e.tipo) ? '' : 'quiet'}"><time>${hhmm(e.t)}</time><div>${describe(e)}</div></div>`).join('')
+    : `<p class="empty">${filter === 'all' ? 'Nessun evento oggi.' : 'Niente di importante oggi: nessun ordine, nessuna posizione chiusa, nessun avviso. Con «Tutto» vedi anche i giri e i segnali.'}</p>`;
+}
+for (const b of document.querySelectorAll('.filters button')) {
+  b.setAttribute('aria-pressed', String(b.dataset.f === filter));
+  b.addEventListener('click', () => {
+    filter = b.dataset.f;
+    try { localStorage.setItem('agenti.filtro', filter); } catch {}
+    for (const x of document.querySelectorAll('.filters button')) x.setAttribute('aria-pressed', String(x === b));
+    renderEvents();
+  });
+}
+function noteEvent(e) {
+  if (e.tipo === 'tick' && (!lastTick || e.t > lastTick.t)) lastTick = e;
+  if (e.tipo === 'allarme' && (!lastAlarm || e.t > lastAlarm.t)) lastAlarm = e;
+}
+function addEvent(e, live) {
+  noteEvent(e);
+  allEvents.unshift(e);
+  if (allEvents.length > 2000) allEvents.length = 2000;
+  if (!live) return;
+  renderEvents();
+  sceneEvent(e);
+  if (e.tipo === 'nota' && /proiezioni/.test(e.testo || '')) { forecasts = null; if (selected) loadSymbol(selected); }
+  if (e.tipo === 'prezzi' || e.simbolo === selected || (e.tipo === 'stop' && String(e.dettaglio || '').startsWith(selected + ' '))) { drawChart(); if (e.tipo !== 'prezzi') renderFeed(); }
+  if (e.tipo === 'tick' || e.tipo === 'allocazione' || e.tipo === 'allarme') loadStatus(); else sayState();
+}
+async function loadEvents() {
+  try {
+    const d = await (await fetch('/api/events?n=400')).json();
+    allEvents.length = 0; lastTick = null; lastAlarm = null;
+    for (const e of d.eventi) addEvent(e, false);
+    renderEvents(); sayState();
+  } catch {}
+}
+function connect() {
+  if (window.STATIC_MODE) { // niente websocket: si rilegge l'istantanea ogni minuto
+    $('#live').classList.add('on'); $('#live').title = 'pagina pubblica: istantanea aggiornata dal motore';
+    setInterval(async () => { await loadEvents(); await loadStatus(); }, 60_000);
+    return;
+  }
+  const ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`);
+  ws.onopen = () => { $('#live').classList.add('on'); $('#live').title = 'collegato al motore in diretta'; };
+  ws.onmessage = (m) => { try { addEvent(JSON.parse(m.data), true); } catch {} };
+  ws.onclose = () => { $('#live').classList.remove('on'); $('#live').title = 'collegamento interrotto, riprovo'; setTimeout(connect, 3000); };
+}
+if (window.STATIC_MODE) {
+  // pagina pubblica: niente chiavi, niente modifiche, niente valutazioni in diretta
+  document.querySelector('.page[data-page="impostazioni"]').innerHTML = '<section class="card"><h2>Impostazioni</h2><p class="why">Questa è la pagina pubblica, in sola lettura: chiavi, schede e riavvio si gestiscono dalla dashboard sul PC (http://127.0.0.1:8787).</p></section>';
+  $('#ask').disabled = true; $('#ask').title = 'disponibile solo sulla dashboard del PC';
+}
+(async () => { await loadEvents(); await loadStatus(); connect(); })();
+setInterval(loadStatus, 15000);
+setInterval(sayState, 60000);
+</script>
+</body>
+</html>
