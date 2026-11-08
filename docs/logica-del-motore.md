@@ -348,15 +348,15 @@ Menu a sinistra (sul telefono si apre con ☰):
 - **Dashboard**: frase di stato; capitale (patrimonio totale, investito, liquidità, risultato sulle posizioni aperte,
   oggi, rischio, confronto con SPY); **rendimento per periodo** (oggi, 7 e 30 giorni, mese, anno, tutto o date a
   scelta: variazione del patrimonio dallo storico di Alpaca, realizzato, operazioni chiuse e vinte, migliore e
-  peggiore, ribasso massimo, grafico del patrimonio, giorno per giorno); profitto e perdita di oggi, ultimo giro,
-  situazione in breve, registro della giornata;
-- **Ufficio**: la mappa 3D con gli agenti (clic per la scheda: situazione, ragionamento, giudizio del capo,
-  impostazioni) e sotto capo ufficio, custodi, ultimo giro con punteggi e voti, esplorazione, sala caffè, **cervello
-  delle previsioni** e **biblioteca degli agenti**;
+  peggiore, ribasso massimo, grafico del patrimonio, giorno per giorno); profitto e perdita di oggi, situazione in breve;
+- **Ufficio**: la mappa 3D con gli agenti e a destra il loro elenco (passando sopra un nome l'avatar si alza e si
+  illumina; clic per la scheda); sotto, a schede: Decisioni (punteggi e voti), Trading agents (i custodi dei titoli),
+  Previsioni (cervello), Esplorazione, Sala caffè (lezioni), Biblioteca;
 - **Investimenti**: card dei titoli in portafoglio e in osservazione; clic per il **grafico** (TradingView Lightweight
   Charts, Apache 2.0, incluso nel repository) con time frame 1m, 5m, 15m, 1h, 4h, 1G, medie, volumi, carico, stop,
   obiettivo, operazioni e la **proiezione dei modelli con il cono** al 50% e all'80%; le candele da 1 e 5 minuti si
   aggiornano ogni 15 secondi; poi operazioni intraday, simulazioni e tabella delle posizioni;
+- **Log operazioni**: acquisti e vendite eseguiti negli ultimi 7 giorni, con ricerca e filtri, risultato di ogni vendita;
 - **Impostazioni**: schede degli agenti con i parametri, chiavi, riavvio;
 - **Guida**.
 

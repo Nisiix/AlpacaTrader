@@ -314,6 +314,20 @@
   details.fold > summary::-webkit-details-marker { display:none; }
   .office-card dl.kv { font-size:13px; margin:8px 0; }
   .office-card h4 { margin:12px 0 4px; font-size:13px; text-transform:uppercase; letter-spacing:.04em; color:var(--ink-3); }
+  .tabs { display:flex; gap:4px; flex-wrap:wrap; margin:16px 0 0; border-bottom:1px solid var(--line); }
+  .tabs button { font:inherit; font-size:14px; font-weight:500; padding:9px 14px; border:0; border-bottom:2px solid transparent; background:transparent; color:var(--ink-2); cursor:pointer; margin-bottom:-1px; }
+  .tabs button[aria-selected="true"] { color:var(--ink); border-bottom-color:var(--ink); font-weight:600; }
+  .tabs button:focus-visible { outline:2px solid var(--agent); outline-offset:-2px; }
+  .tabpanel { border-top-left-radius:0; border-top-right-radius:0; border-top:0; }
+  .tabpanel[hidden] { display:none; }
+  .log-tools { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+  .log-tools input[type="search"] { font:inherit; flex:1 1 260px; padding:9px 12px; border-radius:10px; border:1px solid var(--line); background:var(--card-2); color:var(--ink); }
+  .log-day { margin:16px 0 6px; font-size:13px; font-weight:600; color:var(--ink-3); text-transform:uppercase; letter-spacing:.04em; }
+  .log-row { display:grid; grid-template-columns:52px 90px minmax(90px, 140px) 1fr auto; gap:10px; align-items:baseline; padding:9px 4px; border-bottom:1px solid var(--line); cursor:pointer; font-size:14px; }
+  .log-row:hover { background:var(--card-2); }
+  .log-row .q { color:var(--ink-2); }
+  .log-row .r { text-align:right; white-space:nowrap; }
+  @media (max-width: 700px) { .log-row { grid-template-columns:44px 1fr auto; } .log-row .op { display:none; } .log-row .why { grid-column:1 / -1; } }
   @media (prefers-reduced-motion: reduce) { * { transition:none !important; } }
 </style>
 <script src="./vendor/lightweight-charts.js"></script>
@@ -327,6 +341,7 @@
       <a href="#dashboard" data-page="dashboard"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 13h8V3H3zm0 8h8v-6H3zm10 0h8V11h-8zm0-18v6h8V3z"/></svg><span>Dashboard</span></a>
       <a href="#ufficio" data-page="ufficio"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 11a3 3 0 1 0-3-3 3 3 0 0 0 3 3m-8 0a3 3 0 1 0-3-3 3 3 0 0 0 3 3m0 2c-2.3 0-7 1.2-7 3.5V19h14v-2.5C15 14.2 10.3 13 8 13m8 0c-.3 0-.6 0-1 .1 1.2.8 2 2 2 3.4V19h6v-2.5c0-2.3-4.7-3.5-7-3.5"/></svg><span>Ufficio</span></a>
       <a href="#investimenti" data-page="investimenti"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17l6-6 4 4 8-8v4h2V3h-8v2h4l-6 6-4-4-8 8z"/></svg><span>Investimenti</span></a>
+      <a href="#log" data-page="log"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h2v2H4zm4 0h12v2H8zM4 11h2v2H4zm4 0h12v2H8zm-4 6h2v2H4zm4 0h12v2H8z"/></svg><span>Log operazioni</span></a>
       <a href="#impostazioni" data-page="impostazioni"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.4 13a7.5 7.5 0 0 0 0-2l2.1-1.6-2-3.5-2.5 1a7.4 7.4 0 0 0-1.7-1L15 3h-4l-.4 2.7a7.4 7.4 0 0 0-1.7 1l-2.5-1-2 3.5L6.6 11a7.5 7.5 0 0 0 0 2l-2.1 1.6 2 3.5 2.5-1c.5.4 1.1.7 1.7 1L11 21h4l.4-2.7c.6-.3 1.2-.6 1.7-1l2.5 1 2-3.5zM13 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7"/></svg><span>Impostazioni</span></a>
       <a href="#guida" data-page="guida"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2m1 17h-2v-2h2zm2.1-7.7-.9.9A3.3 3.3 0 0 0 13 15h-2v-.5a4.1 4.1 0 0 1 1.2-2.8l1.2-1.3a2 2 0 1 0-3.4-1.4H8a4 4 0 1 1 7.1 2.3"/></svg><span>Guida</span></a>
   </nav>
@@ -363,35 +378,13 @@
       <div id="eq-chart" style="margin-top:10px" role="img" aria-label="andamento del patrimonio nel periodo"></div>
       <div id="periodo-giorni" style="margin-top:12px"></div>
     </section>
-    <div class="cols" style="margin-top:16px">
-      <div class="stack">
-        <section class="card">
-          <h2>Profitto e perdita di oggi</h2>
-          <div id="pnl"></div>
-        </section>
-      </div>
-      <div class="stack">
-        <section class="card">
-          <h2>Ultimo giro degli agenti</h2>
-          <div class="row" id="context" style="margin-bottom:10px"></div>
-          <div id="decisions"></div>
-          <p class="why" id="intraday-note" style="margin-top:8px"></p>
-        </section>
-      </div>
-    </div>
+    <section class="card" style="margin-top:16px">
+      <h2>Profitto e perdita di oggi</h2>
+      <div id="pnl"></div>
+    </section>
     <section class="card" style="margin-top:16px">
       <h2>In breve <small>la situazione adesso</small></h2>
       <div class="kpis" id="dash-kpi"></div>
-    </section>
-    <section class="card" id="registro" style="margin-top:16px">
-      <div class="top" style="margin-bottom:10px">
-        <h2 style="margin:0">Registro della giornata <small>le azioni ripetute a ogni giro compaiono una volta sola</small></h2>
-        <div class="filters" role="group" aria-label="filtro eventi">
-          <button type="button" data-f="important" aria-pressed="true">Importanti</button>
-          <button type="button" data-f="all" aria-pressed="false">Tutto</button>
-        </div>
-      </div>
-      <div id="events"></div>
     </section>
   </div>
 
@@ -399,53 +392,39 @@
   <div class="page" data-page="ufficio">
     <h1 class="page-title">Ufficio</h1>
       <details class="scene" id="scene-box" open>
-      <summary>Ufficio degli agenti <span class="hint">trascina per girare, rotella per avvicinarti</span></summary>
+      <summary>Ufficio degli agenti <span class="hint">camicia: blu pronto · verde in posizione · rosso in uscita · grigio in attesa · arancione intraday</span></summary>
       <div class="scene-wrap"><div id="scene"></div><aside class="agent-list" id="agent-list" aria-label="agenti dell'ufficio"></aside></div>
-      <p class="legend">In fondo la <b>Direzione</b> (gli agenti generali) davanti alla <b>lavagna dei risultati</b>; poi i <b>Custodi</b>, una scrivania per titolo seguito, con la camicia del colore della fase (blu pronto, verde in posizione, rosso in uscita, grigio in attesa) e lo schermo con prezzo e andamento; infine la <b>Sala intraday</b> (arancione). A destra, oltre la porta, la <b>Sala caffè</b>: chi in questo giro non ha niente da fare si siede ai tavolini e scambia con i colleghi dati veri (dossier, candele, proiezioni di Kronos, lezioni dei trade chiusi); appena ha un trade da aprire o una posizione da seguire torna alla scrivania. Chi vota alza la mano, chi compra o vende si alza e lo schermo lampeggia. Mouse sopra per leggere, clic per aprire. A destra l'elenco degli agenti: passando sopra un nome il suo avatar si alza in piedi e la postazione si illumina; il clic apre la scheda.</p>
+      <p class="legend" hidden>In fondo la <b>Direzione</b> (gli agenti generali) davanti alla <b>lavagna dei risultati</b>; poi i <b>Custodi</b>, una scrivania per titolo seguito, con la camicia del colore della fase (blu pronto, verde in posizione, rosso in uscita, grigio in attesa) e lo schermo con prezzo e andamento; infine la <b>Sala intraday</b> (arancione). A destra, oltre la porta, la <b>Sala caffè</b>: chi in questo giro non ha niente da fare si siede ai tavolini e scambia con i colleghi dati veri (dossier, candele, proiezioni di Kronos, lezioni dei trade chiusi); appena ha un trade da aprire o una posizione da seguire torna alla scrivania. Chi vota alza la mano, chi compra o vende si alza e lo schermo lampeggia. Mouse sopra per leggere, clic per aprire. A destra l'elenco degli agenti: passando sopra un nome il suo avatar si alza in piedi e la postazione si illumina; il clic apre la scheda.</p>
     </details>
-    <div class="cols" style="margin-top:16px">
-      <div class="stack">
-          <section class="card">
-            <h2>Capo ufficio <small>risultati di ogni agente, richiami e consigli</small></h2>
-            <div id="capo"></div>
-          </section>
-          <section class="card">
-            <h2>Custodi <small>un investitore per titolo seguito; clic per il grafico</small></h2>
-            <div class="custode-list" id="custodi"></div>
-          </section>
-      </div>
-      <div class="stack">
-          <section class="card">
-            <h2>Ultimo giro <small>chi ha votato e il punteggio per titolo: sopra +0,5 si compra, sotto −0,5 si vende</small></h2>
-            <div class="row" id="agents"></div>
-            <p class="why" id="journal" style="margin:10px 0"></p>
-            <div id="scores"></div>
-            <details style="margin-top:10px"><summary class="why" style="cursor:pointer">Tutti i voti con il motivo</summary><div id="votes" style="margin-top:8px"></div></details>
-          </section>
-          <section class="card">
-            <h2>Esplorazione <small>gli agenti in pausa cercano opportunità fuori dal loro titolo; chi trova torna alla scrivania</small></h2>
-            <div id="esplorazione"></div>
-          </section>
-          <section class="card">
-            <h2>Sala caffè <small>chi non ha niente da fare si scambia dati e lezioni; chi ha un trade da aprire torna alla scrivania</small></h2>
-            <div id="caffe"></div>
-          </section>
-      </div>
-    </div>
-    <div class="cols" style="margin-top:16px">
-      <div class="stack">
-    <section class="card">
-      <h2>Cervello delle previsioni <small>Kronos e gli altri modelli: pesa di più chi è più affidabile e indovina più spesso la direzione</small></h2>
+    <nav class="tabs" id="uff-tabs" role="tablist" aria-label="sezioni dell'ufficio">
+      <button type="button" role="tab" data-tab="decisioni">Decisioni</button>
+      <button type="button" role="tab" data-tab="agents">Trading agents</button>
+      <button type="button" role="tab" data-tab="previsioni">Previsioni</button>
+      <button type="button" role="tab" data-tab="esplorazione">Esplorazione</button>
+      <button type="button" role="tab" data-tab="caffe">Sala caffè</button>
+      <button type="button" role="tab" data-tab="biblioteca">Biblioteca</button>
+    </nav>
+    <section class="card tabpanel" role="tabpanel" data-tab="decisioni">
+      <p class="why" style="margin-bottom:10px">Punteggio per titolo nell'ultimo giro: da +0,5 si compra, da −0,5 si vende.</p>
+      <div id="scores"></div>
+      <details style="margin-top:12px"><summary class="why" style="cursor:pointer">I voti con il motivo</summary><div id="votes" style="margin-top:8px"></div></details>
+    </section>
+    <section class="card tabpanel" role="tabpanel" data-tab="agents">
+      <p class="why" style="margin-bottom:10px">Un trading agent per titolo seguito: probabilità favorevole e prossima mossa. Clic per il grafico.</p>
+      <div class="custode-list" id="custodi"></div>
+    </section>
+    <section class="card tabpanel" role="tabpanel" data-tab="previsioni">
       <div id="cervello"></div>
     </section>
-      </div>
-      <div class="stack">
-    <section class="card">
-      <h2>Biblioteca degli agenti <small>i principi dei libri di trading più noti, tradotti in regole che il motore applica</small></h2>
+    <section class="card tabpanel" role="tabpanel" data-tab="esplorazione">
+      <div id="esplorazione"></div>
+    </section>
+    <section class="card tabpanel" role="tabpanel" data-tab="caffe">
+      <div id="caffe"></div>
+    </section>
+    <section class="card tabpanel" role="tabpanel" data-tab="biblioteca">
       <div id="biblioteca"></div>
     </section>
-      </div>
-    </div>
   </div>
 
   <!-- Investimenti: le card dei titoli in portafoglio e in osservazione; clic per il grafico con la proiezione dei modelli. -->
@@ -497,6 +476,20 @@
     <p class="verdict" id="verdict">Scegli un titolo.</p>
     <div id="verdict-body"></div>
   </dialog>
+
+  <!-- Log operazioni: gli acquisti e le vendite eseguiti, ultimi 7 giorni, con ricerca. -->
+  <div class="page" data-page="log">
+    <h1 class="page-title">Log operazioni</h1>
+    <section class="card">
+      <div class="log-tools">
+        <input type="search" id="log-q" placeholder="Cerca titolo, agente o motivo…" aria-label="cerca nelle operazioni">
+        <div class="filters" id="log-tipo" role="group" aria-label="tipo di operazione"><button type="button" data-t="tutte" aria-pressed="true">Tutte</button><button type="button" data-t="buy" aria-pressed="false">Acquisti</button><button type="button" data-t="sell" aria-pressed="false">Vendite</button></div>
+        <div class="filters" id="log-giorni" role="group" aria-label="periodo"><button type="button" data-g="1" aria-pressed="false">Oggi</button><button type="button" data-g="3" aria-pressed="false">3 giorni</button><button type="button" data-g="7" aria-pressed="true">7 giorni</button></div>
+      </div>
+      <div id="log-sommario" class="why" style="margin:12px 0"></div>
+      <div id="log"></div>
+    </section>
+  </div>
 
   <!-- Impostazioni: come si regolano gli agenti, le chiavi e il motore. -->
   <div class="page" data-page="impostazioni">
@@ -556,9 +549,10 @@
       <h3>3. Le pagine</h3>
       <p>Il menu è a sinistra (sul telefono si apre con ☰).</p>
       <ul>
-        <li><b>Dashboard</b>: la frase di stato e il capitale (patrimonio totale, investito, liquidità, risultato sulle posizioni aperte, oggi, rischio ammesso, confronto con SPY); il <b>rendimento per periodo</b> con i filtri Oggi, 7 giorni, 30 giorni, Mese, Anno, Tutto o date a scelta (variazione del patrimonio dallo storico di Alpaca, risultato realizzato, operazioni chiuse e vinte, migliore e peggiore, ribasso massimo, grafico del patrimonio e risultato giorno per giorno); poi profitto e perdita di oggi, l'ultimo giro degli agenti, la situazione in breve e il <b>registro</b> della giornata («Importanti» mostra ordini, posizioni, rifiuti, stop e avvisi; le azioni ripetute compaiono una volta sola).</li>
-        <li><b>Ufficio</b>: la mappa 3D con gli agenti alle loro postazioni. In fondo la Direzione e la lavagna con successi e insuccessi di ogni agente, il capo nella stanza di vetro; poi i Custodi (la camicia dice la fase: blu pronto, verde in posizione, rosso in uscita, grigio in attesa) e la Sala intraday (arancione). Chi vota alza la mano, chi compra o vende si alza e lo schermo lampeggia. Oltre la porta, la <b>Sala caffè</b>. Mouse sopra per leggere, clic per la scheda dell'agente (situazione, ragionamento, giudizio del capo, impostazioni). Sotto la mappa: capo ufficio, custodi, ultimo giro con i punteggi e tutti i voti, esplorazione, sala caffè, il <b>cervello delle previsioni</b> e la <b>biblioteca degli agenti</b> (i principi dei libri di trading applicati dal motore).</li>
+        <li><b>Dashboard</b>: la frase di stato e il capitale (patrimonio totale, investito, liquidità, risultato sulle posizioni aperte, oggi, rischio ammesso, confronto con SPY); il <b>rendimento per periodo</b> con i filtri Oggi, 7 giorni, 30 giorni, Mese, Anno, Tutto o date a scelta (variazione del patrimonio dallo storico di Alpaca, risultato realizzato, operazioni chiuse e vinte, migliore e peggiore, ribasso massimo, grafico del patrimonio e risultato giorno per giorno); poi profitto e perdita di oggi e la situazione in breve.</li>
+        <li><b>Ufficio</b>: la mappa 3D con gli agenti alle loro postazioni (Direzione con la lavagna dei risultati e il capo nella stanza di vetro, Trading agents, Sala intraday, Sala caffè); la camicia dice la fase: blu pronto, verde in posizione, rosso in uscita, grigio in attesa, arancione intraday. A destra l'elenco degli agenti: passando sopra un nome l'avatar si alza e la postazione si illumina; il clic apre la scheda (situazione, ragionamento, giudizio del capo, impostazioni). Sotto, a schede: <b>Decisioni</b> (punteggio per titolo e voti), <b>Trading agents</b>, <b>Previsioni</b> (il cervello dei modelli), <b>Esplorazione</b>, <b>Sala caffè</b> (lezioni di squadra) e <b>Biblioteca</b> (i principi dei libri di trading applicati dal motore).</li>
         <li><b>Investimenti</b>: le card dei titoli e delle crypto in portafoglio (valore, guadagno, carico e prezzo, peso, da quanto è aperta, obiettivo e stop dell'intraday) e quelle in osservazione (custodi, voti, attese); più in basso il radar. Il clic su una card apre il <b>grafico</b> (TradingView Lightweight Charts: rotella per lo zoom, trascina per scorrere, mirino con apertura, massimo, minimo e chiusura) con la proiezione dei modelli e il cono di probabilità (fasce 50% e 80%, probabilità di finire sopra o sotto il prezzo di adesso), medie, carico, stop, obiettivo e frecce delle operazioni. Il time frame si sceglie sopra il grafico: 1m, 5m, 15m, 1h, 4h, 1G; le candele brevi si aggiornano da sole (1 e 5 minuti ogni 15 secondi). «Analisi investimento» apre verdetto, voti e dossier del custode; «Chiedi agli agenti adesso» fa una valutazione a secco: nessun ordine parte dalla pagina. Sotto: operazioni intraday, simulazioni e la tabella delle posizioni.</li>
+        <li><b>Log operazioni</b>: gli acquisti e le vendite eseguiti negli ultimi 7 giorni, giorno per giorno, con ricerca per titolo, agente o motivo e filtri per tipo e periodo; per ogni vendita il risultato e quanto è stata tenuta la posizione. Clic su una riga per il grafico.</li>
         <li><b>Impostazioni</b>: le <b>schede degli agenti</b> per regolare i parametri (valgono dal giro successivo), le <b>chiavi</b> di Alpaca, Telegram e X con il riavvio del motore.</li>
         <li><b>Guida</b>: questa pagina.</li>
         <li><b>Pagina pubblica</b>: con «Pagina pubblica su GitHub Pages» nella scheda Motore e gabbia, il PC pubblica ogni N minuti un'istantanea in sola lettura, da aprire anche dal telefono. È visibile a chiunque abbia il link; chiavi e modifiche restano solo sulla dashboard del PC.</li>
@@ -644,8 +638,8 @@ const cls = (x) => x > 0 ? 'up' : x < 0 ? 'down' : '';
 const qty = (q) => Number.isInteger(q) ? String(q) : String(Number(q)).replace('.', ',');
 const hhmm = (iso) => new Date(iso).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
 const DEFAULT_SYMBOLS = ['SPY', 'QQQ', 'AAPL', 'MSFT', 'NVDA', 'GLD', 'BTC/USD', 'ETH/USD', 'IWM', 'TLT'];
-const AGENT_NAMES = { trend: 'Trend', rientro: 'Rientro', regime: 'Regime', orizzonte: 'Orizzonte', uscite: 'Uscite', contesto: 'Contesto', profitto: 'Presa di profitto', kronos: 'Kronos', custodi: 'Custodi', intraday: 'Intraday' };
-const agentName = (n) => AGENT_NAMES[n] ?? n;
+const AGENT_NAMES = { trend: 'Trend', rientro: 'Rientro', regime: 'Regime', orizzonte: 'Orizzonte', uscite: 'Uscite', contesto: 'Contesto', profitto: 'Presa di profitto', kronos: 'Kronos', custodi: 'Trading agents', intraday: 'Intraday' };
+const agentName = (n) => AGENT_NAMES[n] ?? (String(n).startsWith('custode ') ? `Trading agent ${String(n).slice(8)}` : n);
 
 // ---------- ufficio 3D: gli agenti come impiegati alle loro postazioni ----------
 // Tre reparti: la Direzione (gli agenti generali, vicino alla lavagna), i Custodi (una scrivania per titolo seguito, lo
@@ -1075,7 +1069,7 @@ function paintScene(st) {
 }
 
 // In sala caffè si parla: ogni 4 secondi uno scambio vero dallo stato del motore (dossier, candele, Kronos, lezioni, capo).
-const keyName = (k) => k === 'capo' ? 'Capo ufficio' : k.startsWith('a:') ? agentName(k.slice(2)) : k.startsWith('c:') ? `custode ${k.slice(2)}` : k.startsWith('i:') ? `intraday ${k.slice(2)}` : k;
+const keyName = (k) => k === 'capo' ? 'Capo ufficio' : k.startsWith('a:') ? agentName(k.slice(2)) : k.startsWith('c:') ? `Trading agent ${k.slice(2)}` : k.startsWith('i:') ? `intraday ${k.slice(2)}` : k;
 let chatAt = 0, chatIdx = 0;
 function chatTick(now) {
   if (now - chatAt < 4200) return; chatAt = now;
@@ -1458,6 +1452,7 @@ function paintPnl(st) {
 }
 
 function paintDecisions(st) {
+  if (!$('#decisions')) return;
   const cx = st.contesto;
   const tone = cx?.generale === 'favorevole' ? 'up' : cx?.generale === 'sfavorevole' ? 'down' : '';
   $('#context').innerHTML = cx
@@ -1494,6 +1489,7 @@ function paintScores(st) {
 }
 
 function paintAgents(st) {
+  if (!$('#agents')) return;
   const rows = Object.entries(st.agenti || {});
   $('#agents').innerHTML = rows.length ? rows.map(([n, a]) => `<span class="pill ${a.errore ? 'down' : a.segnali ? 'agent' : ''}" title="${esc(a.errore || (a.note || []).join(' · ') || 'nessuna nota')}">${agentName(n)} ${a.errore ? '!' : a.segnali}${st.pesi?.[n] && st.pesi[n] !== 1 ? ` · peso ${String(st.pesi[n]).replace('.', ',')}` : ''}</span>`).join('') : '<p class="empty">Nessun dato.</p>';
   const d = st.diario?.statistiche;
@@ -2017,12 +2013,87 @@ for (const b of $('#periodo-f').querySelectorAll('button')) b.addEventListener('
 $('#p-vai').addEventListener('click', loadPeriodo);
 setInterval(() => { if (currentPage === 'dashboard') loadPeriodo(); }, 120_000);
 
+
+// ---------- ufficio: schede sotto la scena ----------
+{
+  const tabs = [...document.querySelectorAll('#uff-tabs button')];
+  let cur = 'decisioni'; try { cur = localStorage.getItem('agenti.uff.tab') || cur; } catch {}
+  const show = (t) => {
+    cur = tabs.some((b) => b.dataset.tab === t) ? t : 'decisioni';
+    for (const b of tabs) b.setAttribute('aria-selected', String(b.dataset.tab === cur));
+    for (const p of document.querySelectorAll('.tabpanel')) p.hidden = p.dataset.tab !== cur;
+    try { localStorage.setItem('agenti.uff.tab', cur); } catch {}
+  };
+  for (const b of tabs) b.addEventListener('click', () => show(b.dataset.tab));
+  show(cur);
+}
+
+// ---------- log operazioni: acquisti e vendite eseguiti negli ultimi giorni, dal diario dei trade ----------
+let logTipo = 'tutte', logGiorni = 7;
+function operazioniDal(j, giorni) {
+  const da = Date.now() - giorni * 86_400_000;
+  const ops = [];
+  for (const t of j?.trade || []) {
+    const ag = (t.contesto?.agenti || []).map(agentName);
+    const intra = t.contesto?.livelli ? `intraday ${t.contesto.livelli.candela}` : '';
+    const buys = t.acquisti?.length ? t.acquisti : [{ data: t.apertoIl, quantita: t.comprate, prezzo: t.costo / (t.comprate || 1) }];
+    for (const a of buys) ops.push({ t: a.data, lato: 'buy', simbolo: t.simbolo, q: a.quantita, prezzo: a.prezzo, perche: [intra, ag.join(', ')].filter(Boolean).join(' · ') });
+    const sells = t.vendite?.length ? t.vendite : (t.stato === 'chiuso' && t.chiusoIl ? [{ data: t.chiusoIl, quantita: t.vendute, prezzo: t.prezzoUscita ?? t.incassato / (t.vendute || 1), carico: t.costo / (t.comprate || 1), motivo: t.motivoUscita || '' }] : []);
+    for (const v of sells) ops.push({ t: v.data, lato: 'sell', simbolo: t.simbolo, q: v.quantita, prezzo: v.prezzo, pnl: (v.prezzo - v.carico) * v.quantita, ris: v.carico ? v.prezzo / v.carico - 1 : null, perche: String(v.motivo || '').replace(/^agenti: /, '').replace(/^intraday: \S+ intraday \(([^,)]+)[^)]*\): /, 'Intraday $1: ').replace(/^(uscite|profitto|trend|custode \S+): /, ''), dur: t.apertoIl ? durata(t.apertoIl, v.data) : '' });
+  }
+  return ops.filter((o) => o.t && Date.parse(o.t) >= da).sort((a, b) => b.t.localeCompare(a.t));
+}
+async function loadLog() {
+  try { journal = await (await fetch('/api/journal')).json(); } catch {}
+  paintLog();
+}
+function paintLog() {
+  const q = ($('#log-q').value || '').trim().toLowerCase();
+  let ops = operazioniDal(journal, logGiorni);
+  if (logTipo !== 'tutte') ops = ops.filter((o) => o.lato === logTipo);
+  if (q) ops = ops.filter((o) => `${o.simbolo} ${o.perche}`.toLowerCase().includes(q));
+  const vendite = ops.filter((o) => o.lato === 'sell');
+  const pnl = vendite.reduce((a, o) => a + (o.pnl || 0), 0);
+  const vinte = vendite.filter((o) => (o.pnl || 0) > 0).length;
+  $('#log-sommario').innerHTML = ops.length ? `${ops.length} operazioni · ${ops.length - vendite.length} acquisti, ${vendite.length} vendite${vendite.length ? ` · risultato delle vendite <b class="${cls(pnl)}">${usd(pnl)}</b> (${vinte} in guadagno)` : ''}` : '';
+  if (!ops.length) { $('#log').innerHTML = `<p class="empty">Nessuna operazione${q ? ` per «${esc(q)}»` : ''} ${logGiorni === 1 ? 'oggi' : `negli ultimi ${logGiorni} giorni`}.</p>`; return; }
+  let html = '', giorno = '';
+  for (const o of ops.slice(0, 500)) {
+    const g = romeDate(o.t);
+    if (g !== giorno) { giorno = g; html += `<div class="log-day">${new Date(`${g}T12:00:00`).toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' })}</div>`; }
+    const ora = new Date(o.t).toLocaleTimeString('it-IT', { timeZone: 'Europe/Rome', hour: '2-digit', minute: '2-digit' });
+    html += `<div class="log-row" data-sym="${esc(o.simbolo)}" title="apri il grafico"><time class="why">${ora}</time><span class="op"><span class="pill ${o.lato === 'buy' ? 'up' : 'down'}">${o.lato === 'buy' ? 'Acquisto' : 'Vendita'}</span></span><span><b>${esc(o.simbolo)}</b><br><span class="q">${qty(o.q)} a ${px(o.prezzo)}</span></span><span class="why">${esc(o.perche)}${o.dur ? ` · tenuta ${o.dur}` : ''}</span><span class="r">${o.lato === 'sell' ? `<b class="${cls(o.pnl)}">${usd(o.pnl)}</b><br><span class="why">${pct(o.ris)}</span>` : `<span class="why">${money(o.q * o.prezzo)}</span>`}</span></div>`;
+  }
+  $('#log').innerHTML = html;
+  for (const r of $('#log').querySelectorAll('.log-row')) r.addEventListener('click', () => openChart(r.dataset.sym));
+}
+$('#log-q').addEventListener('input', paintLog);
+for (const b of $('#log-tipo').querySelectorAll('button')) b.addEventListener('click', () => { logTipo = b.dataset.t; for (const x of $('#log-tipo').querySelectorAll('button')) x.setAttribute('aria-pressed', String(x === b)); paintLog(); });
+for (const b of $('#log-giorni').querySelectorAll('button')) b.addEventListener('click', () => { logGiorni = Number(b.dataset.g); for (const x of $('#log-giorni').querySelectorAll('button')) x.setAttribute('aria-pressed', String(x === b)); paintLog(); });
+setInterval(() => { if (currentPage === 'log') loadLog(); }, 60_000);
+
+// I «custodi» nella pagina si chiamano «Trading agents»: si rinomina solo il testo mostrato, mai dati o attributi.
+const RINOMINA = [[/\bCustodi\b/g, 'Trading agents'], [/\bcustodi\b/g, 'trading agents'], [/\bCustode\b/g, 'Trading agent'], [/\bcustode\b/g, 'trading agent']];
+function rinominaTesto(root) {
+  if (!root) return;
+  if (root.nodeType === 3) root = root.parentNode;
+  if (!root || root.closest?.('script, style')) return;
+  const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, { acceptNode: (n) => (n.parentNode?.closest?.('script, style') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT) });
+  for (let n = w.nextNode(); n; n = w.nextNode()) {
+    const t = n.nodeValue; if (!/[Cc]ustod/.test(t)) continue;
+    let v = t; for (const [re, r] of RINOMINA) v = v.replace(re, r);
+    if (v !== t) n.nodeValue = v;
+  }
+}
+new MutationObserver((ms) => { for (const m of ms) { if (m.type === 'characterData') rinominaTesto(m.target); else for (const n of m.addedNodes) rinominaTesto(n); } }).observe(document.body, { childList: true, subtree: true, characterData: true });
+rinominaTesto(document.body);
+
 // ---------- pagine ----------
-const PAGES = ['dashboard', 'ufficio', 'investimenti', 'impostazioni', 'guida'];
+const PAGES = ['dashboard', 'ufficio', 'investimenti', 'log', 'impostazioni', 'guida'];
 const SUBS = { impostazioni: ['agenti', 'chiavi'] };
-const NOMI_PAGINE = { dashboard: 'Dashboard', ufficio: 'Ufficio', investimenti: 'Investimenti', impostazioni: 'Impostazioni', guida: 'Guida' };
+const NOMI_PAGINE = { dashboard: 'Dashboard', ufficio: 'Ufficio', investimenti: 'Investimenti', log: 'Log operazioni', impostazioni: 'Impostazioni', guida: 'Guida' };
 // I vecchi indirizzi (segnalibri, link nella guida) portano alla nuova sistemazione.
-const OLD = { panoramica: 'dashboard', oggi: 'investimenti', cronologia: 'dashboard/registro', '3d': 'ufficio', titoli: 'investimenti', 'titoli/registro': 'dashboard/registro', agenti: 'ufficio', 'agenti/squadra': 'ufficio', 'agenti/ufficio': 'ufficio', 'impostazioni/guida': 'guida', schede: 'impostazioni/agenti' };
+const OLD = { panoramica: 'dashboard', oggi: 'investimenti', cronologia: 'log', registro: 'log', 'dashboard/registro': 'log', '3d': 'ufficio', titoli: 'investimenti', 'titoli/registro': 'log', agenti: 'ufficio', 'agenti/squadra': 'ufficio', 'agenti/ufficio': 'ufficio', 'impostazioni/guida': 'guida', schede: 'impostazioni/agenti' };
 function showPage() {
   let h = location.hash.replace('#', '');
   if (OLD[h]) { location.replace(`#${OLD[h]}`); return; }
@@ -2044,7 +2115,7 @@ function showPage() {
   if (officeOn()) { resize(); loadOfficeData(); }
   if (currentPage === 'impostazioni' && currentSub === 'chiavi') loadSettings();
   if (currentPage === 'impostazioni' && currentSub === 'agenti' && !$('#schede').children.length) loadCards();
-  if (currentPage === 'dashboard' && sb === 'registro') setTimeout(() => $('#registro').scrollIntoView({ behavior: 'smooth' }), 50);
+  if (currentPage === 'log') loadLog();
   try { localStorage.setItem('agenti.pagina', currentPage); } catch {}
 }
 window.addEventListener('hashchange', showPage);
@@ -2069,6 +2140,7 @@ function paintSimulazioni(st) {
   $('#simulazioni').innerHTML = `<p class="why" style="margin-bottom:8px">Esito virtuale complessivo <b class="${cls(tot)}">${usd(tot)}</b> su ${list.length} operazioni simulate (nessun ordine inviato).</p><table class="stack-sm"><thead><tr><th>Titolo</th><th class="n">Quantità</th><th class="n">Prezzo simulato</th><th class="n">Ora</th><th class="n">Virtuale</th><th>Agenti</th></tr></thead><tbody>${list.map((x) => `<tr><td><b>${esc(x.simbolo)}</b><br><span class="why">${hhmm(x.quando)}</span></td><td class="n" data-l="Quantità">${qty(x.quantita)}</td><td class="n" data-l="Prezzo simulato">${px(x.prezzo)}</td><td class="n" data-l="Ora">${x.prezzoOra !== null ? px(x.prezzoOra) : '–'}</td><td class="n ${cls(x.virtuale ?? 0)}" data-l="Virtuale">${x.virtuale !== null ? `${usd(x.virtuale)}<br><span class="why">${pct(x.risultato)}</span>` : '–'}</td><td class="why" data-l="Agenti">${(x.agenti || []).map(agentName).join(', ')}</td></tr>`).join('')}</tbody></table>`;
 }
 function paintCapo(st) {
+  if (!$('#capo')) return;
   const c = st.capo;
   if (!c) { $('#capo').innerHTML = '<p class="empty">Nessun dato.</p>'; return; }
   const vs = c.valutazioni || [];
@@ -2101,7 +2173,7 @@ function paintCervello(st) {
   const c = st.cervello;
   if (!c || !c.righe.length) { $('#cervello').innerHTML = `<p class="empty">Nessuna previsione ancora valutata${c ? ` (${c.inAttesa} in attesa della scadenza)` : ''}. Fino a 100 previsioni valutate i modelli pesano per la loro affidabilità (Kronos 100%, Chronos-2 13%, TimesFM 5%).</p>`; return; }
   const rows = c.righe.map((r) => `<tr><td data-l="Previsione">${esc(tipoTxt(r.tipo))}</td><td data-l="Modello"><b>${esc(NOMI_MODELLI[r.modello] || r.modello)}</b></td><td data-l="Affidabilità" class="n">${Math.round((r.affidabilita ?? 0) * 100)}%</td><td data-l="Valutate" class="n">${r.campione}</td><td data-l="Direzione giusta" class="n">${r.inDirezione === null ? '–' : `${Math.round(r.inDirezione * 100)}%`}</td><td data-l="Resa seguendolo" class="n ${r.resaMedia === null ? '' : cls(r.resaMedia)}">${pct(r.resaMedia)}</td><td data-l="Peso adesso" class="n"><b>${Math.round(r.peso * 100)}%</b></td></tr>`).join('');
-  $('#cervello').innerHTML = `<table class="stack-sm"><thead><tr><th>Previsione</th><th>Modello</th><th class="n">Affidabilità</th><th class="n">Valutate</th><th class="n">Direzione giusta</th><th class="n">Resa seguendolo</th><th class="n">Peso adesso</th></tr></thead><tbody>${rows}</tbody></table><p class="why" style="margin-top:8px">${c.inAttesa} previsioni in attesa della scadenza. Peso = affidabilità (dati finanziari con cui il modello è stato addestrato e prove pubblicate) × risultati misurati qui: fino a 100 previsioni valutate conta solo l'affidabilità, poi i risultati la confermano, la alzano o la azzerano. Kronos tiene almeno metà del peso finché non risulta peggiore del caso.</p>`;
+  $('#cervello').innerHTML = `<table class="stack-sm"><thead><tr><th>Previsione</th><th>Modello</th><th class="n">Affidabilità</th><th class="n">Valutate</th><th class="n">Direzione giusta</th><th class="n">Resa seguendolo</th><th class="n">Peso adesso</th></tr></thead><tbody>${rows}</tbody></table><p class="why" style="margin-top:8px">Ogni previsione si confronta con il prezzo vero alla scadenza (${c.inAttesa} in attesa). Il peso di un modello = affidabilità di partenza × risultati misurati; sulle candele intraday i risultati decidono anche quale time frame usare.</p>`;
 }
 function paintCaffe(st) {
   const c = st.caffe;
@@ -2109,21 +2181,17 @@ function paintCaffe(st) {
   const chip = (p, k) => `<span class="pill ${k}" title="${esc(p.perche)}">${esc(keyName(p.chiave))}</span>`;
   const lez = (c.lezioni || []).filter((l) => l.effetto);
   $('#caffe').innerHTML = `
-    <div class="why" style="margin-bottom:4px">In pausa (${c.presenti.length})</div><div class="row">${c.presenti.map((p) => chip(p, '')).join('') || '<span class="why">nessuno: tutti alla scrivania</span>'}</div>
-    <div class="why" style="margin:10px 0 4px">Alla scrivania (${c.operativi.length})</div><div class="row">${c.operativi.map((p) => chip(p, 'agent')).join('')}</div>
-    <div class="why" style="margin:12px 0 4px">Cosa si dicono</div>
-    ${(c.scambi || []).map((x) => `<div class="vote"><b>${esc(keyName(x.da))}</b>${x.a ? ` → ${esc(keyName(x.a))}` : ''} <span class="pill">${esc(x.tema)}</span><br><span class="why">${esc(x.testo)}</span></div>`).join('') || '<p class="empty">Nessuno scambio in questo giro.</p>'}
-    <div class="why" style="margin:12px 0 4px">Lezioni di squadra (dai trade chiusi, almeno 3 per lezione)</div>
-    ${lez.length ? lez.map((l) => `<div class="vote"><span class="pill ${l.effetto === 'prudenza' ? 'down' : 'up'}">${esc(l.effetto)}</span> <span class="why">${esc(l.testo)}</span></div>`).join('') : '<p class="empty">Ancora nessuna lezione: servono almeno 3 trade chiusi simili (per ingresso, settore o forza di Kronos).</p>'}
-    ${(c.applicati || []).length ? `<div class="why" style="margin:12px 0 4px">Applicate in questo giro</div>${c.applicati.map((n) => `<div class="why">• ${esc(n.replace(/^sala caffè: /, ''))}</div>`).join('')}` : ''}`;
+    <div class="why" style="margin-bottom:4px"><b>Lezioni di squadra</b> dai trade chiusi: prudenza dove si è perso, fiducia dove si è vinto</div>
+    ${lez.length ? lez.map((l) => `<div class="vote"><span class="pill ${l.effetto === 'prudenza' ? 'down' : 'up'}">${esc(l.effetto)}</span> <span class="why">${esc(String(l.testo).split('. ')[0])}</span></div>`).join('') : '<p class="empty">Ancora nessuna lezione (servono almeno 3 trade chiusi simili).</p>'}
+    <div class="why" style="margin:14px 0 4px"><b>In pausa</b> (${c.presenti.length})</div><div class="row">${c.presenti.map((p) => chip(p, '')).join('') || '<span class="why">nessuno: tutti alla scrivania</span>'}</div>
+    ${(c.scambi || []).length ? `<details style="margin-top:12px"><summary class="why" style="cursor:pointer">Cosa si dicono (${c.scambi.length})</summary>${c.scambi.map((x) => `<div class="vote"><b>${esc(keyName(x.da))}</b>${x.a ? ` → ${esc(keyName(x.a))}` : ''} <span class="pill">${esc(x.tema)}</span><br><span class="why">${esc(x.testo)}</span></div>`).join('')}</details>` : ''}`;
 }
 function paintEsplorazione(st) {
   const e = st.esplorazione;
   if (!e) { $('#esplorazione').innerHTML = '<p class="empty">Nessun dato: l\u2019esplorazione parte con il prossimo giro.</p>'; return; }
   const row = (x) => `<div class="vote"><b>${esc(x.simbolo)}</b> <span class="pill">${esc(x.settore)}</span> <span class="pill ${x.stato === 'attiva' ? 'up' : x.stato === 'comprata' ? 'agent' : ''}">${esc(x.stato)}</span> <span class="why">trovato da ${esc(keyName(x.scopritore))} alle ${hhmm(x.trovata)} · Kronos ${pct(x.kronos)}${x.stato === 'attiva' ? ` · nell'universo fino al ${esc(x.validaFino)}` : ''}</span><br><span class="why">${esc(x.motivo)}</span>${x.stato === 'attiva' ? `<br><button type="button" class="btn ghost" data-sym="${esc(x.simbolo)}" style="margin-top:6px; padding:3px 10px; font-size:13px">Apri il grafico</button>` : ''}</div>`;
   $('#esplorazione').innerHTML = `
-    <p class="why">${e.ultimoGiro ? `Ultimo giro alle ${hhmm(e.ultimoGiro)}` : 'Nessun giro ancora'} · da esaminare oggi: ${e.daEsaminareOggi} titoli del radar. Un giro al minuto, anche tra un giro e l'altro del motore, solo se qualcuno è in pausa; finito il radar si ricomincia.</p>
-    ${e.esito ? `<p class="why" style="margin-top:6px">${esc(e.esito)}</p>` : ''}
+    <p class="why">Gli agenti in pausa cercano opportunità nel radar · ${e.ultimoGiro ? `ultimo giro alle ${hhmm(e.ultimoGiro)}` : 'nessun giro ancora'} · ${e.daEsaminareOggi} titoli ancora da esaminare oggi</p>
     ${(e.attive || []).length ? `<div class="why" style="margin:10px 0 4px">Opportunità al lavoro</div>${e.attive.map(row).join('')}` : '<p class="empty" style="margin-top:8px">Nessuna opportunità aperta.</p>'}
     ${(e.recenti || []).length ? `<details style="margin-top:8px"><summary class="why" style="cursor:pointer">Chiuse di recente (${e.recenti.length})</summary>${e.recenti.map(row).join('')}</details>` : ''}`;
   for (const b of $('#esplorazione').querySelectorAll('button[data-sym]')) b.addEventListener('click', () => { openChart(b.dataset.sym); });
@@ -2258,18 +2326,10 @@ function grouped(list) {
 }
 const repNote = (g) => g.n > 1 ? ` <span class="rep">×${g.n}, dalle ${hhmm(g.first)}</span>` : '';
 function renderEvents() {
+  if (!evBox) return;
   const list = grouped(filter === 'all' ? allEvents : allEvents.filter((e) => IMPORTANT.has(e.tipo)));
   evBox.innerHTML = list.length ? list.slice(0, 300).map((g) => `<div class="ev ${g.e.tipo === 'allarme' ? 'alarm' : IMPORTANT.has(g.e.tipo) ? '' : 'quiet'}"><time>${hhmm(g.e.t)}</time><div>${g.html}${repNote(g)}</div></div>`).join('')
     : `<p class="empty">${filter === 'all' ? 'Nessun evento oggi.' : 'Niente di importante oggi: nessun ordine, nessuna posizione chiusa, nessun avviso. Con «Tutto» vedi anche i giri e i segnali.'}</p>`;
-}
-for (const b of document.querySelectorAll('.filters button')) {
-  b.setAttribute('aria-pressed', String(b.dataset.f === filter));
-  b.addEventListener('click', () => {
-    filter = b.dataset.f;
-    try { localStorage.setItem('agenti.filtro', filter); } catch {}
-    for (const x of document.querySelectorAll('.filters button')) x.setAttribute('aria-pressed', String(x === b));
-    renderEvents();
-  });
 }
 function noteEvent(e) {
   if (e.tipo === 'tick' && (!lastTick || e.t > lastTick.t)) lastTick = e;
@@ -2282,6 +2342,7 @@ function addEvent(e, live) {
   if (!live) return;
   renderEvents();
   sceneEvent(e);
+  if ((e.tipo === 'trade' || e.tipo === 'ordine') && currentPage === 'log') loadLog();
   if (e.tipo === 'nota' && /proiezioni/.test(e.testo || '')) { forecasts = null; if (selected) loadSymbol(selected); }
   if (e.tipo === 'prezzi' || e.simbolo === selected || (e.tipo === 'stop' && String(e.dettaglio || '').startsWith(selected + ' '))) { drawChart(); if (e.tipo !== 'prezzi') renderFeed(); }
   if (e.tipo === 'tick' || e.tipo === 'allocazione' || e.tipo === 'allarme') loadStatus(); else sayState();
