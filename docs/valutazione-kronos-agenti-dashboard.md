@@ -12,9 +12,11 @@ Data: 8 novembre 2026. Branch: `ccr-f218832d-solbom`. Tutto quanto segue è misu
    backtest sì: la strategia è troppo prudente per un mercato che sale, e nei ribassi perde comunque (stop su AAPL -5,3%).
 2. **Kronos si integra senza difficoltà tecniche** (MIT, 4-100 M parametri, gira su CPU in 0,6-2 s a previsione, sidecar
    Python chiamato da Bun). **Ma zero-shot, sul nostro universo, non prevede la direzione meglio del caso**: accuratezza
-   di direzione 47-55%, errore medio peggiore di "il prezzo non cambia", correlazione di rango debole (+0,07…+0,16).
-   Va usato come *una* caratteristica in più (distribuzione dei campioni, intervallo di prezzo, volatilità attesa),
-   mai come oracolo, e va rifinito (fine-tuning) sui nostri simboli e frequenze prima di pesarlo nelle decisioni.
+   di direzione 41-56% (una costante fa 50-67%), errore medio sempre peggiore di "il prezzo non cambia", correlazione di
+   rango debole e positiva solo sulle barre giornaliere (fino a +0,17 su SPY con il modello small), nulla o negativa a
+   5 minuti e sul Bitcoin orario. Va usato come *una* caratteristica in più (distribuzione dei campioni, intervallo di
+   prezzo, volatilità attesa), mai come oracolo, e va rifinito (fine-tuning) sui nostri simboli e frequenze prima di
+   pesarlo nelle decisioni. Per il trading rapido intraday, oggi, non porta niente.
 3. **Un motore multi-agente a media frequenza è fattibile con Alpaca** (dati IEX in tempo reale, 1000 richieste al
    minuto sul paper, websocket fino a 30 simboli gratis, crypto 24 ore su 24, frazionarie). **Non può essere `claude -p`
    a decidere al minuto**: 20 secondi e un costo per chiamata. Gli agenti rapidi devono essere codice (regole + modelli
@@ -134,19 +136,23 @@ modello prevede rialzo e vendesse allo scoperto quando prevede ribasso (senza co
 | BTCUSD 1 ora | small | 3.28 | 4 barre | 47% | 55% | +0.03 | 0.69% / 0.51% | -0.077% |
 | BTCUSD 1 ora | small | 3.28 | 6 barre | 49% | 53% | +0.10 | 0.94% / 0.63% | -0.028% |
 
-_(Le righe con Kronos-small su SPY, AAPL, NVDA 5 minuti e BTC sono in esecuzione: arrivano nel prossimo commit.)_
-
 ### Lettura dei risultati
 
-- **Zero-shot non batte il caso sulla direzione**: 47-55% contro una costante che fa altrettanto o meglio. L'errore
-  medio è *peggiore* di "non cambia nulla", come ci si aspetta da candele campionate con `T=1` (il campionamento
-  aggiunge rumore; con più campioni o `T` più bassa si avvicina alla mediana ma non si guadagna direzione).
-- **C'è un filo di informazione nell'ordinamento** (IC positivo quasi ovunque, fino a +0,16 su NVDA), dello stesso ordine
-  di grandezza dei fattori classici: utile come **caratteristica** dentro un modello più ampio, non come segnale da solo.
+- **Zero-shot non batte il caso sulla direzione**: 41-56% contro una costante che fa altrettanto o meglio (su AAPL
+  "sempre sale" fa 67%, Kronos 46%). L'errore medio è *peggiore* di "non cambia nulla" in tutte le 27 righe, come ci si
+  aspetta da candele campionate con `T=1` (il campionamento aggiunge rumore; con più campioni o `T` più bassa ci si
+  avvicina alla mediana ma non si guadagna direzione).
+- **Sulle barre giornaliere c'è un filo di informazione nell'ordinamento** (IC +0,07…+0,17 su SPY, NVDA, QQQ a 1 barra;
+  SPY small a 5 barre: "segui il segno" +0,37% per finestra), dello stesso ordine di grandezza dei fattori classici e
+  dentro l'errore statistico di 150 osservazioni (±0,08): utile al più come **caratteristica** dentro un modello più
+  ampio, non come segnale da solo. Su AAPL è zero.
+- **Intraday e crypto zero-shot non funzionano**: a 5 minuti su SPY e NVDA la direzione è 41-48% con IC negativo
+  (-0,13/-0,16 a 1 barra), sul Bitcoin orario IC attorno a zero e "segui il segno" negativo. Proprio il terreno del
+  trading rapido è quello dove oggi Kronos aiuta meno, almeno sui volumi IEX e senza fine-tuning.
 - **Il modello è addestrato soprattutto su mercati asiatici e su volume consolidato**: i nostri volumi IEX sono il 2-3% del
   totale USA. Il tokenizer usa volume e amount, quindi il fine-tuning sui nostri dati (o il passaggio ai dati SIP a
   pagamento) è il primo passo per dargli una chance vera.
-- **Costi di calcolo**: 0,6 s (mini) e circa 2 s (small) per previsione su CPU con 3 campioni. Per 8-30 simboli a 5
+- **Costi di calcolo**: 0,6 s (mini) e 2,9 s (small) per previsione giornaliera, 1,3 s e 6,5 s a 5 minuti (orizzonte 12 barre), su CPU a thread singolo con 3 campioni. Per 8-30 simboli a 5
   minuti basta un processo Python su una macchina normale; per 1 minuto su 30 simboli serve `predict_batch` o una GPU.
 
 ### Come lo integrerei
