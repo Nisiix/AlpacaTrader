@@ -213,6 +213,24 @@ un profitto minore che tornare a pari o in perdita. Proiezione a 5 sedute **nett
 soglia con cui si compra) su un titolo in portafoglio → si esce. La presa di profitto parziale a +3% aspetta se Kronos
 anticipa altro rialzo.
 
+## Il cervello delle previsioni: Kronos e gli altri modelli
+
+Accanto a Kronos il sidecar fa girare altri due modelli gratuiti (Apache 2.0) sulla stessa serie: **Chronos-2** (Amazon) e
+**TimesFM 2.5** (Google). Kronos legge le candele intere ed è addestrato sui mercati; gli altri due sono modelli generici
+sulla serie delle chiusure. Gli studi su dati finanziari dicono che i modelli generici, usati così come sono, prevedono
+poco la direzione dei rendimenti: per questo non si fa una media alla cieca, ma **ogni modello deve dimostrare quanto vale**.
+
+- Ogni previsione di ogni modello (giornaliera a 5 sedute e su ogni candela intraday) si registra e, alla scadenza, si
+  confronta con il prezzo vero: direzione giusta o sbagliata, e quanto avrebbe reso seguirla.
+- La previsione usata dal motore è la **media dei percorsi pesata sulla bravura** di ogni modello: quota di direzioni
+  giuste oltre il 50%, ridotta quando il campione è piccolo. Conti separati per previsione giornaliera e per candela
+  (5 min, 15 min, 1 ora, 4 ore): un modello può valere sulle candele brevi e non sul giornaliero.
+- Un modello conta solo dopo **100 previsioni valutate**; prima si fa solo misurare e decide Kronos. Chi non supera il
+  caso ha peso zero. Kronos, finché non risulta peggiore del caso, tiene **almeno metà del peso**.
+- Tutto il resto del motore resta com'è: probabilità, soglie, costi, taglie e uscite lavorano sulla previsione combinata.
+- Nella pagina Dashboard, «Cervello delle previsioni» mostra per ogni modello previsioni valutate, direzione giusta, resa e
+  peso di adesso. Se Chronos-2 o TimesFM non sono installati (installa-kronos), si lavora con il solo Kronos.
+
 ## Fiducia nelle proiezioni: ridurre il rischio sì, aumentarlo no
 
 Con eventi in arrivo (Fed nei prossimi giorni, trimestrale) il contesto non si fida della proiezione **per entrare o per

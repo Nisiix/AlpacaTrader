@@ -185,7 +185,14 @@ export const AGENTS = {
   // maxAbs: proiezioni oltre questa misura (in valore assoluto) sono rumore del modello e non si usano.
   // controTendenza: sotto la media a 200 si entra solo se Kronos anticipa almeno minRendimento con probabilità di successo
   // (Φ del rendimento atteso sulla volatilità) almeno minFiducia; peso massimo ridotto a pesoFattore × 10%.
-  kronos: { topShare: 1, horizon: 5, timeoutMs: 600_000, port: 8765, model: "small" as "mini" | "small" | "base", lookback: 400, samples: 3, anticipaSoglia: 0.01, maxAbs: 0.25, controTendenza: { enabled: true, minRendimento: 0.02, minFiducia: 0.6, pesoFattore: 0.5 } },
+  kronos: { topShare: 1, horizon: 5, timeoutMs: 600_000, port: 8765, model: "small" as "mini" | "small" | "base", lookback: 400, samples: 3, anticipaSoglia: 0.01, maxAbs: 0.25, controTendenza: { enabled: true, minRendimento: 0.02, minFiducia: 0.6, pesoFattore: 0.5 },
+    // Il cervello delle previsioni: il sidecar fa girare accanto a Kronos altri modelli gratuiti (Chronos-2 di Amazon e
+    // TimesFM 2.5 di Google, Apache 2.0; quelli non installati si saltano). Ogni previsione di ogni modello si confronta col
+    // prezzo vero alla scadenza; la previsione usata è la media pesata sulla quota di direzioni giuste di ognuno, per le
+    // giornaliere e per ogni candela. Un modello conta solo dopo minCampione previsioni valutate (prima si fa solo misurare);
+    // prudenza riduce la bravura dei campioni piccoli; Kronos, se non risulta peggiore del caso, tiene almeno kronosMinimo.
+    modelli: ["kronos", "chronos2", "timesfm"] as string[],
+    cervello: { minCampione: 100, prudenza: 50, kronosMinimo: 0.5, maxAperte: 6000 } },
   // Riepilogo su Telegram una volta al giorno, alla prima passata dopo quest'ora di Roma.
   summaryAfter: "22:05",
   // Presa di profitto parziale (agente "profitto"): a +3% vende metà e lascia correre il resto col trend. Scelta col

@@ -10,4 +10,6 @@ command -v git >/dev/null || { echo "Manca git"; exit 1; }
 ./venv/bin/python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
 ./venv/bin/python -m pip install -r requirements.txt
 ./venv/bin/python -c 'import sys; sys.path.insert(0, "kronos-src"); from model import Kronos; print("Kronos importato: ok")'
+# Modelli che affiancano Kronos (Chronos-2, TimesFM 2.5): facoltativi, senza il motore usa il solo Kronos.
+./venv/bin/python -m pip install -r requirements-modelli.txt && ./venv/bin/python -c 'import chronos, timesfm; print("Chronos-2 e TimesFM importati: ok")' || echo "Modelli aggiuntivi non installati: si lavora con il solo Kronos."
 echo "Kronos installato: bun run agents accende il sidecar da solo."

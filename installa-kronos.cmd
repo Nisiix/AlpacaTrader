@@ -19,6 +19,8 @@ venv\Scripts\python -m pip install --upgrade pip >nul
 venv\Scripts\python -m pip install torch --index-url https://download.pytorch.org/whl/cpu || (echo Installazione di torch fallita. & pause & exit /b 1)
 venv\Scripts\python -m pip install -r requirements.txt || (echo Installazione dipendenze fallita. & pause & exit /b 1)
 venv\Scripts\python -c "import sys; sys.path.insert(0, \"kronos-src\"); from model import Kronos; print(\"Kronos importato: ok\")" || (echo Il modello non si importa. & pause & exit /b 1)
+echo Installo i modelli che affiancano Kronos: Chronos-2 (Amazon) e TimesFM 2.5 (Google), gratuiti, Apache 2.0...
+venv\Scripts\python -m pip install -r requirements-modelli.txt && (venv\Scripts\python -c "import chronos, timesfm; print(\"Chronos-2 e TimesFM importati: ok\")") || echo Modelli aggiuntivi non installati: il motore lavora con il solo Kronos.
 echo.
 echo Kronos installato. Da ora avvia-bot.cmd accende il sidecar da solo (i pesi del modello si scaricano al primo avvio, 1-2 minuti).
 pause

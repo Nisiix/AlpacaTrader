@@ -23,6 +23,7 @@ import { AGENTS, enableCrypto } from "../config.ts";
 import { startDashboard } from "../dashboard/server.ts";
 import { ROOT, buildDeps } from "../deps.ts";
 import { ensureKronos, intradayForecaster, pathForecaster, type KronosLink } from "../kronos-sidecar.ts";
+import { Cervello, previsioniCombinate, previsioniIntradayCombinate } from "../agents/cervello.ts";
 import { appendFileSync, existsSync, mkdirSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { parseArgs } from "./args.ts";
@@ -55,6 +56,8 @@ try {
 
   // Kronos: un sidecar già acceso (--kronos url o KRONOS_URL), altrimenti lo avvia il motore dal venv di tools/kronos.
   let kronos: KronosLink | null = null;
+  // Il cervello delle previsioni (Kronos + gli altri modelli del sidecar), con i risultati salvati in state/cervello.json.
+  const cervello = new Cervello(deps.stateDir);
   if (!args.noKronos && !args.fake) {
     const url = args.kronos ?? process.env.KRONOS_URL;
     // Le righe del sidecar finiscono anche in logs/kronos-AAAA-MM-GG.log, per capire cosa fa a finestra chiusa.
@@ -72,7 +75,7 @@ try {
   // Intraday: operazioni che si chiudono in giornata, su candele scelte dall'agente (5 min / 15 min / 4 ore). Decide Kronos
   // sulle candele brevi (se il sidecar c'è) con le medie brevi; il grafico più lungo pesa solo sulla taglia.
   if (AGENTS.intraday.enabled) {
-    const kf = kronos ? intradayForecaster(kronos) : null;
+    const kf = kronos ? previsioniIntradayCombinate(intradayForecaster(kronos), cervello, deps.now) : null;
     agents.push(new IntradayAgent((s, tf, n) => deps.broker.getIntradayBars(s, tf, n), kf ? async (b, step, h) => Object.fromEntries(Object.entries(await kf(b, step, h)).map(([k, v]) => [k, v.percorso.length ? v.percorso : [v.rendimentoPrevisto]])) : null));
   }
   const cache = emptyCache();
@@ -81,7 +84,8 @@ try {
     agents,
     bus,
     echo: true,
-    forecaster: kronos ? pathForecaster(kronos) : undefined,
+    forecaster: kronos ? previsioniCombinate(pathForecaster(kronos), cervello, deps.now) : undefined,
+    cervello: kronos ? cervello : undefined,
     kronosStato: kronos ? () => kronos!.stato : undefined,
     // Nel finto niente rete: solo le coppie del broker finto.
     cryptoUniverse: args.noCrypto ? undefined : { fetchTop: args.fake ? null : coingeckoTop() },
@@ -92,7 +96,7 @@ try {
 
   // Candele intraday per il grafico, con la proiezione di Kronos sulle prossime candele (in memoria finché non chiude
   // una candela nuova: il sidecar non si interroga a ogni richiesta della pagina).
-  const kfChart = kronos ? intradayForecaster(kronos) : null;
+  const kfChart = kronos ? previsioniIntradayCombinate(intradayForecaster(kronos), cervello, deps.now) : null;
   const memo = new Map<string, { at: number; barre: any[]; previsione: any; ultima: string }>();
   const candele = async (sym: string, tf: string) => {
     const key = `${sym}|${tf}`;

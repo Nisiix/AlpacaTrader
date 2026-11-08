@@ -1,0 +1,4 @@
+# Modelli che affiancano Kronos nel cervello delle previsioni (facoltativi). Pesi scaricati da Hugging Face al primo avvio.
+# Chronos-2 (Amazon, Apache 2.0, ~120M parametri) e TimesFM 2.5 (Google, pesi 2.5 Apache 2.0, ~200M parametri): su CPU.
+chronos-forecasting>=2.2,<3
+timesfm[torch]>=3.0,<4

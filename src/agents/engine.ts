@@ -30,6 +30,7 @@ import type { Notifier } from "../telegram.ts";
 import { agentWeights, allocate, openedToday, type Score } from "./allocator.ts";
 import { applyGuidance, review, type CapoReport } from "./capo.ts";
 import { simboliIntraday } from "./posizioni.ts";
+import type { Cervello, RigaCervello } from "./cervello.ts";
 import type { EventBus } from "./bus.ts";
 import { ContextAgent } from "./context.ts";
 import type { Agent, AgentReport, AgentView, MarketContext, Signal } from "./types.ts";
@@ -54,6 +55,8 @@ export interface EngineDeps {
   kronosStato?: () => string;
   // Universo crypto dinamico: coppie di Alpaca nella top N per capitalizzazione. fetchTop null = solo lista Alpaca.
   cryptoUniverse?: { fetchTop: TopFetcher | null };
+  // Il cervello delle previsioni: confronta le previsioni scadute di ogni modello con i prezzi veri e ne tiene i pesi.
+  cervello?: Cervello;
 }
 
 export interface AgentsStatus {
@@ -100,6 +103,9 @@ export interface AgentsStatus {
   fonti?: FontiDati;
   // Esplorazione del radar da parte degli agenti in pausa.
   esplorazione?: { ultimoGiro: string | null; esito: string | null; daEsaminareOggi: number; attive: Scoperta[]; recenti: Scoperta[] };
+  // Il cervello delle previsioni: per tipo (giorno, candela intraday) e modello, quante previsioni valutate, quota di
+  // direzioni giuste, resa media seguendole e peso di adesso nella previsione combinata.
+  cervello?: { righe: RigaCervello[]; inAttesa: number };
 }
 
 export const statusPath = (stateDir: string) => join(stateDir, "agents-status.json");
@@ -330,6 +336,13 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
     }
     bus.emit("conto", { patrimonio: snap.account.equity, contanti: snap.account.cash, pnlGiorno: snap.account.equity - snap.account.lastEquity, mercatoAperto: snap.clock.isOpen });
     bus.emit("prezzi", { prezzi: snap.prices });
+    // Le previsioni scadute di ogni modello si confrontano con i prezzi di adesso (prima di chiederne di nuove).
+    try {
+      const n = deps.cervello?.valuta(startedAt, snap.prices) ?? 0;
+      if (n) log.info(`cervello: ${n} previsioni valutate`);
+    } catch (e) {
+      log.warn(`cervello: ${(e as Error).message}`);
+    }
     await loadBars(deps, cache, today, [...new Set([...UNIVERSE, ...AGENTS.universe, ...snap.positions.map((p) => p.symbol)])], (m) => log.warn(m));
     const closes = cache.closes;
     const indicators = indicatorsFor(closes, snap.prices, LIMITS.trendSmaDays, LIMITS.volLookbackDays, LIMITS.longSmaDays, LIMITS.rankMomentumDays);
@@ -626,6 +639,10 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
       bus.emit("caffe", { entrati, usciti: usciti.map((o) => ({ chiave: o.chiave, perche: o.perche })) });
     }
     cache.caffePresenti = presentiKey;
+    if (deps.cervello) {
+      deps.cervello.salva();
+      status.cervello = deps.cervello.stato();
+    }
     writeJsonAtomic(statusPath(deps.stateDir), status);
     log.info(`giro ${giro}: ${status.segnali.length} segnali, ${alloc.proposte.length} proposte, ${outcomes.length} ordini, ${cage.rejected.length} rifiuti, rischio ${alloc.rischio}`);
 

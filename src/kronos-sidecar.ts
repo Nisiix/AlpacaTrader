@@ -18,7 +18,16 @@ export interface KronosForecastPath {
   rendimentoPrevisto: number; // alla fine dell'orizzonte
   percorso: number[]; // rendimento previsto giorno per giorno rispetto all'ultima chiusura
   ultimaChiusura: number | null;
+  // Il percorso di ogni modello che il sidecar ha fatto girare (kronos, chronos2, timesfm...), prima della combinazione.
+  modelli?: Record<string, number[]>;
 }
+
+const modelliDi = (f: { modelli?: Record<string, unknown> }): Record<string, number[]> | undefined => {
+  if (!f.modelli || typeof f.modelli !== "object") return undefined;
+  const out: Record<string, number[]> = {};
+  for (const [m, p] of Object.entries(f.modelli)) if (Array.isArray(p) && p.length && p.every((x) => Number.isFinite(Number(x)))) out[m] = p.map(Number);
+  return Object.keys(out).length ? out : undefined;
+};
 
 const pythonFor = (dir: string) => {
   const win = join(dir, "venv", "Scripts", "python.exe");
@@ -63,7 +72,7 @@ export async function ensureKronos(o: SidecarOptions): Promise<KronosLink> {
     return link;
   }
   const model = o.model ?? AGENTS.kronos.model;
-  const child = Bun.spawn([py, "server.py", "--model", model, "--port", String(port), "--lookback", String(AGENTS.kronos.lookback), "--samples", String(AGENTS.kronos.samples)], {
+  const child = Bun.spawn([py, "server.py", "--model", model, "--port", String(port), "--lookback", String(AGENTS.kronos.lookback), "--samples", String(AGENTS.kronos.samples), "--modelli", AGENTS.kronos.modelli.join(",")], {
     cwd: dir,
     stdout: "pipe",
     stderr: "pipe",
@@ -142,12 +151,13 @@ export function pathForecaster(link: KronosLink): (symbols: string[], bars: Reco
       signal: AbortSignal.timeout(AGENTS.kronos.timeoutMs),
     });
     if (!res.ok) throw new Error(`Kronos ${res.status}: ${(await res.text()).slice(0, 200)}`);
-    const data = (await res.json()) as { forecasts?: Record<string, { pred_ret: number; path?: number[]; last_close?: number }> };
+    const data = (await res.json()) as { forecasts?: Record<string, { pred_ret: number; path?: number[]; last_close?: number; modelli?: Record<string, unknown> }> };
     const out: Record<string, KronosForecastPath> = {};
     for (const [s, f] of Object.entries(data.forecasts ?? {})) {
       const r = Number(f.pred_ret);
       if (!Number.isFinite(r)) continue;
-      out[s] = { rendimentoPrevisto: r, percorso: Array.isArray(f.path) ? f.path.map(Number) : [r], ultimaChiusura: typeof f.last_close === "number" ? f.last_close : null };
+      const modelli = modelliDi(f);
+      out[s] = { rendimentoPrevisto: r, percorso: Array.isArray(f.path) ? f.path.map(Number) : [r], ultimaChiusura: typeof f.last_close === "number" ? f.last_close : null, ...(modelli ? { modelli } : {}) };
     }
     return out;
   };
@@ -168,11 +178,12 @@ export function intradayForecaster(link: KronosLink): (series: Record<string, In
       signal: AbortSignal.timeout(AGENTS.kronos.timeoutMs),
     });
     if (!res.ok) throw new Error(`Kronos ${res.status}: ${(await res.text()).slice(0, 200)}`);
-    const data = (await res.json()) as { forecasts?: Record<string, { pred_ret: number; path?: number[]; last_close?: number }> };
+    const data = (await res.json()) as { forecasts?: Record<string, { pred_ret: number; path?: number[]; last_close?: number; modelli?: Record<string, unknown> }> };
     const out: Record<string, KronosForecastPath> = {};
     for (const [s, f] of Object.entries(data.forecasts ?? {})) {
       const r = Number(f.pred_ret);
-      if (Number.isFinite(r)) out[s] = { rendimentoPrevisto: r, percorso: Array.isArray(f.path) ? f.path.map(Number) : [r], ultimaChiusura: typeof f.last_close === "number" ? f.last_close : null };
+      const modelli = modelliDi(f);
+      if (Number.isFinite(r)) out[s] = { rendimentoPrevisto: r, percorso: Array.isArray(f.path) ? f.path.map(Number) : [r], ultimaChiusura: typeof f.last_close === "number" ? f.last_close : null, ...(modelli ? { modelli } : {}) };
     }
     return out;
   };

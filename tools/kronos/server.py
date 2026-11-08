@@ -1,9 +1,13 @@
 # Sidecar Kronos per il motore degli agenti. POST /forecast con
 #   {"series": {"SPY": [{"t": "2026-01-02", "o":..,"h":..,"l":..,"c":..,"v":..}, ...]}, "horizon": 5}   (barre dal motore)
 #   oppure {"symbols": [...], "horizon": 5}   (le barre le scarica il sidecar da Alpaca: servono ALPACA_KEY_ID/SECRET)
-# -> {"forecasts": {"SPY": {"pred_ret": 0.012, "path": [..], "last_close": ..}}}: rendimento previsto della chiusura a
-# `horizon` giorni e il percorso giorno per giorno. Solo libreria standard + torch/pandas; nessun ordine parte da qui.
-# Uso: ./venv/bin/python server.py [--model small] [--port 8765] [--lookback 400] [--samples 3]
+# -> {"forecasts": {"SPY": {"pred_ret": 0.012, "path": [..], "last_close": .., "modelli": {"kronos": [..], "chronos2": [..]}}}}:
+# rendimento previsto della chiusura a `horizon` passi e il percorso passo per passo (di Kronos, il modello principale), più
+# il percorso di ogni modello caricato. Il motore li combina pesandoli per i risultati che ognuno ha avuto davvero.
+# Modelli (--modelli, separati da virgola): kronos (sempre; candele OHLCV, addestrato sui mercati), chronos2 (Amazon
+# Chronos-2, Apache 2.0) e timesfm (Google TimesFM 2.5, Apache 2.0): generici, sulla serie delle chiusure. Quelli non
+# installati si saltano. Nessun ordine parte da qui.
+# Uso: ./venv/bin/python server.py [--model small] [--port 8765] [--lookback 400] [--samples 3] [--modelli kronos,chronos2,timesfm]
 import argparse, json, os, sys, datetime as dt, urllib.request, urllib.parse, time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import numpy as np, pandas as pd, torch
@@ -17,12 +21,53 @@ ap.add_argument("--lookback", type=int, default=400)
 ap.add_argument("--samples", type=int, default=3)
 ap.add_argument("--T", type=float, default=1.0)
 ap.add_argument("--top_p", type=float, default=0.9)
+ap.add_argument("--modelli", default="kronos")
 a = ap.parse_args()
+VOLUTI = {x.strip() for x in a.modelli.split(",") if x.strip()}
 TOK = {"mini": "NeoQuasar/Kronos-Tokenizer-2k", "small": "NeoQuasar/Kronos-Tokenizer-base", "base": "NeoQuasar/Kronos-Tokenizer-base"}
 CTX = {"mini": 2048, "small": 512, "base": 512}
 tokenizer = KronosTokenizer.from_pretrained(TOK[a.model])
 model = Kronos.from_pretrained(f"NeoQuasar/Kronos-{a.model}")
 predictor = KronosPredictor(model, tokenizer, device="cpu", max_context=min(CTX[a.model], a.lookback))
+# Modelli generici facoltativi: se il pacchetto o i pesi mancano si lavora con quelli che ci sono.
+EXTRA = {}
+if "chronos2" in VOLUTI:
+    try:
+        from chronos import BaseChronosPipeline
+        EXTRA["chronos2"] = BaseChronosPipeline.from_pretrained("amazon/chronos-2", device_map="cpu")
+        print("Chronos-2 pronto")
+    except Exception as e:
+        print(f"Chronos-2 non disponibile ({e}): installa con installa-kronos")
+if "timesfm" in VOLUTI:
+    try:
+        import timesfm
+        # Pesi 2.5 (Apache 2.0): quelli di TimesFM 3 sono solo per uso non commerciale.
+        _tf = timesfm.TimesFM_2p5_200M_torch.from_pretrained("google/timesfm-2.5-200m-pytorch")
+        _tf.compile(timesfm.ForecastConfig(max_context=512, max_horizon=64, normalize_inputs=True, use_continuous_quantile_head=True, fix_quantile_crossing=True))
+        EXTRA["timesfm"] = _tf
+        print("TimesFM 2.5 pronto")
+    except Exception as e:
+        print(f"TimesFM 2.5 non disponibile ({e}): installa con installa-kronos")
+CARICATI = ["kronos", *EXTRA.keys()]
+
+def generici(chiusure, horizon):
+    """Percorsi dei modelli generici per un gruppo di serie di chiusure: {modello: [percorso in prezzi, ...]}."""
+    out = {}
+    if not chiusure: return out
+    if "chronos2" in EXTRA:
+        try:
+            _, mean = EXTRA["chronos2"].predict_quantiles([torch.tensor(c, dtype=torch.float32) for c in chiusure], prediction_length=horizon, quantile_levels=[0.5])
+            out["chronos2"] = [np.asarray(m.float().reshape(-1).numpy())[:horizon] for m in mean]
+        except Exception as e:
+            print(f"Chronos-2: {e}")
+    if "timesfm" in EXTRA:
+        try:
+            pts, _ = EXTRA["timesfm"].forecast(horizon=horizon, inputs=[np.asarray(c, dtype=np.float32) for c in chiusure])
+            out["timesfm"] = [np.asarray(p, dtype=np.float64)[:horizon] for p in pts]
+        except Exception as e:
+            print(f"TimesFM: {e}")
+    return out
+
 K, S = os.environ.get("ALPACA_KEY_ID", ""), os.environ.get("ALPACA_SECRET_KEY", "")
 if not K or not S: print("senza ALPACA_KEY_ID/SECRET il sidecar accetta solo barre inviate dal motore (campo series)")
 
@@ -71,14 +116,21 @@ def forecast(symbols, horizon, series=None, step_minutes=None):
         pred = predictor.predict(df=df[["open", "high", "low", "close", "volume", "amount"]], x_timestamp=df["timestamps"], y_timestamp=y_ts, pred_len=horizon, T=a.T, top_p=a.top_p, sample_count=a.samples, verbose=False)
         last = float(df["close"].iloc[-1])
         path = [float(x) / last - 1 for x in pred["close"].values]
-        out[s] = {"pred_ret": path[-1], "path": path, "last_close": last, "seconds": round(time.time() - t0, 2)}
+        out[s] = {"pred_ret": path[-1], "path": path, "last_close": last, "seconds": round(time.time() - t0, 2), "modelli": {"kronos": path}, "_c": df["close"].to_numpy(dtype=np.float64)}
+    # I modelli generici in un colpo solo su tutte le serie (le chiusure, non le candele intere).
+    nomi = list(out.keys())
+    for modello, percorsi in generici([out[s]["_c"] for s in nomi], horizon).items():
+        for s, pp in zip(nomi, percorsi):
+            last = out[s]["last_close"]
+            if len(pp) and np.all(np.isfinite(pp)) and last > 0: out[s]["modelli"][modello] = [float(x) / last - 1 for x in pp]
+    for s in nomi: del out[s]["_c"]
     return out
 
 class H(BaseHTTPRequestHandler):
     def _json(self, code, obj):
         body = json.dumps(obj).encode(); self.send_response(code); self.send_header("content-type", "application/json"); self.send_header("content-length", str(len(body))); self.end_headers(); self.wfile.write(body)
     def do_GET(self):
-        self._json(200, {"ok": True, "model": a.model, "lookback": a.lookback, "pronto": True})
+        self._json(200, {"ok": True, "model": a.model, "lookback": a.lookback, "pronto": True, "modelli": CARICATI})
     def do_POST(self):
         if self.path != "/forecast": return self._json(404, {"error": "non trovato"})
         try:
@@ -91,5 +143,5 @@ class H(BaseHTTPRequestHandler):
             self._json(500, {"error": str(e)})
     def log_message(self, fmt, *args): print(time.strftime("%H:%M:%S"), fmt % args)
 
-print(f"Kronos-{a.model} pronto su http://127.0.0.1:{a.port} (lookback {a.lookback}, {a.samples} campioni)")
+print(f"Kronos-{a.model} pronto su http://127.0.0.1:{a.port} (lookback {a.lookback}, {a.samples} campioni; modelli: {', '.join(CARICATI)})")
 ThreadingHTTPServer(("127.0.0.1", a.port), H).serve_forever()
