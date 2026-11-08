@@ -1225,4 +1225,37 @@ describe("capo ufficio e intraday", () => {
     expect(reports.intraday.segnali[0]!.forza).toBe(0.5);
     expect(reports.trend.segnali).toEqual([]);
   });
+
+  test("con la taglia indicata, richiamo e sala caffè riducono la taglia del voto intraday, non la forza: resta sopra la soglia d'acquisto", async () => {
+    const { applyGuidance } = await import("../src/agents/capo.ts");
+    const { applyLessons } = await import("../src/agents/caffe.ts");
+    const capo = { aggiornato: "", sintesi: "", migliori: [], sogliaKronos: null, ingressoMigliore: null, valutazioni: [{ agente: "intraday", giudizio: "richiamato", kronosMin: 0.01, forza: 0.6, messaggio: "", consigli: [] }] } as any;
+    const reports: Record<string, any> = { intraday: { segnali: [{ agente: "intraday", simbolo: "ETH/USD", lato: "buy", forza: 1, orizzonteSedute: 1, intraday: true, pesoMassimo: 0.1, perche: "candele 5Min" }] } };
+    applyGuidance(reports, capo, undefined);
+    applyLessons(reports, [{ tema: "settore", chiave: "crypto", trade: 3, vinti: 0, media: -0.02, effetto: "prudenza", testo: "" } as any], undefined);
+    const s = reports.intraday.segnali[0];
+    expect(s.forza).toBe(1);
+    expect(s.pesoMassimo).toBeCloseTo(0.1 * 0.6 * 0.85, 6);
+    const a = allocate(view({ positions: [] } as any), reports, { intraday: 1 });
+    expect(a.punteggi[0]!.punteggio).toBeGreaterThanOrEqual(AGENTS.buyScore);
+  });
+
+  test("voti misti: se l'ingresso di più giorni aspetta (evidenza bassa), entra la sola parte intraday con la sua taglia", () => {
+    const v = view();
+    const reports: Record<string, any> = {
+      kronos: { segnali: [{ agente: "kronos", simbolo: "SPY", lato: "buy", forza: 0.6, orizzonteSedute: 5, kronos: 0.05, perche: "Kronos +5%" }] },
+      intraday: { segnali: [{ agente: "intraday", simbolo: "SPY", lato: "buy", forza: 1, orizzonteSedute: 1, intraday: true, pesoMassimo: 0.02, perche: "candele 5Min, Kronos a 15 min +1.5%" }] },
+      custodi: { segnali: [], custodi: [{ simbolo: "SPY", dossier: { probabilita: 0.3 } }] },
+    };
+    const a = allocate(v, reports, { kronos: 1, intraday: 1 });
+    const spy = a.proposte.find((p) => p.symbol === "SPY");
+    expect(spy).toBeDefined();
+    expect(spy!.intraday).toBe(true);
+    expect(spy!.why).toContain("entra solo la parte intraday");
+    expect(a.inAttesa.find((x) => x.simbolo === "SPY")).toBeUndefined();
+    // Senza il voto intraday lo stesso titolo resta in attesa per l'evidenza.
+    const b = allocate(v, { kronos: reports.kronos, custodi: reports.custodi }, { kronos: 1 });
+    expect(b.proposte.find((p) => p.symbol === "SPY")).toBeUndefined();
+    expect(b.inAttesa.find((x) => x.simbolo === "SPY")!.motivo).toContain("evidenza combinata");
+  });
 });

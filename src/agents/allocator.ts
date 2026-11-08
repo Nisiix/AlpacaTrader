@@ -25,6 +25,17 @@ export interface Score {
   fiducia?: number | null;
   // Evidenza combinata del dossier (Kronos, grafico, notizie e post, contesto con Fear & Greed e funding).
   evidenza?: number | null;
+  // Con voti misti (più giorni e intraday) la sola parte intraday: se l'ingresso di più giorni deve aspettare (contesto,
+  // costi, evidenza), l'occasione sulle candele brevi segnalata da Kronos può comunque entrare come trade intraday.
+  parteIntraday?: { compra: number; pesoMassimo?: number; perche: string[] };
+}
+
+// La sola parte intraday di un punteggio misto, come punteggio a sé (vendite d'opinione comprese).
+export function soloParteIntraday(sc: Score): Score | null {
+  const pi = sc.parteIntraday;
+  if (!pi || sc.intraday) return null;
+  const { parteIntraday: _, kronos: __, evidenza: ___, ...base } = sc;
+  return { ...base, punteggio: pi.compra - sc.vende, compra: pi.compra, intraday: true, pesoMassimo: pi.pesoMassimo, agenti: ["intraday"], perche: pi.perche };
 }
 
 export interface Allocation {
@@ -53,6 +64,13 @@ export function scoreSignals(signals: Signal[], weights: Record<string, number>)
       sc.compra += w;
       sc.intraday = sc.compra === w ? !!s.intraday : sc.intraday && !!s.intraday;
       if (s.kronos !== undefined && (sc.kronos === undefined || s.kronos > sc.kronos)) sc.kronos = s.kronos;
+      if (s.intraday) {
+        const pi = sc.parteIntraday ?? { compra: 0, perche: [] };
+        pi.compra += w;
+        if (s.pesoMassimo !== undefined) pi.pesoMassimo = Math.min(pi.pesoMassimo ?? Infinity, s.pesoMassimo);
+        pi.perche.push(`${s.agente}: ${s.perche}`);
+        sc.parteIntraday = pi;
+      }
       // Un voto senza limite di taglia (es. il trend) toglie il limite; se tutti i voti lo hanno, vale il più piccolo.
       if (s.pesoMassimo === undefined) sc.pesoMassimo = Infinity;
       else if (sc.pesoMassimo !== Infinity) sc.pesoMassimo = Math.min(sc.pesoMassimo ?? Infinity, s.pesoMassimo);
@@ -138,7 +156,29 @@ export function allocate(view: AgentView, reports: Record<string, AgentReport>, 
   // Prima i pesi obiettivo di chi si vuole comprare, poi un solo fattore di scala se la volatilità di portafoglio supera l'obiettivo.
   let slots = LIMITS.maxPositions - held.size;
   const wanted: { sc: Score; w: number; p?: { qty: number } }[] = [];
-  for (const sc of punteggi) {
+  // Perché un ingresso nuovo di più giorni deve aspettare (null se può entrare): contesto, proiezione, costi, evidenza.
+  const attesaPiuGiorni = (sc: Score, price: number | undefined): string | null => {
+    const wait = view.contesto?.attendi[sc.simbolo];
+    if (wait) return wait;
+    if (!price || price <= 0) return null;
+    // Il rendimento previsto deve coprire i costi: crypto 0,5% andata e ritorno (×2 di margine), azioni quasi nulli.
+    // Il controllo dei costi riduce il rischio: usa la proiezione anche se il contesto non la ritiene affidabile per entrare.
+    const grezze = view.previsioniKronos ?? view.previsioni;
+    const fcCosti = grezze?.[sc.simbolo] ?? sc.kronos;
+    const costo = isCrypto(sc.simbolo) ? AGENTS.costi.cryptoAndataRitorno : AGENTS.costi.azioniAndataRitorno;
+    // Con Kronos attivo ma senza una proiezione utilizzabile per il titolo non si può dire che il rialzo copra i costi: si aspetta.
+    if (grezze !== undefined && fcCosti === undefined) return "nessuna proiezione di Kronos utilizzabile: non si può verificare che il rialzo copra i costi";
+    if (fcCosti !== undefined && fcCosti < costo * AGENTS.costi.margineCosti)
+      return `Kronos prevede ${(fcCosti * 100).toFixed(2)}%: non copre ${AGENTS.costi.margineCosti} volte i costi di andata e ritorno (${(costo * 100).toFixed(2)}%)`;
+    // Evidenza combinata: il dossier del custode mette insieme Kronos (45%), grafico (25%), notizie e post (15%) e contesto
+    // con Fear & Greed e funding (15%); sopra la media a 200 basta evidenza.min, sotto serve evidenza.minContro.
+    const contro = sotto200(view.closes[sc.simbolo], price);
+    const ev = dossierOf(sc.simbolo);
+    const minEv = contro ? AGENTS.evidenza.minContro : AGENTS.evidenza.min;
+    if (ev !== null && ev < minEv) return `evidenza combinata ${Math.round(ev * 100)}% sotto il minimo ${Math.round(minEv * 100)}%${contro ? " richiesto sotto la media a 200" : ""} (Kronos, grafico, notizie, contesto)`;
+    return null;
+  };
+  for (let sc of punteggi) {
     // Gli acquisti si decidono solo nei giri con analisi d'ingresso (ogni AGENTS.analisiMinuti); negli altri si controlla.
     if (view.analisi === false) break;
     if (sc.punteggio < AGENTS.buyScore) break;
@@ -148,14 +188,23 @@ export function allocate(view: AgentView, reports: Record<string, AgentReport>, 
     if (!isCrypto(sc.simbolo) && (view.mercatoAperto === false || (view.finestraIngressi === false && !sc.intraday))) continue;
     // L'attesa del contesto (settore debole, Kronos a 5 sedute al ribasso) riguarda gli ingressi di più giorni: un voto
     // solo intraday segue Kronos sulle candele brevi, le sue medie brevi e i suoi stop, e non aspetta il contesto.
-    const wait = sc.intraday ? undefined : view.contesto?.attendi[sc.simbolo];
-    if (wait && !held.has(sc.simbolo)) {
-      inAttesa.push({ simbolo: sc.simbolo, motivo: wait });
-      continue;
-    }
     const price = view.prices[sc.simbolo];
-    if (!price || price <= 0) continue;
     const p = held.get(sc.simbolo);
+    // Le attese che valgono solo per un ingresso di più giorni. Se scattano su un punteggio misto e la parte intraday da
+    // sola supera la soglia, si entra come trade intraday (taglia e uscite dell'intraday) invece di lasciar perdere l'occasione.
+    const attesa = p || sc.intraday ? null : attesaPiuGiorni(sc, price);
+    if (attesa) {
+      const alt = soloParteIntraday(sc);
+      if (alt && alt.punteggio >= AGENTS.buyScore) {
+        alt.perche = [...alt.perche, `ufficio: ingresso di più giorni in attesa (${attesa}); entra solo la parte intraday`];
+        punteggi[punteggi.indexOf(sc)] = alt;
+        sc = alt;
+      } else {
+        inAttesa.push({ simbolo: sc.simbolo, motivo: attesa });
+        continue;
+      }
+    }
+    if (!price || price <= 0) continue;
     if (!p && slots <= 0) continue;
     // Evidenza combinata: il dossier del custode mette insieme Kronos (45%), grafico (25%), notizie e post (15%) e contesto
     // con Fear & Greed e funding (15%). Per un ingresso nuovo di più giorni deve arrivare almeno a evidenza.min (sopra la
@@ -164,24 +213,6 @@ export function allocate(view: AgentView, reports: Record<string, AgentReport>, 
     const ev = sc.intraday ? null : dossierOf(sc.simbolo);
     sc.evidenza = ev;
     const minEv = contro ? AGENTS.evidenza.minContro : AGENTS.evidenza.min;
-    // Il rendimento previsto deve coprire i costi: crypto 0,5% andata e ritorno (×2 di margine), azioni quasi nulli.
-    // Il controllo dei costi riduce il rischio: usa la proiezione anche se il contesto non la ritiene affidabile per entrare.
-    const grezze = view.previsioniKronos ?? view.previsioni;
-    const fcCosti = sc.intraday ? undefined : (grezze?.[sc.simbolo] ?? sc.kronos);
-    const costo = isCrypto(sc.simbolo) ? AGENTS.costi.cryptoAndataRitorno : AGENTS.costi.azioniAndataRitorno;
-    // Con Kronos attivo ma senza una proiezione utilizzabile per il titolo non si può dire che il rialzo copra i costi: si aspetta.
-    if (!p && !sc.intraday && grezze !== undefined && fcCosti === undefined) {
-      inAttesa.push({ simbolo: sc.simbolo, motivo: "nessuna proiezione di Kronos utilizzabile: non si può verificare che il rialzo copra i costi" });
-      continue;
-    }
-    if (!p && fcCosti !== undefined && fcCosti < costo * AGENTS.costi.margineCosti) {
-      inAttesa.push({ simbolo: sc.simbolo, motivo: `Kronos prevede ${(fcCosti * 100).toFixed(2)}%: non copre ${AGENTS.costi.margineCosti} volte i costi di andata e ritorno (${(costo * 100).toFixed(2)}%)` });
-      continue;
-    }
-    if (!p && ev !== null && ev < minEv) {
-      inAttesa.push({ simbolo: sc.simbolo, motivo: `evidenza combinata ${Math.round(ev * 100)}% sotto il minimo ${Math.round(minEv * 100)}%${contro ? " richiesto sotto la media a 200" : ""} (Kronos, grafico, notizie, contesto)` });
-      continue;
-    }
     let w = maxWeightFor(view.closes[sc.simbolo]).max * rischioDi(sc.simbolo, !(kronosSu(sc.simbolo) || sc.intraday)) * (AGENTS.scaleByScore ? Math.min(1, sc.punteggio) : 1);
     if (sc.pesoMassimo !== undefined) w = Math.min(w, sc.pesoMassimo);
     // Taglia proporzionale alla fiducia nella proiezione di Kronos: più è probabile che il rialzo si avveri, più si investe.

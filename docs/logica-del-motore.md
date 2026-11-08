@@ -139,13 +139,15 @@ A ogni giro rilegge il diario per ogni agente (e per la squadra dei custodi): tr
 Con meno di 3 trade è «nuovo»; in attivo con almeno il 55% di vinti «bene» (65% «ottimo»); in attivo con pochi vinti «da
 seguire»; in perdita **richiamato**: i suoi voti d'acquisto di più giorni sotto una soglia di Kronos (la maggiore tra
 +1%, la soglia migliore dell'ufficio e la media dei suoi trade vinti) non contano, gli altri pesano il 60%. Un voto
-intraday richiamato perde solo forza: la soglia a 5 sedute è un altro orizzonte. Le vendite non si toccano.
+intraday richiamato non perde forza ma **taglia** (×0,6): la soglia a 5 sedute è un altro orizzonte, e l'ingresso sulle
+candele brevi resta deciso da Kronos con i suoi filtri. Le vendite non si toccano.
 
 ### La sala caffè
 
 Dai trade chiusi raggruppa per tipo d'ingresso, settore e forza di Kronos: con almeno 3 trade, vinti sotto il 40% e
 media negativa → **prudenza** (×0,85 sul voto), vinti dal 60% e media positiva → **fiducia** (×1,1), in totale tra ×0,7
-e ×1,15. Chi non ha niente da fare va in pausa; chi ha di nuovo un trade da aprire torna alla scrivania nello stesso giro.
+e ×1,15. Sui voti intraday la prudenza riduce la **taglia**, non la forza (e la fiducia non la aumenta): così
+l'esperienza dei trade di più giorni non basta a far saltare un'occasione che Kronos vede sulle candele da 5 o 15 minuti. Chi non ha niente da fare va in pausa; chi ha di nuovo un trade da aprire torna alla scrivania nello stesso giro.
 I colleghi si scambiano solo dati veri: dossier, proiezioni, candele, lezioni.
 
 ### L'esplorazione
@@ -169,6 +171,10 @@ l'opportunità regge. Si chiude quando è comprato (lo segue il suo custode), qu
    - **costi**: Kronos deve prevedere almeno **2 volte** i costi di andata e ritorno (crypto 0,5% → +1%; azioni ~0,05%
      → +0,1%); con Kronos attivo, senza proiezione utilizzabile non si entra;
    - **evidenza combinata** del dossier: almeno 50% sopra la media a 200, 60% sotto.
+
+   **Voti misti**: se sullo stesso titolo votano sia agenti di più giorni sia l'intraday e uno di questi filtri fa
+   aspettare l'ingresso di più giorni, si guarda la sola parte intraday: se da sola arriva a +0,5 entra come **trade
+   intraday** (sua taglia, suo obiettivo e stop, chiusura in giornata o promozione), invece di perdere l'occasione.
 3. **Taglia**: al massimo il **10% del conto** per titolo, meno se il titolo è nervoso (valore × volatilità giornaliera ≤
    0,25% del conto) × rischio ammesso × **fiducia in Kronos** (50% → 40% della taglia, ≥ 80% → piena) × evidenza (al
    minimo metà); sotto la media a 200 ancora × 0,5, mai oltre il 5%.

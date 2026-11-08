@@ -127,6 +127,14 @@ export function applyLessons(reports: Record<string, AgentReport>, lezioni: Lezi
       let f = 1;
       for (const l of hits) f *= l.effetto === "prudenza" ? 0.85 : 1.1;
       f = Math.min(1.15, Math.max(0.7, f));
+      const quali0 = hits.map((l) => `«${l.chiave}» ${l.vinti}/${l.trade}`).join(", ");
+      // Voto intraday: l'esperienza della squadra cambia la taglia (solo in meno), non la forza; l'ingresso lo decide Kronos
+      // sulle candele brevi, e la prudenza non deve bastare a portarlo sotto la soglia d'acquisto.
+      if (s.intraday && s.pesoMassimo !== undefined) {
+        if (f >= 1) return s;
+        note.push(`sala caffè: ${s.agente} su ${s.simbolo} più prudente (taglia ×${f.toFixed(2)}) per l'esperienza della squadra: ${quali0}`);
+        return { ...s, pesoMassimo: s.pesoMassimo * f, perche: `${s.perche} · sala caffè: taglia ridotta dall'esperienza della squadra (${quali0})` };
+      }
       const forza = Math.min(1, s.forza * f);
       if (Math.abs(forza - s.forza) < 1e-9) return s;
       const quali = hits.map((l) => `«${l.chiave}» ${l.vinti}/${l.trade}`).join(", ");

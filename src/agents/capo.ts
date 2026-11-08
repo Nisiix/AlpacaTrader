@@ -163,7 +163,10 @@ export function applyGuidance(reports: Record<string, AgentReport>, capo: CapoRe
         note.push(`capo ufficio: voto di ${s.agente} su ${s.simbolo} scartato (Kronos ${pct(fc ?? null)} sotto la soglia del richiamo ${pct(rule.kronosMin)})`);
         continue;
       }
-      kept.push({ ...s, forza: s.forza * rule.forza, perche: `${s.perche} · sotto richiamo del capo ufficio: forza ridotta` });
+      // Per un voto intraday il richiamo riduce la taglia, non la forza: la decisione d'entrare resta a Kronos sulle candele
+      // brevi (con i suoi filtri di probabilità e costi), così il richiamo non lo porta sotto la soglia d'acquisto.
+      if (s.intraday && s.pesoMassimo !== undefined) kept.push({ ...s, pesoMassimo: s.pesoMassimo * rule.forza, perche: `${s.perche} · sotto richiamo del capo ufficio: taglia ridotta` });
+      else kept.push({ ...s, forza: s.forza * rule.forza, perche: `${s.perche} · sotto richiamo del capo ufficio: forza ridotta` });
     }
     r.segnali = kept;
   }
