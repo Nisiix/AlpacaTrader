@@ -17,3 +17,14 @@ export ALPACA_KEY_ID=... ALPACA_SECRET_KEY=...
 correlazione di rango tra rendimento previsto e reale, errore assoluto contro "non cambia nulla",
 e il rendimento medio di chi seguisse il segno della previsione. I pesi si scaricano da Hugging Face alla prima esecuzione
 (`NeoQuasar/Kronos-mini` 4,1M parametri con `Kronos-Tokenizer-2k`; `Kronos-small` 24,7M e `Kronos-base` 102M con `Kronos-Tokenizer-base`).
+
+## Sidecar per il motore degli agenti
+
+```sh
+./venv/bin/python server.py --model small --port 8765     # resta acceso; chiavi Alpaca nell'ambiente
+bun run agents --kronos http://127.0.0.1:8765              # l'agente "kronos" si accende solo così
+```
+
+`POST /forecast` con `{"symbols": [...], "horizon": 5}` risponde con il rendimento previsto della chiusura a `horizon`
+sedute per ogni simbolo (solo sedute finite, 400 barre di storia, 3 campioni). L'agente tiene solo il 25% di previsioni
+più nette e solo se concordano col trend di lungo periodo; senza sidecar il motore lavora senza di lui.

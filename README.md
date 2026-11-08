@@ -1,5 +1,49 @@
 # Agente di paper trading Alpaca
 
+Due modi di lavorare, stesso conto paper, stesse regole:
+
+- **Motore degli agenti** (`bun run agents`): processo sempre acceso sul tuo PC, orizzonte a 20 sedute, più agenti
+  che osservano e votano, dashboard 3D locale. È la strada scelta dopo la valutazione in `docs/`.
+- **Sveglie** (`bun run schedule` / cloud): 4 volte al giorno con `claude -p`, come prima.
+
+## Motore degli agenti
+
+```sh
+bun run agents                       # ogni 5 minuti: conto, agenti, gabbia, ordini, stop, diario; dashboard su http://127.0.0.1:8787
+bun run agents --fake --once         # un giro con broker finto, senza dashboard
+bun run agents --kronos http://127.0.0.1:8765   # aggiunge l'agente Kronos (sidecar in tools/kronos/server.py)
+bun run dashboard                    # solo la dashboard, in lettura, sullo stato esistente
+```
+
+Opzioni: `--tick 5` (minuti tra un giro e l'altro), `--port 8787`, `--no-dashboard`, `--fake`, `--once`.
+Da tenere acceso il PC (o un altro processo con lo stesso `state/`): il motore riparte da `state/` dopo un riavvio,
+il lock e gli ID deterministici evitano doppioni anche con le sveglie classiche.
+
+| Agente | Cosa guarda | Segnali |
+|---|---|---|
+| `trend` | chiusura sopra le medie a 50 e 200 giorni, momentum a 6 mesi | compra i migliori 5 (forza 1 → 0,5 per classifica); vende chi ha in mano sotto la 50 |
+| `rientro` | sopra la 200, tornato entro il 2% dalla media a 50 dopo una corsa di almeno il 4% in 20 sedute | compra (forza 0,7) |
+| `regime` | SPY contro la sua media a 200 giorni e la volatilità a 20 giorni | nessun ordine: dimezza l'esposizione ammessa quando il mercato è debole o nervoso |
+| `orizzonte` | trade aperti da 20 sedute | vende (0,8 se lo slancio è finito, 0,4 se il trend regge: allora decide il trend) |
+| `kronos` (opzionale) | previsioni del modello a 5 sedute, solo il 25% più nette e nel verso del trend | compra/vende (0,5) |
+
+L'**allocatore** somma i segnali pesati (peso 1 per tutti finché il diario non ha un campione; poi 0,5 a chi perde,
+1,2 a chi vince con campione affidabile), compra sopra 0,5 e vende sotto -0,5; il peso obiettivo di un titolo è il massimo
+della gabbia (20%, meno se volatile) × rischio del regime × punteggio. Poi tutto passa dalla **gabbia** (`src/cage.ts`):
+acquisti solo nella finestra 15:40-17:30 di Roma e una sola volta al giorno per titolo, vendite e stop a mercato aperto.
+L'interruttore a -5% dal massimo si **riarma da solo dopo 5 giorni di borsa** (nel backtest: da +4,3% a +17,7%).
+
+Ogni cosa che succede finisce nel **registro eventi** `state/events/AAAA-MM-GG.jsonl` (prezzi, segnali, rischio,
+allocazione, ordini, rifiuti, stop, trade, allarmi) e nello stato `state/agents-status.json`. La **dashboard**
+(`src/dashboard/`) li legge: pavimento 3D dei mercati (altezza = peso in portafoglio, colore = guadagno/perdita), agenti in
+orbita che lanciano i segnali verso i titoli, anello della gabbia, pannelli con posizioni, punteggi, ordini, rifiuti,
+stop, diario ed eventi in diretta via WebSocket. Three.js è servito dal pacchetto npm: funziona senza internet.
+Telegram riceve ogni ordine inviato, gli allarmi e un riepilogo dopo le 22:05.
+
+![dashboard](docs/dashboard.png)
+
+## Sveglie (modalità classica)
+
 Si sveglia 4 volte al giorno (ora di Roma, lun-ven), legge il conto, chiede una decisione a `claude -p`,
 la passa nella gabbia di regole, invia gli ordini ammessi, scrive il testimone e manda il resoconto su Telegram.
 Solo paper: l'endpoint `https://paper-api.alpaca.markets` è scritto nel codice.
@@ -44,7 +88,7 @@ bun test                           # test con broker e cervello finti
 - Voto a maggioranza: `claude -p` risponde 3 volte in parallelo; passa solo l'ordine proposto da almeno 2 risposte,
   con la quantità più prudente. Con meno di 2 risposte valide nessun ordine del modello (stop e uscite di trend restano).
 - Registro degli errori (`state/lessons.json`): dopo uno stop loss niente riacquisto per 5 giorni di borsa; due rifiuti di Alpaca uguali bloccano quel titolo-lato per 5 giorni.
-- Interruttore (`state/breaker.json`): -5% dal massimo blocca gli acquisti finché non lanci `breaker-reset`; -2% in giornata li blocca fino a domani.
+- Interruttore (`state/breaker.json`): -5% dal massimo blocca gli acquisti per 5 giorni di borsa (o finché non lanci `breaker-reset`), poi si riarma da solo; -2% in giornata li blocca fino a domani.
 - Nessun ordine nel briefing, a mercato chiuso o con più di 20 minuti di ritardo.
 
 ## Nel cloud, a PC spento
@@ -86,4 +130,8 @@ Il repo deve essere **privato**: il branch `stato` contiene conto e posizioni.
 | `src/telegram.ts`, `src/report.ts` | messaggi, allarmi ⚠️, resoconto |
 | `src/log.ts` | log in `logs/<sveglia>.log`, chiavi oscurate |
 | `src/wake.ts` | il giro di una sveglia |
-| `src/cli/` | `schedule`, `once`, `status`, `telegram-chat-id`, `breaker-reset`, `backtest`, `cloud-wake` |
+| `src/cli/` | `schedule`, `once`, `status`, `telegram-chat-id`, `breaker-reset`, `backtest`, `cloud-wake`, `agents`, `dashboard` |
+| `src/agents/` | motore: `types`, `bus` (registro eventi), agenti `trend` `pullback` `regime` `horizon` `kronos`, `allocator`, `engine` (il giro) |
+| `src/dashboard/` | server Bun (HTTP + WebSocket + Three.js locale) e pagina `index.html` |
+| `tools/kronos/` | prova di Kronos sui dati Alpaca e sidecar `server.py` per l'agente |
+| `docs/` | valutazione, risultati grezzi |

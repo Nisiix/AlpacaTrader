@@ -5,10 +5,16 @@ export interface CliArgs {
   now?: string;
   state?: string;
   logs?: string;
+  // Motore degli agenti e dashboard.
+  once: boolean;
+  tick?: number;
+  port?: number;
+  noDashboard: boolean;
+  kronos?: string;
 }
 
 export function parseArgs(argv: string[]): CliArgs {
-  const a: CliArgs = { fake: false, force: false };
+  const a: CliArgs = { fake: false, force: false, once: false, noDashboard: false };
   for (let i = 0; i < argv.length; i++) {
     const k = argv[i]!;
     const val = () => {
@@ -22,6 +28,11 @@ export function parseArgs(argv: string[]): CliArgs {
     else if (k === "--now") a.now = val();
     else if (k === "--state") a.state = val();
     else if (k === "--logs") a.logs = val();
+    else if (k === "--once") a.once = true;
+    else if (k === "--tick") a.tick = Number(val());
+    else if (k === "--port") a.port = Number(val());
+    else if (k === "--no-dashboard") a.noDashboard = true;
+    else if (k === "--kronos") a.kronos = val();
     else throw new Error(`opzione sconosciuta: ${k}`);
   }
   if (a.now && !a.fake) throw new Error("--now si usa solo con --fake");

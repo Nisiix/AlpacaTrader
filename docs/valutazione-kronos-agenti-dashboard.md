@@ -383,3 +383,25 @@ In tutti i casi il codice resta quello: stato su git o su disco, testimone, lock
 già scritti per sopravvivere a riavvii. Raccomandazione: **non comprare né accendere nulla finché il backtest con costi
 non mostra un motore che batte il 60/40**; nel frattempo GitHub Actions (o le sveglie attuali, con l'interruttore
 riparato) copre tutto ciò che serve per una strategia a orizzonte di settimane.
+
+---
+
+## Addendum (8 novembre, notte): cosa è stato costruito
+
+Decisioni prese: orizzonte a 20 sedute (quello con il 61-67% storico), motore in locale su un PC acceso, niente VPS
+né GitHub a pagamento. Implementato e provato in questo branch:
+
+- **Interruttore con riarmo automatico** dopo 5 giorni di borsa (`src/breaker.ts`): il backtest di serie su 550 sedute
+  passa da +4,33% a **+17,65%** (SPY +35,18%, 60/40 +18,22%), perdita massima -8,72%, 208 ordini, 3 scatti dell'interruttore.
+- **Motore degli agenti** `bun run agents` (`src/agents/`): trend, rientro, regime, orizzonte, Kronos opzionale;
+  allocatore a punteggi con pesi dal diario; gabbia invariata a valle; stop GTC su Alpaca; diario con gli agenti che hanno
+  votato ogni ingresso; registro eventi JSONL; Telegram per ordini, allarmi e riepilogo serale.
+- **Dashboard 3D locale** (`src/dashboard/`, porta 8787) con Three.js servito dal pacchetto npm (funziona offline).
+- **Sidecar Kronos** (`tools/kronos/server.py`) per l'agente `kronos`, spento di serie.
+- **Test**: 15 nuovi (agenti, allocatore, interruttore, motore con broker finto, dashboard), 114 in tutto, tutti verdi.
+- **Prova su dati reali a mercato chiuso** (8/11, stato separato): 3 segnali (AAPL trend+rientro 1,2; MSFT trend 1,0),
+  regime "SPY sopra la media a 200", nessuna proposta perché le posizioni sono già al peso obiettivo. Nessun ordine.
+
+Cosa manca e va deciso con i prossimi dati: il backtest *del motore* (oggi il backtest rigioca la gabbia con il metodo
+trend; rientro, orizzonte e pesi degli agenti non sono ancora simulati), e almeno 4-6 settimane di paper con il diario
+prima di toccare i pesi a mano.

@@ -19,6 +19,8 @@ export interface EntryContext {
   fiducia: Confidence | null;
   attesa: string;
   perche: string;
+  // Motore degli agenti: quali agenti hanno votato l'ingresso (serve a pesarli sui risultati).
+  agenti?: string[];
 }
 
 export interface Intent {
@@ -102,6 +104,7 @@ function exitReason(o: Order, intent: Intent | undefined): string {
   if (intent?.origine === "stop-loss") return "stop loss del codice";
   if (intent?.origine === "uscita-trend") return "uscita di trend del codice";
   if (intent?.origine === "modello") return "scelta del modello";
+  if (intent?.origine === "agenti") return `agenti: ${intent.contesto?.perche ?? ""}`.trim();
   return "sconosciuto";
 }
 

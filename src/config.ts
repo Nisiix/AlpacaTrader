@@ -25,8 +25,10 @@ export const LIMITS = {
   earningsBlackoutDays: 2,
   // Titoli che si muovono insieme: tetto complessivo.
   groups: [{ name: "tecnologia", symbols: ["QQQ", "NVDA", "MSFT", "AAPL"], maxPct: 0.35 }],
-  // Interruttore: oltre questa perdita dal massimo gli acquisti si fermano finché non lo riarmi tu.
+  // Interruttore: oltre questa perdita dal massimo gli acquisti si fermano, e si riarma da solo dopo breakerRearmSessions
+  // giorni di borsa (nel backtest su 550 sedute il riarmo manuale mai fatto costava 13 punti di rendimento).
   maxDrawdownPct: 0.05,
+  breakerRearmSessions: 5,
   // Oltre questa perdita in giornata niente acquisti fino a domani.
   maxDailyLossPct: 0.02,
   // Dopo uno stop loss su un titolo, niente riacquisto per questi giorni di borsa.
@@ -96,4 +98,30 @@ export const JOURNAL = {
   highVol: 0.015,
   keepIdsDays: 30,
   recentForBrain: 10,
+};
+
+// Motore degli agenti (bun run agents): processo sempre acceso sul tuo PC, orizzonte a 20 sedute.
+// A un mese la direzione "sale" ha ragione nel 61-67% dei casi sullo storico 2020-2026: è l'orizzonte scelto.
+export const AGENTS = {
+  tickMinutes: 5,
+  horizonSessions: 20,
+  // Finestra degli ingressi, ora di Roma: dopo i primi 10 minuti di seduta, fino a metà pomeriggio USA.
+  entryWindow: { from: "15:40", to: "17:30" },
+  // Punteggio netto (somma pesata dei segnali) oltre il quale si compra / sotto il quale si vende.
+  buyScore: 0.5,
+  sellScore: -0.5,
+  // Peso minimo di un'aggiunta: sotto il 2% del conto l'ordine non vale il costo.
+  minAddPct: 0.02,
+  // Regime: con SPY sotto la media a 200 giorni l'esposizione si dimezza; con volatilità alta pure.
+  regime: { bearScale: 0.5, highVolDaily: 0.015, highVolScale: 0.5 },
+  // Rientro sul trend: prezzo tra la media a 50 e il 2% sopra, dopo che nelle ultime 20 sedute era almeno il 4% sopra.
+  pullback: { nearPct: 0.02, runUpPct: 0.04, lookback: 20 },
+  // Pesi degli agenti dal diario: scendono se un agente perde con un campione almeno indicativo, salgono se vince con campione affidabile.
+  weights: { base: 1, losing: 0.5, winning: 1.2 },
+  // Kronos (sidecar Python, opzionale): si considerano solo le previsioni più nette (quota) e solo se concordano col trend.
+  kronos: { topShare: 0.25, horizon: 5, timeoutMs: 90_000 },
+  // Riepilogo su Telegram una volta al giorno, alla prima passata dopo quest'ora di Roma.
+  summaryAfter: "22:05",
+  dashboardPort: 8787,
+  eventsKeepDays: 60,
 };

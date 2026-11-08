@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agenti Alpaca</title>
+<style>
+  :root { --bg:#0b0f16; --panel:#121a26; --line:#1f2a3a; --fg:#e6edf3; --muted:#8b98a9; --up:#2ecc71; --down:#e74c3c; --buy:#3fb950; --sell:#f85149; --accent:#58a6ff; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font: 13px/1.4 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; height:100vh; display:grid; grid-template-columns: 1fr 420px; grid-template-rows: 44px 1fr; }
+  header { grid-column: 1 / -1; display:flex; align-items:center; gap:16px; padding:0 16px; border-bottom:1px solid var(--line); background:var(--panel); }
+  header h1 { font-size:15px; margin:0; font-weight:600; }
+  header .kpi { display:flex; gap:14px; margin-left:auto; }
+  .kpi span b { font-variant-numeric: tabular-nums; }
+  #scene { position:relative; overflow:hidden; }
+  #scene canvas { display:block; }
+  .lbl { color:var(--fg); font-size:11px; background:rgba(11,15,22,.7); padding:2px 5px; border-radius:4px; white-space:nowrap; pointer-events:none; }
+  .lbl.agent { color:var(--accent); }
+  aside { border-left:1px solid var(--line); overflow:auto; background:var(--panel); padding:10px 12px; display:flex; flex-direction:column; gap:12px; }
+  section h2 { font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:0 0 6px; }
+  table { width:100%; border-collapse:collapse; } td, th { padding:3px 4px; text-align:left; border-bottom:1px solid var(--line); vertical-align:top; } th { color:var(--muted); font-weight:500; }
+  td.num, th.num { text-align:right; font-variant-numeric: tabular-nums; }
+  .up { color:var(--up); } .down { color:var(--down); } .buy { color:var(--buy); } .sell { color:var(--sell); } .muted { color:var(--muted); }
+  .bar { height:6px; background:var(--line); border-radius:3px; overflow:hidden; } .bar i { display:block; height:100%; background:var(--accent); }
+  #events { max-height: 320px; overflow:auto; font-size:12px; } #events div { padding:3px 0; border-bottom:1px solid var(--line); } #events time { color:var(--muted); margin-right:6px; font-variant-numeric: tabular-nums; }
+  .tag { display:inline-block; padding:0 5px; border-radius:3px; background:var(--line); color:var(--muted); font-size:11px; margin-right:4px; }
+  .dot { display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--down); margin-right:6px; } .dot.on { background:var(--up); }
+  @media (max-width: 900px) { body { grid-template-columns: 1fr; grid-template-rows: 44px 45vh 1fr; } aside { border-left:0; border-top:1px solid var(--line); } }
+</style>
+<script type="importmap">{ "imports": { "three": "/vendor/three.module.js", "three/addons/": "/vendor/addons/" } }</script>
+</head>
+<body>
+<header>
+  <h1><span class="dot" id="live"></span>Agenti Alpaca · paper</h1>
+  <span class="muted" id="giro">in attesa dello stato…</span>
+  <div class="kpi">
+    <span>Patrimonio <b id="k-eq">–</b></span>
+    <span>Oggi <b id="k-day">–</b></span>
+    <span>Contanti <b id="k-cash">–</b></span>
+    <span>Rischio <b id="k-risk">–</b></span>
+    <span>vs SPY <b id="k-spy">–</b></span>
+  </div>
+</header>
+<div id="scene"></div>
+<aside>
+  <section><h2>Posizioni</h2><table id="positions"><thead><tr><th>Titolo</th><th class="num">Qta</th><th class="num">Carico</th><th class="num">Ora</th><th class="num">Var.</th><th class="num">Valore</th></tr></thead><tbody></tbody></table></section>
+  <section><h2>Agenti e pesi</h2><table id="agents"><tbody></tbody></table></section>
+  <section><h2>Punteggi e segnali</h2><table id="scores"><thead><tr><th>Titolo</th><th class="num">Punteggio</th><th>Agenti</th></tr></thead><tbody></tbody></table><div id="signals" class="muted" style="margin-top:6px"></div></section>
+  <section><h2>Ordini dell'ultimo giro</h2><div id="orders" class="muted">nessuno</div></section>
+  <section><h2>Rifiuti della gabbia</h2><div id="rejects" class="muted">nessuno</div></section>
+  <section><h2>Stop su Alpaca · Diario</h2><div id="stops" class="muted"></div><div id="journal" class="muted"></div></section>
+  <section><h2>Eventi in diretta</h2><div id="events"></div></section>
+</aside>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
+
+const $ = (s) => document.querySelector(s);
+const fmt = (x, d = 2) => (x === null || x === undefined || Number.isNaN(x)) ? '–' : Number(x).toLocaleString('it-IT', { minimumFractionDigits: d, maximumFractionDigits: d });
+const pct = (x) => (x === null || x === undefined) ? '–' : `${x >= 0 ? '+' : ''}${(x * 100).toFixed(2)}%`;
+const cls = (x) => x > 0 ? 'up' : x < 0 ? 'down' : '';
+const UNIVERSE = ['SPY', 'QQQ', 'IWM', 'AAPL', 'MSFT', 'NVDA', 'GLD', 'TLT'];
+const GROUPS = { SPY: 'indici', QQQ: 'tecnologia', IWM: 'indici', AAPL: 'tecnologia', MSFT: 'tecnologia', NVDA: 'tecnologia', GLD: 'oro', TLT: 'obbligazioni' };
+
+// ---------- scena 3D: il pavimento dei mercati, l'anello della gabbia, gli agenti in orbita ----------
+const host = $('#scene');
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(2, window.devicePixelRatio));
+host.appendChild(renderer.domElement);
+const labels = new CSS2DRenderer();
+labels.domElement.style.position = 'absolute'; labels.domElement.style.top = '0'; labels.domElement.style.pointerEvents = 'none';
+host.appendChild(labels.domElement);
+const scene = new THREE.Scene();
+scene.fog = new THREE.Fog(0x0b0f16, 18, 40);
+const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
+camera.position.set(0, 12, 19);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0, 1, 0); controls.enableDamping = true; controls.maxPolarAngle = Math.PI / 2.05;
+scene.add(new THREE.HemisphereLight(0xaaccff, 0x223344, 1.1));
+const sun = new THREE.DirectionalLight(0xffffff, 1.2); sun.position.set(6, 12, 8); scene.add(sun);
+const grid = new THREE.GridHelper(24, 24, 0x1f2a3a, 0x16202c); scene.add(grid);
+const cage = new THREE.Mesh(new THREE.TorusGeometry(6.2, 0.04, 8, 120), new THREE.MeshBasicMaterial({ color: 0x58a6ff, transparent: true, opacity: 0.55 }));
+cage.rotation.x = Math.PI / 2; cage.position.y = 0.05; scene.add(cage);
+const cageLbl = new CSS2DObject(Object.assign(document.createElement('div'), { className: 'lbl agent', textContent: 'gabbia' })); cageLbl.position.set(0, 0.2, 6.4); scene.add(cageLbl);
+
+const symbols = new Map(); // simbolo -> { mesh, label, pos }
+UNIVERSE.forEach((s, i) => {
+  const col = i % 4, row = Math.floor(i / 4);
+  const pos = new THREE.Vector3((col - 1.5) * 2.4, 0, (row - 0.5) * 2.6);
+  const mesh = new THREE.Mesh(new THREE.BoxGeometry(1.4, 1, 1.4), new THREE.MeshStandardMaterial({ color: 0x3a4657, roughness: 0.5, metalness: 0.1 }));
+  mesh.position.copy(pos); mesh.scale.y = 0.2; mesh.position.y = 0.1; scene.add(mesh);
+  const el = document.createElement('div'); el.className = 'lbl'; el.textContent = s;
+  const label = new CSS2DObject(el); label.position.set(pos.x, 0.6, pos.z); scene.add(label);
+  symbols.set(s, { mesh, label, el, pos, targetH: 0.2 });
+});
+const agents = new Map(); // nome -> { mesh, pos }
+function placeAgents(names) {
+  names.forEach((n, i) => {
+    if (agents.has(n)) return;
+    const a = (i / Math.max(1, names.length)) * Math.PI * 2;
+    const pos = new THREE.Vector3(Math.cos(a) * 8, 1.2, Math.sin(a) * 8);
+    const mesh = new THREE.Mesh(new THREE.SphereGeometry(0.45, 24, 16), new THREE.MeshStandardMaterial({ color: 0x58a6ff, emissive: 0x1b3a66, roughness: 0.3 }));
+    mesh.position.copy(pos); scene.add(mesh);
+    const el = document.createElement('div'); el.className = 'lbl agent'; el.textContent = n;
+    const label = new CSS2DObject(el); label.position.set(pos.x, pos.y + 0.8, pos.z); scene.add(label);
+    agents.set(n, { mesh, pos, el, pulse: 0 });
+  });
+}
+placeAgents(['trend', 'rientro', 'regime', 'orizzonte']);
+const beams = []; // { line, born, ttl }
+function beam(from, to, color, ttl = 2500) {
+  const geo = new THREE.BufferGeometry().setFromPoints([from.clone(), to.clone().setY(0.8)]);
+  const line = new THREE.Line(geo, new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.9 }));
+  scene.add(line); beams.push({ line, born: performance.now(), ttl });
+}
+function pulse(symbol, color) {
+  const s = symbols.get(symbol); if (!s) return;
+  const ring = new THREE.Mesh(new THREE.RingGeometry(0.9, 1.0, 48), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.9, side: THREE.DoubleSide }));
+  ring.rotation.x = -Math.PI / 2; ring.position.set(s.pos.x, 0.06, s.pos.z); scene.add(ring);
+  beams.push({ line: ring, born: performance.now(), ttl: 1800, grow: true });
+}
+function resize() {
+  const w = host.clientWidth, h = host.clientHeight;
+  renderer.setSize(w, h); labels.setSize(w, h); camera.aspect = w / h; camera.updateProjectionMatrix();
+}
+new ResizeObserver(resize).observe(host); resize();
+function animate() {
+  requestAnimationFrame(animate);
+  const now = performance.now();
+  for (const s of symbols.values()) {
+    s.mesh.scale.y += (s.targetH - s.mesh.scale.y) * 0.08; s.mesh.position.y = s.mesh.scale.y / 2;
+    s.label.position.y = s.mesh.scale.y + 0.5;
+  }
+  for (const a of agents.values()) { a.pulse *= 0.95; a.mesh.scale.setScalar(1 + a.pulse); }
+  for (let i = beams.length - 1; i >= 0; i--) {
+    const b = beams[i]; const k = (now - b.born) / b.ttl;
+    if (k >= 1) { scene.remove(b.line); beams.splice(i, 1); continue; }
+    b.line.material.opacity = 0.9 * (1 - k); if (b.grow) b.line.scale.setScalar(1 + k * 1.5);
+  }
+  cage.rotation.z += 0.0015;
+  controls.update(); renderer.render(scene, camera); labels.render(scene, camera);
+}
+animate();
+
+// ---------- stato e pannelli ----------
+let status = null;
+function paint(st) {
+  status = st;
+  if (!st || st.versione !== 1) { $('#giro').textContent = st?.nota ?? 'nessuno stato'; return; }
+  $('#giro').textContent = `giro ${st.giro} · ${new Date(st.aggiornato).toLocaleTimeString('it-IT')} · mercato ${st.mercatoAperto ? 'aperto' : 'chiuso'}${st.finestraIngressi ? ' · finestra ingressi' : ''}`;
+  const c = st.conto || {};
+  $('#k-eq').textContent = fmt(c.patrimonio) + ' $'; $('#k-cash').textContent = fmt(c.contanti) + ' $';
+  $('#k-day').textContent = (c.pnlGiorno >= 0 ? '+' : '') + fmt(c.pnlGiorno) + ' $'; $('#k-day').className = cls(c.pnlGiorno);
+  $('#k-risk').textContent = `${Math.round((st.rischio ?? 1) * 100)}%`;
+  $('#k-spy').textContent = st.confronto ? `${pct(st.confronto.conto)} / ${pct(st.confronto.spy)}` : '–';
+  const eq = c.patrimonio || 1;
+  const held = new Map((st.posizioni || []).map((p) => [p.simbolo, p]));
+  for (const [sym, s] of symbols) {
+    const p = held.get(sym);
+    const share = p ? p.valore / eq : 0;
+    s.targetH = Math.max(0.2, share * 18);
+    s.mesh.material.color.set(p ? (p.variazione >= 0 ? 0x2ecc71 : 0xe74c3c) : 0x3a4657);
+    s.mesh.material.emissive?.set(p ? (p.variazione >= 0 ? 0x0f3d22 : 0x4a1510) : 0x000000);
+    const price = st.prezzi?.[sym];
+    s.el.innerHTML = `<b>${sym}</b> ${price ? fmt(price) : ''}${p ? ` · ${(share * 100).toFixed(1)}% · <span class="${cls(p.variazione)}">${pct(p.variazione)}</span>` : ''}`;
+  }
+  $('#positions tbody').innerHTML = (st.posizioni || []).map((p) => `<tr><td>${p.simbolo}</td><td class="num">${p.quantita}</td><td class="num">${fmt(p.prezzoCarico)}</td><td class="num">${fmt(p.prezzoAttuale)}</td><td class="num ${cls(p.variazione)}">${pct(p.variazione)}</td><td class="num">${fmt(p.valore, 0)}</td></tr>`).join('') || '<tr><td colspan="6" class="muted">nessuna posizione</td></tr>';
+  placeAgents(Object.keys(st.agenti || {}));
+  $('#agents tbody').innerHTML = Object.entries(st.agenti || {}).map(([n, a]) => `<tr><td><b>${n}</b> <span class="tag">peso ${st.pesi?.[n] ?? 1}</span> <span class="tag">${a.segnali} segnali</span>${a.errore ? `<br><span class="down">${a.errore}</span>` : ''}${a.note?.length ? `<br><span class="muted">${a.note.join(' · ')}</span>` : ''}</td></tr>`).join('');
+  $('#scores tbody').innerHTML = (st.punteggi || []).map((s) => `<tr><td>${s.simbolo}</td><td class="num ${cls(s.punteggio)}">${s.punteggio.toFixed(2)}</td><td class="muted">${s.agenti.join(', ')}</td></tr>`).join('') || '<tr><td colspan="3" class="muted">nessun segnale</td></tr>';
+  $('#signals').innerHTML = (st.segnali || []).map((s) => `<div><span class="${s.lato}">${s.lato === 'buy' ? '▲' : '▼'} ${s.simbolo}</span> <span class="tag">${s.agente}</span> <span class="tag">forza ${s.forza.toFixed(2)}</span> ${s.perche}</div>`).join('');
+  $('#orders').innerHTML = (st.ordini || []).map((o) => `<div><span class="${o.lato}">${o.lato === 'buy' ? 'COMPRA' : 'VENDE'} ${o.quantita} ${o.simbolo}</span> <span class="tag">${o.esito}</span><br><span class="muted">${o.perche}</span></div>`).join('') || 'nessuno';
+  $('#rejects').innerHTML = (st.rifiuti || []).map((r) => `<div><span class="sell">${r.side} ${r.qty} ${r.symbol}</span> <span class="tag">${r.source}</span> ${r.reason}</div>`).join('') || 'nessuno';
+  const sp = st.stopSuAlpaca;
+  $('#stops').innerHTML = sp ? `Stop attivi: ${[...sp.ok, ...sp.placed].join(', ') || 'nessuno'}${sp.errors.length ? `<br><span class="down">${sp.errors.join('; ')}</span>` : ''}` : 'Stop: non verificati in questo giro (mercato chiuso)';
+  const d = st.diario?.statistiche;
+  $('#journal').innerHTML = d ? `Diario: ${d.trade} trade chiusi, ${d.vinti} vinti, attesa ${d.attesa === null ? '–' : pct(d.attesa)} (${d.campione}).<br><span class="muted">${st.diario.stato}</span>${st.acquistiBloccati ? `<br><span class="down">Acquisti bloccati: ${st.acquistiBloccati}</span>` : ''}${st.allarmi?.length ? `<br><span class="down">Allarmi: ${st.allarmi.join(' | ')}</span>` : ''}` : '';
+}
+async function loadStatus() {
+  try { paint(await (await fetch('/api/status')).json()); } catch (e) { $('#giro').textContent = `stato non leggibile: ${e.message}`; }
+}
+const evBox = $('#events');
+function describe(e) {
+  switch (e.tipo) {
+    case 'tick': return `giro ${e.giro}`;
+    case 'conto': return `patrimonio ${fmt(e.patrimonio)} $, oggi ${e.pnlGiorno >= 0 ? '+' : ''}${fmt(e.pnlGiorno)} $, mercato ${e.mercatoAperto ? 'aperto' : 'chiuso'}`;
+    case 'prezzi': return `prezzi: ${Object.entries(e.prezzi || {}).map(([k, v]) => `${k} ${fmt(v)}`).join(' · ')}`;
+    case 'agente': return `<span class="tag">${e.agente}</span>${e.errore ? `<span class="down">${e.errore}</span>` : `${e.segnali} segnali${e.rischio !== null && e.rischio !== undefined ? `, rischio ${Math.round(e.rischio * 100)}%` : ''}${e.note?.length ? ` · ${e.note.join(' · ')}` : ''}`}`;
+    case 'segnale': return `<span class="tag">${e.agente}</span><span class="${e.lato}">${e.lato === 'buy' ? '▲ compra' : '▼ vendi'} ${e.simbolo}</span> forza ${Number(e.forza).toFixed(2)} · ${e.perche}`;
+    case 'rischio': return `rischio ammesso ${Math.round(e.rischio * 100)}% · ${(e.note || []).join(' · ')}`;
+    case 'allocazione': return `allocazione: ${(e.proposte || []).map((p) => `${p.side} ${p.qty} ${p.symbol}`).join(', ') || 'nessuna proposta'} · rischio ${Math.round(e.rischio * 100)}%`;
+    case 'ordine': return `<span class="${e.lato}">ORDINE ${e.lato === 'buy' ? 'COMPRA' : 'VENDE'} ${e.quantita} ${e.simbolo}</span> <span class="tag">${e.esito}${e.stato ? ` ${e.stato}` : ''}</span>${e.errore ? ` <span class="down">${e.errore}</span>` : ''}`;
+    case 'rifiuto': return `<span class="sell">rifiutato ${e.lato} ${e.quantita} ${e.simbolo}</span> <span class="tag">${e.origine}</span> ${e.motivo}`;
+    case 'stop': return `stop ${e.azione}: ${e.dettaglio}`;
+    case 'trade': return e.stato === 'aperto' ? `trade aperto ${e.simbolo} ${e.quantita} @ ${fmt(e.prezzo)} (${(e.agenti || []).join(', ')})` : `trade chiuso ${e.simbolo} <span class="${cls(e.risultato)}">${pct(e.risultato)}</span> in ${e.giorni} g · ${e.uscita}`;
+    case 'allarme': return `<span class="down">⚠️ ${e.titolo}</span> ${e.dettaglio}`;
+    default: return e.testo ?? JSON.stringify(e);
+  }
+}
+function addEvent(e, live) {
+  const row = document.createElement('div');
+  row.innerHTML = `<time>${new Date(e.t).toLocaleTimeString('it-IT')}</time>${describe(e)}`;
+  evBox.prepend(row);
+  while (evBox.children.length > 400) evBox.lastChild.remove();
+  if (!live) return;
+  if (e.tipo === 'segnale') { const a = agents.get(e.agente), s = symbols.get(e.simbolo); if (a && s) { beam(a.pos, s.pos, e.lato === 'buy' ? 0x3fb950 : 0xf85149); a.pulse = 0.6; } }
+  if (e.tipo === 'agente') { const a = agents.get(e.agente); if (a) a.pulse = 0.4; }
+  if (e.tipo === 'ordine' && e.esito === 'inviato') pulse(e.simbolo, e.lato === 'buy' ? 0x3fb950 : 0xf85149);
+  if (e.tipo === 'rifiuto') { const s = symbols.get(e.simbolo); if (s) beam(new THREE.Vector3(s.pos.x * 1.9, 0.3, s.pos.z * 1.9), s.pos, 0xf85149, 1200); }
+  if (e.tipo === 'tick' || e.tipo === 'allocazione') loadStatus();
+}
+async function loadEvents() {
+  try {
+    const d = await (await fetch('/api/events?n=300')).json();
+    evBox.innerHTML = ''; for (const e of d.eventi) addEvent(e, false);
+  } catch {}
+}
+function connect() {
+  const ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`);
+  ws.onopen = () => $('#live').classList.add('on');
+  ws.onmessage = (m) => { try { addEvent(JSON.parse(m.data), true); } catch {} };
+  ws.onclose = () => { $('#live').classList.remove('on'); setTimeout(connect, 3000); };
+}
+loadStatus(); loadEvents(); connect(); setInterval(loadStatus, 15000);
+</script>
+</body>
+</html>

@@ -11,10 +11,15 @@
     "typecheck": "tsc -p .",
     "breaker-reset": "bun src/cli/breaker-reset.ts",
     "backtest": "bun src/cli/backtest.ts",
-    "cloud-wake": "bun src/cli/cloud-wake.ts"
+    "cloud-wake": "bun src/cli/cloud-wake.ts",
+    "agents": "bun src/cli/agents.ts",
+    "dashboard": "bun src/cli/dashboard.ts"
   },
   "devDependencies": {
     "bun-types": "1.4.4",
     "typescript": "^7.0.2"
+  },
+  "dependencies": {
+    "three": "0.160.0"
   }
 }
