@@ -104,7 +104,8 @@ try {
   const candele = async (sym: string, tf: string) => {
     const key = `${sym}|${tf}`;
     const m = memo.get(key);
-    if (m && Date.now() - m.at < 60_000) return { barre: m.barre, previsione: m.previsione };
+    // Candele da 1 e 5 minuti quasi in diretta (15 secondi), le altre ogni minuto.
+    if (m && Date.now() - m.at < (tf === "1Min" || tf === "5Min" ? 15_000 : 60_000)) return { barre: m.barre, previsione: m.previsione };
     const b = (await deps.broker.getIntradayBars([sym], tf, 160))[sym] ?? [];
     const barre = b.map((x) => ({ date: x.t, open: x.open, high: x.high, low: x.low, close: x.close, volume: x.volume }));
     const ultima = b.at(-1)?.t ?? "";
