@@ -6,7 +6,7 @@ import { runAgentsBacktest } from "../src/agents/backtest.ts";
 import { ClaudeMacro, ContextAgent } from "../src/agents/context.ts";
 import { CustodiAgent, newsScore } from "../src/agents/custode.ts";
 import { ExitAgent } from "../src/agents/exits.ts";
-import { IntradayAgent, readBars, timeframeFor } from "../src/agents/intraday.ts";
+import { IntradayAgent, orizzonti, readBars, timeframeFor } from "../src/agents/intraday.ts";
 import type { IntradayBar } from "../src/broker/types.ts";
 import { selectPairs } from "../src/agents/universe.ts";
 import { EventBus, readEvents } from "../src/agents/bus.ts";
@@ -680,7 +680,7 @@ describe("intraday", () => {
     expect(r.entra).toBe(true);
     expect(r.pattern).toContain("rottura");
     expect(r.targetPct).toBeGreaterThanOrEqual(AGENTS.intraday.target.stocks);
-    expect(r.stopPct).toBeGreaterThanOrEqual(AGENTS.intraday.minStopPct);
+    expect(r.stopPct).toBeGreaterThanOrEqual(AGENTS.intraday.minStopPct.stocks);
     // Un balzo di 8 punti su candele da pochi centesimi: oltre 3 ATR dalla media, si insegue e non si entra.
     const tired = candles(100, 40, [100.1, 100.2, 108]);
     expect(readBars(tired, 108, false).entra).toBe(false);
@@ -724,8 +724,14 @@ describe("intraday", () => {
     expect(r4a.segnali.filter((x) => x.lato === "sell" && x.simbolo === "BTC/USD")).toEqual([]);
     const r4 = await a.observe(view({ closes, prices: { ...prices, "BTC/USD": 76_500 }, now: day("2026-09-23", "04:40"), today: "2026-09-23", positions: pos }));
     expect(r4.segnali.find((x) => x.lato === "sell")!.perche).toContain("durata massima");
-    // Stesso giorno, dopo l'uscita: niente secondo ingresso su BTC.
-    const r5 = await a.observe(view({ closes, prices, now: day("2026-09-22", "18:00"), today: "2026-09-22" }));
+    // Senza ordine eseguito il voto non blocca il titolo: al giro dopo si riprova (un voto scartato dall'allocatore non lo ferma).
+    const fresh = new IntradayAgent(async (syms) => Object.fromEntries(syms.filter((x) => bars[x]).map((x) => [x, bars[x]!])));
+    await fresh.observe(view({ closes, prices, now, today: "2026-09-22" }));
+    const again = await fresh.observe(view({ closes, prices, now: day("2026-09-22", "16:35"), today: "2026-09-22" }));
+    expect(again.segnali.some((x) => x.lato === "buy" && x.simbolo === "BTC/USD")).toBe(true);
+    // Stesso giorno, dopo l'uscita (trade di oggi nel diario): niente secondo ingresso su BTC.
+    const diario = { versione: 1, trade: [{ simbolo: "BTC/USD", stato: "chiuso", apertoIl: day("2026-09-22", "16:31").toISOString(), contesto: { agenti: ["intraday"] } }] } as unknown as JournalFile;
+    const r5 = await a.observe(view({ closes, prices, now: day("2026-09-22", "18:00"), today: "2026-09-22", journal: diario }));
     expect(r5.segnali.filter((x) => x.lato === "buy" && x.simbolo === "BTC/USD")).toEqual([]);
     // Fuori orario per i titoli (22:30): NVDA non è candidata neanche con Kronos favorevole.
     const r6 = await a.observe(view({ closes, prices, now: day("2026-09-22", "22:30"), today: "2026-09-22", previsioni: { NVDA: 0.03 } }));
@@ -747,8 +753,9 @@ describe("intraday", () => {
     const a = new IntradayAgent(async (syms) => Object.fromEntries(syms.filter((x) => bars[x]).map((x) => [x, bars[x]!])), async (b, step, h) => { asked.push(`${step}:${h}:${Object.keys(b).join(",")}`); return Object.fromEntries(Object.keys(b).map((x) => [x, kint[x] ?? -0.01])); });
     const r = await a.observe(view({ closes, prices, now, today: "2026-09-22" }));
     const btc = r.segnali.find((x) => x.lato === "buy" && x.simbolo === "BTC/USD")!;
-    expect(btc.perche).toContain("Kronos sulle prossime 6 candele");
-    expect(asked.some((q) => q.startsWith("5:6:") && q.includes("BTC/USD"))).toBe(true);
+    expect(btc.perche).toMatch(/Kronos a \d+ (min|h) sulle candele/);
+    // Una sola chiamata per candela, con la profondità che serve agli orizzonti (5 min: fino a un'ora = 12 candele).
+    expect(asked.some((q) => q.startsWith("5:12:") && q.includes("BTC/USD"))).toBe(true);
     // In posizione e in guadagno (+1,2%): Kronos sulle prossime candele vede -2% → protezione del profitto, si vende.
     kint = { "BTC/USD": -0.02 };
     // Una candela nuova: Kronos si richiede (in memoria si tiene una proiezione per candela).
@@ -771,7 +778,7 @@ describe("intraday", () => {
     const b2 = new IntradayAgent(async (syms) => Object.fromEntries(syms.filter((x) => bars[x]).map((x) => [x, bars[x]!])), async (b) => Object.fromEntries(Object.keys(b).map((x) => [x, kint[x] ?? -0.01])));
     const r2 = await b2.observe(view({ closes, prices, now, today: "2026-09-22" }));
     expect(r2.segnali.filter((x) => x.lato === "buy")).toEqual([]);
-    expect(r2.intraday!.find((x) => x.simbolo === "BTC/USD")!.motivo).toContain("Kronos sulle prossime 6 candele");
+    expect(r2.intraday!.find((x) => x.simbolo === "BTC/USD")!.motivo).toContain("non basta");
   });
 
   test("con Kronos si sceglie la candela con la probabilità di successo più alta; la posizione si segue sulla candela più breve", async () => {
@@ -1149,5 +1156,71 @@ describe("presa di profitto parziale", () => {
     j.trade[0]!.vendute = 10;
     v.positions[0]!.qty = 10;
     expect(new TakeProfitAgent(0.05, 0.5).observe(v).segnali).toEqual([]);
+  });
+});
+
+describe("ottimizzazioni: intraday separato, soglie simmetriche, costi e contanti impegnati", () => {
+  const trade = (simbolo: string, agenti: string[]) => ({ simbolo, stato: "aperto", apertoIl: "2026-09-23T14:00:00.000Z", comprate: 10, quantita: 10, contesto: { agenti } });
+  const diario = (...t: ReturnType<typeof trade>[]) => ({ ...emptyJournal(), trade: t }) as unknown as JournalFile;
+  const pos = (symbol: string, entry: number, price: number) => [{ symbol, qty: 10, avgEntryPrice: entry, currentPrice: price, marketValue: 10 * price }];
+
+  test("le uscite di più giorni non toccano un'operazione intraday; resta lo stop di emergenza", () => {
+    const j = diario(trade("NVDA", ["intraday"]));
+    const neg = new ExitAgent().observe(view({ positions: pos("NVDA", 180, 181), journal: j, previsioni: { NVDA: -0.03 } }));
+    expect(neg.segnali).toEqual([]);
+    const crollo = new ExitAgent().observe(view({ positions: pos("NVDA", 180, 150), journal: j, prices: { ...PRICES, NVDA: 150 } }));
+    expect(crollo.segnali[0]!.perche).toContain("stop");
+  });
+
+  test("la proiezione negativa fa uscire solo se netta (stessa soglia degli acquisti)", () => {
+    const j = diario(trade("NVDA", ["trend"]));
+    expect(new ExitAgent().observe(view({ positions: pos("NVDA", 180, 181), journal: j, previsioni: { NVDA: -0.003 } })).segnali).toEqual([]);
+    expect(new ExitAgent().observe(view({ positions: pos("NVDA", 180, 181), journal: j, previsioni: { NVDA: -0.02 } })).segnali[0]!.perche).toContain("proiezione negativa");
+  });
+
+  test("la presa di profitto aspetta se Kronos vede altro rialzo, e non riguarda l'intraday", () => {
+    const j = diario(trade("NVDA", ["trend"]), trade("MSFT", ["intraday"]));
+    const positions = [...pos("NVDA", 170, 180), ...pos("MSFT", 450, 480)];
+    expect(new TakeProfitAgent().observe(view({ positions, journal: j, previsioni: { NVDA: 0.03 } })).segnali).toEqual([]);
+    expect(new TakeProfitAgent().observe(view({ positions, journal: j, previsioni: { NVDA: 0 } })).segnali.map((x) => x.simbolo)).toEqual(["NVDA"]);
+  });
+
+  test("l'allocatore non ridistribuisce i contanti già impegnati e senza proiezione utilizzabile aspetta", () => {
+    const sig = (simbolo: string) => ({ agente: "trend", simbolo, lato: "buy" as const, forza: 1, orizzonteSedute: 60, perche: "in trend" });
+    const reports = { trend: { segnali: [sig("SPY"), sig("GLD")] } };
+    const base = view({ previsioni: { SPY: 0.03, GLD: 0.03 } });
+    const libero = allocate(base, reports, {}).proposte.reduce((a, p) => a + p.qty * base.prices[p.symbol]!, 0);
+    const impegnato = allocate({ ...base, account: { ...base.account, cash: 20_000 }, cashImpegnato: 15_000 }, reports, {}).proposte.reduce((a, p) => a + p.qty * base.prices[p.symbol]!, 0);
+    expect(impegnato).toBeLessThanOrEqual(20_000 - 15_000);
+    expect(libero).toBeGreaterThan(impegnato);
+    const senza = allocate(view({ previsioni: { SPY: 0.03 } }), reports, {});
+    expect(senza.inAttesa.find((x) => x.simbolo === "GLD")!.motivo).toContain("nessuna proiezione di Kronos");
+  });
+
+  test("una proiezione che il contesto non ritiene affidabile non fa comprare, ma fa sempre uscire", () => {
+    const j = diario(trade("NVDA", ["trend"]));
+    // Fed in arrivo: il contesto toglie la proiezione dalle filtrate, resta tra quelle di Kronos.
+    const r = new ExitAgent().observe(view({ positions: pos("NVDA", 180, 181), journal: j, previsioni: {}, previsioniKronos: { NVDA: -0.02 } }));
+    expect(r.segnali[0]!.perche).toContain("proiezione negativa");
+    const sig = { agente: "trend", simbolo: "SPY", lato: "buy" as const, forza: 1, orizzonteSedute: 60, perche: "in trend" };
+    const a = allocate(view({ previsioni: {}, previsioniKronos: { SPY: 0.0005 } }), { trend: { segnali: [sig] } }, {});
+    expect(a.inAttesa[0]!.motivo).toContain("non copre");
+  });
+
+  test("la gabbia non rimanda uno stop o un'uscita di trend se la vendita è già in corso", () => {
+    const v = view();
+    const p = pos("NVDA", 220, 180); // oltre lo stop
+    const aperto = { id: "x", clientOrderId: "x", symbol: "NVDA", side: "sell", type: "market", qty: 10, filledQty: 0, status: "new", submittedAt: "2026-09-24T13:00:00Z" } as any;
+    const r = applyCage({ today: "2026-09-24", slotKind: "open", marketOpen: true, latenessMin: 0, account: v.account, positions: p, prices: { ...v.prices, NVDA: 180 }, closes: v.closes, recentOrders: [aperto], lessons: [], buyBlock: null, proposals: [] });
+    expect(r.orders).toEqual([]);
+    expect(r.rejected[0]!.reason).toContain("già in corso");
+  });
+
+  test("gli orizzonti di Kronos per candela: dai quarti d'ora alle ore, stesse candele per titoli e crypto", () => {
+    expect(orizzonti("5Min").map((o) => o.h)).toEqual([15, 30, 60]);
+    expect(orizzonti("15Min").map((o) => o.h)).toEqual([15, 30, 60, 120, 240]);
+    expect(orizzonti("1Hour").map((o) => o.h)).toEqual([60, 120, 240, 480]);
+    expect(orizzonti("4Hour").map((o) => o.h)).toEqual([240, 480]);
+    expect(AGENTS.intraday.candele).toEqual(["5Min", "15Min", "1Hour", "4Hour"]);
   });
 });

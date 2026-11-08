@@ -60,8 +60,8 @@ describe("uscita di trend fatta dal codice", () => {
     const r = applyCage(base({ positions: pos, closes: { ...base().closes, MSFT: falling } }));
     expect(r.orders.map((o) => `${o.symbol} ${o.side} ${o.qty} ${o.source}`)).toEqual(["MSFT sell 20 uscita-trend"]);
   });
-  test("a metà seduta no: il trend si legge una volta al giorno", () => {
-    expect(applyCage(base({ slotKind: "mid", positions: pos, closes: { ...base().closes, MSFT: falling } })).orders).toEqual([]);
+  test("a metà seduta la gabbia vende comunque sul trend: nessuna sveglia dedicata", () => {
+    expect(applyCage(base({ slotKind: "mid", positions: pos, closes: { ...base().closes, MSFT: falling } })).orders.map((o) => o.source)).toEqual(["uscita-trend"]);
   });
   test("sopra la media resta in mano", () => {
     expect(applyCage(base({ positions: pos })).orders).toEqual([]);
@@ -81,14 +81,13 @@ describe("filtro di lungo periodo", () => {
   });
 });
 
-describe("ingressi solo alla sveglia di apertura", () => {
-  test("a metà seduta e alla chiusura gli acquisti sono rifiutati, le vendite no", () => {
+describe("ingressi senza sveglia dedicata: l'orario lo decide il motore", () => {
+  test("a metà seduta e alla chiusura gli acquisti e le vendite passano la gabbia", () => {
     const pos = [{ symbol: "SPY", qty: 10, avgEntryPrice: 600, currentPrice: 600, marketValue: 6_000 }];
     for (const slotKind of ["mid", "close"] as const) {
       const r = applyCage(base({ slotKind, positions: pos, proposals: [buy("GLD", 5), { symbol: "SPY", side: "sell", qty: 4, why: "" }] }));
-      expect(r.rejected.map((x) => x.symbol)).toEqual(["GLD"]);
-      expect(r.rejected[0]!.reason).toContain("solo alla sveglia di apertura");
-      expect(r.orders.map((o) => o.symbol)).toEqual(["SPY"]);
+      expect(r.rejected.filter((x) => x.reason.includes("sveglia"))).toEqual([]);
+      expect(r.orders.map((o) => o.symbol).sort()).toEqual(["GLD", "SPY"]);
     }
   });
 });
@@ -175,12 +174,12 @@ describe("voto a maggioranza", () => {
 });
 
 describe("una giornata intera con le regole nuove", () => {
-  test("compra all'apertura, a metà seduta il modello non può aggiungere, il giorno dopo l'uscita di trend vende", async () => {
+  test("compra all'apertura, a metà seduta il modello può aggiungere, il giorno dopo l'uscita di trend vende", async () => {
     const env = makeEnv(day("2026-09-24", "15:41"), brainSaying({ orders: [buy("SPY", 10)], reasoning: "In trend.", plan_next: "" }));
     expect((await runWake(env.deps())).witness!.ordiniInviati.map((o) => o.simbolo)).toEqual(["SPY"]);
     env.clock.t = day("2026-09-24", "18:31").getTime();
     const mid = await runWake(env.deps({ brain: brainSaying({ orders: [buy("SPY", 5)], reasoning: "", plan_next: "" }) }));
-    expect(mid.witness!.ordiniRifiutati[0]!.motivo).toContain("solo alla sveglia di apertura");
+    expect(mid.witness!.ordiniInviati.map((o) => o.simbolo)).toEqual(["SPY"]);
     // ieri SPY ha chiuso sotto la media a 50 giorni
     env.setFake((s) => (s.closes.SPY = Array.from({ length: 260 }, (_, i) => (i < 230 ? 500 + i : 730 - (i - 229) * 8))));
     env.clock.t = day("2026-09-25", "15:41").getTime();

@@ -57,7 +57,8 @@ export const LIMITS = {
   // Spento per scelta dell'utente: nessun interruttore sul conto, decidono gli agenti (stop per posizione, uscite, gabbia).
   // Dalle schede si può riaccendere. Le sveglie classiche (bun run schedule) lo usano sempre.
   breakerEnabled: false,
-  // Oltre questa perdita in giornata niente acquisti fino a domani.
+  // Perdita in giornata oltre la quale l'interruttore classico ferma gli acquisti: vale solo con breakerEnabled (spento);
+  // nel motore degli agenti il limite del giorno è AGENTS.daily.maxLossPct (0 = nessun limite).
   maxDailyLossPct: 0.02,
   // Dopo uno stop loss su un titolo, niente riacquisto per questi giorni di borsa.
   stopLossCooldownDays: 5,
@@ -67,9 +68,6 @@ export const LIMITS = {
 
 // Storico giornaliero da chiedere: media a 200 giorni più margine per festività.
 export const DAILY_BARS_DAYS = 320; // media a 200 + momentum a 12 mesi (252) con margine
-
-// Le decisioni di ingresso e le uscite di trend si prendono solo a questa sveglia, sulle chiusure complete.
-export const ENTRY_SLOT: SlotKind = "open";
 
 // Voto a maggioranza: il cervello risponde più volte in parallelo, passa solo l'ordine proposto da almeno quorum risposte.
 export const BRAIN_VOTES = { calls: 3, quorum: 2 };
@@ -193,12 +191,16 @@ export const AGENTS = {
   // Presa di profitto parziale (agente "profitto"): a +3% vende metà e lascia correre il resto col trend. Scelta col
   // walk-forward (bun run sweep): in prova alza i vinti dal 32% al 37% con rendimento quasi uguale e perdita massima minore.
   // La presa di profitto totale a +5% arriva al 45% di vinti ma costa 5-9 punti di rendimento.
+  // Se Kronos anticipa altro rialzo (≥ anticipaSoglia) la presa di profitto aspetta: si lascia correre.
   takeProfit: { enabled: true, pct: 0.03, fraction: 0.5 },
-  // Politica di uscita (agente "uscite", segnali vincolanti che la gabbia non può votare via):
-  // stop a -3% dal carico (anche come stop GTC su Alpaca); a +3% (o +4% per titolo) si incassa, a meno che la proiezione (Kronos) dica
-  // che c'è altro da prendere: allora si lascia correre con uno stop che segue il massimo e non restituisce più del
-  // rischio (giveBackPct), mai sotto il carico + lockPct. Proiezione negativa: si esce subito, in guadagno o in perdita.
-  // Stop a -3%: con -2% NVDA (3% di volatilità al giorno) usciva sul rumore. Obiettivo +4% dove le barriere lo pagano.
+  // Politica di uscita (agente "uscite", segnali vincolanti che la gabbia non può votare via), per le posizioni di più
+  // giorni: le operazioni intraday hanno le loro uscite (obiettivo, stop, Kronos sulle candele brevi) e qui restano
+  // soggette solo allo stop di emergenza. Stop (anche come stop GTC su Alpaca): con stopMode "volatilita" tra il 5% e il 10%
+  // dal carico (stops.ts); con "fisso" stopPct. Proiezione di Kronos netta al ribasso (≤ -anticipaSoglia, la stessa soglia con
+  // cui si compra): si esce subito, in guadagno o in perdita. mode "obiettivo": a targetPct si incassa, a meno che la
+  // proiezione dica che c'è altro da prendere: allora si lascia correre con uno stop che segue il massimo e non restituisce
+  // più di giveBackPct, mai sotto il carico + lockPct.
+  // Stop troppo stretto: NVDA (3% di volatilità al giorno) usciva sul rumore. Obiettivo +4% dove le barriere lo pagano.
   // mode "trend": niente obiettivo fisso, stop che segue il massimo a trailAtr × ATR (ATR ≈ prezzo × volatilità giornaliera);
   // mode "obiettivo": incasso a targetPct (per titolo) con trailing solo se la proiezione dice di continuare.
   // stopMode "volatilita": stop a 2,5 × vol × √5 tra il 5% e il 10% (stops.ts), con taglia già ridotta dalla volatilità;
@@ -242,23 +244,29 @@ export const AGENTS = {
   // media a 200, grafico in ordine, Kronos al rialzo oltre la soglia) entra nell'universo per giorniValida giorni; chi
   // l'ha trovato torna alla scrivania e lo vota. maxScoperte: quante scoperte nuove al giorno, al massimo.
   esplorazione: { enabled: true, everyMinutes: 1, perGiro: 6, maxScoperte: 100, giorniValida: 3, minTecnica: 0.5 },
-  // Intraday (agente "intraday"): operazioni che si aprono e chiudono nella stessa giornata, solo nel verso del trend
-  // giornaliero. L'agente sceglie da solo la candela (5 min / 15 min / 4 ore) dalla volatilità del titolo: più è nervoso,
-  // più la candela è corta. Entra su rottura dei massimi delle ultime 20 candele o su rientro sulla media a 20 candele;
-  // esce all'obiettivo, allo stop (ATR), alla rottura al ribasso della media a 20 candele, o comunque prima della chiusura.
+  // Intraday (agente "intraday"): operazioni che si aprono e chiudono nella stessa giornata. Titoli e crypto usano le
+  // stesse candele (5 min, 15 min, 1 ora, 4 ore): di ognuna si usa solo quella che sta nel tempo rimasto (una candela da
+  // 4 ore per le azioni solo nelle prime ore di seduta). Con Kronos si sceglie la coppia candela + orizzonte (da 15 minuti
+  // a ore) con la probabilità più alta; senza Kronos la candela dalla volatilità. Esce all'obiettivo, allo stop (ATR),
+  // quando Kronos sulla candela più breve cambia idea, a orizzonte scaduto, o comunque prima della chiusura.
   intraday: {
     enabled: true,
     timeframes: { fast: "5Min", mid: "15Min", slow: "4Hour" } as Record<"fast" | "mid" | "slow", string>,
     // Soglie di volatilità giornaliera (deviazione standard dei rendimenti a 20 giorni) per la scelta della candela.
     volFast: 0.03, volMid: 0.015,
     bars: 120, // candele di storia per medie, ATR e massimi
-    // Kronos sulle candele intraday: proiezione delle prossime `candele` candele per chi ha le medie brevi in ordine
-    // (al massimo perGiro titoli a giro, ricalcolata a ogni candela chiusa); si entra con probabilità ≥ minProb.
-    kronos: { candele: 6, perGiro: 24, minProb: 0.55 },
+    // Kronos sulle candele intraday: per ogni titolo e candela una sola proiezione (fino a maxCandele candele, ricalcolata
+    // a ogni candela chiusa) da cui si leggono più orizzonti, in minuti: dai quarti d'ora alle ore. Si sceglie la coppia
+    // candela + orizzonte con la probabilità di successo più alta, purché stia nel tempo rimasto, il rialzo previsto copra
+    // `costi.margineCosti` volte i costi e la probabilità sia ≥ minProb. perGiro = coppie titolo-candela guardate a giro.
+    kronos: { orizzontiMin: [15, 30, 60, 120, 240, 480] as number[], maxCandele: 20, perGiro: 24, minProb: 0.55 },
+    // Scaduto l'orizzonte scelto (× questo fattore) senza obiettivo e senza rialzo ancora probabile, si chiude.
+    scadenzaOrizzonte: 1.5,
     // Le candele su cui si cerca l'ingresso: con Kronos si sceglie quella con la probabilità di successo più alta.
     candele: ["5Min", "15Min", "1Hour", "4Hour"] as string[],
     target: { stocks: 0.01, crypto: 0.02 }, // obiettivo di profitto; se l'ATR dice di più, vale l'ATR × targetAtr
-    targetAtr: 1.5, stopAtr: 1.2, minStopPct: 0.004,
+    // Stop minimo: sulle crypto sopra il costo di andata e ritorno (0,5%), altrimenti ogni stop costa quasi il doppio.
+    targetAtr: 1.5, stopAtr: 1.2, minStopPct: { stocks: 0.004, crypto: 0.01 },
     maxWeight: 0.1, // peso massimo di un'operazione intraday (comparto a taglia ridotta)
     // Finestre, ora di Roma: ingressi solo se resta tempo per chiudere in giornata; poi chiusura forzata.
     // Crypto: sempre aperte, un'operazione intraday dura al massimo cryptoOreMax ore. Azioni: tutta la seduta vera

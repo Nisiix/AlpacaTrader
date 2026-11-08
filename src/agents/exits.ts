@@ -1,6 +1,7 @@
 import { AGENTS, LIMITS, isCrypto } from "../config.ts";
 import { dailyVol } from "../indicators.ts";
 import { stopPctFor } from "../stops.ts";
+import { soloIntraday } from "./posizioni.ts";
 import type { Agent, AgentReport, AgentView, Signal } from "./types.ts";
 
 export interface ExitPolicy {
@@ -39,18 +40,23 @@ export class ExitAgent implements Agent {
         sell(`perdita ${pct(gain)} oltre lo stop del ${pct(stopPct)}${this.policy.stopMode === "fisso" ? "" : " (scalato sulla volatilità)"}`);
         continue;
       }
+      // Un'operazione intraday ha le sue uscite (obiettivo, stop e Kronos sulle candele brevi): qui resta solo lo stop di emergenza.
+      if (soloIntraday(v.journal, p.symbol)) continue;
       // Protezione del profitto: in guadagno (oltre i costi) e Kronos vede nel breve un calo che lo azzererebbe → si incassa
       // adesso un profitto minore invece di rischiare di tornare a pari o in perdita.
       const pp = AGENTS.protezioneProfitto;
       const margine = isCrypto(p.symbol) ? pp.margine.crypto : pp.margine.stocks;
-      const path = v.percorsi?.[p.symbol]?.slice(0, pp.sedute) ?? (forecast !== undefined ? [forecast] : []);
+      // Per uscire vale anche la proiezione che il contesto non considera affidabile per entrare (riduce il rischio).
+      const fcUscita = v.previsioniKronos?.[p.symbol] ?? forecast;
+      const path = v.percorsi?.[p.symbol]?.slice(0, pp.sedute) ?? (fcUscita !== undefined ? [fcUscita] : []);
       const dip = path.length ? Math.min(...path) : null;
       if (pp.enabled && gain > margine && dip !== null && dip < 0 && (1 + gain) * (1 + dip) - 1 <= margine) {
         sell(`protezione del profitto: in guadagno del ${pct(gain)}, ma Kronos vede ${pct(dip)} nelle prossime ${pp.sedute} sedute, che lo azzererebbe: si incassa adesso`);
         continue;
       }
-      if (forecast !== undefined && forecast < 0) {
-        sell(`proiezione negativa (${pct(forecast)}) su un titolo in portafoglio: si esce ${gain >= 0 ? "in guadagno" : "limitando la perdita"} (${pct(gain)})`);
+      // Stessa soglia con cui si compra (anticipaSoglia): un -0,2% non è una proiezione netta, e uscire sul rumore costa.
+      if (fcUscita !== undefined && fcUscita <= -AGENTS.kronos.anticipaSoglia) {
+        sell(`proiezione negativa (${pct(fcUscita)}) su un titolo in portafoglio: si esce ${gain >= 0 ? "in guadagno" : "limitando la perdita"} (${pct(gain)})`);
         continue;
       }
       if (soloRientro) continue;

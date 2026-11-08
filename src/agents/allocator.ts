@@ -6,6 +6,7 @@ import { dailyVol } from "../indicators.ts";
 import { romeTime } from "../slots.ts";
 import { roundQty } from "../broker/types.ts";
 import { learningStatus, statsOf, type JournalFile } from "../journal.ts";
+import { soloIntraday } from "./posizioni.ts";
 import type { AgentReport, AgentView, Signal } from "./types.ts";
 
 export interface Score {
@@ -139,7 +140,7 @@ export function allocate(view: AgentView, reports: Record<string, AgentReport>, 
   for (const sc of punteggi) {
     const p = held.get(sc.simbolo);
     if (forced.has(sc.simbolo)) continue;
-    if (sc.punteggio <= AGENTS.sellScore && p && apertiOggi.has(sc.simbolo)) continue;
+    if (sc.punteggio <= AGENTS.sellScore && p && (apertiOggi.has(sc.simbolo) || soloIntraday(view.journal, sc.simbolo))) continue;
     if (sc.punteggio <= AGENTS.sellScore && p) {
       proposte.push({ symbol: sc.simbolo, side: "sell", qty: p.qty, why: sc.perche.join(" · "), confidence: conf(-sc.punteggio), expect: `uscita: punteggio ${sc.punteggio.toFixed(2)}` });
     }
@@ -172,8 +173,15 @@ export function allocate(view: AgentView, reports: Record<string, AgentReport>, 
     sc.evidenza = ev;
     const minEv = contro ? AGENTS.evidenza.minContro : AGENTS.evidenza.min;
     // Il rendimento previsto deve coprire i costi: crypto 0,5% andata e ritorno (×2 di margine), azioni quasi nulli.
-    const fcCosti = sc.intraday ? undefined : (view.previsioni?.[sc.simbolo] ?? sc.kronos);
+    // Il controllo dei costi riduce il rischio: usa la proiezione anche se il contesto non la ritiene affidabile per entrare.
+    const grezze = view.previsioniKronos ?? view.previsioni;
+    const fcCosti = sc.intraday ? undefined : (grezze?.[sc.simbolo] ?? sc.kronos);
     const costo = isCrypto(sc.simbolo) ? AGENTS.costi.cryptoAndataRitorno : AGENTS.costi.azioniAndataRitorno;
+    // Con Kronos attivo ma senza una proiezione utilizzabile per il titolo non si può dire che il rialzo copra i costi: si aspetta.
+    if (!p && !sc.intraday && grezze !== undefined && fcCosti === undefined) {
+      inAttesa.push({ simbolo: sc.simbolo, motivo: "nessuna proiezione di Kronos utilizzabile: non si può verificare che il rialzo copra i costi" });
+      continue;
+    }
     if (!p && fcCosti !== undefined && fcCosti < costo * AGENTS.costi.margineCosti) {
       inAttesa.push({ simbolo: sc.simbolo, motivo: `Kronos prevede ${(fcCosti * 100).toFixed(2)}%: non copre ${AGENTS.costi.margineCosti} volte i costi di andata e ritorno (${(costo * 100).toFixed(2)}%)` });
       continue;
@@ -217,7 +225,7 @@ export function allocate(view: AgentView, reports: Record<string, AgentReport>, 
     const q = Math.max(0.05, (x.sc.fiducia ?? 0.6) * (x.sc.evidenza ?? 0.6) * Math.min(2, Math.max(0.1, x.sc.punteggio)));
     return { ...x, price, have, chiesto: Math.max(0, x.w * scale * equity - have), q, dato: 0 };
   });
-  const avail = Math.max(0, view.account.cash - equity * AGENTS.riservaContanti);
+  const avail = Math.max(0, view.account.cash - (view.cashImpegnato ?? 0) - equity * AGENTS.riservaContanti);
   const totale = asks.reduce((a, x) => a + x.chiesto, 0);
   let riparto = false;
   if (totale > avail && totale > 0) {

@@ -1,7 +1,7 @@
 import type { ProposedOrder } from "./brain/types.ts";
 import type { Account, Order, Position, Side } from "./broker/types.ts";
 import { isOpenOrder, isProtectiveStop } from "./broker/types.ts";
-import { AGENTS, CRYPTO, CRYPTO_MIN_NOTIONAL, ENTRY_SLOT, LIMITS, MAX_LATENESS_MIN, UNIVERSE, isCrypto, type SlotKind } from "./config.ts";
+import { AGENTS, CRYPTO, CRYPTO_MIN_NOTIONAL, LIMITS, MAX_LATENESS_MIN, UNIVERSE, isCrypto, type SlotKind } from "./config.ts";
 import { EVENTS, eventBlockFor, type MarketEvent } from "./events.ts";
 import { dailyVol, indicatorsFor, sma, trendOf } from "./indicators.ts";
 import { setupOf } from "./journal.ts";
@@ -52,6 +52,8 @@ export interface CageInput {
   // Titoli comprati oggi: l'uscita di trend (che guarda la chiusura di ieri, già nota all'acquisto) non li vende finché
   // non si è formata una candela giornaliera nuova. Restano gli stop e le uscite vincolanti.
   apertiOggi?: Set<string>;
+  // Operazioni intraday aperte: hanno le loro uscite, l'uscita di trend giornaliera non le riguarda.
+  intradayAperti?: Set<string>;
 }
 
 export interface CageResult {
@@ -93,12 +95,22 @@ export function applyCage(i: CageInput): CageResult {
 
   // Il blocco di orario vale per i titoli; le crypto passano sempre (salvo conto vuoto o briefing).
   const blockFor = (symbol: string) => tradingBlockReason(i, symbol);
+  // Gli stop di protezione su Alpaca sono ordini aperti per scelta nostra: non contano come doppioni.
+  const openOrders = i.recentOrders.filter((o) => isOpenOrder(o) && !isProtectiveStop(o));
+  // Una vendita già in corso (non ancora eseguita) non si rimanda a ogni giro: Alpaca la rifiuterebbe per quantità impegnata.
+  const sellInCorso = (symbol: string) => openOrders.some((o) => o.symbol === symbol && o.side === "sell");
   const seen = new Set<string>();
   const stopped = new Set<string>();
   for (const p of stopLoss) {
     const block = blockFor(p.symbol);
     if (block) {
       rejected.push({ symbol: p.symbol, side: "sell", qty: p.qty, source: "stop-loss", reason: `stop loss scattato (${pct(lossPct(p))}) ma ${block}: vendo alla prossima sveglia utile` });
+      continue;
+    }
+    if (sellInCorso(p.symbol)) {
+      rejected.push({ symbol: p.symbol, side: "sell", qty: p.qty, source: "stop-loss", reason: `stop loss scattato (${pct(lossPct(p))}): una vendita è già in corso` });
+      seen.add(`${p.symbol}-sell`);
+      stopped.add(p.symbol);
       continue;
     }
     orders.push({ symbol: p.symbol, side: "sell", qty: p.qty, source: "stop-loss", why: `stop loss: ${pct(lossPct(p))} dal prezzo di carico` });
@@ -115,8 +127,7 @@ export function applyCage(i: CageInput): CageResult {
   // È il codice a farla, come lo stop: il metodo non dipende dal modello che se ne ricordi.
   {
     for (const p of i.positions) {
-      if (p.qty <= 0 || stopped.has(p.symbol) || blockFor(p.symbol)) continue;
-      if (i.slotKind !== ENTRY_SLOT && !isCrypto(p.symbol)) continue;
+      if (p.qty <= 0 || stopped.has(p.symbol) || blockFor(p.symbol) || sellInCorso(p.symbol) || i.intradayAperti?.has(p.symbol)) continue;
       const c = i.closes[p.symbol];
       const m = c ? sma(c, LIMITS.trendSmaDays) : null;
       const last = c?.[c.length - 1];
@@ -131,8 +142,6 @@ export function applyCage(i: CageInput): CageResult {
     }
   }
 
-  // Gli stop di protezione su Alpaca sono ordini aperti per scelta nostra: non contano come doppioni.
-  const openOrders = i.recentOrders.filter((o) => isOpenOrder(o) && !isProtectiveStop(o));
   let cash = i.account.cash;
   for (const o of openOrders) if (o.side === "buy") cash -= (o.qty - o.filledQty) * (i.prices[o.symbol] ?? 0);
   const symbols = new Set([...held.keys(), ...openOrders.filter((o) => o.side === "buy").map((o) => o.symbol)]);
@@ -162,7 +171,6 @@ export function applyCage(i: CageInput): CageResult {
       if (p.qty > q) { reject(`niente short: in portafoglio ce ne sono ${q}`); continue; }
     } else {
       if (i.buyBlock) { reject(i.buyBlock); continue; }
-      if (i.slotKind !== ENTRY_SLOT && !isCrypto(p.symbol) && !p.intraday) { reject("gli acquisti si fanno solo alla sveglia di apertura, sulle chiusure di ieri"); continue; }
       // L'intraday si chiude in giornata con obiettivo e stop propri: non segue il filtro macro né il trend giornaliero.
       const ev = p.intraday ? null : eventBlockFor(p.symbol, i.today, i.events ?? EVENTS);
       if (ev) { reject(ev); continue; }

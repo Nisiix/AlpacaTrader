@@ -35,6 +35,12 @@ export interface AgentView {
   indicators: Record<string, Indicator>;
   positions: Position[];
   account: Account;
+  // Contanti già impegnati da ordini d'acquisto ancora aperti: l'allocatore non li ridistribuisce.
+  cashImpegnato?: number;
+  // Le proiezioni di Kronos utilizzabili prima del filtro del contesto. `previsioni` (filtrate: niente fiducia con eventi in
+  // arrivo) servono a ciò che aumenta il rischio (ingressi, tenere); queste a ciò che lo riduce (uscire, controllare i costi):
+  // una proiezione non fidata non può far comprare, ma può sempre far vendere o fermare un acquisto.
+  previsioniKronos?: Record<string, number>;
   journal: JournalFile;
   // Rendimento previsto per simbolo (Kronos) quando il sidecar c'è; altrimenti assente.
   previsioni?: Record<string, number>;

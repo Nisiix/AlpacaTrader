@@ -177,35 +177,53 @@ agenti chiedono, l'allocatore li **divide in proporzione alla qualità** di ogni
 evidenza del dossier × punteggio dei voti, senza dare a nessuno più di quanto ha chiesto; quello che avanza va agli altri.
 Una posizione nuova vale la pena sopra lo 0,2% del conto; le aggiunte a una posizione aperta sopra il 2%.
 
-## Intraday: la candela con la probabilità più alta, il controllo su quella più breve
+## Intraday: candela e orizzonte con la probabilità più alta
 
-Con Kronos intraday ogni candidato si guarda su candele da **5 e 15 minuti, 1 ora e 4 ore**: su ognuna servono medie brevi
-in ordine (o rottura/rientro), obiettivo raggiungibile entro la chiusura e rapporto obiettivo/stop ≥ 1,2; poi Kronos sulle
-prossime 6 candele e la sua probabilità. Si entra sulla candela con la **probabilità di successo più alta** (almeno 55%).
-La posizione si segue sulla candela **più breve** (5 min → 1 min, 15 min → 5 min, 1 ora → 15 min, 4 ore → 1 ora):
-- Kronos lì vede ancora salire con almeno il 60% → oltre l'obiettivo **si lascia correre**, lo stop sale sopra il carico;
+Titoli e crypto usano **le stesse candele: 5 e 15 minuti, 1 ora e 4 ore**. Si valuta solo una candela che può completarsi
+nel tempo rimasto (azioni: fino a 15 minuti dalla chiusura vera di Alpaca; crypto: durata massima 12 ore), quindi la 4 ore
+per le azioni vale solo nelle prime ore di seduta.
+
+Su ogni candela servono medie brevi in ordine (EMA 9 sopra EMA 20 e prezzo sopra la 9, oppure rottura/rientro),
+obiettivo raggiungibile e rapporto obiettivo/stop ≥ 1,2. Poi **una sola proiezione di Kronos per candela**, letta a più
+**orizzonti, dai quarti d'ora alle ore** (15, 30 minuti, 1, 2, 4, 8 ore, nei limiti di 20 candele e del tempo rimasto):
+- per ogni orizzonte, rendimento previsto e **probabilità di successo** (rendimento sulla volatilità delle candele);
+- vale solo se il rialzo copre **2 volte i costi** di andata e ritorno (crypto 1%, azioni 0,1%);
+- si sceglie la coppia **candela + orizzonte** con la probabilità più alta (almeno 55%).
+
+La taglia scala con la fiducia (55% → metà, 70% e oltre → piena); grafico superiore e Kronos a 5 sedute contrari la
+dimezzano ciascuno. Stop minimo 0,4% sulle azioni e **1% sulle crypto** (sopra il costo di 0,5%).
+
+La posizione si segue sulla candela **più breve** (5 min → 1 min, 15 min → 5 min, 1 ora → 15 min, 4 ore → 1 ora), con
+Kronos sull'orizzonte d'ingresso (senza superare il tempo rimasto):
+- vede ancora salire con almeno il 60% → oltre l'obiettivo **si lascia correre**, lo stop sale sopra il carico;
 - vede un calo che azzererebbe il guadagno → **si incassa** (protezione del profitto);
-- in perdita, vede un calo che porta a metà strada dallo stop con rialzo al 35% o meno → **si taglia prima**;
-- restano stop, obiettivo (se Kronos non vede altro), media a 20 persa e chiusura di giornata.
+- in perdita, vede un calo verso lo stop con rialzo al 35% o meno → **si taglia prima**;
+- **orizzonte scaduto** (1,5 volte quello d'ingresso) senza obiettivo e senza rialzo probabile → si chiude;
+- restano stop, obiettivo, media a 20 persa e chiusura di giornata.
+
+Un'operazione intraday ha **solo queste uscite**: la proiezione a 5 sedute, la presa di profitto a +3% e l'uscita di trend
+giornaliera non la toccano (resta lo stop di emergenza). Il blocco «un ingresso al giorno per titolo» scatta a ordine
+eseguito: un voto scartato dall'allocatore o dalla gabbia si ripresenta al giro dopo.
 
 ## Protezione del profitto
 
 Con una posizione in guadagno oltre i costi (0,2% azioni, 0,6% crypto), se Kronos vede nelle **prossime 2 sedute** (dal
 percorso previsto giorno per giorno) un calo che riporterebbe il guadagno a zero, l'agente uscite **vende subito**: meglio
-un profitto minore che tornare a pari o in perdita. Per l'intraday vale lo stesso con Kronos sulle prossime 6 candele.
-Resta anche la regola di prima: proiezione a 5 sedute negativa su un titolo in portafoglio → si esce.
+un profitto minore che tornare a pari o in perdita. Proiezione a 5 sedute **netta al ribasso** (−1% o meno, la stessa
+soglia con cui si compra) su un titolo in portafoglio → si esce. La presa di profitto parziale a +3% aspetta se Kronos
+anticipa altro rialzo.
 
-## Intraday: decide Kronos sulle candele brevi
+## Fiducia nelle proiezioni: ridurre il rischio sì, aumentarlo no
 
-Per i trade che si chiudono in giornata non contano le medie giornaliere (50, 200) né il settimanale. Su ogni titolo nella
-finestra degli ingressi l'operatore intraday guarda la sua candela (5 min, 15 min, 4 ore dalla volatilità):
-1. **medie brevi**: EMA 9 sopra EMA 20 e prezzo sopra la 9, oppure una rottura dei massimi o un rientro sulla media a 20;
-2. **Kronos sulle prossime 6 candele** (il sidecar prevede la serie intraday): rialzo con probabilità ≥ 55% (rendimento
-   atteso sulla volatilità delle candele);
-3. **in parte** il grafico più lungo (1 ora per 5 e 15 minuti, il giornaliero per le 4 ore: prezzo sopra la sua media a
-   20) e il Kronos a 5 sedute: se contrari, ognuno **dimezza la taglia**, non blocca.
-La taglia parte dal peso massimo intraday e scala con la fiducia (55% → metà, 70% e oltre → piena). Obiettivo e stop
-dall'ATR, chiusura entro l'orario: come prima. Senza sidecar vale il Kronos a 5 sedute.
+Con eventi in arrivo (Fed nei prossimi giorni, trimestrale) il contesto non si fida della proiezione **per entrare o per
+tenere**. Per **uscire** e per **controllare i costi** la proiezione vale sempre: una proiezione non fidata non può far
+comprare, ma può sempre far vendere o fermare un acquisto. Con Kronos attivo, un titolo senza proiezione utilizzabile
+non entra (non si può verificare che il rialzo copra i costi).
+
+## Ordini e contanti
+
+Il riparto del capitale non ridistribuisce i contanti già impegnati da ordini d'acquisto aperti. Uno stop o un'uscita di
+trend non si rimanda se una vendita è già in corso. Non ci sono sveglie: acquisti e uscite seguono la seduta vera.
 
 ## Sala caffè: gli agenti imparano gli uni dagli altri
 

@@ -73,7 +73,7 @@ try {
   // sulle candele brevi (se il sidecar c'è) con le medie brevi; il grafico più lungo pesa solo sulla taglia.
   if (AGENTS.intraday.enabled) {
     const kf = kronos ? intradayForecaster(kronos) : null;
-    agents.push(new IntradayAgent((s, tf, n) => deps.broker.getIntradayBars(s, tf, n), kf ? async (b, step, h) => Object.fromEntries(Object.entries(await kf(b, step, h)).map(([k, v]) => [k, v.rendimentoPrevisto])) : null));
+    agents.push(new IntradayAgent((s, tf, n) => deps.broker.getIntradayBars(s, tf, n), kf ? async (b, step, h) => Object.fromEntries(Object.entries(await kf(b, step, h)).map(([k, v]) => [k, v.percorso.length ? v.percorso : [v.rendimentoPrevisto]])) : null));
   }
   const cache = emptyCache();
   const engine: EngineDeps = {

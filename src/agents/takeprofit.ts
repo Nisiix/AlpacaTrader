@@ -1,4 +1,5 @@
 import { AGENTS } from "../config.ts";
+import { soloIntraday } from "./posizioni.ts";
 import type { Agent, AgentReport, AgentView, Signal } from "./types.ts";
 
 // Presa di profitto: vincolante, una volta per trade. Con frazione 1 chiude la posizione al guadagno obiettivo;
@@ -18,6 +19,10 @@ export class TakeProfitAgent implements Agent {
       const price = v.prices[p.symbol] ?? p.currentPrice;
       const gain = price / p.avgEntryPrice - 1;
       if (gain < this.target) continue;
+      if (soloIntraday(v.journal, p.symbol)) continue; // l'intraday ha il suo obiettivo
+      // Kronos anticipa altro rialzo: si lascia correre (se la proiezione gira, ci pensano la protezione del profitto e le uscite).
+      const fc = v.previsioni?.[p.symbol];
+      if (fc !== undefined && fc >= AGENTS.kronos.anticipaSoglia) continue;
       const trade = v.journal.trade.find((t) => t.simbolo === p.symbol && t.stato === "aperto");
       // Già alleggerito una volta (quantità in mano sotto quella comprata): si lascia correre il resto.
       if (this.fraction < 1 && trade && trade.quantita < trade.comprate - 1e-9) continue;
