@@ -304,3 +304,82 @@ Decisioni che spettano a te:
 - Fonti: [repo Kronos](https://github.com/shiyu-coder/Kronos) · [paper](https://arxiv.org/abs/2508.02739) ·
   [Kronos-mini su Hugging Face](https://huggingface.co/NeoQuasar/Kronos-mini) · [Kronos-base](https://huggingface.co/NeoQuasar/Kronos-base) ·
   [Alpaca, piani dati di mercato](https://docs.alpaca.markets/docs/about-market-data-api).
+
+---
+
+## Addendum (8 novembre, sera): soglia del 60%, GitHub, PC acceso
+
+### "Mi serve una direzione indovinata di almeno il 60%"
+
+Il 60% su ogni barra, su strumenti liquidi come SPY, non lo raggiunge nessun modello pubblico: la direzione del giorno
+dopo è indovinabile al 51-55% anche dai sistemi professionali, e il vantaggio sta nella taglia delle vincite rispetto
+alle perdite, non nella frequenza. Tre vie misurate sui nostri dati portano però **sopra il 60%**, con costi diversi:
+
+**1. Allungare l'orizzonte.** La quota di finestre in cui il prezzo è più alto dopo h sedute (storico 2020-2026 | ultime 250):
+
+| | 1 seduta | 5 | 10 | 20 | 60 |
+|---|---|---|---|---|---|
+| SPY | 54% / 52% | 59% / 53% | 63% / 53% | **67% / 62%** | 77% / 86% |
+| QQQ | 55% / 53% | 58% / 51% | 61% / 50% | 64% / 52% | 71% / 72% |
+| NVDA | 53% / 50% | 57% / 50% | 57% / 46% | 62% / 56% | 70% / 73% |
+| AAPL | 53% / 53% | 56% / 56% | 58% / 58% | 61% / 63% | 65% / 77% |
+| TLT | 49% / 48% | 46% / 43% | 43% / 36% | 39% / 28% | 31% / 15% |
+
+A un mese "sale" ha ragione nel 61-67% dei casi su azioni e indici; a tre mesi oltre il 70%. È la ragione per cui il
+trend following lento funziona *se resta investito*: la direzione la dà la deriva del mercato, non la previsione.
+Il 60% chiesto è quindi compatibile con una strategia a orizzonte di settimane, **non** con il trading rapido intraday,
+dove la direzione della prossima barra è una moneta (46-55% in tutte le prove) e i costi mangiano il resto.
+
+**2. Essere selettivi.** Agire solo quando Kronos è "deciso" (rendimento previsto nel 25% o 10% più ampio). Kronos-small,
+250 finestre giornaliere dell'ultimo anno (`tools/kronos/selectivity.py`, righe in `docs/kronos-risultati/rows_*.csv`):
+
+| | tutte le previsioni | top 25% (63 casi) | top 10% (25 casi) |
+|---|---|---|---|
+| SPY, 1 seduta | 55% | **60%** | 56% |
+| SPY, 2 sedute | 52% | 59% | 60% |
+| NVDA, 2 sedute | 54% | **62%** | **72%** |
+| NVDA, 3 sedute | 56% | 60% | 68% |
+| NVDA, 4-5 sedute | 56-57% | 57-59% | 64-68% |
+
+Con 63 casi l'intervallo di confidenza è circa ±12 punti, con 25 casi ±19: questi numeri *suggeriscono* che la
+selettività aiuti, non lo dimostrano. Vanno ripetuti su più anni, più simboli e dopo il fine-tuning. Se reggono,
+il modo d'uso è: Kronos propone solo nel 10-25% dei giorni, la gabbia decide la taglia, il diario misura.
+
+**3. Combinare.** Orizzonte di 5-20 sedute + filtro di trend (già in gabbia) + Kronos selettivo come conferma + costi
+bassi perché si opera poco. È la direzione opposta a "buy e sell costanti", e lo dico perché i dati lo dicono.
+
+Metrica da adottare al posto del 60%: **attesa per operazione dopo i costi** (percentuale vinti × vincita media −
+percentuale persi × perdita media − spread e slippage) e **rendimento contro il 60/40**. Un sistema al 45% di direzione
+con vincite doppie delle perdite guadagna; uno al 60% con stop stretti e take profit piccoli può perdere.
+
+### "È possibile far girare il sistema tramite GitHub?"
+
+Sì, con limiti precisi, e in parte lo fa già (le sveglie cloud programmate salvano lo stato sul branch `stato`).
+
+| Modo | Cosa può fare | Limiti |
+|---|---|---|
+| **GitHub Actions a orario** (`on: schedule`, cron) | sveglie ogni 15-30 minuti nelle ore di borsa, ogni run parte da un runner nuovo, legge/scrive il branch `stato`, chiavi nei *secrets* | intervallo minimo 5 minuti; ritardi di 5-30 minuti frequenti all'inizio dell'ora e salti nei giorni di carico; nessun websocket; ogni run paga 1-2 minuti di avvio (bun install, eventuale Kronos con cache); Kronos richiede torch in cache (il pacchetto CPU, non quello CUDA da 5 GB) |
+| **GitHub Actions come processo lungo** | un job fino a 6 ore che resta collegato al websocket | a 2 run al giorno per coprire la seduta sono ~140 ore al mese: oltre le 2.000 minuti gratuiti del piano Free, circa 50 $ al mese al prezzo 2026 di 0,006 $ al minuto; se GitHub termina il job si perde il tempo reale finché non riparte |
+| **Sessioni cloud di Claude Code programmate** (oggi) | sveglie con `claude -p` disponibile | intervallo minimo orario: va bene per il supervisore, non per il motore rapido |
+
+Conclusione: **per una strategia a orizzonte di giorni/settimane (quella che i dati sostengono) GitHub basta**, anche
+gratis: un workflow ogni 15-30 minuti in orario di borsa sta dentro i minuti gratuiti (26 run × ~2 min × 21 giorni ≈
+1.100 minuti al mese) e il codice attuale è già fatto per riprendere da uno stato salvato su git. **Per il tempo reale
+vero** (websocket, decisioni in secondi) GitHub non è lo strumento.
+
+### "Mi serve un PC sempre acceso?"
+
+No, se il sistema lavora a sveglie (ogni 15-30 minuti o più): bastano GitHub Actions o le sessioni cloud attuali.
+Sì, o un suo equivalente, se si vuole un processo sempre collegato al mercato. Equivalenti al posto del PC:
+
+- **VPS economico** (Hetzner, Contabo, OVH: 4-6 € al mese, 2 vCPU/4 GB): la soluzione normale per un motore sempre acceso,
+  Kronos-mini/small su CPU ci gira.
+- **Oracle Cloud Always Free**: dal giugno 2026 ridotto a 2 OCPU ARM e 12 GB, spesso "out of capacity", ma gratuito e
+  sufficiente se si ottiene l'istanza.
+- **Raspberry Pi 5 a casa**: costo una tantum, consumo di pochi watt, ma dipende dalla tua connessione e corrente.
+- **Container su Fly.io/Railway**: 5-10 $ al mese, riavvii automatici, log in cloud.
+
+In tutti i casi il codice resta quello: stato su git o su disco, testimone, lock, riconciliazione dopo una morte sono
+già scritti per sopravvivere a riavvii. Raccomandazione: **non comprare né accendere nulla finché il backtest con costi
+non mostra un motore che batte il 60/40**; nel frattempo GitHub Actions (o le sveglie attuali, con l'interruttore
+riparato) copre tutto ciò che serve per una strategia a orizzonte di settimane.

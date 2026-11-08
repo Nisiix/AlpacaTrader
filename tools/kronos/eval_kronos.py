@@ -15,6 +15,7 @@ ap.add_argument("--samples", type=int, default=3)
 ap.add_argument("--T", type=float, default=1.0)
 ap.add_argument("--top_p", type=float, default=0.9)
 ap.add_argument("--out", default=None)
+ap.add_argument("--rows", default=None)
 a = ap.parse_args()
 
 TOK = {"mini": "NeoQuasar/Kronos-Tokenizer-2k", "small": "NeoQuasar/Kronos-Tokenizer-base", "base": "NeoQuasar/Kronos-Tokenizer-base"}
@@ -61,5 +62,6 @@ def summarize(g):
 out = {"csv": os.path.basename(a.csv), "model": a.model, "params": nparams, "lookback": a.lookback, "pred_len": a.pred_len, "tests": len(starts), "samples": a.samples,
        "load_s": round(load_s, 1), "sec_per_forecast": round(float(np.mean(tp)), 2), "by_horizon": {int(h): summarize(g) for h, g in r.groupby("h")}}
 print(json.dumps(out, indent=1))
+if a.rows: r.to_csv(a.rows, index=False)
 if a.out:
     with open(a.out, "w") as f: json.dump(out, f, indent=1)
