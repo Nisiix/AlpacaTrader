@@ -1199,6 +1199,17 @@ function paintMoney(st) {
   if (cmp) { $('#k-cmp').innerHTML = `<span class="${cls(cmp.conto)}">${pct(cmp.conto)}</span> <span class="why">contro ${pct(cmp.spy)}</span>`; }
 }
 
+// Orari delle operazioni, in ora di Roma: oggi solo l'ora, altrimenti giorno e ora; durata leggibile.
+function quando(iso) {
+  if (!iso) return '–';
+  const d = new Date(iso);
+  const ora = d.toLocaleTimeString('it-IT', { timeZone: 'Europe/Rome', hour: '2-digit', minute: '2-digit' });
+  return romeDate(iso) === todayRome() ? ora : `${d.toLocaleDateString('it-IT', { timeZone: 'Europe/Rome', day: '2-digit', month: '2-digit' })} ${ora}`;
+}
+function durata(da, a = new Date().toISOString()) {
+  const m = Math.max(0, Math.round((Date.parse(a) - Date.parse(da)) / 60000));
+  return m < 60 ? `${m} min` : m < 1440 ? `${Math.floor(m / 60)} h${m % 60 ? ` ${m % 60} min` : ''}` : `${Math.floor(m / 1440)} g ${Math.floor((m % 1440) / 60)} h`;
+}
 function paintPositions(st) {
   const pos = st.posizioni || [];
   $('#pos-n').textContent = pos.length ? `${pos.length}` : '';
@@ -1208,9 +1219,9 @@ function paintPositions(st) {
     return;
   }
   const eq = st.conto?.patrimonio || 1;
-  $('#positions').innerHTML = `<table><thead><tr><th>Titolo</th><th class="n">Quantità</th><th class="n">Carico</th><th class="n">Ora</th><th class="n">Guadagno</th><th class="n">Peso</th></tr></thead><tbody>${pos.map((p) => {
+  $('#positions').innerHTML = `<table><thead><tr><th>Titolo</th><th class="n">Quantità</th><th class="n">Carico</th><th class="n">Prezzo</th><th class="n">Guadagno</th><th class="n">Peso</th></tr></thead><tbody>${pos.map((p) => {
     const gain = (p.prezzoAttuale - p.prezzoCarico) * p.quantita;
-    return `<tr><td><b>${esc(p.simbolo)}</b></td><td class="n">${qty(p.quantita)}</td><td class="n">${fmt(p.prezzoCarico)}</td><td class="n">${fmt(p.prezzoAttuale)}</td><td class="n ${cls(gain)}">${usd(gain)}<br><span class="why">${pct(p.variazione)}</span></td><td class="n">${(p.valore / eq * 100).toFixed(1).replace('.', ',')}%</td></tr>`;
+    return `<tr><td><b>${esc(p.simbolo)}</b>${p.dal ? `<br><span class="why" title="${esc(new Date(p.dal).toLocaleString('it-IT', { timeZone: 'Europe/Rome' }))}">dal ${quando(p.dal)} · da ${durata(p.dal)}</span>` : ''}</td><td class="n">${qty(p.quantita)}</td><td class="n">${fmt(p.prezzoCarico)}</td><td class="n">${fmt(p.prezzoAttuale)}</td><td class="n ${cls(gain)}">${usd(gain)}<br><span class="why">${pct(p.variazione)}</span></td><td class="n">${(p.valore / eq * 100).toFixed(1).replace('.', ',')}%</td></tr>`;
   }).join('')}</tbody></table>`;
 }
 
@@ -1221,11 +1232,11 @@ function paintPnl(st) {
   let html = `<div class="pnl-line"><div><div class="lab">Incassato oggi</div><div class="val ${cls(pl.realizzato)}">${usd(pl.realizzato)}</div></div><div><div class="lab">Sulle posizioni aperte</div><div class="val ${cls(pl.nonRealizzato)}">${usd(pl.nonRealizzato)}</div></div><div><div class="lab">Totale giornata</div><div class="val ${cls(total)}">${usd(total)}</div></div></div>`;
   if (!pl.vendite.length && !pl.acquisti.length) html += `<p class="empty">Nessuna operazione oggi.</p>`;
   if (pl.vendite.length) {
-    html += `<table><thead><tr><th>Vendita</th><th class="n">Carico → uscita</th><th class="n">Risultato</th></tr></thead><tbody>${pl.vendite.map((v) => `<tr><td><b>${esc(v.simbolo)}</b> ${qty(v.quantita)}${v.chiuso ? '' : ' <span class="pill">parziale</span>'}<br><span class="why">${esc(v.motivo)}${v.agenti?.length ? ` · voto di ${v.agenti.map(agentName).join(', ')}` : ''}</span></td><td class="n">${fmt(v.carico)} → ${fmt(v.prezzo)}</td><td class="n ${cls(v.pnl)}"><b>${usd(v.pnl)}</b><br><span class="why">${pct(v.risultato)}</span></td></tr>`).join('')}</tbody></table>`;
+    html += `<table><thead><tr><th>Vendita</th><th class="n">Carico → uscita · orari</th><th class="n">Risultato</th></tr></thead><tbody>${pl.vendite.map((v) => `<tr><td><b>${esc(v.simbolo)}</b> ${qty(v.quantita)}${v.chiuso ? '' : ' <span class="pill">parziale</span>'}<br><span class="why">${esc(v.motivo)}${v.agenti?.length ? ` · voto di ${v.agenti.map(agentName).join(', ')}` : ''}</span></td><td class="n">${fmt(v.carico)} → ${fmt(v.prezzo)}${v.ora ? `<br><span class="why">${v.aperto ? `${quando(v.aperto)} → ` : ''}${quando(v.ora)}${v.aperto ? ` · ${durata(v.aperto, v.ora)}` : ''}</span>` : ''}</td><td class="n ${cls(v.pnl)}"><b>${usd(v.pnl)}</b><br><span class="why">${pct(v.risultato)}</span></td></tr>`).join('')}</tbody></table>`;
   }
   const per = Object.entries(pl.perAgente || {});
   if (per.length) html += `<div class="row" style="margin-top:12px"><span class="why">Per agente:</span>${per.sort((a, b) => b[1].pnl - a[1].pnl).map(([a, g]) => `<span class="pill ${cls(g.pnl)}">${agentName(a)} ${usd(g.pnl)}</span>`).join('')}</div>`;
-  if (pl.acquisti?.length) html += `<p class="why" style="margin-top:10px">Comprato oggi: ${pl.acquisti.map((a) => `<b>${esc(a.simbolo)}</b> ${qty(a.quantita)} a ${fmt(a.prezzo)}`).join(', ')}.</p>`;
+  if (pl.acquisti?.length) html += `<p class="why" style="margin-top:10px">Comprato oggi: ${pl.acquisti.slice().sort((a, b) => String(a.ora).localeCompare(String(b.ora))).map((a) => `<b>${esc(a.simbolo)}</b> ${qty(a.quantita)} a ${fmt(a.prezzo)}${a.ora ? ` alle ${quando(a.ora)}` : ''}`).join(', ')}.</p>`;
   $('#pnl').innerHTML = html;
 }
 
@@ -1238,7 +1249,7 @@ function paintDecisions(st) {
   const items = [];
   for (const o of st.ordini || []) {
     const ok = o.esito.startsWith('inviato');
-    items.push(`<div class="decision"><div class="head"><span><span class="pill ${o.lato === 'buy' ? 'up' : 'down'}">${o.lato === 'buy' ? 'Comprato' : 'Venduto'}</span> <b>${qty(o.quantita)} ${esc(o.simbolo)}</b></span><span class="pill ${ok ? '' : 'warn'}">${ok ? 'ordine inviato' : esc(cleanErr(o.esito))}</span></div><div class="why">${esc(o.perche)}</div></div>`);
+    items.push(`<div class="decision"><div class="head"><span><span class="pill ${o.lato === 'buy' ? 'up' : 'down'}">${o.lato === 'buy' ? 'Comprato' : 'Venduto'}</span> <b>${qty(o.quantita)} ${esc(o.simbolo)}</b> <span class="why">alle ${quando(st.aggiornato)}</span></span><span class="pill ${ok ? '' : 'warn'}">${ok ? 'ordine inviato' : esc(cleanErr(o.esito))}</span></div><div class="why">${esc(o.perche)}</div></div>`);
   }
   // I rifiuti con lo stesso motivo stanno su una riga sola: "mercato chiuso" per cinque titoli è una notizia, non cinque.
   const byReason = new Map();
@@ -1535,7 +1546,7 @@ function paintTitle() {
   const cust = (st?.custodi || []).find((c) => c.simbolo === selected);
   const pos = (st?.posizioni || []).find((p) => p.simbolo === selected);
   const v = $('#verdict'); v.className = 'verdict';
-  v.textContent = pos ? `In portafoglio: ${qty(pos.quantita)} a ${px(pos.prezzoCarico)}, ${pct(pos.variazione)}.` : votes.length ? `Nell'ultimo giro ${votes.length === 1 ? 'un agente ha votato' : `${votes.length} agenti hanno votato`} su ${selected}${score ? ` (punteggio ${score.punteggio >= 0 ? '+' : ''}${score.punteggio.toFixed(2)})` : ''}.` : `Nessun voto su ${selected} nell'ultimo giro.`;
+  v.textContent = pos ? `In portafoglio: ${qty(pos.quantita)} a ${px(pos.prezzoCarico)}, ${pct(pos.variazione)}${pos.dal ? `, dal ${quando(pos.dal)} (da ${durata(pos.dal)})` : ''}.` : votes.length ? `Nell'ultimo giro ${votes.length === 1 ? 'un agente ha votato' : `${votes.length} agenti hanno votato`} su ${selected}${score ? ` (punteggio ${score.punteggio >= 0 ? '+' : ''}${score.punteggio.toFixed(2)})` : ''}.` : `Nessun voto su ${selected} nell'ultimo giro.`;
   $('#verdict-body').innerHTML = `${votes.map((s) => `<div class="vote"><span class="pill agent">${agentName(s.agente)}</span> <span class="${s.lato === 'buy' ? 'up' : 'down'}"><b>${s.lato === 'buy' ? 'compra' : 'vendi'}</b></span> forza ${s.forza.toFixed(2).replace('.', ',')}<br><span class="why">${esc(s.perche)}</span></div>`).join('')}${cust ? custodeCard(cust) : ''}`;
 }
 // Il feed del titolo: cosa ha fatto il motore oggi su questo titolo, dal più recente, aggiornato in diretta.
