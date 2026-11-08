@@ -205,6 +205,9 @@ export const AGENTS = {
   // stopMode "fisso": stopPct. La letteratura (Lei-Li, Han-Zhou-Zhu) dà ragione agli stop larghi scalati sulla volatilità.
   // trailAtr 0 = nessun trailing: nel backtest 2024-2026 il trailing a 3 ATR dal massimo toglieva 19 punti (usciva sul rumore
   // mentre il trend continuava); l'uscita di trend resta quella della gabbia (chiusura sotto la media a 50).
+  // Protezione del profitto: con una posizione in guadagno (oltre il margine dei costi), se Kronos nelle prossime
+  // `sedute` vede un calo che lo azzererebbe, si vende subito con il profitto di adesso.
+  protezioneProfitto: { enabled: true, sedute: 2, margine: { stocks: 0.002, crypto: 0.006 } },
   exit: { enabled: true, mode: "trend" as "trend" | "obiettivo", stopMode: "volatilita" as "volatilita" | "fisso", stopPct: 0.03, trailAtr: 0, targetPct: 0.03, targetBySymbol: { GLD: 0.04, MSFT: 0.04, QQQ: 0.04 } as Record<string, number>, giveBackPct: 0.02, lockPct: 0.005 },
   // Contesto economico (agente "contesto"): prima di ogni trade. Regole sui dati di mercato e sul calendario eventi sempre;
   // in più, se c'è `claude -p`, una lettura della situazione economica con ricerca web ogni refreshHours (cache in state/macro.json).
@@ -222,11 +225,15 @@ export const AGENTS = {
   // con tesi, piano e rischio dichiarati, dentro le stesse regole del motore.
   // Custodi senza numero fisso: uno per ogni titolo o crypto in trend (maxCandidates è solo una sicurezza).
   custodi: { enabled: true, maxCandidates: 100, pullbackSmaDays: 20, extendedPct: 0.15, keepIdleTicks: 12 },
+  // Evidenza combinata del dossier (Kronos, grafico, notizie, contesto) minima per un ingresso nuovo di più giorni:
+  // sopra la media a 200 e, più alta, sotto la 200 (contro tendenza).
+  evidenza: { min: 0.5, minContro: 0.6 },
   // Esplorazione: gli agenti in sala caffè passano in rassegna il radar (RADAR_SECTORS e le crypto rimaste fuori dal
-  // tetto di coppie) ogni everyMinutes, perGiro titoli alla volta. Un titolo che supera i criteri del motore (sopra la
+  // tetto di coppie) ogni everyMinutes (di serie ogni minuto, anche tra un giro e l'altro), perGiro titoli alla volta;
+  // finito il radar si ricomincia da capo (i prezzi cambiano, Kronos si chiede una volta al giorno per titolo). Un titolo che supera i criteri del motore (sopra la
   // media a 200, grafico in ordine, Kronos al rialzo oltre la soglia) entra nell'universo per giorniValida giorni; chi
   // l'ha trovato torna alla scrivania e lo vota. maxScoperte: quante scoperte nuove al giorno, al massimo.
-  esplorazione: { enabled: true, everyMinutes: 30, perGiro: 8, maxScoperte: 6, giorniValida: 3, minTecnica: 0.5 },
+  esplorazione: { enabled: true, everyMinutes: 1, perGiro: 6, maxScoperte: 6, giorniValida: 3, minTecnica: 0.5 },
   // Intraday (agente "intraday"): operazioni che si aprono e chiudono nella stessa giornata, solo nel verso del trend
   // giornaliero. L'agente sceglie da solo la candela (5 min / 15 min / 4 ore) dalla volatilità del titolo: più è nervoso,
   // più la candela è corta. Entra su rottura dei massimi delle ultime 20 candele o su rientro sulla media a 20 candele;

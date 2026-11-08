@@ -131,7 +131,7 @@ describe("esplorazione dalla sala caffè", () => {
     expect(g.motivo).toContain("sotto la media a 200");
   });
 
-  test("un giro: titoli del radar, filtro, Kronos; chi trova torna alla scrivania; al massimo un giro ogni mezz'ora", async () => {
+  test("un giro: titoli del radar, filtro, Kronos; chi trova torna alla scrivania; al massimo un giro al minuto; finito il radar si ricomincia", async () => {
     const f = readEsplorazione("/nonexistent-dir", "2026-11-09");
     const now = new Date("2026-11-09T15:00:00Z");
     const r = await explore({
@@ -147,8 +147,8 @@ describe("esplorazione dalla sala caffè", () => {
     expect(r!.scartati.find((x) => x.simbolo === "AVGO")!.motivo).toContain("nessun rialzo");
     expect(r!.scartati.find((x) => x.simbolo === "GOOGL")!.motivo).toContain("fuori misura");
     expect(r!.nuove.some((n) => n.simbolo === "GOOGL")).toBe(false);
-    // Mezz'ora non è passata: niente secondo giro.
-    expect(await explore({ now: new Date(now.getTime() + 10 * 60_000), today: "2026-11-09", file: f, presenti, universe: [], cryptoFuori: [], getBars: async () => ({}), forecast: null })).toBeNull();
+    // Non è passato un minuto: niente secondo giro.
+    expect(await explore({ now: new Date(now.getTime() + 30_000), today: "2026-11-09", file: f, presenti, universe: [], cryptoFuori: [], getBars: async () => ({}), forecast: null })).toBeNull();
     // Senza nessuno in pausa nessuno esplora.
     expect(await explore({ now: new Date(now.getTime() + 60 * 60_000), today: "2026-11-09", file: f, presenti: [], universe: [], cryptoFuori: [], getBars: async () => ({}), forecast: null })).toBeNull();
   });

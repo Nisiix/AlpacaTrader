@@ -219,10 +219,12 @@ export class IntradayAgent implements Agent {
     }
     // Kronos sulle candele brevi: solo per chi ha le medie brevi in ordine (o un ingresso), al massimo c.kronos.perGiro.
     const short = candidates.filter((s) => { const r = reads.get(s); return r && (r.breve || r.read.entra); }).slice(0, c.kronos.perGiro);
+    // Anche le posizioni aperte in guadagno chiedono Kronos: serve alla protezione del profitto.
+    const protect = [...mine].filter((s) => { const p = held.get(s); const pr = v.prices[s] ?? p?.currentPrice; return p && pr && bars[s] && pr / p.avgEntryPrice - 1 > 0; });
     const kInt = new Map<string, number>();
-    if (this.forecast && short.length) {
+    if (this.forecast && (short.length || protect.length)) {
       const bySteps = new Map<string, string[]>();
-      for (const s of short) bySteps.set(tfOf.get(s)!, [...(bySteps.get(tfOf.get(s)!) ?? []), s]);
+      for (const s of [...short, ...protect]) bySteps.set(tfOf.get(s)!, [...(bySteps.get(tfOf.get(s)!) ?? []), s]);
       for (const [tf, syms] of bySteps) {
         const need = syms.filter((s) => this.kCache.get(s)?.chiave !== `${tf}|${bars[s]!.at(-1)!.t}`);
         if (need.length) {
@@ -250,6 +252,22 @@ export class IntradayAgent implements Agent {
       }
     }
     for (const s of short) if (upTf(tfOf.get(s)!) === "1Day") { const e = ema(v.closes[s] ?? [], 20); if (e !== null) higher.set(s, v.prices[s]! > e); }
+
+    // Protezione del profitto sulle operazioni aperte: in guadagno oltre i costi, se Kronos sulle prossime candele vede
+    // un calo che lo azzererebbe, si incassa adesso invece di rischiare di tornare a pari o in perdita.
+    for (const s of protect) {
+      if (segnali.some((x) => x.simbolo === s && x.lato === "sell")) continue;
+      const k = kInt.get(s);
+      const p = held.get(s)!;
+      const price = v.prices[s] ?? p.currentPrice;
+      const gain = price / p.avgEntryPrice - 1;
+      const margine = isCrypto(s) ? AGENTS.protezioneProfitto.margine.crypto : AGENTS.protezioneProfitto.margine.stocks;
+      if (!AGENTS.protezioneProfitto.enabled || k === undefined || k >= 0 || gain <= margine || (1 + gain) * (1 + k) - 1 > margine) continue;
+      const motivo = `protezione del profitto: +${(gain * 100).toFixed(2)}% in tasca, ma Kronos vede ${pct(k)} sulle prossime ${c.kronos.candele} candele ${tfOf.get(s)}, che lo azzererebbe: si incassa adesso`;
+      segnali.push({ agente: this.name, simbolo: s, lato: "sell", forza: 1, orizzonteSedute: 1, vincolante: true, intraday: true, perche: `${s} intraday (${tfOf.get(s)}): ${motivo}` });
+      const st = stati.find((x) => x.simbolo === s);
+      if (st) st.motivo = motivo;
+    }
 
     for (const s of candidates) {
       const tf = tfOf.get(s)!;

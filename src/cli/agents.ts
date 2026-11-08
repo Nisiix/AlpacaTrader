@@ -16,7 +16,7 @@ import { RegimeAgent } from "../agents/regime.ts";
 import { TakeProfitAgent } from "../agents/takeprofit.ts";
 import { TrendAgent } from "../agents/trend.ts";
 import { EventBus } from "../agents/bus.ts";
-import { emptyCache, runEngine, runTick, valutaTitolo, type EngineDeps } from "../agents/engine.ts";
+import { emptyCache, exploreNow, runEngine, runTick, valutaTitolo, type EngineDeps } from "../agents/engine.ts";
 import { coingeckoTop } from "../agents/universe.ts";
 import type { Agent } from "../agents/types.ts";
 import { AGENTS, enableCrypto } from "../config.ts";
@@ -149,6 +149,11 @@ try {
     quit(RESTART_CODE);
   }, 5_000);
   watcher.unref();
+  // Sala caffè: ogni minuto gli agenti in pausa passano un pezzo del radar, anche tra un giro e l'altro.
+  const exploreTimer = setInterval(() => {
+    if (!stop) exploreNow(engine, cache).catch((e) => console.warn(`esplorazione: ${(e as Error).message}`));
+  }, 60_000);
+  exploreTimer.unref();
   // GitHub Pages (se acceso nelle schede): istantanea in sola lettura pubblicata ogni N minuti con il git del PC.
   if (!args.fake) {
     let lastPages = 0;

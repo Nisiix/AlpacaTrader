@@ -18,7 +18,7 @@ import { applyAgentSettings } from "../agent-settings.ts";
 import * as simulations from "../simulations.ts";
 import type { Simulazione } from "../simulations.ts";
 import { clientOrderId, sendOne, waitForFills, type ExecOutcome } from "../execute.ts";
-import { writeJsonAtomic } from "../fsutil.ts";
+import { isObject, readJson, writeJsonAtomic } from "../fsutil.ts";
 import { indicatorsFor } from "../indicators.ts";
 import { applyFills, closeDust, contextFor, dailyPnl, learnFromJournal, learningStatus, pruneJournal, readJournal, recordIntent, statsOf, writeJournal, type DailyPnl, type Stats } from "../journal.ts";
 import { activeLessons, learnFromBrokerReject, learnFromStopLoss, pruneLessons, readLessons, writeLessons, type Lesson } from "../lessons.ts";
@@ -126,6 +126,8 @@ export interface EngineCache {
   capoSintesi?: string;
   giriCaffe?: number;
   caffePresenti?: string;
+  inTick?: boolean;
+  exploring?: boolean;
   scartateNota?: string;
 }
 
@@ -394,7 +396,8 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
     try {
       fonti = deps.fonti ? await deps.fonti.read() : undefined;
     } catch {}
-    const view: AgentView = { today, now: startedAt, prices: snap.prices, closes, indicators, positions: snap.positions, account: snap.account, journal, previsioni, mercatoAperto: snap.clock.isOpen, finestraIngressi: inEntryWindow(startedAt) && snap.clock.isOpen, giornata, fonti };
+    const percorsi = previsioni && cache.previsioni ? Object.fromEntries(Object.keys(previsioni).filter((k) => cache.previsioni!.data[k]?.percorso?.length).map((k) => [k, cache.previsioni!.data[k]!.percorso])) : undefined;
+    const view: AgentView = { today, now: startedAt, prices: snap.prices, closes, indicators, positions: snap.positions, account: snap.account, journal, previsioni, percorsi, mercatoAperto: snap.clock.isOpen, finestraIngressi: inEntryWindow(startedAt) && snap.clock.isOpen, giornata, fonti };
     const reports: Record<string, AgentReport> = {};
     const agentStatus: AgentsStatus["agenti"] = {};
     // Il contesto economico si valuta per primo: decide dove si aspetta e di quali proiezioni fidarsi.
@@ -596,53 +599,9 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
       fonti: fonti ? { paura: fonti.paura, funding: Object.fromEntries(AGENTS.universe.filter((u) => fonti!.funding[u] !== undefined).map((u) => [u, fonti!.funding[u]!])), errori: fonti.errori } : undefined,
       caffe: coffeeBreak({ now: deps.now(), reports, held: new Set([...positions.map((p) => p.symbol), ...cage.orders.filter((o) => o.side === "buy").map((o) => o.symbol)]), previsioni: view.previsioni, scartate, lezioni, capo, applicati: applicatiCaffe, giro: (cache.giriCaffe = (cache.giriCaffe ?? 0) + 1), primaInPausa: new Set((cache.caffePresenti ?? "").split(",").filter(Boolean)), esploratori: scout.esploratori }),
     };
-    // Esplorazione: con qualcuno in pausa, ogni mezz'ora si passa in rassegna un pezzo del radar.
-    try {
-      const giroEspl = await explore({
-        now: deps.now(), today, file: espl, presenti: status.caffe!.presenti, universe: AGENTS.universe, cryptoFuori: [],
-        getBars: (syms) => retry(() => deps.broker.getDailyBars(syms, DAILY_BARS_DAYS), deps.sleep),
-        forecast: deps.forecaster
-          ? async (syms, bars) => {
-              const raw = await deps.forecaster!(syms, bars);
-              const out: Record<string, number> = {};
-              for (const [k, v] of Object.entries(raw)) {
-                const fp = normalizeForecast(v);
-                out[k] = fp.rendimentoPrevisto;
-                if (cache.previsioni?.date === today) cache.previsioni.data[k] = fp;
-              }
-              if (cache.previsioni?.date === today) writeJsonAtomic(forecastsPath(deps.stateDir), { versione: 1, aggiornato: deps.now().toISOString(), giorno: today, orizzonte: AGENTS.kronos.horizon, previsioni: cache.previsioni.data });
-              return out;
-            }
-          : null,
-      });
-      if (giroEspl) {
-        for (const [k, b] of Object.entries(giroEspl.bars)) {
-          cache.bars[k] = b;
-          cache.closes[k] = b.map((x) => x.close);
-        }
-        for (const n of giroEspl.nuove) {
-          if (!AGENTS.universe.includes(n.simbolo)) AGENTS.universe.push(n.simbolo);
-          // Lo scopritore lascia la sala caffè e torna alla scrivania: lo dice ai colleghi.
-          const c = status.caffe!;
-          const i = c.presenti.findIndex((p) => p.chiave === n.scopritore);
-          if (i >= 0) c.presenti.splice(i, 1);
-          c.operativi.push({ chiave: n.scopritore, nome: n.agente, perche: `ha trovato ${n.simbolo}` });
-          c.scambi.unshift({ da: n.scopritore, a: null, tema: "esplorazione", testo: `Ho trovato ${n.simbolo} (${n.settore}): ${n.motivo}. Torno alla scrivania, lo porto al motore.` });
-        }
-        log.info(`esplorazione: ${giroEspl.messaggio}`);
-        bus.emit("esplorazione", { esaminati: giroEspl.esaminati, nuove: giroEspl.nuove.map((n) => ({ simbolo: n.simbolo, agente: n.agente, kronos: n.kronos, motivo: n.motivo })), scartati: giroEspl.scartati });
-      }
-      writeEsplorazione(deps.stateDir, espl);
-    } catch (e) {
-      log.warn(`esplorazione non riuscita: ${(e as Error).message}`);
-    }
-    status.esplorazione = {
-      ultimoGiro: espl.ultimoGiro,
-      esito: espl.ultimoEsito,
-      daEsaminareOggi: radar(AGENTS.universe).filter((x) => !espl.esaminati.includes(x)).length,
-      attive: attive(espl, today),
-      recenti: espl.scoperte.filter((x) => x.stato !== "attiva").slice(-6),
-    };
+    // Esplorazione: con qualcuno in pausa si passa in rassegna un pezzo del radar (anche tra un giro e l'altro, ogni minuto).
+    await exploreRound(deps, cache, today, espl, status.caffe!, (m) => log.info(m), (m) => log.warn(m));
+    status.esplorazione = esplSummary(espl, today);
     // Chi entra e chi esce dalla sala caffè: un evento solo quando cambia qualcosa.
     const presentiKey = status.caffe!.presenti.map((p) => p.chiave).join(",");
     if (cache.caffePresenti !== undefined && cache.caffePresenti !== presentiKey) {
@@ -820,15 +779,96 @@ export function summaryText(s: AgentsStatus): string {
 }
 
 // Il ciclo: un giro ogni tickMinutes, finché il processo vive. Fuori orario il giro è solo lettura.
+// Un giro di esplorazione (dal giro del motore o dal timer di ogni minuto): legge il radar, aggiorna universo, candele e
+// proiezioni in memoria, sposta lo scopritore dalla sala caffè alla scrivania, scrive il file dell'esplorazione.
+async function exploreRound(deps: EngineDeps, cache: EngineCache, today: string, espl: ReturnType<typeof readEsplorazione>, caffe: CaffeReport, info: (m: string) => void, warn: (m: string) => void) {
+  try {
+    const giroEspl = await explore({
+      now: deps.now(), today, file: espl, presenti: caffe.presenti, universe: AGENTS.universe, cryptoFuori: [],
+      getBars: (syms) => retry(() => deps.broker.getDailyBars(syms, DAILY_BARS_DAYS), deps.sleep),
+      forecast: deps.forecaster
+        ? async (syms, bars) => {
+            // Kronos una volta al giorno per titolo: quelli già proiettati oggi non si richiedono al sidecar.
+            const out: Record<string, number> = {};
+            const known = cache.previsioni?.date === today ? cache.previsioni.data : {};
+            for (const k of syms) if (known[k]) out[k] = known[k]!.rendimentoPrevisto;
+            const need = syms.filter((k) => out[k] === undefined);
+            if (!need.length) return out;
+            const raw = await deps.forecaster!(need, bars);
+            for (const [k, v] of Object.entries(raw)) {
+              const fp = normalizeForecast(v);
+              out[k] = fp.rendimentoPrevisto;
+              if (cache.previsioni?.date === today) cache.previsioni.data[k] = fp;
+            }
+            if (cache.previsioni?.date === today) writeJsonAtomic(forecastsPath(deps.stateDir), { versione: 1, aggiornato: deps.now().toISOString(), giorno: today, orizzonte: AGENTS.kronos.horizon, previsioni: cache.previsioni.data });
+            return out;
+          }
+        : null,
+    });
+    if (giroEspl) {
+      for (const [k, b] of Object.entries(giroEspl.bars)) {
+        cache.bars[k] = b;
+        cache.closes[k] = b.map((x) => x.close);
+      }
+      for (const n of giroEspl.nuove) {
+        if (!AGENTS.universe.includes(n.simbolo)) AGENTS.universe.push(n.simbolo);
+        // Lo scopritore lascia la sala caffè e torna alla scrivania: lo dice ai colleghi.
+        const i = caffe.presenti.findIndex((p) => p.chiave === n.scopritore);
+        if (i >= 0) caffe.presenti.splice(i, 1);
+        caffe.operativi.push({ chiave: n.scopritore, nome: n.agente, perche: `ha trovato ${n.simbolo}` });
+        caffe.scambi.unshift({ da: n.scopritore, a: null, tema: "esplorazione", testo: `Ho trovato ${n.simbolo} (${n.settore}): ${n.motivo}. Torno alla scrivania, lo porto al motore.` });
+      }
+      if (giroEspl.nuove.length || giroEspl.esaminati.length) info(`esplorazione: ${giroEspl.messaggio}`);
+      if (giroEspl.esaminati.length) deps.bus.emit("esplorazione", { esaminati: giroEspl.esaminati, nuove: giroEspl.nuove.map((n) => ({ simbolo: n.simbolo, agente: n.agente, kronos: n.kronos, motivo: n.motivo })), scartati: giroEspl.scartati });
+    }
+    writeEsplorazione(deps.stateDir, espl);
+  } catch (e) {
+    warn(`esplorazione non riuscita: ${(e as Error).message}`);
+  }
+}
+
+const esplSummary = (espl: ReturnType<typeof readEsplorazione>, today: string) => ({
+  ultimoGiro: espl.ultimoGiro,
+  esito: espl.ultimoEsito,
+  daEsaminareOggi: radar(AGENTS.universe).filter((x) => !espl.esaminati.includes(x)).length,
+  attive: attive(espl, today),
+  recenti: espl.scoperte.filter((x) => x.stato !== "attiva").slice(-6),
+});
+
+// Il timer di ogni minuto: tra un giro e l'altro gli agenti in sala caffè continuano a cercare. Salta se un giro è in corso;
+// aggiorna nello stato solo sala caffè ed esplorazione.
+export async function exploreNow(deps: EngineDeps, cache: EngineCache): Promise<void> {
+  if (cache.inTick || cache.exploring) return;
+  const r = readJson(statusPath(deps.stateDir), isObject);
+  if (r.kind !== "ok") return;
+  const status = r.value as unknown as AgentsStatus;
+  if (!status.caffe?.presenti?.length) return;
+  cache.exploring = true;
+  try {
+    const today = romeTime(deps.now()).date;
+    const espl = readEsplorazione(deps.stateDir, today);
+    const before = espl.ultimoGiro;
+    await exploreRound(deps, cache, today, espl, status.caffe, (m) => console.log(`${deps.now().toISOString()} ${m}`), (m) => console.warn(`${deps.now().toISOString()} ${m}`));
+    if (espl.ultimoGiro === before || cache.inTick) return;
+    status.esplorazione = esplSummary(espl, today);
+    writeJsonAtomic(statusPath(deps.stateDir), status);
+  } finally {
+    cache.exploring = false;
+  }
+}
+
 export async function runEngine(deps: EngineDeps, tickMs: number, shouldStop: () => boolean = () => false, cache: EngineCache = emptyCache()): Promise<void> {
   while (!shouldStop()) {
     const t0 = deps.now().getTime();
     try {
+      cache.inTick = true;
       const r = await runTick(deps, cache);
       if (deps.echo ?? true) console.log(`${deps.now().toISOString()} ${r.message}`);
     } catch (e) {
       console.error(`${deps.now().toISOString()} giro fallito: ${(e as Error).message}`);
       deps.bus.emit("allarme", { titolo: "Giro fallito", dettaglio: (e as Error).message });
+    } finally {
+      cache.inTick = false;
     }
     const wait = Math.max(5_000, tickMs - (deps.now().getTime() - t0));
     await deps.sleep(wait);

@@ -738,6 +738,17 @@ describe("intraday", () => {
     const btc = r.segnali.find((x) => x.lato === "buy" && x.simbolo === "BTC/USD")!;
     expect(btc.perche).toContain("Kronos sulle prossime 6 candele");
     expect(asked.some((q) => q.startsWith("5:6:") && q.includes("BTC/USD"))).toBe(true);
+    // In posizione e in guadagno (+1,2%): Kronos sulle prossime candele vede -2% → protezione del profitto, si vende.
+    kint = { "BTC/USD": -0.02 };
+    // Una candela nuova: Kronos si richiede (in memoria si tiene una proiezione per candela).
+    const lastB = bars["BTC/USD"]!.at(-1)!; bars["BTC/USD"]!.push({ ...lastB, t: new Date(Date.parse(lastB.t) + 5 * 60_000).toISOString(), open: lastB.close, close: 77_367, high: 77_400, low: lastB.close });
+    const posB = [{ symbol: "BTC/USD", qty: 0.05, avgEntryPrice: 76_450, currentPrice: 77_367, marketValue: 3_868 }];
+    const rp = await a.observe(view({ closes, prices: { ...prices, "BTC/USD": 77_367 }, now: day("2026-09-22", "16:40"), today: "2026-09-22", positions: posB }));
+    const prot = rp.segnali.find((x) => x.lato === "sell" && x.simbolo === "BTC/USD")!;
+    expect(prot.vincolante).toBe(true);
+    expect(prot.perche).toContain("protezione del profitto");
+    bars["BTC/USD"]!.pop();
+    kint = { "BTC/USD": 0.01, NVDA: 0.006 };
     // Lo stesso ingresso con il Kronos a 5 sedute contrario: si entra lo stesso, ma a taglia ridotta.
     const a2 = new IntradayAgent(async (syms) => Object.fromEntries(syms.filter((x) => bars[x]).map((x) => [x, bars[x]!])), async (b) => Object.fromEntries(Object.keys(b).map((x) => [x, kint[x] ?? -0.01])));
     const rr = await a2.observe(view({ closes, prices, now, today: "2026-09-22", previsioni: { "BTC/USD": -0.03 } }));
@@ -972,6 +983,48 @@ describe("ingressi contro tendenza guidati da Kronos", () => {
       const big = Math.floor(((LIMITS.maxPositionPct * 0.5 + 0.02) * v.account.equity) / v.prices.NVDA!);
       expect(applyCage({ ...base, proposals: [prop(big, 0.04)] }).rejected[0]!.reason).toContain("contro tendenza il massimo");
     });
+  });
+});
+
+describe("protezione del profitto", () => {
+  test("in guadagno, se Kronos nelle prossime 2 sedute vede un calo che azzera il profitto si vende; se il calo è piccolo si tiene", () => {
+    const v = view({ positions: [{ symbol: "NVDA", qty: 10, avgEntryPrice: 170, currentPrice: 180, marketValue: 1800 }] });
+    v.prices.NVDA = 173.4; // +2%
+    // Percorso: -2,5% domani, poi recupera (+3% a 5 sedute): il calo di domani azzererebbe il +2%.
+    v.previsioni = { NVDA: 0.03 }; v.percorsi = { NVDA: [-0.025, -0.01, 0.01, 0.02, 0.03] };
+    const r = new ExitAgent().observe(v);
+    const s = r.segnali.find((x) => x.simbolo === "NVDA")!;
+    expect(s).toMatchObject({ lato: "sell", vincolante: true });
+    expect(s.perche).toContain("protezione del profitto");
+    // Calo piccolo (-0,5%): il profitto resta, si tiene.
+    v.percorsi = { NVDA: [-0.005, 0.01, 0.02, 0.025, 0.03] };
+    expect(new ExitAgent().observe(v).segnali.filter((x) => x.simbolo === "NVDA")).toEqual([]);
+    // In perdita la regola non c'entra (decidono stop e proiezione).
+    v.prices.NVDA = 168; v.percorsi = { NVDA: [-0.025, -0.01, 0.01, 0.02, 0.03] };
+    expect(new ExitAgent().observe(v).segnali.filter((x) => x.simbolo === "NVDA" && x.perche.includes("protezione"))).toEqual([]);
+  });
+});
+
+describe("evidenza combinata e prudenza sotto la media a 200", () => {
+  const dossier = (p: number) => ({ aggiornato: "", probabilita: p, tecnica: { punteggio: 0.5, pattern: [] }, kronos: { punteggio: 0.5, nota: "" }, notizie: { punteggio: null, titoli: [], nota: "" }, contesto: { punteggio: 0.5, nota: "" }, memoria: {} as any, prossimaAzione: "" });
+  const custodiCon = (sym: string, p: number) => ({ segnali: [], custodi: [{ simbolo: sym, dossier: dossier(p) } as any] });
+  const buy = (sym: string) => ({ trend: { segnali: [{ agente: "trend", simbolo: sym, lato: "buy" as const, forza: 1, orizzonteSedute: 20, perche: "" }] } });
+  test("il dossier (Kronos, grafico, notizie, contesto) ferma l'ingresso sotto il minimo e ne scala la taglia", () => {
+    const v = view({ previsioni: { NVDA: 0.03 } });
+    const low = allocate(v, { ...buy("NVDA"), custodi: custodiCon("NVDA", 0.42) }, { trend: 1 });
+    expect(low.proposte.filter((x) => x.symbol === "NVDA")).toEqual([]);
+    expect(low.inAttesa.find((x) => x.simbolo === "NVDA")!.motivo).toContain("evidenza combinata 42%");
+    const q = (p: number) => allocate(v, { ...buy("NVDA"), custodi: custodiCon("NVDA", p) }, { trend: 1 }).proposte.find((x) => x.symbol === "NVDA")!.qty;
+    expect(q(0.5)).toBeLessThan(q(0.85));
+  });
+  test("a parità di Kronos ed evidenza, sotto la 200 la taglia è più piccola che sopra (metà) e serve un'evidenza più alta", () => {
+    const up = view({ previsioni: { NVDA: 0.04 } });
+    const down = view({ falling: ["NVDA"], previsioni: { NVDA: 0.04 } });
+    const w = (vv: AgentView, p: number) => { const pr = allocate(vv, { ...buy("NVDA"), kronos: { segnali: [] }, custodi: custodiCon("NVDA", p) }, { trend: 1 }).proposte.find((x) => x.symbol === "NVDA"); return pr ? (pr.qty * vv.prices.NVDA!) / vv.account.equity : 0; };
+    expect(w(down, 0.7)).toBeGreaterThan(0);
+    expect(w(down, 0.7)).toBeLessThanOrEqual(w(up, 0.7) * 0.5 + 0.002);
+    expect(w(down, 0.55)).toBe(0); // sotto la 200 serve almeno il 60%
+    expect(w(up, 0.55)).toBeGreaterThan(0);
   });
 });
 

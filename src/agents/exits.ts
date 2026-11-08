@@ -1,4 +1,4 @@
-import { AGENTS, LIMITS } from "../config.ts";
+import { AGENTS, LIMITS, isCrypto } from "../config.ts";
 import { dailyVol } from "../indicators.ts";
 import { stopPctFor } from "../stops.ts";
 import type { Agent, AgentReport, AgentView, Signal } from "./types.ts";
@@ -37,6 +37,16 @@ export class ExitAgent implements Agent {
       const stopPct = this.policy.stopMode === "fisso" ? this.policy.stopPct : stopPctFor(v.closes[p.symbol]);
       if (gain <= -stopPct) {
         sell(`perdita ${pct(gain)} oltre lo stop del ${pct(stopPct)}${this.policy.stopMode === "fisso" ? "" : " (scalato sulla volatilità)"}`);
+        continue;
+      }
+      // Protezione del profitto: in guadagno (oltre i costi) e Kronos vede nel breve un calo che lo azzererebbe → si incassa
+      // adesso un profitto minore invece di rischiare di tornare a pari o in perdita.
+      const pp = AGENTS.protezioneProfitto;
+      const margine = isCrypto(p.symbol) ? pp.margine.crypto : pp.margine.stocks;
+      const path = v.percorsi?.[p.symbol]?.slice(0, pp.sedute) ?? (forecast !== undefined ? [forecast] : []);
+      const dip = path.length ? Math.min(...path) : null;
+      if (pp.enabled && gain > margine && dip !== null && dip < 0 && (1 + gain) * (1 + dip) - 1 <= margine) {
+        sell(`protezione del profitto: in guadagno del ${pct(gain)}, ma Kronos vede ${pct(dip)} nelle prossime ${pp.sedute} sedute, che lo azzererebbe: si incassa adesso`);
         continue;
       }
       if (forecast !== undefined && forecast < 0) {

@@ -23,6 +23,8 @@ export interface Score {
   kronos?: number;
   // Probabilità che la proiezione si avveri (decide la taglia).
   fiducia?: number | null;
+  // Evidenza combinata del dossier (Kronos, grafico, notizie e post, contesto con Fear & Greed e funding).
+  evidenza?: number | null;
 }
 
 export interface Allocation {
@@ -111,6 +113,7 @@ export function allocate(view: AgentView, reports: Record<string, AgentReport>, 
   // Kronos è la fonte principale, il contesto fa da contorno: quando Kronos anticipa un rialzo sul titolo, la riduzione
   // del contesto non si applica (la taglia la decide già la fiducia nella proiezione, sotto). Regime e altri restano.
   const rischioSenzaContesto = Object.entries(reports).reduce((a, [n, r]) => (n === "contesto" ? a : a * (r.rischio ?? 1)), 1);
+  const dossierOf = (s: string) => Object.values(reports).flatMap((r) => r.custodi ?? []).find((c) => c.simbolo === s)?.dossier?.probabilita ?? null;
   const kronosSu = (s: string) => (view.previsioni?.[s] ?? -1) >= AGENTS.kronos.anticipaSoglia;
   const punteggi = scoreSignals(signals, weights);
   const proposte: ProposedOrder[] = [];
@@ -161,16 +164,30 @@ export function allocate(view: AgentView, reports: Record<string, AgentReport>, 
     if (!price || price <= 0) continue;
     const p = held.get(sc.simbolo);
     if (!p && slots <= 0) continue;
+    // Evidenza combinata: il dossier del custode mette insieme Kronos (45%), grafico (25%), notizie e post (15%) e contesto
+    // con Fear & Greed e funding (15%). Per un ingresso nuovo di più giorni deve arrivare almeno a evidenza.min (sopra la
+    // media a 200) o evidenza.minContro (sotto la 200): chiunque abbia votato, le altre fonti possono fermare l'ingresso.
+    const contro = !sc.intraday && sotto200(view.closes[sc.simbolo], price);
+    const ev = sc.intraday ? null : dossierOf(sc.simbolo);
+    sc.evidenza = ev;
+    const minEv = contro ? AGENTS.evidenza.minContro : AGENTS.evidenza.min;
+    if (!p && ev !== null && ev < minEv) {
+      inAttesa.push({ simbolo: sc.simbolo, motivo: `evidenza combinata ${Math.round(ev * 100)}% sotto il minimo ${Math.round(minEv * 100)}%${contro ? " richiesto sotto la media a 200" : ""} (Kronos, grafico, notizie, contesto)` });
+      continue;
+    }
     let w = maxWeightFor(view.closes[sc.simbolo]).max * (kronosSu(sc.simbolo) || sc.intraday ? rischioSenzaContesto : rischio) * (AGENTS.scaleByScore ? Math.min(1, sc.punteggio) : 1);
     if (sc.pesoMassimo !== undefined) w = Math.min(w, sc.pesoMassimo);
-    // Sotto la media a 200 (ingresso contro tendenza) mai più di metà del peso massimo, chiunque abbia votato.
-    if (!sc.intraday && sotto200(view.closes[sc.simbolo], price)) w = Math.min(w, pesoControTendenza());
     // Taglia proporzionale alla fiducia nella proiezione di Kronos: più è probabile che il rialzo si avveri, più si investe.
     if (AGENTS.sizing.byKronos) {
       const f = kronosConfidence(view, sc.simbolo);
       sc.fiducia = f.p;
       w *= f.factor;
     }
+    // E all'evidenza combinata: al minimo richiesto metà taglia, dall'80% in su taglia piena.
+    if (ev !== null) w *= Math.max(0.5, Math.min(1, 0.5 + ((ev - minEv) / Math.max(0.05, 0.8 - minEv)) * 0.5));
+    // Sotto la media a 200 (contro tendenza) sempre più prudente che sopra: a parità di fiducia ed evidenza la taglia si
+    // moltiplica per la quota contro tendenza (metà di serie) e non supera mai quella quota del peso massimo.
+    if (contro) w = Math.min(w * AGENTS.kronos.controTendenza.pesoFattore, pesoControTendenza());
     if (!p) slots--;
     wanted.push({ sc, w, p });
   }

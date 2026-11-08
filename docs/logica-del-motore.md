@@ -157,6 +157,24 @@ titolo × √5), l'agente Kronos, il custode del titolo e lo scopritore della sa
 quelle di sempre: stop sulla volatilità su Alpaca, si tiene finché Kronos vede il rialzo, si esce quando la proiezione gira
 (custode, agente uscite, uscita di trend della gabbia). Parametri nella scheda di Kronos.
 
+## Scelta dei titoli: Kronos più tutte le fonti
+
+Un ingresso nuovo di più giorni (non intraday) passa da tre filtri, chiunque abbia votato:
+1. **voti e punteggio** (Kronos, trend, rientro, custodi, esplorazione), con richiami del capo e lezioni della sala caffè;
+2. **evidenza combinata** del dossier del custode: Kronos 45%, grafico 25%, notizie e post (Google News, Alpaca/Benzinga,
+   X) 15%, contesto 15% (con Fear & Greed e funding per le crypto). Sotto **50%** (sopra la media a 200) o **60%** (sotto
+   la 200) non si entra: il titolo resta in attesa con il motivo;
+3. **taglia**: peso massimo × fiducia in Kronos (probabilità che la proiezione si avveri) × evidenza (al minimo metà,
+   dall'80% piena). **Sotto la media a 200** la taglia si moltiplica ancora per 0,5 e non supera mai il 5% del conto:
+   a parità di tutto, contro tendenza si investe sempre la metà.
+
+## Protezione del profitto
+
+Con una posizione in guadagno oltre i costi (0,2% azioni, 0,6% crypto), se Kronos vede nelle **prossime 2 sedute** (dal
+percorso previsto giorno per giorno) un calo che riporterebbe il guadagno a zero, l'agente uscite **vende subito**: meglio
+un profitto minore che tornare a pari o in perdita. Per l'intraday vale lo stesso con Kronos sulle prossime 6 candele.
+Resta anche la regola di prima: proiezione a 5 sedute negativa su un titolo in portafoglio → si esce.
+
 ## Intraday: decide Kronos sulle candele brevi
 
 Per i trade che si chiudono in giornata non contano le medie giornaliere (50, 200) né il settimanale. Su ogni titolo nella
@@ -189,7 +207,7 @@ A ogni giro, dopo i richiami del capo ufficio, il motore (`src/agents/caffe.ts`)
 
 ### Esplorazione: chi è in pausa cerca nuove occasioni
 
-Gli agenti in sala caffè non restano fissi sul loro titolo (`src/agents/esplorazione.ts`). Ogni 30 minuti, se qualcuno è
+Gli agenti in sala caffè non restano fissi sul loro titolo (`src/agents/esplorazione.ts`). Ogni minuto (anche tra un giro e l'altro), se qualcuno è
 in pausa, prendono i prossimi 8 titoli del **radar** (azioni ed ETF liquidi fuori dall'universo, in `RADAR_SECTORS` con il
 loro settore: tecnologia, finanza, salute, energia, consumi, indici; le crypto della top 100 negoziabili su Alpaca sono
 già tutte nell'universo) e li passano con i criteri del motore:

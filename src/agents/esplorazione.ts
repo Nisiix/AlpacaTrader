@@ -121,9 +121,14 @@ export async function explore(input: {
   const done = new Set(f.esaminati);
   const queue = radar(input.universe, input.cryptoFuori).filter((s) => !done.has(s));
   f.ultimoGiro = input.now.toISOString();
+  // Radar finito: si ricomincia da capo (i prezzi cambiano durante la giornata; Kronos resta quello di oggi).
   if (!queue.length) {
-    f.ultimoEsito = "radar passato tutto per oggi";
-    return { esaminati: [], nuove: [], scartati: [], bars: {}, previsioni: {}, messaggio: f.ultimoEsito };
+    f.esaminati = [];
+    queue.push(...radar(input.universe, input.cryptoFuori));
+    if (!queue.length) {
+      f.ultimoEsito = "radar vuoto: tutti i titoli sono già seguiti";
+      return { esaminati: [], nuove: [], scartati: [], bars: {}, previsioni: {}, messaggio: f.ultimoEsito };
+    }
   }
   const batch = queue.slice(0, c.perGiro);
   const bars = await input.getBars(batch); // se fallisce si riprova al prossimo giro di esplorazione

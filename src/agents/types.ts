@@ -38,6 +38,8 @@ export interface AgentView {
   journal: JournalFile;
   // Rendimento previsto per simbolo (Kronos) quando il sidecar c'è; altrimenti assente.
   previsioni?: Record<string, number>;
+  // Il percorso previsto da Kronos, seduta per seduta (rendimento rispetto all'ultima chiusura): serve a vedere i cali nel breve.
+  percorsi?: Record<string, number[]>;
   // Contesto economico deciso prima degli altri agenti: settori in cui si aspetta, proiezioni di cui fidarsi.
   contesto?: MarketContext;
   // Borsa aperta adesso e finestra degli ingressi sui titoli: l'allocatore non spreca posti su titoli non negoziabili.
