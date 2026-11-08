@@ -24,29 +24,36 @@ export interface KronosForecastPath {
   del?: string;
 }
 
-// Quanti campioni chiedere: il massimo che sta nel tempo concesso per serie, dai secondi per campione misurati sulle
-// richieste precedenti (media mobile: si adatta anche quando il PC è più carico). Prima di ogni misura vale il numero iniziale.
+// Quanti campioni chiedere: si parte dal numero iniziale e, a ogni richiesta, si guarda il tempo per serie misurato sul
+// PC (attese per altre richieste comprese): oltre quello concesso si scende in proporzione; ben sotto si sale (fino al
+// doppio alla volta). Il costo dei campioni non è proporzionale (Kronos li genera insieme), quindi salendo così si arriva
+// al massimo che il PC regge senza doverlo stimare.
+export type TipoCampioni = "giorno" | "intraday" | "esplorazione";
 export class Campionatore {
-  private msPerCampione: number | null = null;
-  ultimi: number;
-  constructor(private tipo: "giorno" | "intraday") {
-    this.ultimi = AGENTS.kronos.campioni[tipo].iniziali;
+  private n: number;
+  private ultimoMsPerSerie: number | null = null;
+  constructor(private tipo: TipoCampioni) {
+    this.n = AGENTS.kronos.campioni[tipo].iniziali;
   }
   quanti(): number {
     const c = AGENTS.kronos.campioni;
-    if (this.msPerCampione === null) return (this.ultimi = Math.max(c.min, Math.min(c.max, c[this.tipo].iniziali)));
-    return (this.ultimi = Math.max(c.min, Math.min(c.max, Math.floor(c[this.tipo].msPerSerie / this.msPerCampione))));
+    return (this.n = Math.max(c.min, Math.min(c.max, this.n)));
   }
   misura(ms: number, serie: number, campioni: number) {
     if (serie <= 0 || campioni <= 0 || !(ms > 0)) return;
-    const v = ms / (serie * campioni);
-    this.msPerCampione = this.msPerCampione === null ? v : 0.7 * this.msPerCampione + 0.3 * v;
+    const c = AGENTS.kronos.campioni;
+    const budget = c[this.tipo].msPerSerie;
+    const perSerie = ms / serie;
+    this.ultimoMsPerSerie = perSerie;
+    if (perSerie > budget) this.n = Math.floor((campioni * budget) / perSerie);
+    else if (perSerie < 0.75 * budget) this.n = Math.max(campioni + 1, Math.floor(campioni * Math.min(2, (0.9 * budget) / perSerie)));
+    this.n = Math.max(c.min, Math.min(c.max, this.n));
   }
   stato(): string {
-    return `${this.ultimi}${this.msPerCampione !== null ? ` (${(this.msPerCampione / 1000).toFixed(2)} s per campione e serie)` : ""}`;
+    return `${this.n}${this.ultimoMsPerSerie !== null ? ` (${(this.ultimoMsPerSerie / 1000).toFixed(1)} s per titolo)` : ""}`;
   }
 }
-export const CAMPIONI = { giorno: new Campionatore("giorno"), intraday: new Campionatore("intraday") };
+export const CAMPIONI = { giorno: new Campionatore("giorno"), intraday: new Campionatore("intraday"), esplorazione: new Campionatore("esplorazione") };
 
 const modelliDi = (f: { modelli?: Record<string, unknown> }): Record<string, number[]> | undefined => {
   if (!f.modelli || typeof f.modelli !== "object") return undefined;
@@ -161,8 +168,8 @@ export async function ensureKronos(o: SidecarOptions): Promise<KronosLink> {
 }
 
 // Chiede le proiezioni mandando le barre che il motore ha già (così il sidecar non ha bisogno di chiavi Alpaca).
-export function pathForecaster(link: KronosLink): (symbols: string[], bars: Record<string, Bar[]>) => Promise<Record<string, KronosForecastPath>> {
-  return async (symbols, bars) => {
+export function pathForecaster(link: KronosLink): (symbols: string[], bars: Record<string, Bar[]>, tipo?: "giorno" | "esplorazione") => Promise<Record<string, KronosForecastPath>> {
+  return async (symbols, bars, tipo = "giorno") => {
     if (!link.ready) throw new Error(`Kronos ${link.stato}`);
     const series: Record<string, { t: string; o: number; h: number; l: number; c: number; v: number }[]> = {};
     for (const s of symbols) {
@@ -171,7 +178,8 @@ export function pathForecaster(link: KronosLink): (symbols: string[], bars: Reco
     }
     if (!Object.keys(series).length) return {};
     const n = Object.keys(series).length;
-    const samples = CAMPIONI.giorno.quanti();
+    const camp = CAMPIONI[tipo];
+    const samples = camp.quanti();
     const t0 = Date.now();
     const res = await fetch(`${link.url}/forecast`, {
       method: "POST",
@@ -181,7 +189,7 @@ export function pathForecaster(link: KronosLink): (symbols: string[], bars: Reco
     });
     if (!res.ok) throw new Error(`Kronos ${res.status}: ${(await res.text()).slice(0, 200)}`);
     const data = (await res.json()) as { forecasts?: Record<string, { pred_ret: number; path?: number[]; last_close?: number; modelli?: Record<string, unknown> }> };
-    CAMPIONI.giorno.misura(Date.now() - t0, n, samples);
+    camp.misura(Date.now() - t0, n, samples);
     const out: Record<string, KronosForecastPath> = {};
     for (const [s, f] of Object.entries(data.forecasts ?? {})) {
       const r = Number(f.pred_ret);

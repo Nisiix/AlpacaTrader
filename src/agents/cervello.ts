@@ -187,13 +187,13 @@ export const tipoIntraday = (stepMinutes: number) => `intraday-${stepMinutes}m`;
 
 // Le previsioni giornaliere passano dal cervello: si registra la previsione di ogni modello e si restituisce il percorso
 // combinato (il motore non vede differenze: un percorso, un rendimento previsto).
-export function previsioniCombinate<B extends { close: number }>(
-  f: (symbols: string[], bars: Record<string, B[]>) => Promise<Record<string, KronosForecastPath>>,
+export function previsioniCombinate<B extends { close: number }, T extends string = "giorno" | "esplorazione">(
+  f: (symbols: string[], bars: Record<string, B[]>, tipo?: T) => Promise<Record<string, KronosForecastPath>>,
   c: Cervello,
   now: () => Date = () => new Date(),
-): (symbols: string[], bars: Record<string, B[]>) => Promise<Record<string, KronosForecastPath>> {
-  return async (symbols, bars) => {
-    const raw = await f(symbols, bars);
+): (symbols: string[], bars: Record<string, B[]>, tipo?: T) => Promise<Record<string, KronosForecastPath>> {
+  return async (symbols, bars, tipo) => {
+    const raw = await f(symbols, bars, tipo);
     const t = now();
     for (const [s, p] of Object.entries(raw)) {
       if (!p.modelli) continue;

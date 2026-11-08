@@ -91,4 +91,13 @@ describe("regole del primo motore riviste", () => {
     // chiusura del 12) il 12 stesso a inizio seduta non è ancora l'ultima ora.
     expect(uscitaTrimestrale(v("2026-11-13"), "ORCL", -0.02, 0, false)).toBeNull();
   });
+
+  test("analisi d'ingresso ogni 15 minuti: negli altri giri niente acquisti nuovi, le uscite restano", () => {
+    const sig = (lato: "buy" | "sell", vincolante = false) => ({ agente: "trend", simbolo: "SPY", lato, forza: 1, orizzonteSedute: 60, perche: "x", ...(vincolante ? { vincolante } : {}) });
+    const base = { today: "2026-11-09", now: new Date(), prices: { SPY: 600 }, closes: { SPY: salita(600) }, indicators: {}, positions: [], account, journal: emptyJournal(), previsioni: { SPY: 0.03 } } as unknown as AgentView;
+    expect(allocate({ ...base, analisi: true }, { trend: { segnali: [sig("buy")] } }, {}).proposte.map((p) => p.side)).toEqual(["buy"]);
+    expect(allocate({ ...base, analisi: false }, { trend: { segnali: [sig("buy")] } }, {}).proposte).toEqual([]);
+    const conPosizione = { ...base, analisi: false, positions: [{ symbol: "SPY", qty: 10, avgEntryPrice: 600, currentPrice: 600, marketValue: 6000 }] } as AgentView;
+    expect(allocate(conPosizione, { uscite: { segnali: [sig("sell", true)] } }, {}).proposte.map((p) => p.side)).toEqual(["sell"]);
+  });
 });

@@ -271,13 +271,19 @@ sono ammessi; le quantità crypto si troncano al milionesimo (mai per eccesso) e
   non restano fermi su un titolo che la gabbia rifiuterebbe.
 - **Rientro (RSI a 2 giorni)**: le chiusure concluse più il prezzo di adesso (a borsa aperta; le crypto sempre).
 
-## Kronos: quanti più campioni possibile
+## Kronos: quanti più campioni possibile, analisi d'ingresso ogni 15 minuti
 
 Ogni previsione di Kronos è la media di più percorsi generati («campioni»): più campioni, previsione più stabile (l'errore
-casuale scende con la radice del numero: da 3 a 48 si divide per 4). Il motore misura quanto impiega davvero il PC e chiede
-ogni volta il massimo che sta nel tempo concesso: **3 secondi per titolo** per le proiezioni giornaliere (si rifanno una
-volta per giornata conclusa) e **0,8 secondi per titolo e candela** per quelle intraday (che devono restare rapide), tra 4 e
-96 campioni. Se il PC è più carico i campioni scendono, se è libero salgono. Lo stato è nella riga di Kronos della dashboard.
+casuale scende con la radice del numero). Il costo non è proporzionale (Kronos genera i campioni insieme: sul PC 8 campioni
+costano quanto 4), quindi il motore **sale con i campioni** finché il tempo per titolo misurato resta in quello concesso, e
+scende se il PC è più carico: **6 s per titolo** per le giornaliere (una volta per giornata conclusa), **3 s per titolo e
+candela** per l'intraday, **1,5 s** per la scrematura dell'esplorazione (chi entra nell'universo si riproietta con il
+budget pieno); tra 4 e 128 campioni. Lo stato è nella riga di Kronos della dashboard.
+
+Il giro resta ogni **5 minuti** per conto, uscite, stop, protezione del profitto e operazioni intraday aperte (una
+posizione su candele da 5 minuti non può aspettarne 15). L'**analisi d'ingresso** (scansione intraday con Kronos sulle
+candele e nuovi acquisti) si fa **ogni 15 minuti**: tre volte il tempo per Kronos, più campioni, previsioni più stabili.
+Tra un'analisi e l'altra in dashboard restano le candidate dell'ultima.
 
 ## Uscita intelligente prima delle trimestrali
 

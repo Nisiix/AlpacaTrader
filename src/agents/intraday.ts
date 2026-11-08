@@ -146,6 +146,8 @@ export class IntradayAgent implements Agent {
   private entrateOggi = new Map<string, string>(); // simbolo -> giorno dell'ultimo ingresso
   // Ultima proiezione intraday per titolo: si ricalcola solo quando chiude una candela nuova.
   private kCache = new Map<string, { chiave: string; path: number[] }>();
+  // Gli stati delle candidate all'ultima analisi d'ingresso: tra un'analisi e l'altra restano visibili in dashboard.
+  private ultimeCandidate: IntradayStato[] = [];
   constructor(
     private fetchBars: BarFetcher,
     private forecast: IntradayForecast | null = null,
@@ -188,6 +190,7 @@ export class IntradayAgent implements Agent {
     // taglia. Senza Kronos intraday (sidecar spento) vale il Kronos a 5 sedute, come prima.
     const candidates: string[] = [];
     for (const s of AGENTS.universe) {
+      if (v.analisi === false) break; // la scansione delle candidate si fa nell'analisi d'ingresso, ogni AGENTS.analisiMinuti
       if (v.giornata?.obiettivoRaggiunto || v.giornata?.perditaOltre) break; // oggi basta così
       if (held.has(s) || this.entrateOggi.get(s) === v.today) continue;
       if (!inWindow(s)) continue;
@@ -399,8 +402,10 @@ export class IntradayAgent implements Agent {
       segnali.push({ agente: this.name, simbolo: s, lato: "buy", forza: 1, orizzonteSedute: 1, intraday: true, pesoMassimo: peso, ...(k !== undefined ? {} : fc !== undefined ? { kronos: fc } : {}), perche: `${s} intraday su candele ${tf}${valutate ? ` (scelta per probabilità: ${valutate})` : ""}: ${ingresso}${k !== undefined ? `; Kronos a ${etichetta(h!)} sulle candele ${tf} ${pct(k)} (probabilità ${Math.round((pr ?? 0) * 100)}%)` : fc !== undefined ? `; Kronos ${pct(fc)} a ${AGENTS.kronos.horizon} sedute` : ""}${correttivi.length ? `; in parte contrari: ${correttivi.join(" e ")}, taglia ridotta` : ""}; obiettivo ${num(target)} (${pct(read.targetPct)}), stop ${num(stop)} (${pct(-read.stopPct)}), poi controllo su candele ${LOWER[tf] ?? tf}, chiusura ${chiusuraDi(s)}` });
       stati.push({ simbolo: s, candela: tf, ...(h !== undefined && k !== undefined ? { orizzonte: etichetta(h) } : {}), controllo: `poi candele ${LOWER[tf] ?? tf}`, fase: "cerca ingresso", ingresso: price, obiettivo: target, stop, prezzo: price, motivo: `ingresso votato: ${ingresso}${valutate ? ` · probabilità per candela: ${valutate}` : ""}` });
     }
+    if (v.analisi === false) stati.push(...this.ultimeCandidate.filter((x) => !held.has(x.simbolo)));
+    else this.ultimeCandidate = stati.filter((x) => x.fase !== "in posizione");
     const n = segnali.filter((x) => x.lato === "buy").length;
-    note.unshift(`${[...mine].length} operazioni aperte, ${candidates.length} candidate, ${n} ingressi votati${this.forecast ? ` · candele valutate: ${TFS.join(", ")}` : ""}`);
+    note.unshift(v.analisi === false ? `${[...mine].length} operazioni aperte seguite; nuove candidate alla prossima analisi d'ingresso (ogni ${AGENTS.analisiMinuti} minuti)` : `${[...mine].length} operazioni aperte, ${candidates.length} candidate, ${n} ingressi votati${this.forecast ? ` · candele valutate: ${TFS.join(", ")}` : ""}`);
     return { segnali, note, intraday: stati };
   }
 }

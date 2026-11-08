@@ -96,7 +96,11 @@ export const JOURNAL = {
 // Motore degli agenti (bun run agents): processo sempre acceso sul tuo PC, orizzonte a 20 sedute.
 // A un mese la direzione "sale" ha ragione nel 61-67% dei casi sullo storico 2020-2026: è l'orizzonte scelto.
 export const AGENTS = {
+  // Un giro ogni tickMinutes: conto, uscite, stop, protezione del profitto, operazioni intraday aperte. L'analisi per
+  // decidere se investire e su cosa (scansione intraday con Kronos sulle candele, nuovi acquisti) ogni analisiMinuti:
+  // tre volte il tempo per Kronos, quindi più campioni e previsioni più stabili.
   tickMinutes: 5,
+  analisiMinuti: 15,
   // Riesame del trade a 60 sedute (un trimestre): la letteratura sul momentum lavora su 1-12 mesi, non su 20 sedute.
   horizonSessions: 60,
   // Momentum assoluto (dual momentum): si compra solo se il rendimento a 12 mesi è positivo; altrimenti liquidità.
@@ -152,7 +156,7 @@ export const AGENTS = {
   // maxAbs: proiezioni oltre questa misura (in valore assoluto) sono rumore del modello e non si usano.
   // controTendenza: sotto la media a 200 si entra solo se Kronos anticipa almeno minRendimento con probabilità di successo
   // (Φ del rendimento atteso sulla volatilità) almeno minFiducia; peso massimo ridotto a pesoFattore × 10%.
-  kronos: { topShare: 1, horizon: 5, timeoutMs: 600_000, port: 8765, model: "small" as "mini" | "small" | "base", lookback: 400, samples: 3, anticipaSoglia: 0.01, maxAbs: 0.25, controTendenza: { enabled: true, minRendimento: 0.02, minFiducia: 0.6, pesoFattore: 0.5 },
+  kronos: { topShare: 1, horizon: 5, timeoutMs: 900_000, port: 8765, model: "small" as "mini" | "small" | "base", lookback: 400, samples: 3, anticipaSoglia: 0.01, maxAbs: 0.25, controTendenza: { enabled: true, minRendimento: 0.02, minFiducia: 0.6, pesoFattore: 0.5 },
     // Il cervello delle previsioni: il sidecar fa girare accanto a Kronos altri modelli gratuiti (Chronos-2 di Amazon e
     // TimesFM 2.5 di Google, Apache 2.0; quelli non installati si saltano). Peso di un modello = affidabilità × risultato
     // misurato. Affidabilità (scala 0-1, metà dai dati finanziari dell'addestramento, metà dalle prove pubblicate sui
@@ -165,10 +169,11 @@ export const AGENTS = {
     modelli: ["kronos", "chronos2", "timesfm"] as string[],
     // Campioni di Kronos: quanti percorsi genera e media per ogni previsione. Più campioni = previsione più stabile
     // (l'errore casuale scende con la radice del numero: da 3 a 48 si divide per 4), ma il tempo cresce in proporzione.
-    // Il motore misura quanto impiega davvero il PC e chiede ogni volta il massimo che sta nel tempo concesso per serie:
-    // giornaliere 3 s per titolo (una volta per giornata conclusa: 70 titoli ≈ 3,5 minuti, si possono aspettare) e
-    // intraday 0,8 s per titolo e candela (a ogni candela: devono restare rapide).
-    campioni: { min: 4, max: 96, giorno: { msPerSerie: 3_000, iniziali: 24 }, intraday: { msPerSerie: 800, iniziali: 8 } },
+    // Il motore misura quanto impiega davvero il PC e sale con i campioni finché il tempo per titolo resta in quello
+    // concesso (il costo non è proporzionale: Kronos genera i campioni insieme). Giornaliere 6 s per titolo (una volta per
+    // giornata conclusa: 70 titoli ≈ 7 minuti, si possono aspettare), intraday 3 s per titolo e candela (nell'analisi ogni
+    // 15 minuti), esplorazione 1,5 s (è una prima scrematura: chi entra nell'universo viene riproiettato con più campioni).
+    campioni: { min: 4, max: 128, giorno: { msPerSerie: 6_000, iniziali: 24 }, intraday: { msPerSerie: 3_000, iniziali: 16 }, esplorazione: { msPerSerie: 1_500, iniziali: 8 } },
     cervello: { minCampione: 100, prudenza: 50, kronosMinimo: 0.5, maxAperte: 6000, bravuraAttesa: 0.03, affidabilita: { kronos: 1, chronos2: 0.13, timesfm: 0.05 } as Record<string, number>, affidabilitaIgnota: 0.05 } },
   // Riepilogo su Telegram una volta al giorno, alla prima passata dopo quest'ora di Roma.
   summaryAfter: "22:05",

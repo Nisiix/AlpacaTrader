@@ -1740,7 +1740,7 @@ function paintKpi(st) {
     tile('Operazioni di oggi', `${pl.acquisti.length} acquisti · ${pl.vendite.length} vendite`, `incassato <span class="${cls(pl.realizzato)}">${usd(pl.realizzato)}</span>, sulle aperte <span class="${cls(pl.nonRealizzato)}">${usd(pl.nonRealizzato)}</span>`, '#titoli'),
     tile('Contesto', esc(st.contesto?.generale || 'n.d.'), `${fg ? `Fear & Greed ${fg.valore} (${esc(fg.classe)}) · ` : ''}rischio ammesso ${Math.round((st.rischio ?? 1) * 100)}%`),
     tile('Kronos', st.kronos ? `${st.kronos.simboli} proiezioni` : 'n.d.', esc(st.kronos?.stato || '')),
-    tile('Agenti', `${(st.caffe?.operativi || []).length} al lavoro · ${(st.caffe?.presenti || []).length} in pausa`, `${(st.custodi || []).length} custodi · ${(st.intraday || []).filter((x) => x.fase === 'in posizione').length} operazioni intraday aperte`, '#agenti/squadra'),
+    tile('Agenti', `${(st.caffe?.operativi || []).length} al lavoro · ${(st.caffe?.presenti || []).length} in pausa`, `${(st.custodi || []).length} custodi · ${(st.intraday || []).filter((x) => x.fase === 'in posizione').length} operazioni intraday aperte${st.analisi ? ` · analisi d'ingresso ogni ${st.analisi.ogniMinuti} min${st.analisi.prossima ? `, prossima alle ${hhmm(st.analisi.prossima)}` : ''}` : ''}`, '#agenti/squadra'),
     tile('Esplorazione', `${att.length} opportunità`, att.length ? att.map((x) => esc(x.simbolo)).join(', ') : 'nessuna aperta', '#agenti/squadra'),
   ].join('');
 }

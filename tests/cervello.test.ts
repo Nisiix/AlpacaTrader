@@ -111,14 +111,23 @@ describe("cervello delle previsioni", () => {
 });
 
 describe("campioni di Kronos", () => {
-  test("si chiede il massimo che sta nel tempo concesso per titolo, misurato sul PC, tra il minimo e il massimo", async () => {
+  test("si sale con i campioni finché il tempo per titolo resta in quello concesso; oltre si scende; mai fuori da minimo e massimo", async () => {
     const { Campionatore } = await import("../src/kronos-sidecar.ts");
-    const c = new Campionatore("giorno");
-    expect(c.quanti()).toBe(AGENTS.kronos.campioni.giorno.iniziali); // prima misura: numero iniziale
-    c.misura(35 * 24 * 100, 35, 24); // 100 ms per campione e titolo
-    expect(c.quanti()).toBe(Math.min(AGENTS.kronos.campioni.max, Math.floor(AGENTS.kronos.campioni.giorno.msPerSerie / 100)));
-    const lento = new Campionatore("intraday");
-    lento.misura(10 * 8 * 5_000, 10, 8); // PC lentissimo: si scende fino al minimo, mai sotto
-    expect(lento.quanti()).toBe(AGENTS.kronos.campioni.min);
+    const cfg = AGENTS.kronos.campioni;
+    const c = new Campionatore("intraday");
+    expect(c.quanti()).toBe(cfg.intraday.iniziali);
+    // Il PC risponde in 1,3 s per titolo con 16 campioni (budget 3 s): si sale (al più il doppio).
+    c.misura(1_300, 1, 16);
+    const su = c.quanti();
+    expect(su).toBeGreaterThan(16);
+    expect(su).toBeLessThanOrEqual(32);
+    // Ora troppo lento (6 s per titolo): si scende in proporzione.
+    c.misura(6_000, 1, su);
+    expect(c.quanti()).toBe(Math.max(cfg.min, Math.floor((su * cfg.intraday.msPerSerie) / 6_000)));
+    // Lentissimo: mai sotto il minimo. Velocissimo e ripetuto: mai sopra il massimo.
+    c.misura(100_000, 1, 4);
+    expect(c.quanti()).toBe(cfg.min);
+    for (let i = 0; i < 20; i++) c.misura(10, 1, c.quanti());
+    expect(c.quanti()).toBe(cfg.max);
   });
 });

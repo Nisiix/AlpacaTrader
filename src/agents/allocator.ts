@@ -139,6 +139,8 @@ export function allocate(view: AgentView, reports: Record<string, AgentReport>, 
   let slots = LIMITS.maxPositions - held.size;
   const wanted: { sc: Score; w: number; p?: { qty: number } }[] = [];
   for (const sc of punteggi) {
+    // Gli acquisti si decidono solo nei giri con analisi d'ingresso (ogni AGENTS.analisiMinuti); negli altri si controlla.
+    if (view.analisi === false) break;
     if (sc.punteggio < AGENTS.buyScore) break;
     if (forced.has(sc.simbolo)) continue;
     // Titoli azionari a borsa chiusa (o fuori finestra, salvo intraday): non si propongono e non occupano un posto,

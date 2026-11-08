@@ -51,7 +51,7 @@ export interface EngineDeps {
   echo?: boolean;
   // Proiezioni (Kronos) per l'agente delle uscite e per l'agente kronos; assente = nessuna proiezione.
   // Riceve anche le barre giornaliere già scaricate (il sidecar lavora su quelle). Un numero = solo rendimento finale.
-  forecaster?: (symbols: string[], bars: Record<string, Bar[]>) => Promise<Record<string, number | KronosForecastPath>>;
+  forecaster?: (symbols: string[], bars: Record<string, Bar[]>, tipo?: "giorno" | "esplorazione") => Promise<Record<string, number | KronosForecastPath>>;
   // Fonti esterne gratuite (Fear & Greed, funding): se assenti si va avanti senza.
   fonti?: { read(): Promise<FontiDati> };
   // Una riga sullo stato di Kronos per la dashboard (attivo, in avvio, non installato).
@@ -108,6 +108,8 @@ export interface AgentsStatus {
   fonti?: FontiDati;
   // Esplorazione del radar da parte degli agenti in pausa.
   esplorazione?: { ultimoGiro: string | null; esito: string | null; daEsaminareOggi: number; attive: Scoperta[]; recenti: Scoperta[] };
+  // Analisi d'ingresso: se questo giro l'ha fatta, quando è stata l'ultima e quando arriva la prossima.
+  analisi?: { questoGiro: boolean; ultima: string | null; prossima: string | null; ogniMinuti: number };
   // Il cervello delle previsioni: per tipo (giorno, candela intraday) e modello, quante previsioni valutate, quota di
   // direzioni giuste, resa media seguendole e peso di adesso nella previsione combinata.
   cervello?: { righe: RigaCervello[]; inAttesa: number };
@@ -150,6 +152,7 @@ export interface EngineCache {
   exploring?: boolean;
   scartateNota?: string;
   trimestraliDate?: string;
+  ultimaAnalisi?: string;
 }
 
 export const emptyCache = (): EngineCache => ({ closes: {}, bars: {}, ultimoRiepilogo: null });
@@ -465,8 +468,11 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
       fonti = deps.fonti ? await deps.fonti.read() : undefined;
     } catch {}
     const percorsi = previsioni && cache.previsioni ? Object.fromEntries(Object.keys(previsioni).filter((k) => cache.previsioni!.data[k]?.percorso?.length).map((k) => [k, percorsoDaAdesso(cache.previsioni!.data[k]!, snap.prices[k])])) : undefined;
+    // Analisi d'ingresso ogni AGENTS.analisiMinuti (con mezzo minuto di tolleranza sul ritmo dei giri).
+    const analisi = !cache.ultimaAnalisi || startedAt.getTime() - Date.parse(cache.ultimaAnalisi) >= AGENTS.analisiMinuti * 60_000 - 30_000;
+    if (analisi) cache.ultimaAnalisi = startedAt.toISOString();
     const cashImpegnato = snap.recentOrders.filter((o) => isOpenOrder(o) && !isProtectiveStop(o) && o.side === "buy").reduce((a, o) => a + (o.qty - o.filledQty) * (snap.prices[o.symbol] ?? 0), 0);
-    const view: AgentView = { today, now: startedAt, prices: snap.prices, closes, indicators, positions: snap.positions, account: snap.account, cashImpegnato, journal, previsioni, previsioniKronos: previsioni, percorsi, mercatoAperto: snap.clock.isOpen, chiusuraBorsa: snap.clock.nextClose, finestraIngressi: stockEntryOpen(snap.clock, startedAt), giornata, fonti };
+    const view: AgentView = { today, now: startedAt, prices: snap.prices, closes, indicators, positions: snap.positions, account: snap.account, cashImpegnato, analisi, journal, previsioni, previsioniKronos: previsioni, percorsi, mercatoAperto: snap.clock.isOpen, chiusuraBorsa: snap.clock.nextClose, finestraIngressi: stockEntryOpen(snap.clock, startedAt), giornata, fonti };
     const reports: Record<string, AgentReport> = {};
     const agentStatus: AgentsStatus["agenti"] = {};
     // Il contesto economico si valuta per primo: decide dove si aspetta e di quali proiezioni fidarsi.
@@ -669,6 +675,7 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
       kronos: { stato: deps.kronosStato?.() ?? (deps.forecaster ? "attivo" : "non configurato"), proiezioniDel: cache.previsioni?.giorno ?? null, simboli: Object.keys(cache.previsioni?.data ?? {}).length, scartate },
       giornata: { pnlPct, obiettivoPct: AGENTS.daily.targetPct, perditaMaxPct: AGENTS.daily.maxLossPct, obiettivoRaggiunto: giornata.obiettivoRaggiunto, perditaOltre: giornata.perditaOltre },
       simulazioni,
+      analisi: { questoGiro: analisi, ultima: cache.ultimaAnalisi ?? null, prossima: cache.ultimaAnalisi ? new Date(Date.parse(cache.ultimaAnalisi) + AGENTS.analisiMinuti * 60_000).toISOString() : null, ogniMinuti: AGENTS.analisiMinuti },
       capo,
       fonti: fonti ? { paura: fonti.paura, funding: Object.fromEntries(AGENTS.universe.filter((u) => fonti!.funding[u] !== undefined).map((u) => [u, fonti!.funding[u]!])), errori: fonti.errori } : undefined,
       caffe: coffeeBreak({ now: deps.now(), reports, held: new Set([...positions.map((p) => p.symbol), ...cage.orders.filter((o) => o.side === "buy").map((o) => o.symbol)]), previsioni: view.previsioni, scartate, lezioni, capo, applicati: applicatiCaffe, giro: (cache.giriCaffe = (cache.giriCaffe ?? 0) + 1), primaInPausa: new Set((cache.caffePresenti ?? "").split(",").filter(Boolean)), esploratori: scout.esploratori }),
@@ -691,7 +698,7 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
       status.cervello = deps.cervello.stato();
     }
     writeJsonAtomic(statusPath(deps.stateDir), status);
-    log.info(`giro ${giro}: ${status.segnali.length} segnali, ${alloc.proposte.length} proposte, ${outcomes.length} ordini, ${cage.rejected.length} rifiuti, rischio ${alloc.rischio}`);
+    log.info(`giro ${giro}${analisi ? " (con analisi d'ingresso)" : ""}: ${status.segnali.length} segnali, ${alloc.proposte.length} proposte, ${outcomes.length} ordini, ${cage.rejected.length} rifiuti, rischio ${alloc.rischio}`);
 
     // 9. Riepilogo del giorno su Telegram, una volta, dopo la chiusura. Nel fine settimana solo se c'è stato
     // movimento (crypto): il conto di profitto e perdita del giorno non deve perdersi.
@@ -881,12 +888,13 @@ async function exploreRound(deps: EngineDeps, cache: EngineCache, today: string,
             const out: Record<string, number> = {};
             const known = cache.previsioni?.data ?? {};
             const chiave = limitiSedute(deps.now()).chiave;
-            for (const k of syms) if (aggiornata(known[k], k, chiave)) out[k] = known[k]!.rendimentoPrevisto;
+            for (const k of syms) if (aggiornata(known[k], k, chiave) || known[k]?.del === `esplorazione ${limiteDi(k, chiave)}`) out[k] = known[k]!.rendimentoPrevisto;
             const need = syms.filter((k) => out[k] === undefined);
             if (!need.length) return out;
-            const raw = await deps.forecaster!(need, bars);
+            const raw = await deps.forecaster!(need, bars, "esplorazione");
             for (const [k, v] of Object.entries(raw)) {
-              const fp = { ...normalizeForecast(v), del: limiteDi(k, chiave) };
+              // Proiezione di scrematura (meno campioni): se il titolo entra nell'universo si rifà con il budget pieno.
+              const fp = { ...normalizeForecast(v), del: `esplorazione ${limiteDi(k, chiave)}` };
               out[k] = fp.rendimentoPrevisto;
               if (cache.previsioni) cache.previsioni.data[k] = fp;
             }

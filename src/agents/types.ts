@@ -37,6 +37,9 @@ export interface AgentView {
   account: Account;
   // Contanti già impegnati da ordini d'acquisto ancora aperti: l'allocatore non li ridistribuisce.
   cashImpegnato?: number;
+  // Giro con analisi d'ingresso (ogni AGENTS.analisiMinuti): scansione intraday con Kronos e nuovi acquisti. Negli altri
+  // giri si controllano solo le posizioni (uscite, stop, protezione). Assente = analisi (valutazione dalla dashboard, test).
+  analisi?: boolean;
   // Le proiezioni di Kronos utilizzabili prima del filtro del contesto. `previsioni` (filtrate: niente fiducia con eventi in
   // arrivo) servono a ciò che aumenta il rischio (ingressi, tenere); queste a ciò che lo riduce (uscire, controllare i costi):
   // una proiezione non fidata non può far comprare, ma può sempre far vendere o fermare un acquisto.
