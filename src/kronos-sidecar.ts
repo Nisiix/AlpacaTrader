@@ -28,7 +28,7 @@ export interface KronosForecastPath {
 // PC (attese per altre richieste comprese): oltre quello concesso si scende in proporzione; ben sotto si sale (fino al
 // doppio alla volta). Il costo dei campioni non è proporzionale (Kronos li genera insieme), quindi salendo così si arriva
 // al massimo che il PC regge senza doverlo stimare.
-export type TipoCampioni = "giorno" | "intraday" | "esplorazione";
+export type TipoCampioni = "giorno" | "intraday" | "esplorazione" | "grafico";
 export class Campionatore {
   private n: number;
   private ultimoMsPerSerie: number | null = null;
@@ -53,7 +53,7 @@ export class Campionatore {
     return `${this.n}${this.ultimoMsPerSerie !== null ? ` (${(this.ultimoMsPerSerie / 1000).toFixed(1)} s per titolo)` : ""}`;
   }
 }
-export const CAMPIONI = { giorno: new Campionatore("giorno"), intraday: new Campionatore("intraday"), esplorazione: new Campionatore("esplorazione") };
+export const CAMPIONI = { giorno: new Campionatore("giorno"), intraday: new Campionatore("intraday"), esplorazione: new Campionatore("esplorazione"), grafico: new Campionatore("grafico") };
 
 const modelliDi = (f: { modelli?: Record<string, unknown> }): Record<string, number[]> | undefined => {
   if (!f.modelli || typeof f.modelli !== "object") return undefined;
@@ -203,14 +203,15 @@ export function pathForecaster(link: KronosLink): (symbols: string[], bars: Reco
 
 // Kronos sulle candele intraday (5 min, 15 min, 1 ora, 4 ore): le prossime `horizon` candele dello stesso passo.
 // Per la decisione intraday conta questa proiezione, non quella a 5 sedute.
-export function intradayForecaster(link: KronosLink): (series: Record<string, IntradayBar[]>, stepMinutes: number, horizon: number) => Promise<Record<string, KronosForecastPath>> {
+export function intradayForecaster(link: KronosLink, tipo: "intraday" | "grafico" = "intraday"): (series: Record<string, IntradayBar[]>, stepMinutes: number, horizon: number) => Promise<Record<string, KronosForecastPath>> {
   return async (bars, stepMinutes, horizon) => {
     if (!link.ready) throw new Error(`Kronos ${link.stato}`);
     const series: Record<string, { t: string; o: number; h: number; l: number; c: number; v: number }[]> = {};
     for (const [s, b] of Object.entries(bars)) if (b.length >= 60) series[s] = b.slice(-AGENTS.kronos.lookback).map((x) => ({ t: x.t, o: x.open, h: x.high, l: x.low, c: x.close, v: x.volume }));
     if (!Object.keys(series).length) return {};
     const n = Object.keys(series).length;
-    const samples = CAMPIONI.intraday.quanti();
+    const camp = CAMPIONI[tipo];
+    const samples = camp.quanti();
     const t0 = Date.now();
     const res = await fetch(`${link.url}/forecast`, {
       method: "POST",
@@ -220,7 +221,7 @@ export function intradayForecaster(link: KronosLink): (series: Record<string, In
     });
     if (!res.ok) throw new Error(`Kronos ${res.status}: ${(await res.text()).slice(0, 200)}`);
     const data = (await res.json()) as { forecasts?: Record<string, { pred_ret: number; path?: number[]; last_close?: number; modelli?: Record<string, unknown> }> };
-    CAMPIONI.intraday.misura(Date.now() - t0, n, samples);
+    camp.misura(Date.now() - t0, n, samples);
     const out: Record<string, KronosForecastPath> = {};
     for (const [s, f] of Object.entries(data.forecasts ?? {})) {
       const r = Number(f.pred_ret);

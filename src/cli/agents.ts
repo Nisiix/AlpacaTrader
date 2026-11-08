@@ -98,7 +98,8 @@ try {
 
   // Candele intraday per il grafico, con la proiezione di Kronos sulle prossime candele (in memoria finché non chiude
   // una candela nuova: il sidecar non si interroga a ogni richiesta della pagina).
-  const kfChart = kronos ? previsioniIntradayCombinate(intradayForecaster(kronos), cervello, deps.now) : null;
+  // I grafici (dashboard e pagina pubblica) hanno un canale di campioni proprio, leggero: non tolgono tempo agli agenti.
+  const kfChart = kronos ? previsioniIntradayCombinate(intradayForecaster(kronos, "grafico"), cervello, deps.now) : null;
   const memo = new Map<string, { at: number; barre: any[]; previsione: any; ultima: string }>();
   const candele = async (sym: string, tf: string) => {
     const key = `${sym}|${tf}`;
