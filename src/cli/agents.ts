@@ -2,9 +2,11 @@
 // Il motore degli agenti: processo sempre acceso sul tuo PC. Ogni `tick` minuti legge il conto, interroga gli agenti
 // (trend, rientro, regime, orizzonte, Kronos se c'è), passa dalla gabbia, invia, e aggiorna la dashboard locale.
 import { HorizonAgent } from "../agents/horizon.ts";
-import { KronosAgent, httpFetcher } from "../agents/kronos.ts";
+import { ExitAgent } from "../agents/exits.ts";
+import { KronosAgent, forecasterFor, httpFetcher } from "../agents/kronos.ts";
 import { PullbackAgent } from "../agents/pullback.ts";
 import { RegimeAgent } from "../agents/regime.ts";
+import { TakeProfitAgent } from "../agents/takeprofit.ts";
 import { TrendAgent } from "../agents/trend.ts";
 import { EventBus } from "../agents/bus.ts";
 import { runEngine, runTick, type EngineDeps } from "../agents/engine.ts";
@@ -20,9 +22,11 @@ try {
   for (const w of deps.warnings) console.warn(w);
   const bus = new EventBus(deps.stateDir, deps.now);
   const agents: Agent[] = [new TrendAgent(), new PullbackAgent(), new RegimeAgent(), new HorizonAgent()];
+  if (AGENTS.exit.enabled) agents.push(new ExitAgent());
   const kronosUrl = args.kronos ?? process.env.KRONOS_URL;
   if (kronosUrl) agents.push(new KronosAgent(httpFetcher(kronosUrl)));
-  const engine: EngineDeps = { ...deps, agents, bus, echo: true };
+  if (args.profitto || AGENTS.takeProfit.enabled) agents.push(new TakeProfitAgent());
+  const engine: EngineDeps = { ...deps, agents, bus, echo: true, forecaster: kronosUrl ? forecasterFor(kronosUrl) : undefined };
   console.log(`motore degli agenti${args.fake ? " (finto)" : ""}: ${agents.map((a) => a.name).join(", ")} · stato in ${deps.stateDir}`);
 
   let dash: ReturnType<typeof startDashboard> | null = null;

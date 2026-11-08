@@ -11,10 +11,11 @@ export interface CliArgs {
   port?: number;
   noDashboard: boolean;
   kronos?: string;
+  profitto: boolean;
 }
 
 export function parseArgs(argv: string[]): CliArgs {
-  const a: CliArgs = { fake: false, force: false, once: false, noDashboard: false };
+  const a: CliArgs = { fake: false, force: false, once: false, noDashboard: false, profitto: false };
   for (let i = 0; i < argv.length; i++) {
     const k = argv[i]!;
     const val = () => {
@@ -33,6 +34,7 @@ export function parseArgs(argv: string[]): CliArgs {
     else if (k === "--port") a.port = Number(val());
     else if (k === "--no-dashboard") a.noDashboard = true;
     else if (k === "--kronos") a.kronos = val();
+    else if (k === "--profitto") a.profitto = true;
     else throw new Error(`opzione sconosciuta: ${k}`);
   }
   if (a.now && !a.fake) throw new Error("--now si usa solo con --fake");

@@ -25,12 +25,15 @@ il lock e gli ID deterministici evitano doppioni anche con le sveglie classiche.
 | `rientro` | sopra la 200, tornato entro il 2% dalla media a 50 dopo una corsa di almeno il 4% in 20 sedute | compra (forza 0,7) |
 | `regime` | SPY contro la sua media a 200 giorni e la volatilità a 20 giorni | nessun ordine: dimezza l'esposizione ammessa quando il mercato è debole o nervoso |
 | `orizzonte` | trade aperti da 20 sedute | vende (0,8 se lo slancio è finito, 0,4 se il trend regge: allora decide il trend) |
-| `kronos` (opzionale) | previsioni del modello a 5 sedute, solo il 25% più nette e nel verso del trend | compra/vende (0,5) |
+| `uscite` | ogni posizione: perdita dal carico, guadagno, massimo visto, proiezione di Kronos se c'è | **vincolante** (non si vota): vende a -2%; a +3% incassa, salvo proiezione positiva: allora segue il massimo e vende se restituisce il 2% (mai sotto carico +0,5%); proiezione negativa: esce subito |
+| `kronos` (opzionale) | previsioni del modello a 5 sedute, solo il 25% più nette e nel verso del trend | compra/vende (0,5); le stesse proiezioni guidano `uscite` |
+| `profitto` (opzionale, `--profitto`) | guadagno oltre +2% | vende (1) |
 
 L'**allocatore** somma i segnali pesati (peso 1 per tutti finché il diario non ha un campione; poi 0,5 a chi perde,
 1,2 a chi vince con campione affidabile), compra sopra 0,5 e vende sotto -0,5; il peso obiettivo di un titolo è il massimo
 della gabbia (20%, meno se volatile) × rischio del regime × punteggio. Poi tutto passa dalla **gabbia** (`src/cage.ts`):
 acquisti solo nella finestra 15:40-17:30 di Roma e una sola volta al giorno per titolo, vendite e stop a mercato aperto.
+Lo stop GTC su Alpaca sta al 2% dal carico (`AGENTS.exit.stopPct`); la politica di uscita si regola in `src/config.ts` (`AGENTS.exit`).
 L'interruttore a -5% dal massimo si **riarma da solo dopo 5 giorni di borsa** (nel backtest: da +4,3% a +17,7%).
 
 Ogni cosa che succede finisce nel **registro eventi** `state/events/AAAA-MM-GG.jsonl` (prezzi, segnali, rischio,
@@ -41,6 +44,28 @@ stop, diario ed eventi in diretta via WebSocket. Three.js è servito dal pacchet
 Telegram riceve ogni ordine inviato, gli allarmi e un riepilogo dopo le 22:05.
 
 ![dashboard](docs/dashboard.png)
+
+### Installazione su Windows
+
+`installa-windows.ps1` crea il progetto in `D:\Applicazioni\WebDev\Bot alpaca agents` (o nella cartella passata come
+argomento): controlla git e bun, clona il repo sul branch del motore, installa, crea `secrets.ts`, lancia i test e mette sul
+desktop il collegamento "Bot alpaca agents" che avvia `bun run agents`. Da PowerShell:
+
+```powershell
+irm https://raw.githubusercontent.com/Nisiix/AlpacaTrader/ccr-f218832d-solbom/installa-windows.ps1 -OutFile installa-windows.ps1
+powershell -ExecutionPolicy Bypass -File installa-windows.ps1
+```
+
+### Backtest del motore (550 sedute, dati Alpaca, esecuzione alla chiusura, senza costi)
+
+| Variante | Rendimento | Perdita max | Trade | Vinti | Attesa/trade | Durata media |
+|---|---|---|---|---|---|---|
+| Gabbia + metodo trend (sveglie), interruttore a riarmo automatico | +17,65% | -8,72% | 208 ordini | – | – | – |
+| Agenti: trend, rientro, regime, orizzonte, pesi dal diario | +13,60% | -8,57% | 86 | 34% | +0,64% | 27 g |
+| Agenti + presa di profitto secca a +2% | +16,93% | -7,32% | 143 | 47% | +0,73% | 16 g |
+| Agenti + uscite: stop -2%, incasso a +3% | +14,85% | -7,62% | 281 | 45% | +0,29% | 7 g |
+| Agenti + uscite: stop -2%, incasso a +4% | +13,18% | -9,00% | 235 | 39% | +0,36% | 9 g |
+| SPY comprato e tenuto / 60-40 | +35,18% / +18,22% | | | | | |
 
 ## Sveglie (modalità classica)
 
@@ -57,7 +82,7 @@ bun run schedule                   # resta acceso, ogni 30 s lancia la sveglia d
 bun run once [--slot 15:40] [--force]   # una sveglia subito (la più recente di oggi)
 bun run status                     # lock, ultimo testimone, conto
 bun run breaker-reset              # riarma l'interruttore sulla perdita (dopo che hai guardato cosa è successo)
-bun run backtest [--days 500] [--riarmo 5]   # rigioca gabbia e metodo sulle chiusure storiche
+bun run backtest [--days 500] [--riarmo 5]   # rigioca sulle chiusure storiche la gabbia col metodo trend e poi il motore degli agenti (4 varianti)
 bun run cloud-wake                 # il comando delle sessioni cloud programmate (vedi sotto)
 bun test                           # test con broker e cervello finti
 ```

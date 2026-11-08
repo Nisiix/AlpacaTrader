@@ -39,6 +39,7 @@ export function agentWeights(journal: JournalFile, today: string, names: string[
 export function scoreSignals(signals: Signal[], weights: Record<string, number>): Score[] {
   const by = new Map<string, Score>();
   for (const s of signals) {
+    if (s.vincolante) continue;
     const sc = by.get(s.simbolo) ?? { simbolo: s.simbolo, punteggio: 0, compra: 0, vende: 0, agenti: [], perche: [] };
     const w = (weights[s.agente] ?? AGENTS.weights.base) * s.forza;
     if (s.lato === "buy") sc.compra += w;
@@ -61,8 +62,18 @@ export function allocate(view: AgentView, reports: Record<string, AgentReport>, 
   const equity = view.account.equity;
   const conf = (x: number) => (x >= 1 ? "alta" : x >= 0.7 ? "media" : "bassa");
 
+  // Prima le regole vincolanti (stop, obiettivo, proiezione contraria): vendono tutto, senza voto.
+  const forced = new Set<string>();
+  for (const s of signals) {
+    if (!s.vincolante || s.lato !== "sell" || forced.has(s.simbolo)) continue;
+    const p = held.get(s.simbolo);
+    if (!p) continue;
+    forced.add(s.simbolo);
+    proposte.push({ symbol: s.simbolo, side: "sell", qty: p.qty, why: `${s.agente}: ${s.perche}`, confidence: "alta", expect: "regola di rischio" });
+  }
   for (const sc of punteggi) {
     const p = held.get(sc.simbolo);
+    if (forced.has(sc.simbolo)) continue;
     if (sc.punteggio <= AGENTS.sellScore && p) {
       proposte.push({ symbol: sc.simbolo, side: "sell", qty: p.qty, why: sc.perche.join(" · "), confidence: conf(-sc.punteggio), expect: `uscita: punteggio ${sc.punteggio.toFixed(2)}` });
     }
@@ -70,11 +81,12 @@ export function allocate(view: AgentView, reports: Record<string, AgentReport>, 
   let slots = LIMITS.maxPositions - held.size;
   for (const sc of punteggi) {
     if (sc.punteggio < AGENTS.buyScore) break;
+    if (forced.has(sc.simbolo)) continue;
     const price = view.prices[sc.simbolo];
     if (!price || price <= 0) continue;
     const p = held.get(sc.simbolo);
     if (!p && slots <= 0) continue;
-    const w = maxWeightFor(view.closes[sc.simbolo]).max * rischio * Math.min(1, sc.punteggio);
+    const w = maxWeightFor(view.closes[sc.simbolo]).max * rischio * (AGENTS.scaleByScore ? Math.min(1, sc.punteggio) : 1);
     const target = w * equity;
     const have = p ? p.qty * price : 0;
     const delta = target - have;

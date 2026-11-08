@@ -2,6 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { agentWeights, allocate, scoreSignals } from "../src/agents/allocator.ts";
+import { runAgentsBacktest } from "../src/agents/backtest.ts";
+import { ExitAgent } from "../src/agents/exits.ts";
 import { EventBus, readEvents } from "../src/agents/bus.ts";
 import { emptyCache, inEntryWindow, runTick, statusPath, type AgentsStatus, type EngineDeps } from "../src/agents/engine.ts";
 import { HorizonAgent } from "../src/agents/horizon.ts";
@@ -284,5 +286,89 @@ describe("dashboard", () => {
     } finally {
       d.stop();
     }
+  });
+});
+
+describe("backtest del motore", () => {
+  test("su storico in salita compra, tiene e misura; i trade finiscono nel diario con gli agenti; nessun errore sul crollo", () => {
+    const closes: Record<string, number[]> = {};
+    for (const s of UNIVERSE) closes[s] = syntheticCloses(PRICES[s]!, 0.01, 320);
+    const r = runAgentsBacktest(closes, 100_000, "2026-01-05");
+    expect(r.days).toBe(320 - LIMITS.longSmaDays);
+    expect(r.buys).toBeGreaterThan(0);
+    expect(r.avgExposure).toBeGreaterThan(0.3);
+    expect(r.totalReturn).toBeGreaterThan(0);
+    // Crollo del 30% di tutto a metà: stop e uscite di trend, l'interruttore scatta, il diario registra trade chiusi dagli agenti.
+    const crash: Record<string, number[]> = {};
+    for (const s of UNIVERSE) crash[s] = closes[s]!.map((x, i) => (i >= 280 ? x * 0.7 : x));
+    const c = runAgentsBacktest(crash, 100_000, "2026-01-05");
+    expect(c.stopOuts + c.trendExits + c.agentSells).toBeGreaterThan(0);
+    expect(c.breakerTrips).toBeGreaterThanOrEqual(1);
+    expect(c.stats.trade).toBeGreaterThan(0);
+    expect(Object.keys(c.perAgent)).toContain("trend");
+    expect(c.maxDrawdown).toBeGreaterThan(0.1);
+  });
+});
+
+describe("uscite (regole vincolanti)", () => {
+  const pos = (symbol: string, avg: number, price: number) => ({ symbol, qty: 10, avgEntryPrice: avg, currentPrice: price, marketValue: price * 10 });
+  const openTrade = (simbolo: string, massimo?: number) => ({ id: simbolo, simbolo, stato: "aperto" as const, apertoIl: "2026-09-01T14:00:00Z", comprate: 10, costo: 1000, vendute: 0, incassato: 0, quantita: 10, contesto: null, massimo });
+
+  test("stop a -2% vende; sotto l'obiettivo tace; a +3% senza proiezione incassa", () => {
+    const j = emptyJournal();
+    j.trade.push(openTrade("AAPL"), openTrade("MSFT"), openTrade("SPY"));
+    const v = view({ positions: [pos("AAPL", 100, 97.9), pos("MSFT", 100, 101), pos("SPY", 100, 103.1)], journal: j });
+    v.prices.AAPL = 97.9; v.prices.MSFT = 101; v.prices.SPY = 103.1;
+    const r = new ExitAgent().observe(v);
+    expect(r.segnali.map((s) => s.simbolo).sort()).toEqual(["AAPL", "SPY"]);
+    expect(r.segnali.every((s) => s.vincolante && s.lato === "sell")).toBe(true);
+    expect(r.segnali.find((s) => s.simbolo === "AAPL")!.perche).toContain("oltre lo stop");
+    expect(r.segnali.find((s) => s.simbolo === "SPY")!.perche).toContain("si incassa");
+  });
+
+  test("con proiezione positiva oltre l'obiettivo lascia correre e vende solo se restituisce il 2% dal massimo (mai sotto carico + 0,5%)", () => {
+    const j = emptyJournal();
+    j.trade.push(openTrade("SPY", 106));
+    const run = view({ positions: [pos("SPY", 100, 104.5)], journal: j, previsioni: { SPY: 0.01 } });
+    run.prices.SPY = 104.5; // dal massimo 106 ha restituito l'1,4%: si tiene
+    expect(new ExitAgent().observe(run).segnali).toEqual([]);
+    run.prices.SPY = 103.8; // restituito il 2,1%: si incassa
+    expect(new ExitAgent().observe(run).segnali[0]?.perche).toContain("prima di restituire");
+    const j2 = emptyJournal();
+    j2.trade.push(openTrade("SPY", 103.2));
+    const low = view({ positions: [pos("SPY", 100, 100.3)], journal: j2, previsioni: { SPY: 0.01 } });
+    low.prices.SPY = 100.3; // massimo 103,2 × 0,98 = 101,1 ma il pavimento è carico + 0,5% = 100,5: sotto, si vende
+    expect(new ExitAgent().observe(low).segnali.length).toBe(1);
+  });
+
+  test("proiezione negativa: esce subito, anche in perdita piccola; l'allocatore esegue il vincolo senza voto", () => {
+    const j = emptyJournal();
+    j.trade.push(openTrade("NVDA"));
+    const v = view({ positions: [pos("NVDA", 100, 99.5)], journal: j, previsioni: { NVDA: -0.02 } });
+    v.prices.NVDA = 99.5;
+    const r = new ExitAgent().observe(v);
+    expect(r.segnali[0]!.perche).toContain("proiezione negativa");
+    // Il trend vota compra con forza 1 e peso 1,2: senza vincolo terrebbe. Il vincolo vende tutto.
+    const a = allocate(v, { uscite: r, trend: { segnali: [{ agente: "trend", simbolo: "NVDA", lato: "buy", forza: 1, orizzonteSedute: 20, perche: "" }] } }, { uscite: 1, trend: 1.2 });
+    expect(a.proposte).toEqual([{ symbol: "NVDA", side: "sell", qty: 10, why: expect.stringContaining("uscite:"), confidence: "alta", expect: "regola di rischio" }]);
+    expect(a.punteggi.find((p) => p.simbolo === "NVDA")!.agenti).toEqual(["trend"]); // il vincolo non entra nei punteggi
+  });
+
+  test("nel motore lo stop GTC su Alpaca sta al 2% dal carico e il massimo visto finisce nel diario", async () => {
+    const env = makeEnv(day("2026-09-24", "15:41"));
+    const r = await runTick(engineDeps(env, [new TrendAgent(), new RegimeAgent(), new ExitAgent()]));
+    const sym = r.status_file!.posizioni[0]!.simbolo;
+    const stop = openStopsFor(env, sym)[0]!;
+    expect(stop.stopPrice).toBeCloseTo(PRICES[sym]! * 0.98, 1);
+    const journal = JSON.parse(readFileSync(join(env.stateDir, "journal.json"), "utf8")) as JournalFile;
+    // Il massimo si aggiorna alla passata successiva, con il prezzo del momento.
+    env.setFake((s) => {
+      s.prices[sym] = PRICES[sym]! * 1.05;
+    });
+    env.clock.t = day("2026-09-24", "15:51").getTime();
+    await runTick(engineDeps(env, [new TrendAgent(), new RegimeAgent(), new ExitAgent()]));
+    const j2 = JSON.parse(readFileSync(join(env.stateDir, "journal.json"), "utf8")) as JournalFile;
+    expect(j2.trade.find((t) => t.simbolo === sym)!.massimo).toBeCloseTo(PRICES[sym]! * 1.05, 5);
+    void journal;
   });
 });

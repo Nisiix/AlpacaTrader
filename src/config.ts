@@ -110,6 +110,9 @@ export const AGENTS = {
   // Punteggio netto (somma pesata dei segnali) oltre il quale si compra / sotto il quale si vende.
   buyScore: 0.5,
   sellScore: -0.5,
+  // Se true il peso obiettivo di un titolo scende col punteggio (0,5 → metà peso); se false il punteggio serve solo
+  // a scegliere e ordinare i titoli, e il peso è quello massimo della gabbia × rischio del regime.
+  scaleByScore: false,
   // Peso minimo di un'aggiunta: sotto il 2% del conto l'ordine non vale il costo.
   minAddPct: 0.02,
   // Regime: con SPY sotto la media a 200 giorni l'esposizione si dimezza; con volatilità alta pure.
@@ -122,6 +125,13 @@ export const AGENTS = {
   kronos: { topShare: 0.25, horizon: 5, timeoutMs: 90_000 },
   // Riepilogo su Telegram una volta al giorno, alla prima passata dopo quest'ora di Roma.
   summaryAfter: "22:05",
+  // Presa di profitto secca (agente "profitto"): spenta di serie, si accende con --profitto; il backtest la misura.
+  takeProfit: { enabled: false, pct: 0.02 },
+  // Politica di uscita (agente "uscite", segnali vincolanti che la gabbia non può votare via):
+  // stop a -2% dal carico (anche come stop GTC su Alpaca); a +3% si incassa, a meno che la proiezione (Kronos) dica
+  // che c'è altro da prendere: allora si lascia correre con uno stop che segue il massimo e non restituisce più del
+  // rischio (giveBackPct), mai sotto il carico + lockPct. Proiezione negativa: si esce subito, in guadagno o in perdita.
+  exit: { enabled: true, stopPct: 0.02, targetPct: 0.03, giveBackPct: 0.02, lockPct: 0.005 },
   dashboardPort: 8787,
   eventsKeepDays: 60,
 };

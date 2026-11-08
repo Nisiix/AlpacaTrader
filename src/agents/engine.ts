@@ -29,6 +29,8 @@ export interface EngineDeps {
   agents: Agent[];
   bus: EventBus;
   echo?: boolean;
+  // Proiezioni (Kronos) per l'agente delle uscite e per l'agente kronos; assente = nessuna proiezione.
+  forecaster?: (symbols: string[]) => Promise<Record<string, number>>;
 }
 
 export interface AgentsStatus {
@@ -193,8 +195,23 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
     if (jr.problem) await alarm("Diario dei trade illeggibile", jr.problem);
     const learning = learningStatus(journal, today);
 
-    // 4. Gli agenti guardano, ognuno per conto suo; chi sbaglia non ferma gli altri.
-    const view: AgentView = { today, now: startedAt, prices: snap.prices, closes, indicators, positions: snap.positions, account: snap.account, journal };
+    // 4. Il massimo visto da ogni trade aperto (per lo stop che segue il profitto), poi le proiezioni, poi gli agenti.
+    for (const t of journal.trade) {
+      if (t.stato !== "aperto") continue;
+      const price = snap.prices[t.simbolo];
+      if (price) t.massimo = Math.max(t.massimo ?? 0, price);
+    }
+    let previsioni: Record<string, number> | undefined;
+    if (deps.forecaster) {
+      try {
+        previsioni = await deps.forecaster([...new Set([...UNIVERSE, ...snap.positions.map((p) => p.symbol)])]);
+        bus.emit("nota", { testo: `proiezioni: ${Object.entries(previsioni).map(([k, v]) => `${k} ${(v * 100).toFixed(1)}%`).join(", ")}` });
+      } catch (e) {
+        log.warn(`proiezioni non disponibili: ${(e as Error).message}`);
+        bus.emit("nota", { testo: `proiezioni non disponibili: ${(e as Error).message}` });
+      }
+    }
+    const view: AgentView = { today, now: startedAt, prices: snap.prices, closes, indicators, positions: snap.positions, account: snap.account, journal, previsioni };
     const reports: Record<string, AgentReport> = {};
     const agentStatus: AgentsStatus["agenti"] = {};
     await Promise.all(
@@ -264,7 +281,7 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
       try {
         const [pos, open] = await Promise.all([deps.broker.getPositions(), deps.broker.getOpenOrders()]);
         positions = pos;
-        stops = await manageStops(deps.broker, giro, pos, open, log, closes);
+        stops = await manageStops(deps.broker, giro, pos, open, log, closes, AGENTS.exit.enabled ? AGENTS.exit.stopPct : undefined);
       } catch (e) {
         stops = { ok: [], placed: [], cancelled: [], errors: [`Alpaca non risponde: ${(e as Error).message}`] };
       }

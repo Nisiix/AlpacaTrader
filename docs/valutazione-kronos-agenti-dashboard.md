@@ -405,3 +405,69 @@ né GitHub a pagamento. Implementato e provato in questo branch:
 Cosa manca e va deciso con i prossimi dati: il backtest *del motore* (oggi il backtest rigioca la gabbia con il metodo
 trend; rientro, orizzonte e pesi degli agenti non sono ancora simulati), e almeno 4-6 settimane di paper con il diario
 prima di toccare i pesi a mano.
+
+
+---
+
+## Addendum (8 novembre, mattina): backtest del motore, obiettivi di profitto, installazione sul PC
+
+### Il backtest ora rigioca anche il motore
+
+`bun run backtest` stampa prima la gabbia con il metodo trend (le sveglie) e poi quattro varianti del motore degli agenti,
+tutte su 550 sedute reali, esecuzione alla chiusura, senza costi né slippage (quindi ottimiste):
+
+| Variante | Rendimento | Perdita max | Trade chiusi | Vinti | Attesa/trade | Esposizione | Durata |
+|---|---|---|---|---|---|---|---|
+| trend, rientro, regime, orizzonte, pesi dal diario (stop gabbia 5-10%) | +13,60% | -8,57% | 86 | 34% | +0,64% | 57% | 27 g |
+| + presa di profitto secca a +2% | **+16,93%** | **-7,32%** | 143 | 47% | +0,73% | 54% | 16 g |
+| + uscite: stop -2%, incasso a +3% (la politica richiesta, senza proiezioni) | +14,85% | -7,62% | 281 | 45% | +0,29% | 49% | 7 g |
+| + uscite: stop -2%, incasso a +4% | +13,18% | -9,00% | 235 | 39% | +0,36% | 53% | 9 g |
+| riferimento: gabbia + trend con riarmo automatico | +17,65% | -8,72% | 208 ordini | | | | |
+| riferimento: SPY / 60-40 | +35,18% / +18,22% | | | | | | |
+
+Il diario inizia a pesare gli agenti dopo 90 giorni e 30 trade (da aprile-giugno nel backtest): il trend finisce a 1,2,
+il rientro a 0,5 nella variante base (23 trade, attesa -0,6%). Con il peso obiettivo scollegato dal punteggio
+(`scaleByScore: false`) l'esposizione sale dal 49% al 57% e il rendimento da +7,7% a +13,6%: stare investiti conta più
+di scegliere bene. Le proiezioni di Kronos non sono nel backtest (servirebbe rigiocare il modello su 550 giorni × 8 titoli):
+lì le uscite incassano sempre all'obiettivo.
+
+### "Almeno il 3-4% al giorno, oltre il 50% di successi, uscite a -2% / +3-4%"
+
+Numeri sulle ultime 500 sedute (massimi e minimi veri delle barre, entrata alla chiusura, entro 20 sedute):
+
+| Titolo | tocca +2% prima di -2% | tocca +3% prima di -2% | attesa (+3/-2) | tocca +4% prima di -2% | attesa (+4/-2) |
+|---|---|---|---|---|---|
+| SPY | 50% | 37% | -0,13% | 27% | -0,39% |
+| QQQ | 54% | 43% | +0,16% | 36% | +0,14% |
+| AAPL | 56% | 45% | +0,25% | 41% | +0,44% |
+| MSFT | 56% | 46% | +0,31% | 41% | +0,46% |
+| NVDA | 53% | 46% | +0,31% | 40% | +0,38% |
+| GLD | 61% | 53% | +0,65% | 46% | +0,76% |
+| TLT | 41% | 32% | -0,39% | 20% | -0,78% |
+
+E quanto si muove un titolo in un giorno: SPY chiude almeno il 2% sopra l'apertura nello 0,6% dei giorni, NVDA nell'11,8%;
+a 5 minuti, +2% prima di -1% dentro la seduta succede nell'1,2% dei casi su SPY e nel 30% su NVDA; BTC tocca +2% prima
+di -1% in 24 ore nel 30% dei casi.
+
+Cosa dicono questi numeri, senza giri di parole:
+
+- **Il 3-4% al giorno sul conto non è raggiungibile** con questo universo e queste regole: con il 20% massimo per titolo,
+  un +3% sul conto richiede un +15% in un giorno su una posizione piena, o cinque posizioni che fanno tutte +3% lo stesso
+  giorno. SPY fa +2% in un giorno 3 volte l'anno. Nemmeno i fondi migliori del mondo fanno il 3% al giorno (sarebbe oltre
+  il 1.000% all'anno). L'obiettivo realistico per questo sistema è **battere il 60/40 e avvicinarsi a SPY con meno
+  perdita massima**: nel backtest siamo a +15-17% in 2,2 anni contro +18% del 60/40 e +35% di SPY.
+- **Oltre il 50% di successi con uscita a +3% e stop -2% non c'è**: 37-53% a seconda del titolo (GLD è l'unico sopra il 50%).
+  Però **non serve**: con premio 3 e rischio 2 si guadagna già dal 40% di successi, e infatti l'attesa è positiva su
+  tutto tranne SPY, IWM e TLT. La metrica giusta è l'attesa per trade dopo i costi, non la percentuale di vinti.
+- **La politica richiesta è implementata e misurata** (agente `uscite`): nel backtest rende +14,85% con perdita massima
+  -7,6%, 45% di vinti e 281 trade in 2,2 anni (uno ogni 2 giorni di borsa). Costa 2 punti rispetto alla presa di profitto
+  secca a +2% e 3 rispetto al trend puro: lo stop a -2% esce spesso sul rumore (NVDA si muove del 3% al giorno).
+  Con le proiezioni di Kronos a decidere se lasciare correre, il risultato cambierà: va misurato in paper, perché zero-shot
+  Kronos ha mostrato poco segnale (sezione 2) e le sue proiezioni negative faranno uscire anche da trade buoni.
+- **Perdita minima con Kronos**: l'uscita anticipata su proiezione negativa c'è (vincolante). Il rischio opposto è
+  reale: con una previsione che indovina la direzione il 50% delle volte, metà delle uscite anticipate saranno sbagliate.
+
+### Installazione in `D:\Applicazioni\WebDev\Bot alpaca agents`
+
+Da questa sessione cloud non posso scrivere sul tuo PC (nessuna cartella condivisa via Remote Control). Lo script
+`installa-windows.ps1` fa tutto con un comando: vedi README, sezione "Installazione su Windows".

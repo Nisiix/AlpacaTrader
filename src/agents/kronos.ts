@@ -12,6 +12,12 @@ export interface KronosForecast {
 
 export type Fetcher = (symbols: string[], horizon: number) => Promise<KronosForecast[]>;
 
+// Per il motore: le proiezioni come mappa simbolo → rendimento previsto, da passare alla vista degli agenti.
+export function forecasterFor(url: string): (symbols: string[]) => Promise<Record<string, number>> {
+  const f = httpFetcher(url);
+  return async (symbols) => Object.fromEntries((await f(symbols, AGENTS.kronos.horizon)).map((x) => [x.simbolo, x.rendimentoPrevisto]));
+}
+
 export function httpFetcher(url: string): Fetcher {
   return async (symbols, horizon) => {
     const res = await fetch(`${url.replace(/\/$/, "")}/forecast`, {
@@ -32,10 +38,13 @@ export class KronosAgent implements Agent {
 
   async observe(v: AgentView): Promise<AgentReport> {
     let fc: KronosForecast[];
-    try {
-      fc = await this.fetcher([...UNIVERSE], AGENTS.kronos.horizon);
-    } catch (e) {
-      return { segnali: [], note: [`Kronos non disponibile: ${(e as Error).message}`] };
+    if (v.previsioni) fc = Object.entries(v.previsioni).map(([simbolo, rendimentoPrevisto]) => ({ simbolo, rendimentoPrevisto }));
+    else {
+      try {
+        fc = await this.fetcher([...UNIVERSE], AGENTS.kronos.horizon);
+      } catch (e) {
+        return { segnali: [], note: [`Kronos non disponibile: ${(e as Error).message}`] };
+      }
     }
     const valid = fc.filter((f) => Number.isFinite(f.rendimentoPrevisto)).sort((a, b) => Math.abs(b.rendimentoPrevisto) - Math.abs(a.rendimentoPrevisto));
     const keep = Math.max(1, Math.round(valid.length * AGENTS.kronos.topShare));

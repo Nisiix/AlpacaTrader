@@ -43,6 +43,8 @@ export interface Trade {
   incassato: number;
   quantita: number; // ancora in mano
   contesto: EntryContext | null;
+  // Prezzo massimo visto dall'ingresso: serve allo stop che segue il profitto.
+  massimo?: number;
   chiusoIl?: string;
   prezzoIngresso?: number;
   prezzoUscita?: number;

@@ -11,6 +11,8 @@ export interface Signal {
   forza: number; // 0..1
   orizzonteSedute: number;
   perche: string;
+  // Regola di rischio, non opinione: l'allocatore la esegue senza sommarla agli altri voti.
+  vincolante?: boolean;
 }
 
 export interface AgentView {
@@ -22,6 +24,8 @@ export interface AgentView {
   positions: Position[];
   account: Account;
   journal: JournalFile;
+  // Rendimento previsto per simbolo (Kronos) quando il sidecar c'è; altrimenti assente.
+  previsioni?: Record<string, number>;
 }
 
 export interface AgentReport {
