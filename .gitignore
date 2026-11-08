@@ -3,3 +3,6 @@ state/
 logs/
 node_modules/
 .stato/
+tools/kronos/kronos-src/
+tools/kronos/venv/
+tools/kronos/data/

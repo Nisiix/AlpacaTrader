@@ -1,0 +1,8 @@
+# Prova zero-shot di Kronos su barre Alpaca. Python 3.10+. Su CPU basta la build normale di torch.
+torch>=2.0.0
+numpy
+pandas
+einops==0.8.1
+huggingface_hub>=0.33.1
+safetensors>=0.6.2
+tqdm
