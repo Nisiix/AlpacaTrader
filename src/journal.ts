@@ -23,6 +23,8 @@ export interface EntryContext {
   agenti?: string[];
   // Proiezione di Kronos all'ingresso: il capo ufficio la confronta con l'esito per consigliare la soglia giusta.
   kronos?: number;
+  // Operazione intraday promossa a posizione di più giorni (ISO del momento): da lì la seguono le regole di più giorni.
+  promossa?: string;
 }
 
 export interface Intent {

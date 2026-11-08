@@ -793,7 +793,8 @@ describe("intraday", () => {
     const closes: Record<string, number[]> = { "PEPE/USD": syntheticCloses(base, 0.04, 260) };
     for (const sym of UNIVERSE) closes[sym] = syntheticCloses(PRICES[sym]!, 0.01, 260);
     const a = new IntradayAgent(async (syms, tf) => Object.fromEntries(syms.map((x) => [x, mk(tf)])), async (b) => Object.fromEntries(Object.keys(b).map((x) => [x, 0.2])));
-    const r = await a.observe(view({ closes, prices: { ...PRICES, "PEPE/USD": base * 1.004 }, now: day("2026-09-22", "16:30"), today: "2026-09-22" }));
+    // Sera (borsa chiusa): candidate solo le crypto.
+    const r = await a.observe(view({ closes, prices: { ...PRICES, "PEPE/USD": base * 1.004 }, now: day("2026-09-22", "23:00"), today: "2026-09-22" }));
     expect(r.segnali.filter((x) => x.lato === "buy")).toEqual([]);
     expect(r.intraday!.find((x) => x.simbolo === "PEPE/USD")!.motivo).toContain("fuori misura");
   });

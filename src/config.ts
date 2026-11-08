@@ -259,12 +259,21 @@ export const AGENTS = {
     // `costi.margineCosti` volte i costi e la probabilità sia ≥ minProb. perGiro = coppie titolo-candela guardate a giro.
     // zMax: una proiezione oltre zMax volte la volatilità delle candele sull'orizzonte (o oltre kronos.maxAbs) è rumore del
     // modello (succede sui prezzi minuscoli, es. 0,000005 $) e non si usa, come le giornaliere fuori misura.
-    kronos: { orizzontiMin: [15, 30, 60, 120, 240, 480] as number[], maxCandele: 20, perGiro: 24, minProb: 0.55, zMax: 4 },
+    kronos: { orizzontiMin: [15, 30, 60, 120, 240, 480] as number[], maxCandele: 20, perGiro: 40, minProb: 0.55, zMax: 4 },
     // Scaduto l'orizzonte scelto (× questo fattore) senza obiettivo e senza rialzo ancora probabile, si chiude.
     scadenzaOrizzonte: 1.5,
     // Le candele su cui si cerca l'ingresso: con Kronos si sceglie quella con la probabilità di successo più alta.
     candele: ["5Min", "15Min", "1Hour", "4Hour"] as string[],
-    target: { stocks: 0.01, crypto: 0.02 }, // obiettivo di profitto; se l'ATR dice di più, vale l'ATR × targetAtr
+    // Obiettivo: con Kronos è il rialzo che Kronos prevede sull'orizzonte scelto (minuti o ore), mai sotto questo minimo,
+    // che copre i costi con margine (azioni 0,3%, crypto 1,2% contro lo 0,5% di andata e ritorno); senza Kronos il maggiore
+    // tra minimo e targetAtr × ATR. Si entra solo se l'obiettivo vale almeno rapportoMin volte lo stop: un trade breve da
+    // pochi minuti è possibile quando Kronos vede un movimento netto rispetto al rumore della candela.
+    target: { stocks: 0.003, crypto: 0.012 },
+    rapportoMin: 1.2,
+    // Promozione: un'operazione intraday in guadagno che a fine finestra (chiusura della borsa, durata massima delle crypto)
+    // rispetta i criteri del metodo di più giorni (trend o Kronos netto, Kronos a 5 sedute che copre i costi con probabilità
+    // ≥ minProb, nessuna attesa del contesto né trimestrale vicina) non si chiude: passa alle regole di più giorni.
+    promozione: { enabled: true, minProb: 0.55 },
     // Stop minimo: sulle crypto sopra il costo di andata e ritorno (0,5%), altrimenti ogni stop costa quasi il doppio.
     targetAtr: 1.5, stopAtr: 1.2, minStopPct: { stocks: 0.004, crypto: 0.01 },
     maxWeight: 0.1, // peso massimo di un'operazione intraday (comparto a taglia ridotta)

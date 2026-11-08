@@ -96,6 +96,7 @@ describe("impostazioni degli agenti e chiavi", () => {
     expect(validate("AGENTS.exit.mode", "boh").ok).toBe(false);
     expect(validate("AGENTS.intraday.closeBy.stocks", "25:00").ok).toBe(false);
     const before = LIMITS.maxPositions;
+    const cryptoDiSerie = AGENTS.intraday.target.crypto;
     const r = saveAgentSettings(dir, { "LIMITS.maxPositions": 7, "AGENTS.intraday.target.crypto": 0.03, "AGENTS.buyScore": 0.5 });
     expect(r.ok && Object.keys(r.salvati).sort()).toEqual(["AGENTS.intraday.target.crypto", "LIMITS.maxPositions"]); // buyScore è di serie: non salvato
     expect(LIMITS.maxPositions).toBe(7);
@@ -105,7 +106,7 @@ describe("impostazioni degli agenti e chiavi", () => {
     saveAgentSettings(dir, {});
     applyAgentSettings(dir);
     expect(LIMITS.maxPositions).toBe(before);
-    expect(AGENTS.intraday.target.crypto).toBe(0.02);
+    expect(AGENTS.intraday.target.crypto).toBe(cryptoDiSerie);
   });
 
   test("secrets.ts: scrittura con campi vuoti che non toccano il resto, lettura mascherata, chiavi non paper rifiutate", async () => {

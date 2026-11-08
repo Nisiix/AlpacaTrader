@@ -1,0 +1,90 @@
+import { describe, expect, test } from "bun:test";
+import { EventBus } from "../src/agents/bus.ts";
+import { emptyCache, runTick, type EngineDeps } from "../src/agents/engine.ts";
+import { IntradayAgent, promuovibile } from "../src/agents/intraday.ts";
+import type { AgentView } from "../src/agents/types.ts";
+import type { IntradayBar } from "../src/broker/types.ts";
+import { syntheticCloses } from "../src/broker/fake.ts";
+import { AGENTS, setCryptoUniverse } from "../src/config.ts";
+import { emptyJournal, type JournalFile } from "../src/journal.ts";
+import { makeEnv } from "./helpers.ts";
+
+// Candele da 5 minuti di BTC in salita con oscillazioni (EMA 9 sopra EMA 20, prezzo sopra la 9), che finiscono a `fine`.
+function salitaA5Minuti(fine: number, finoA: Date, n = 120): IntradayBar[] {
+  const end = Math.floor(finoA.getTime() / 300_000) * 300_000;
+  const out: IntradayBar[] = [];
+  for (let i = 0; i < n; i++) {
+    const k = n - 1 - i;
+    const c = fine * (1 - 0.0015 * k) * (1 + (k % 2 === 0 ? 0.003 : -0.003));
+    const o = i ? out[i - 1]!.close : c;
+    out.push({ t: new Date(end - (k + 1) * 300_000).toISOString(), open: o, high: Math.max(o, c) * 1.001, low: Math.min(o, c) * 0.999, close: c, volume: 1_000 });
+  }
+  return out;
+}
+
+describe("intraday nel motore vero: candele da 5 minuti, Kronos, ordini", () => {
+  test("Kronos vede +1,5% in 15 minuti su BTC: il motore compra su candele da 5 minuti e incassa all'obiettivo di Kronos pochi minuti dopo", async () => {
+    setCryptoUniverse(["BTC/USD"]);
+    const start = new Date("2026-09-27T21:00:00+02:00"); // domenica sera: solo crypto
+    const env = makeEnv(start);
+    env.setFake((s) => {
+      s.prices["BTC/USD"] = 76_000;
+      s.intraday = { "BTC/USD": { "5Min": salitaA5Minuti(76_000, start) } };
+    });
+    const chiesti: number[] = [];
+    // Kronos sulle candele da 5 minuti: +1,5% già alla terza candela (15 minuti) e poi fermo; sulle altre candele niente.
+    const kronos = async (b: Record<string, IntradayBar[]>, step: number, h: number) => {
+      chiesti.push(step);
+      return Object.fromEntries(Object.keys(b).map((x) => [x, step === 5 ? Array.from({ length: h }, (_, i) => Math.min(0.015, 0.005 * (i + 1))) : Array.from({ length: h }, () => 0)]));
+    };
+    const intraday = new IntradayAgent((s, tf, n) => env.broker.getIntradayBars(s, tf, n), kronos);
+    const d = env.deps();
+    const deps: EngineDeps = { broker: d.broker, notifier: d.notifier, stateDir: d.stateDir, logsDir: d.logsDir, redactor: d.redactor, now: d.now, sleep: d.sleep, agents: [intraday], bus: new EventBus(d.stateDir, d.now), echo: false };
+    const cache = emptyCache();
+
+    const r1 = await runTick(deps, cache);
+    const acquisto = r1.status_file!.ordini.find((o) => o.simbolo === "BTC/USD" && o.lato === "buy");
+    expect(acquisto?.esito).toStartWith("inviato");
+    expect(acquisto!.perche).toContain("intraday su candele 5Min");
+    expect(acquisto!.perche).toContain("da Kronos in 15 min");
+    expect(chiesti).toContain(5);
+    const st = r1.status_file!.intraday.find((x) => x.simbolo === "BTC/USD")!;
+    expect(st.orizzonte).toBe("15 min");
+    const entrata = env.broker.load().positions["BTC/USD"]!.avgEntryPrice;
+    expect(st.obiettivo! / entrata - 1).toBeCloseTo(0.015, 3);
+
+    // Cinque minuti dopo (giro senza analisi d'ingresso): il prezzo è all'obiettivo, Kronos sulla candela breve non vede altro.
+    env.clock.t += 5 * 60_000;
+    env.setFake((s) => (s.prices["BTC/USD"] = entrata * 1.016));
+    const r2 = await runTick(deps, cache);
+    expect(r2.status_file!.analisi!.questoGiro).toBe(false);
+    const vendita = r2.status_file!.ordini.find((o) => o.simbolo === "BTC/USD" && o.lato === "sell");
+    expect(vendita?.esito).toStartWith("inviato");
+    expect(vendita!.perche).toContain("obiettivo raggiunto");
+    expect(env.broker.load().positions["BTC/USD"]).toBeUndefined();
+    // Il conto di oggi registra l'operazione chiusa in pochi minuti, in guadagno.
+    const pnl = r2.status_file!.pnlOggi;
+    expect(pnl.vendite.find((x) => x.simbolo === "BTC/USD")!.pnl).toBeGreaterThan(0);
+  });
+
+  test("trend che continua: a fine finestra l'operazione in guadagno non si chiude, passa alle regole di più giorni", async () => {
+    setCryptoUniverse(["BTC/USD"]);
+    const aperta = new Date("2026-09-27T08:00:00Z");
+    const now = new Date(aperta.getTime() + AGENTS.intraday.cryptoOreMax * 3_600_000 + 60_000); // oltre la durata massima
+    const prezzo = 76_600; // +0,8%: in guadagno ma sotto l'obiettivo, ancora in corsa
+    const bars = salitaA5Minuti(prezzo, now);
+    const journal: JournalFile = { ...emptyJournal(), trade: [{ id: "t1", simbolo: "BTC/USD", stato: "aperto", apertoIl: aperta.toISOString(), comprate: 0.1, costo: 7_600, vendute: 0, incassato: 0, quantita: 0.1, contesto: { setup: "", momentum20: null, volGiornaliera: null, distanzaMedia: null, fiducia: null, attesa: "", perche: "", agenti: ["intraday"] } } as any] };
+    const view = (previsioni: Record<string, number>) => ({ today: "2026-09-27", now, prices: { "BTC/USD": prezzo }, closes: { "BTC/USD": syntheticCloses(prezzo, 0.02, 260) }, indicators: {}, positions: [{ symbol: "BTC/USD", qty: 0.1, avgEntryPrice: 76_000, currentPrice: prezzo, marketValue: 7_660 }], account: { equity: 100_000, lastEquity: 100_000, cash: 92_000, status: "ACTIVE" }, journal, previsioni, mercatoAperto: false, analisi: false }) as unknown as AgentView;
+    const agente = () => new IntradayAgent(async (syms) => Object.fromEntries(syms.map((s) => [s, bars])), async (b, _s, h) => Object.fromEntries(Object.keys(b).map((x) => [x, Array.from({ length: h }, () => 0.002)])));
+    // Kronos a 5 sedute +3% con trend in corso: promossa, nessuna vendita, da ora la seguono le regole di più giorni.
+    expect(promuovibile(view({ "BTC/USD": 0.03 }), "BTC/USD", 0.008).ok).toBe(true);
+    const r = await agente().observe(view({ "BTC/USD": 0.03 }));
+    expect(r.segnali.filter((x) => x.lato === "sell").map((x) => x.perche)).toEqual([]);
+    expect(r.intraday!.find((x) => x.simbolo === "BTC/USD")!.motivo).toContain("promossa a posizione di più giorni");
+    expect(journal.trade[0]!.contesto!.promossa).toBeDefined();
+    // Senza un rialzo che copra i costi a 5 sedute la stessa operazione si chiude alla durata massima.
+    journal.trade[0]!.contesto!.promossa = undefined;
+    const r2 = await agente().observe(view({ "BTC/USD": 0.002 }));
+    expect(r2.segnali.find((x) => x.lato === "sell")!.perche).toContain("durata massima");
+  });
+});
