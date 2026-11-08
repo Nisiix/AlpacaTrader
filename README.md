@@ -1,10 +1,8 @@
 # Agente di paper trading Alpaca
 
-Due modi di lavorare, stesso conto paper, stesse regole:
-
-- **Motore degli agenti** (`bun run agents`): processo sempre acceso sul tuo PC, orizzonte a 20 sedute, più agenti
-  che osservano e votano, dashboard 3D locale. È la strada scelta dopo la valutazione in `docs/`.
-- **Sveglie** (`bun run schedule` / cloud): 4 volte al giorno con `claude -p`, come prima.
+Un solo modo di lavorare: il **motore degli agenti** (`bun run agents`), processo sempre acceso sul tuo PC (avvia-bot.cmd),
+più agenti che osservano e votano, Kronos e il cervello delle previsioni, dashboard locale e pagina pubblica. Le sveglie
+classiche (4 al giorno con `claude -p`, anche nel cloud) sono state tolte: la logica completa è in `docs/logica-del-motore.md`.
 
 ## Motore degli agenti
 
@@ -17,7 +15,7 @@ bun run dashboard                    # solo la dashboard, in lettura, sullo stat
 
 Opzioni: `--tick 5` (minuti tra un giro e l'altro), `--port 8787`, `--no-dashboard`, `--fake`, `--once`, `--no-crypto` (toglie le crypto, che nel motore sono di serie e lavorano 24 ore su 24 con la stessa logica dei titoli), `--no-kronos`, `--kronos url` (sidecar già acceso altrove), `--profitto`.
 Da tenere acceso il PC (o un altro processo con lo stesso `state/`): il motore riparte da `state/` dopo un riavvio,
-il lock e gli ID deterministici evitano doppioni anche con le sveglie classiche.
+il lock e gli ID degli ordini (uno per giro) evitano doppioni.
 
 | Agente | Cosa guarda | Segnali |
 |---|---|---|
@@ -150,69 +148,40 @@ codice 75 e `avvia-bot.cmd` lo rilancia da solo: codice e chiavi nuove entrano i
 ricominciano con i criteri di oggi. A ogni avvio il motore riparte da `state/` e dal conto Alpaca: niente da configurare, le
 posizioni le decide giorno per giorno (universo crypto rinnovato ogni giorno, custodi che nascono e muoiono, trend ricalcolato a ogni giro).
 
-## Sveglie (modalità classica)
-
-Si sveglia 4 volte al giorno (ora di Roma, lun-ven), legge il conto, chiede una decisione a `claude -p`,
-la passa nella gabbia di regole, invia gli ordini ammessi, scrive il testimone e manda il resoconto su Telegram.
-Solo paper: l'endpoint `https://paper-api.alpaca.markets` è scritto nel codice.
+Solo paper: l'endpoint `https://paper-api.alpaca.markets` è scritto nel codice e il motore si rifiuta di partire con uno diverso.
 
 ## Avvio
 
 ```sh
 cp secrets.example.ts secrets.ts   # poi riempi i campi (chiavi paper PK..., token e chat id del bot)
 bun run telegram-chat-id [--scrivi]   # dopo aver scritto /start al bot: stampa il chat id; con --scrivi lo mette in secrets.ts (su Windows: doppio clic su imposta-telegram.cmd)
-bun run schedule                   # resta acceso, ogni 30 s lancia la sveglia dovuta
-bun run once [--slot 15:40] [--force]   # una sveglia subito (la più recente di oggi)
-bun run status                     # lock, ultimo testimone, conto
+bun run agents                     # il motore (su Windows: avvia-bot.cmd)
 bun run breaker-reset              # riarma l'interruttore sulla perdita (dopo che hai guardato cosa è successo)
 bun run chiudi-posizioni           # chiude tutte le posizioni paper per ripartire da zero (vedi «Ripartire da zero»)
 bun run backtest [--days 500] [--riarmo 5]   # rigioca sulle chiusure storiche la gabbia col metodo trend e poi il motore degli agenti (4 varianti)
-bun run cloud-wake                 # il comando delle sessioni cloud programmate (vedi sotto)
-bun test                           # test con broker e cervello finti
+bun test                           # test con broker finto
 ```
 
-`--fake` su ogni comando usa broker finto (`state/fake/fake-broker.json`), cervello finto e Telegram su file
-(`state/fake/telegram-outbox.log`). Con `--fake` si può anche passare `--now 2026-09-24T15:41:00+02:00`.
-
-| Sveglia | Ora Roma | Cosa fa |
-|---|---|---|
-| Briefing | 09:00 | legge il conto, fissa il piano, nessun ordine |
-| Apertura | 15:40 | l'unica che compra; uscite di trend sulle chiusure di ieri |
-| Metà seduta | 18:30 | controlla, vende solo con un motivo, stop |
-| Chiusura | 21:40 | chiude la giornata e fa il resoconto (il venerdì anche il riepilogo) |
+`--fake` usa broker finto (`state/fake/fake-broker.json`) e Telegram su file (`state/fake/telegram-outbox.log`).
 
 ## Regole della gabbia (`src/cage.ts`, numeri in `src/config.ts`)
 
-- Universo fisso: SPY QQQ IWM AAPL MSFT NVDA GLD TLT. Niente short, niente leva, solo azioni intere.
-- Massimo 5 titoli, massimo 20% del conto per titolo, e meno se il titolo è volatile: valore × volatilità giornaliera (20 giorni) ≤ 0,25% del conto.
-- Gruppo tecnologia (QQQ NVDA MSFT AAPL) al massimo 35% insieme.
-- Metodo dichiarato: trend following lento. Si compra solo se l'ultima chiusura è sopra la media a 50 **e** a 200 giorni
-  (e il prezzo del momento sopra la 50); tra i candidati il modello preferisce il momentum a 6 mesi.
-- Uscita normale: alla sveglia di apertura il codice vende tutta la posizione se ieri ha chiuso sotto la media a 50 giorni.
-- Acquisti solo alla sveglia di apertura. Le medie si calcolano su sedute finite: la barra di oggi non entra.
-- Stop di protezione contro i crolli: 2,5 × volatilità giornaliera × √5, al mezzo punto, tra il 5% e il 10% dal prezzo di carico
-  (SPY ~5%, AAPL/MSFT ~6-7%, titoli nervosi 10%). Lo vende il codice a ogni sveglia **e** c'è uno stop GTC su Alpaca.
-- Calendario di Fed e trimestrali (`src/events.ts`, **da aggiornare a mano**): niente acquisti nel giorno della Fed,
-  né di AAPL/MSFT/NVDA nei 2 giorni di borsa prima dei conti. Il lunedì al briefing arriva un promemoria se mancano date future.
-- Voto a maggioranza: `claude -p` risponde 3 volte in parallelo; passa solo l'ordine proposto da almeno 2 risposte,
-  con la quantità più prudente. Con meno di 2 risposte valide nessun ordine del modello (stop e uscite di trend restano).
-- Registro degli errori (`state/lessons.json`): dopo uno stop loss niente riacquisto per 5 giorni di borsa; due rifiuti di Alpaca uguali bloccano quel titolo-lato per 5 giorni.
-- Interruttore (`state/breaker.json`): -5% dal massimo blocca gli acquisti per 5 giorni di borsa (o finché non lanci `breaker-reset`), poi si riarma da solo; -2% in giornata li blocca fino a domani.
-- Nessun ordine nel briefing, a mercato chiuso o con più di 20 minuti di ritardo.
-
-## Nel cloud, a PC spento
-
-Ogni sveglia è una sessione cloud programmata che lancia `bun run cloud-wake`:
-lo stato (testimone, lock, registro, interruttore, log) vive sul branch `stato` di questo repo,
-la sveglia viene "prenotata" con un push (due sessioni insieme: ne lavora una sola) e lo stato
-si salva appena il testimone è scritto, ogni 15 secondi e alla fine, anche su SIGTERM.
-Conta solo la prenotazione arrivata su GitHub, e scade 20 minuti dopo l'orario della sveglia.
-Ogni comando git ha un timeout: se GitHub non risponde la sveglia lavora lo stesso (gli ordini doppi
-li blocca l'id dell'ordine) e se lo stato non arriva su GitHub lo dice su Telegram.
-Nella routine il comando va lanciato con un timeout di almeno 25 minuti: aspetta l'orario e poi lavora. Le chiavi arrivano come variabili d'ambiente:
-`ALPACA_KEY_ID`, `ALPACA_SECRET_KEY`, `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`.
-L'ambiente cloud deve poter raggiungere `paper-api.alpaca.markets`, `data.alpaca.markets` e `api.telegram.org`.
-Il repo deve essere **privato**: il branch `stato` contiene conto e posizioni.
+- Universo: titoli e crypto degli agenti (più le scoperte dell'esplorazione). Niente short, niente leva, solo azioni intere
+  (gli stop GTC di Alpaca non accettano frazioni); crypto in frazioni, ordine minimo 10 $.
+- Massimo 10% del conto per titolo, e meno se il titolo è volatile: valore × volatilità giornaliera (20 giorni) ≤ 0,25% del conto.
+- Massimo 35% del conto per **settore** (tecnologia, finanza, crypto…, anche per i titoli scoperti): si muovono insieme.
+- Metodo: sopra la media a 50 **e** a 200 giorni, salvo un rialzo netto anticipato da Kronos; sotto la 200 solo contro
+  tendenza (Kronos ≥ 2% con probabilità ≥ 60%), a metà taglia. Uscita di trend: chiusura sotto la media a 50, salvo
+  Kronos che anticipa ancora un rialzo. Le operazioni intraday hanno le loro regole.
+- Stop di protezione contro i crolli: 2,5 × volatilità giornaliera × √5, tra il 5% e il 10% dal carico; lo vende il codice
+  a ogni giro **e** c'è uno stop GTC su Alpaca (crypto: stop_limit). Una vendita già in corso non si rimanda.
+- Calendario: Fed scritta in `src/events.ts` (niente acquisti di azioni ed ETF nel giorno della decisione; le crypto no);
+  trimestrali di tutti i titoli seguiti lette ogni giorno dal calendario pubblico di Nasdaq (`state/trimestrali.json`):
+  niente acquisti del titolo nei 2 giorni di borsa prima dei conti.
+- Registro degli errori (`state/lessons.json`): dopo uno stop loss niente riacquisto per 5 giorni di borsa; due rifiuti di
+  Alpaca uguali bloccano quel titolo-lato per 5 giorni. Imparare dai risultati lo fanno capo ufficio e sala caffè.
+- Interruttore (`state/breaker.json`): spento di serie, si riaccende dalle impostazioni come freno d'emergenza.
+- Azioni solo a borsa aperta (orologio di Alpaca); crypto 24 ore su 24.
 
 ## File
 
@@ -239,7 +208,7 @@ Il repo deve essere **privato**: il branch `stato` contiene conto e posizioni.
 | `src/telegram.ts`, `src/report.ts` | messaggi, allarmi ⚠️, resoconto |
 | `src/log.ts` | log in `logs/<sveglia>.log`, chiavi oscurate |
 | `src/wake.ts` | il giro di una sveglia |
-| `src/cli/` | `schedule`, `once`, `status`, `telegram-chat-id`, `breaker-reset`, `backtest`, `cloud-wake`, `agents`, `dashboard` |
+| `src/cli/` | `agents`, `dashboard`, `telegram-chat-id`, `breaker-reset`, `backtest`, `sweep`, `chiudi` |
 | `src/agents/` | motore: `types`, `bus` (registro eventi), agenti `trend` `pullback` `regime` `horizon` `kronos`, `allocator`, `engine` (il giro) |
 | `src/dashboard/` | server Bun (HTTP + WebSocket + Three.js locale) e pagina `index.html` |
 | `tools/kronos/` | prova di Kronos sui dati Alpaca e sidecar `server.py` per l'agente |

@@ -10,7 +10,9 @@ export function canonicalSymbol(symbol: string, assetClass?: string): string {
   if (assetClass === "crypto" && !symbol.includes("/") && symbol.endsWith("USD")) return `${symbol.slice(0, -3)}/USD`;
   return symbol;
 }
-const qtyString = (symbol: string, qty: number) => (isCrypto(symbol) ? qty.toFixed(6).replace(/0+$/, "").replace(/\.$/, "") : String(qty));
+// Crypto: 6 decimali troncati, mai arrotondati per eccesso (80,874531937 → 80,874531): con toFixed Alpaca rispondeva
+// "insufficient balance" perché si chiedeva un milionesimo in più di quanto c'è (la commissione si paga nella moneta).
+export const qtyString = (symbol: string, qty: number) => (isCrypto(symbol) ? (Math.floor(qty * 1e6 + 1e-6) / 1e6).toFixed(6).replace(/0+$/, "").replace(/\.$/, "") : String(qty));
 
 function toOrder(o: any): Order {
   return {

@@ -48,8 +48,10 @@ export const LIMITS = {
   rankMomentumDays: 120,
   // Niente acquisti di singoli titoli in questi giorni di borsa prima della trimestrale (giorno compreso).
   earningsBlackoutDays: 2,
-  // Titoli che si muovono insieme: tetto complessivo.
-  groups: [{ name: "tecnologia", symbols: ["QQQ", "NVDA", "MSFT", "AAPL"], maxPct: 0.35 }],
+  // Titoli che si muovono insieme: tetto complessivo per settore (sectorOf: anche i titoli scoperti dall'esplorazione e le
+  // crypto, che salgono e scendono insieme). groupMaxBySector cambia il tetto per un settore preciso.
+  groupMaxPct: 0.35,
+  groupMaxBySector: {} as Record<string, number>,
   // Interruttore: oltre questa perdita dal massimo gli acquisti si fermano, e si riarma da solo dopo breakerRearmSessions
   // giorni di borsa (nel backtest su 550 sedute il riarmo manuale mai fatto costava 13 punti di rendimento).
   maxDrawdownPct: 0.05,
@@ -171,7 +173,9 @@ export const AGENTS = {
   // Peso minimo di un'aggiunta: sotto il 2% del conto l'ordine non vale il costo.
   minAddPct: 0.02,
   // Regime: con SPY sotto la media a 200 giorni l'esposizione si dimezza; con volatilità alta pure.
-  regime: { bearScale: 0.5, highVolDaily: 0.015, highVolScale: 0.5 },
+  // Per classe: le azioni guardano lo SPY, le crypto il BTC (sotto la media a 200 o con volatilità oltre highVolCrypto).
+  // Con il contesto non si sommano: vale la riduzione più forte tra regime e contesto.
+  regime: { bearScale: 0.5, highVolDaily: 0.015, highVolScale: 0.5, highVolCrypto: 0.045 },
   // Rientro (mean reversion di Connors): RSI(2) sotto 10 con prezzo sopra la media a 200; uscita a RSI(2) sopra 70 o dopo
   // 5 sedute; taglia piccola (5% del conto): gli obiettivi brevi funzionano sulla mean reversion, non sul trend.
   pullback: { rsiDays: 2, rsiEntry: 10, rsiExit: 70, maxHoldSessions: 5, maxWeight: 0.05 },

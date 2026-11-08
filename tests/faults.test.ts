@@ -2,7 +2,6 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { ClaudeBrain } from "../src/brain/claude.ts";
 import { FAKE_DECISION } from "../src/brain/fake.ts";
 import { dueSlot } from "../src/slots.ts";
 import { runWake } from "../src/wake.ts";
@@ -12,59 +11,6 @@ import { at, brainSaying, makeEnv, ordersFor, type TestEnv } from "./helpers.ts"
 const ROOT = join(import.meta.dir, "..");
 const onceArgs = (env: TestEnv, when: Date, extra: string[] = []) => ["bun", join(ROOT, "src/cli/once.ts"), "--fake", "--now", when.toISOString(), "--state", env.stateDir, "--logs", env.logsDir, ...extra];
 const count = (text: string, needle: string) => text.split(needle).length - 1;
-
-describe("guasto 1: morte a metà", () => {
-  test("kill subito dopo il primo ordine, poi la sveglia dopo (18:30) non rimanda il vecchio ordine", async () => {
-    const env = makeEnv(at("15:41"));
-    env.setFake((s) => (s.faults.crashAfterSubmits = 1));
-    expect(Bun.spawnSync(onceArgs(env, at("15:41"))).signalCode).toBe("SIGKILL");
-    env.setFake((s) => (s.faults = {}));
-    expect(Bun.spawnSync(onceArgs(env, at("18:31"))).exitCode).toBe(0);
-    const out = env.outbox();
-    expect(out).toContain("Sveglia precedente interrotta (2026-09-24-15-40)");
-    expect(out).toContain("NON partito: BUY 5 GLD (id 2026-09-24-15-40-GLD-buy), non lo rimando");
-    expect(env.broker.load().orders.some((o) => o.clientOrderId === "2026-09-24-15-40-GLD-buy")).toBe(false);
-  });
-
-  test("kill anche durante la riconciliazione: la terza sveglia sa ancora cosa è successo alla prima", async () => {
-    const env = makeEnv(at("15:41"));
-    env.setFake((s) => (s.faults.crashAfterSubmits = 1));
-    expect(Bun.spawnSync(onceArgs(env, at("15:41"))).signalCode).toBe("SIGKILL");
-    env.setFake((s) => (s.faults = { crashOnMethod: "getOrderByClientId" }));
-    expect(Bun.spawnSync(onceArgs(env, at("15:42"))).signalCode).toBe("SIGKILL");
-    env.setFake((s) => (s.faults = {}));
-    expect(Bun.spawnSync(onceArgs(env, at("15:43"))).exitCode).toBe(0);
-    const out = env.outbox();
-    expect(out).toContain("partito: BUY 10 SPY");
-    expect(out).toContain("NON partito: BUY 5 GLD");
-    expect(ordersFor(env, "SPY")).toHaveLength(1);
-  });
-});
-
-describe("guasto 2: doppio lancio", () => {
-  test("quattro sveglie uguali lanciate insieme: una lavora, le altre si fermano, un ordine per titolo", async () => {
-    const env = makeEnv(at("15:41"));
-    const procs = Array.from({ length: 4 }, () => Bun.spawn(onceArgs(env, at("15:41")), { stdout: "pipe", stderr: "pipe" }));
-    const codes = await Promise.all(procs.map((p) => p.exited));
-    const outs = await Promise.all(procs.map((p) => new Response(p.stdout).text()));
-    expect(outs.filter((o) => o.includes("[done]"))).toHaveLength(1);
-    expect(codes.every((c) => c === 0 || c === 3)).toBe(true);
-    expect(ordersFor(env, "SPY")).toHaveLength(1);
-    expect(ordersFor(env, "GLD")).toHaveLength(1);
-  });
-
-  test("due sveglie insieme dopo una morta: una sola riconcilia", async () => {
-    const env = makeEnv(at("15:41"));
-    env.setFake((s) => (s.faults.crashAfterSubmits = 1));
-    Bun.spawnSync(onceArgs(env, at("15:41")));
-    env.setFake((s) => (s.faults = {}));
-    const procs = Array.from({ length: 3 }, () => Bun.spawn(onceArgs(env, at("15:42")), { stdout: "pipe", stderr: "pipe" }));
-    await Promise.all(procs.map((p) => p.exited));
-    expect(count(env.outbox(), "Sveglia precedente interrotta")).toBe(1);
-    expect(ordersFor(env, "SPY")).toHaveLength(1);
-    expect(ordersFor(env, "GLD")).toHaveLength(1);
-  });
-});
 
 describe("guasto 3: Alpaca in timeout durante l'invio", () => {
   test("30 secondi di panne: l'ordine arrivato non viene duplicato e il resoconto dice la verità", async () => {
@@ -92,28 +38,6 @@ describe("guasto 3: Alpaca in timeout durante l'invio", () => {
 });
 
 describe("guasto 4: il modello risponde male", () => {
-  const truncations: [string, string][] = [
-    ["busta JSON troncata", '{"type":"result","is_error":false,"structured_output":{"orders":[{"symbol":"SPY","side":"buy","qty":10'],
-    ["risultato testuale troncato", JSON.stringify({ type: "result", is_error: false, result: '{"orders":[{"symbol":"SPY","side":"buy","qty":10,"why":"x"},{"symbol":"NVDA"' })],
-    ["campi mancanti", JSON.stringify({ type: "result", is_error: false, structured_output: { orders: [{ symbol: "SPY", side: "buy", qty: 10, why: "x" }] } })],
-    ["output vuoto", ""],
-  ];
-  for (const [name, stdout] of truncations) {
-    test(`${name}: nessun ordine del modello, allarme, stop loss comunque attivo`, async () => {
-      const brain = new ClaudeBrain(async () => ({ code: 0, stdout, stderr: "" }));
-      const env = makeEnv(at("15:41"), brain);
-      env.setFake((s) => {
-        s.positions.AAPL = { qty: 10, avgEntryPrice: 290 };
-        s.cash -= 2_900;
-      }); // 250 vs 290 = -13.8%, oltre lo stop di AAPL (9,5%)
-      const res = await runWake(env.deps());
-      expect(res.status).toBe("done");
-      expect(env.outbox()).toContain("Errore del cervello");
-      expect(ordersFor(env, "SPY")).toHaveLength(0);
-      expect(res.witness!.ordiniInviati.map((o) => `${o.simbolo}-${o.lato}-${o.origine}`)).toEqual(["AAPL-sell-stop-loss"]);
-    });
-  }
-
   test("JSON valido ma ordini strani: quantità testo, frazionaria, lato inventato, tutti rifiutati con motivo", async () => {
     const env = makeEnv(at("15:41"), brainSaying({ orders: [{ symbol: "SPY", side: "buy", qty: "10" as any, why: "" }, { symbol: "QQQ", side: "buy", qty: 1.5, why: "" }, { symbol: "IWM", side: "short", qty: 1, why: "" }], reasoning: "x", plan_next: "" }));
     const res = await runWake(env.deps());

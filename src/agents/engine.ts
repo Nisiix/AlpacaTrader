@@ -20,17 +20,19 @@ import type { Simulazione } from "../simulations.ts";
 import { clientOrderId, sendOne, waitForFills, type ExecOutcome } from "../execute.ts";
 import { isObject, readJson, writeJsonAtomic } from "../fsutil.ts";
 import { indicatorsFor } from "../indicators.ts";
-import { applyFills, closeDust, contextFor, dailyPnl, learnFromJournal, learningStatus, pruneJournal, readJournal, recordIntent, statsOf, writeJournal, type DailyPnl, type Stats } from "../journal.ts";
+import { applyFills, closeDust, contextFor, dailyPnl, learningStatus, pruneJournal, readJournal, recordIntent, statsOf, writeJournal, type DailyPnl, type Stats } from "../journal.ts";
 import { activeLessons, learnFromBrokerReject, learnFromStopLoss, pruneLessons, readLessons, writeLessons, type Lesson } from "../lessons.ts";
 import { acquireLock, inspectLock, releaseLock, type LockData } from "../lock.ts";
 import { Logger, type Redactor } from "../log.ts";
 import { romeTime } from "../slots.ts";
 import { manageStops, type StopsReport } from "../stops.ts";
 import type { Notifier } from "../telegram.ts";
-import { agentWeights, allocate, openedToday, type Score } from "./allocator.ts";
+import { allocate, openedToday, type Score } from "./allocator.ts";
 import { applyGuidance, review, type CapoReport } from "./capo.ts";
 import { simboliIntraday } from "./posizioni.ts";
 import type { Cervello, RigaCervello } from "./cervello.ts";
+import { refreshEarnings, type EarningsFetcher } from "../earnings.ts";
+import { addEarnings } from "../events.ts";
 import type { EventBus } from "./bus.ts";
 import { ContextAgent } from "./context.ts";
 import type { Agent, AgentReport, AgentView, MarketContext, Signal } from "./types.ts";
@@ -57,6 +59,8 @@ export interface EngineDeps {
   cryptoUniverse?: { fetchTop: TopFetcher | null };
   // Il cervello delle previsioni: confronta le previsioni scadute di ogni modello con i prezzi veri e ne tiene i pesi.
   cervello?: Cervello;
+  // Calendario delle trimestrali (Nasdaq): una lettura al giorno; assente = solo il calendario scritto a mano.
+  trimestrali?: EarningsFetcher;
 }
 
 export interface AgentsStatus {
@@ -108,6 +112,13 @@ export interface AgentsStatus {
   cervello?: { righe: RigaCervello[]; inAttesa: number };
 }
 
+// Il registro degli errori nel motore tiene solo le regole di sicurezza: niente riacquisto dopo uno stop e niente nuovo
+// tentativo dopo due rifiuti di Alpaca. Le lezioni statistiche dal diario non si usano: imparare dai risultati lo fanno il
+// capo ufficio e la sala caffè, da subito e con limiti, e due sistemi insieme punirebbero due volte lo stesso errore.
+const lezioniDiSicurezza = (file: Parameters<typeof activeLessons>[0], today: string) => activeLessons(file, today).filter((l) => l.tipo !== "statistica");
+// Tutti gli agenti votano con lo stesso peso: chi va male lo richiama il capo ufficio (forza ridotta, soglia di Kronos).
+const pesiUguali = (agents: { name: string }[]) => Object.fromEntries(agents.map((a) => [a.name, AGENTS.weights.base]));
+
 export const statusPath = (stateDir: string) => join(stateDir, "agents-status.json");
 
 interface Snapshot {
@@ -136,6 +147,7 @@ export interface EngineCache {
   inTick?: boolean;
   exploring?: boolean;
   scartateNota?: string;
+  trimestraliDate?: string;
 }
 
 export const emptyCache = (): EngineCache => ({ closes: {}, bars: {}, ultimoRiepilogo: null });
@@ -311,6 +323,21 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
       log.info(m);
       bus.emit("nota", { testo: m });
     });
+    // Le trimestrali dei prossimi giorni per tutti i titoli seguiti: bloccano gli acquisti di quel titolo nei giorni prima.
+    if (deps.trimestrali && cache.trimestraliDate !== today) {
+      try {
+        const r = await refreshEarnings(deps.stateDir, today, [...new Set([...AGENTS.universe, ...Object.keys(RADAR_SECTORS), ...UNIVERSE])], deps.trimestrali);
+        if (r.file) addEarnings(r.file.date);
+        cache.trimestraliDate = today;
+        const m = r.problema ? `trimestrali: ${r.problema}; resta il calendario già noto` : r.nuove ? `trimestrali dei prossimi giorni: ${r.file!.date.map((x) => `${x.symbol} ${x.date}`).join(", ")}` : null;
+        if (m) {
+          log.info(m);
+          bus.emit("nota", { testo: m });
+        }
+      } catch (e) {
+        log.warn(`trimestrali: ${(e as Error).message}`);
+      }
+    }
     // Le scoperte dell'esplorazione ancora attive stanno nell'universo (prezzi, contesto, custodi, gabbia le vedono).
     const espl = readEsplorazione(deps.stateDir, today);
     for (const sc of attive(espl, today)) if (!AGENTS.universe.includes(sc.simbolo)) AGENTS.universe.push(sc.simbolo);
@@ -389,7 +416,7 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
         await alarm("Perdita del giorno oltre la soglia", buyBlock);
       }
     }
-    const lessonsNow = activeLessons(lessonsFile, today);
+    const lessonsNow = lezioniDiSicurezza(lessonsFile, today);
     const jr = readJournal(deps.stateDir, startedAt);
     const journal = jr.file;
     if (jr.problem) await alarm("Diario dei trade illeggibile", jr.problem);
@@ -478,7 +505,7 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
       cache.capoSintesi = capo.sintesi;
       bus.emit("capo", { sintesi: capo.sintesi, richiamati: capo.valutazioni.filter((v) => v.giudizio === "richiamato").map((v) => ({ agente: v.agente, messaggio: v.messaggio, consigli: v.consigli })) });
     }
-    const weights = agentWeights(journal, today, deps.agents.map((a) => a.name));
+    const weights = pesiUguali(deps.agents);
     const alloc = allocate(view, reports, weights);
     // Un titolo votato ma in attesa (contesto, Kronos al ribasso) non è un ordine rifiutato: nessuna quantità, evento a sé.
     for (const w of alloc.inAttesa) bus.emit("attesa", { simbolo: w.simbolo, motivo: w.motivo });
@@ -504,8 +531,10 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
     }
     // Le simulazioni di oggi si rivalutano con i prezzi di adesso: come sarebbe andata.
     const simulazioni = simulations.evaluate(deps.stateDir, today, snap.prices);
-    // Gli acquisti hanno un ID al giorno (un solo ingresso per titolo al giorno), le vendite uno per giro.
-    const runIdFor = (side: string) => (side === "buy" ? `agenti-${today}` : giro);
+    // Un ID per giro, per acquisti e vendite: un nuovo tentativo nello stesso giro non si duplica (Alpaca rifiuta l'ID già
+    // usato) e un ordine ancora aperto ferma il doppione nella gabbia. Più acquisti dello stesso titolo nella giornata
+    // (un'aggiunta dal riparto, un'operazione intraday) sono ammessi; l'intraday ha il suo limite di un ingresso al giorno.
+    const runIdFor = (_side: string) => giro;
     for (const o of cage.orders) {
       const sc = alloc.punteggi.find((p) => p.simbolo === o.symbol);
       const proposed = alloc.proposte.find((p) => p.symbol === o.symbol && p.side === o.side);
@@ -567,7 +596,6 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
     fills.closed.push(...closeDust(journal));
     for (const t of fills.opened) bus.emit("trade", { stato: "aperto", simbolo: t.simbolo, quantita: t.comprate, prezzo: t.costo / t.comprate, agenti: t.contesto?.agenti ?? [] });
     for (const t of fills.closed) bus.emit("trade", { stato: "chiuso", simbolo: t.simbolo, risultato: t.risultato ?? 0, pnl: t.incassato - t.costo, giorni: t.giorni ?? 0, uscita: t.motivoUscita ?? "sconosciuto", agenti: t.contesto?.agenti ?? [] });
-    learned.push(...learnFromJournal(lessonsFile, journal, today));
     pruneLessons(lessonsFile, today);
     writeLessons(deps.stateDir, lessonsFile);
     pruneJournal(journal, today);
@@ -609,7 +637,7 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
       inAttesa: alloc.inAttesa,
       stopSuAlpaca: stops,
       acquistiBloccati: buyBlock,
-      lezioniAttive: activeLessons(lessonsFile, today),
+      lezioniAttive: lezioniDiSicurezza(lessonsFile, today),
       allarmi: alarms,
       diario: { stato: learning.motivo, statistiche: statsOf(journal.trade) },
       confronto: bm.cmp,
@@ -727,14 +755,14 @@ export async function valutaTitolo(deps: EngineDeps, cache: EngineCache, symbol:
   );
   // Come nel giro vero: i richiami del capo ufficio e le lezioni della sala caffè cambiano i voti prima dei punteggi.
   for (const n of [...applyGuidance(reports, review(journal, now), view.previsioni), ...applyLessons(reports, teamLessons(journal), view.previsioni)]) if (n.includes(` ${symbol} `)) note.push(n);
-  const weights = agentWeights(journal, today, deps.agents.map((a) => a.name));
+  const weights = pesiUguali(deps.agents);
   const alloc = allocate(view, reports, weights);
   const voti = Object.values(reports).flatMap((r) => r.segnali).filter((s) => s.simbolo === symbol);
   const score = alloc.punteggi.find((p) => p.simbolo === symbol);
   const proposals = alloc.proposte.filter((p) => p.symbol === symbol);
   const entry = stockEntryOpen(clock, now);
   const recentOrders = open;
-  const cage = applyCage({ today, slotKind: entry ? "open" : "mid", marketOpen: clock.isOpen, latenessMin: 0, account, positions, prices, closes, recentOrders, lessons: activeLessons(lessonsFile, today), buyBlock, proposals, previsioni: view.previsioni, apertiOggi: openedToday(view) });
+  const cage = applyCage({ today, slotKind: entry ? "open" : "mid", marketOpen: clock.isOpen, latenessMin: 0, account, positions, prices, closes, recentOrders, lessons: lezioniDiSicurezza(lessonsFile, today), buyBlock, proposals, previsioni: view.previsioni, apertiOggi: openedToday(view), intradayAperti: simboliIntraday(journal) });
   const pos = positions.find((p) => p.symbol === symbol && p.qty > 0) ?? null;
   const price = prices[symbol] ?? closes[symbol]?.at(-1) ?? null;
   const c = closes[symbol];

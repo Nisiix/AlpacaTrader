@@ -79,6 +79,8 @@ export interface AgentReport {
   contesto?: MarketContext;
   // Solo gli agenti di rischio: moltiplicatore 0..1 dell'esposizione ammessa.
   rischio?: number;
+  // Solo il regime: il moltiplicatore per le crypto (dal BTC), quando è diverso da quello delle azioni (dallo SPY).
+  rischioCrypto?: number;
   note?: string[];
   // Solo l'agente dei custodi: lo stato di ogni custode (tesi, piano, rischio, livelli), per la dashboard.
   custodi?: CustodeStato[];

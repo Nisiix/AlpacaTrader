@@ -110,10 +110,17 @@ export function portfolioVol(weights: Record<string, number>, closes: Record<str
 // Dai punteggi agli ordini proposti. La gabbia (applyCage) resta a valle: qui si decide solo quanto si vorrebbe.
 export function allocate(view: AgentView, reports: Record<string, AgentReport>, weights: Record<string, number>): Allocation {
   const signals = Object.values(reports).flatMap((r) => r.segnali);
-  const rischio = Object.values(reports).reduce((a, r) => a * (r.rischio ?? 1), 1);
-  // Kronos è la fonte principale, il contesto fa da contorno: quando Kronos anticipa un rialzo sul titolo, la riduzione
-  // del contesto non si applica (la taglia la decide già la fiducia nella proiezione, sotto). Regime e altri restano.
-  const rischioSenzaContesto = Object.entries(reports).reduce((a, [n, r]) => (n === "contesto" ? a : a * (r.rischio ?? 1)), 1);
+  // Rischio ammesso: regime (per classe: SPY per le azioni, BTC per le crypto) e contesto guardano entrambi la salute del
+  // mercato, quindi non si moltiplicano: vale la riduzione più forte. Gli altri agenti di rischio, se ci sono, moltiplicano.
+  // Kronos è la fonte principale, il contesto fa da contorno: quando Kronos anticipa un rialzo sul titolo (o il voto è
+  // intraday), la riduzione del contesto non si applica; il regime resta.
+  const altri = Object.entries(reports).reduce((a, [n, r]) => (n === "contesto" || n === "regime" ? a : a * (r.rischio ?? 1)), 1);
+  const rischioDi = (simbolo: string, conContesto: boolean) => {
+    const g = reports.regime;
+    const reg = isCrypto(simbolo) ? (g?.rischioCrypto ?? g?.rischio ?? 1) : (g?.rischio ?? 1);
+    return Math.min(reg, conContesto ? (reports.contesto?.rischio ?? 1) : 1) * altri;
+  };
+  const rischio = rischioDi("SPY", true);
   const dossierOf = (s: string) => Object.values(reports).flatMap((r) => r.custodi ?? []).find((c) => c.simbolo === s)?.dossier?.probabilita ?? null;
   const kronosSu = (s: string) => (view.previsioni?.[s] ?? -1) >= AGENTS.kronos.anticipaSoglia;
   const punteggi = scoreSignals(signals, weights);
@@ -190,7 +197,7 @@ export function allocate(view: AgentView, reports: Record<string, AgentReport>, 
       inAttesa.push({ simbolo: sc.simbolo, motivo: `evidenza combinata ${Math.round(ev * 100)}% sotto il minimo ${Math.round(minEv * 100)}%${contro ? " richiesto sotto la media a 200" : ""} (Kronos, grafico, notizie, contesto)` });
       continue;
     }
-    let w = maxWeightFor(view.closes[sc.simbolo]).max * (kronosSu(sc.simbolo) || sc.intraday ? rischioSenzaContesto : rischio) * (AGENTS.scaleByScore ? Math.min(1, sc.punteggio) : 1);
+    let w = maxWeightFor(view.closes[sc.simbolo]).max * rischioDi(sc.simbolo, !(kronosSu(sc.simbolo) || sc.intraday)) * (AGENTS.scaleByScore ? Math.min(1, sc.punteggio) : 1);
     if (sc.pesoMassimo !== undefined) w = Math.min(w, sc.pesoMassimo);
     // Taglia proporzionale alla fiducia nella proiezione di Kronos: più è probabile che il rialzo si avveri, più si investe.
     if (AGENTS.sizing.byKronos) {

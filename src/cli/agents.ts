@@ -9,7 +9,7 @@ import { FontiEsterne } from "../agents/fonti.ts";
 import { loadSecrets } from "../deps.ts";
 import { IntradayAgent } from "../agents/intraday.ts";
 import { ExitAgent } from "../agents/exits.ts";
-import { spawnRunner } from "../brain/claude.ts";
+import { spawnRunner } from "../claude-runner.ts";
 import { KronosAgent } from "../agents/kronos.ts";
 import { PullbackAgent } from "../agents/pullback.ts";
 import { RegimeAgent } from "../agents/regime.ts";
@@ -24,6 +24,7 @@ import { startDashboard } from "../dashboard/server.ts";
 import { ROOT, buildDeps } from "../deps.ts";
 import { ensureKronos, intradayForecaster, pathForecaster, type KronosLink } from "../kronos-sidecar.ts";
 import { Cervello, previsioniCombinate, previsioniIntradayCombinate } from "../agents/cervello.ts";
+import { nasdaqEarnings } from "../earnings.ts";
 import { appendFileSync, existsSync, mkdirSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { parseArgs } from "./args.ts";
@@ -86,6 +87,7 @@ try {
     echo: true,
     forecaster: kronos ? previsioniCombinate(pathForecaster(kronos), cervello, deps.now) : undefined,
     cervello: kronos ? cervello : undefined,
+    trimestrali: args.fake ? undefined : nasdaqEarnings,
     kronosStato: kronos ? () => kronos!.stato : undefined,
     // Nel finto niente rete: solo le coppie del broker finto.
     cryptoUniverse: args.noCrypto ? undefined : { fetchTop: args.fake ? null : coingeckoTop() },

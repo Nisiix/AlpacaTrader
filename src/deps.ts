@@ -1,8 +1,5 @@
 import { existsSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { ClaudeBrain } from "./brain/claude.ts";
-import { FakeBrain } from "./brain/fake.ts";
-import { VotingBrain } from "./brain/vote.ts";
 import { AlpacaBroker } from "./broker/alpaca.ts";
 import { FakeBroker } from "./broker/fake.ts";
 import type { CliArgs } from "./cli/args.ts";
@@ -42,7 +39,9 @@ export function dirs(args: CliArgs) {
   return { stateDir, logsDir };
 }
 
-export async function buildDeps(args: CliArgs): Promise<WakeDeps & { warnings: string[] }> {
+// Le dipendenze del motore degli agenti (e degli strumenti accanto: chiusura posizioni, backtest). Niente cervello: le
+// sveglie classiche con il modello a voto sono state tolte; WakeDeps resta solo come banco di prova nei test.
+export async function buildDeps(args: CliArgs): Promise<Omit<WakeDeps, "brain"> & { warnings: string[] }> {
   const secrets = await loadSecrets(!args.fake);
   assertPaperOnly(process.env, secrets ?? undefined);
   const { stateDir, logsDir } = dirs(args);
@@ -56,7 +55,7 @@ export async function buildDeps(args: CliArgs): Promise<WakeDeps & { warnings: s
   const outbox = new FileNotifier(join(stateDir, "telegram-outbox.log"));
 
   if (args.fake) {
-    return { broker: new FakeBroker(join(stateDir, "fake-broker.json"), now), brain: new FakeBrain(), notifier: outbox, stateDir, logsDir, redactor, now, sleep, warnings };
+    return { broker: new FakeBroker(join(stateDir, "fake-broker.json"), now), notifier: outbox, stateDir, logsDir, redactor, now, sleep, warnings };
   }
   const s = secrets!;
   let notifier;
@@ -65,5 +64,5 @@ export async function buildDeps(args: CliArgs): Promise<WakeDeps & { warnings: s
     notifier = outbox;
     warnings.push(`Telegram non configurato (manca token o chat id): i messaggi vanno in ${outbox.file}`);
   }
-  return { broker: new AlpacaBroker(s.alpacaKeyId, s.alpacaSecretKey), brain: new VotingBrain(new ClaudeBrain()), notifier, stateDir, logsDir, redactor, now, sleep, warnings };
+  return { broker: new AlpacaBroker(s.alpacaKeyId, s.alpacaSecretKey), notifier, stateDir, logsDir, redactor, now, sleep, warnings };
 }

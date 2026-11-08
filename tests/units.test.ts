@@ -22,7 +22,7 @@ describe("endpoint solo paper", () => {
     expect(() => assertPaperOnly({}, { ...secrets, alpacaKeyId: "AKLIVE" })).toThrow(LiveEndpointError);
   });
   test("il programma non parte con l'endpoint vero configurato", () => {
-    const r = Bun.spawnSync(["bun", join(ROOT, "src/cli/once.ts"), "--fake"], { env: { ...process.env, APCA_API_BASE_URL: "https://api.alpaca.markets" }, stderr: "pipe" });
+    const r = Bun.spawnSync(["bun", join(ROOT, "src/cli/agents.ts"), "--fake", "--no-kronos"], { env: { ...process.env, APCA_API_BASE_URL: "https://api.alpaca.markets" }, stderr: "pipe", timeout: 30_000 });
     expect(r.exitCode).toBe(2);
     expect(r.stderr.toString()).toContain("mi rifiuto di partire");
   });

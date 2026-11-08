@@ -172,7 +172,7 @@ describe("5. tetto sui titoli correlati", () => {
     });
     const res = await runWake(env.deps());
     expect(res.witness!.ordiniInviati.map((o) => o.simbolo)).toEqual(["MSFT"]);
-    expect(reasonFor(res, "AAPL")).toContain("gruppo tecnologia al 40.0%");
+    expect(reasonFor(res, "AAPL")).toContain("settore tecnologia al 40.0%");
   });
 });
 

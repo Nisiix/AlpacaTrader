@@ -30,32 +30,6 @@ describe("casi richiesti", () => {
     expect(openStopsFor(env, "GLD")).toHaveLength(1);
   });
 
-  test("processo ucciso dopo il primo ordine: la sveglia dopo trova il lock, riconcilia, non ricompra", async () => {
-    const env = makeEnv(at("15:41"));
-    env.setFake((s) => (s.faults.crashAfterSubmits = 1));
-    // Il processo figlio legge i limiti dal file delle impostazioni: qui quelli storici (20% per titolo), come gli altri test.
-    writeFileSync(join(env.stateDir, "impostazioni-agenti.json"), JSON.stringify({ versione: 1, valori: { "LIMITS.maxPositionPct": 0.2, "LIMITS.maxPositions": 5 } }));
-    const args = ["bun", join(ROOT, "src/cli/once.ts"), "--fake", "--now", at("15:41").toISOString(), "--state", env.stateDir, "--logs", env.logsDir];
-    const killed = Bun.spawnSync(args, { stdout: "pipe", stderr: "pipe" });
-    expect(killed.signalCode).toBe("SIGKILL");
-    expect(ordersFor(env, "SPY")).toHaveLength(1);
-    expect(ordersFor(env, "GLD")).toHaveLength(0);
-    expect(readWitness(env.stateDir).kind).toBe("missing");
-
-    env.setFake((s) => (s.faults = {}));
-    const again = Bun.spawnSync(args, { stdout: "pipe", stderr: "pipe" });
-    expect(again.exitCode).toBe(0);
-
-    const out = env.outbox();
-    expect(out).toContain("⚠️ Run 2026-09-24-15-40 · Sveglia precedente interrotta");
-    expect(out).toContain("partito: BUY 10 SPY");
-    expect(out).toContain("NON partito: BUY 5 GLD");
-    expect(ordersFor(env, "SPY")).toHaveLength(1);
-    expect(ordersFor(env, "GLD")).toHaveLength(1);
-    const w = readWitness(env.stateDir);
-    expect(w.kind === "ok" && w.value.ordiniGiaPresenti.map((o) => o.simbolo)).toEqual(["SPY"]);
-  });
-
   test("testimone delle 9 e poi niente fino alle 21:40: segnala 15:40 e 18:30 come saltate", async () => {
     const env = makeEnv(at("09:01"));
     expect((await runWake(env.deps())).runId).toBe("2026-09-24-09-00");

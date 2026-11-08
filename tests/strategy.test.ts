@@ -5,8 +5,6 @@ import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { compareWithBenchmarks } from "../src/benchmark.ts";
-import { buildPrompt } from "../src/brain/prompt.ts";
-import { majority, VotingBrain } from "../src/brain/vote.ts";
 import { BrainError, type Brain, type BrainInput, type Decision } from "../src/brain/types.ts";
 import { syntheticCloses } from "../src/broker/fake.ts";
 import { applyCage, type CageInput } from "../src/cage.ts";
@@ -121,7 +119,6 @@ describe("calendario di Fed e trimestrali", () => {
     await runWake(env.deps());
     expect(input!.events).toContain("decisione della Fed il 2026-10-28");
     expect(input!.events).toContain("trimestrale MSFT il 2026-10-28");
-    expect(buildPrompt(input!)).toContain("decisione della Fed il 2026-10-28");
   });
 });
 
@@ -141,35 +138,6 @@ describe("confronto con il 60/40", () => {
     const env = makeEnv(day("2026-09-24", "09:01"));
     await runWake(env.deps());
     expect(env.outbox()).toContain("60/40 SPY/TLT +0.00%");
-  });
-});
-
-describe("voto a maggioranza", () => {
-  const d = (orders: { symbol: string; side: string; qty: number }[]): Decision => ({ orders: orders.map((o) => ({ ...o, why: "x" })), reasoning: "R.", plan_next: "P" });
-  test("passa solo ciò che proposto da almeno 2 su 3; quantità = mediana bassa", () => {
-    const r = majority([d([{ symbol: "AAPL", side: "buy", qty: 50 }, { symbol: "TLT", side: "buy", qty: 200 }]), d([{ symbol: "AAPL", side: "buy", qty: 40 }]), d([{ symbol: "AAPL", side: "buy", qty: 60 }, { symbol: "MSFT", side: "buy", qty: 30 }])], 2, 3);
-    expect(r.orders.map((o) => `${o.symbol} ${o.qty}`)).toEqual(["AAPL 50"]);
-    expect(r.reasoning).toContain("scartati per mancanza di accordo: TLT-buy (1/3), MSFT-buy (1/3)");
-  });
-  test("due risposte d'accordo su due: quantità più prudente", () => {
-    expect(majority([d([{ symbol: "SPY", side: "buy", qty: 10 }]), d([{ symbol: "SPY", side: "buy", qty: 8 }])], 2).orders[0]!.qty).toBe(8);
-  });
-  test("una risposta che ripete lo stesso ordine vota una volta sola", () => {
-    expect(majority([d([{ symbol: "SPY", side: "buy", qty: 10 }, { symbol: "SPY", side: "buy", qty: 10 }]), d([])], 2).orders).toEqual([]);
-  });
-  test("meno risposte valide del quorum: errore del cervello, nessun ordine del modello", async () => {
-    let n = 0;
-    const flaky: Brain = { name: "a volte", decide: async () => { if (n++ > 0) throw new BrainError("troncato"); return d([{ symbol: "SPY", side: "buy", qty: 1 }]); } };
-    await expect(new VotingBrain(flaky, 3, 2).decide({} as any)).rejects.toThrow("solo 1 risposte valide su 3");
-  });
-  test("nella sveglia: 3 chiamate in parallelo, l'ordine concorde parte", async () => {
-    let calls = 0;
-    const inner: Brain = { name: "finto", decide: async () => (calls++, d(calls === 2 ? [] : [{ symbol: "SPY", side: "buy", qty: 5 }])) };
-    const env = makeEnv(day("2026-09-24", "15:41"), new VotingBrain(inner, 3, 2));
-    const res = await runWake(env.deps());
-    expect(calls).toBe(3);
-    expect(ordersFor(env, "SPY")).toHaveLength(1);
-    expect(res.witness!.ragionamento).toContain("Voto: 3/3 risposte valide, 1 ordini con la maggioranza");
   });
 });
 

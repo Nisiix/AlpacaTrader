@@ -1,7 +1,9 @@
-import { LIMITS, UNIVERSE } from "./config.ts";
+import { LIMITS, UNIVERSE, isCrypto } from "./config.ts";
 import { addDays, addTradingDays } from "./slots.ts";
 
-// Calendario degli eventi che muovono i prezzi a salti. Va tenuto a mano: Alpaca non dà le date delle trimestrali.
+// Calendario degli eventi che muovono i prezzi a salti. La Fed è scritta qui (calendario ufficiale); le trimestrali di
+// tutti i titoli seguiti arrivano ogni giorno dal calendario pubblico di Nasdaq (earnings.ts) e si aggiungono a quelle
+// scritte qui, che restano come riserva se la fonte non risponde.
 // Date americane. Fed = giorno della decisione (le 14:00 di New York). Trimestrali: tutte dopo la chiusura.
 export interface MarketEvent {
   date: string; // YYYY-MM-DD
@@ -26,7 +28,8 @@ const describe = (e: MarketEvent) => (e.kind === "fed" ? "decisione della Fed" :
 // Perché oggi non si può comprare questo titolo, o null. Fed: niente acquisti nel giorno della decisione.
 // Trimestrale: niente acquisti del titolo negli ultimi giorni di borsa prima, giorno compreso (i conti escono dopo la chiusura).
 export function eventBlockFor(symbol: string, today: string, events: MarketEvent[] = EVENTS): string | null {
-  const fed = events.find((e) => e.kind === "fed" && e.date === today);
+  // La Fed decide sui tassi americani: ferma gli acquisti di azioni ed ETF, non quelli delle crypto.
+  const fed = isCrypto(symbol) ? undefined : events.find((e) => e.kind === "fed" && e.date === today);
   if (fed) return `${describe(fed)}: oggi niente acquisti nuovi`;
   const horizon = addTradingDays(today, LIMITS.earningsBlackoutDays);
   const er = events.find((e) => e.kind === "trimestrale" && e.symbol === symbol && e.date >= today && e.date <= horizon);
@@ -46,4 +49,12 @@ export function staleCalendar(today: string, events: MarketEvent[] = EVENTS): st
   if (!events.some((e) => e.kind === "fed" && e.date >= today)) out.push("nessuna decisione della Fed futura");
   for (const s of SINGLE_STOCKS) if (!events.some((e) => e.kind === "trimestrale" && e.symbol === s && e.date >= today)) out.push(`nessuna trimestrale futura per ${s}`);
   return out;
+}
+
+// Aggiunge (senza doppioni) le trimestrali arrivate dalla fonte automatica.
+export function addEarnings(list: { date: string; symbol: string }[]) {
+  for (const x of list) {
+    if (EVENTS.some((e) => e.kind === "trimestrale" && e.symbol === x.symbol && e.date === x.date)) continue;
+    EVENTS.push({ date: x.date, kind: "trimestrale", symbol: x.symbol, confirmed: true });
+  }
 }

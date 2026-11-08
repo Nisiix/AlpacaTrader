@@ -540,7 +540,7 @@ describe("crypto", () => {
     const crypto = r.status_file!.ordini.filter((o) => o.simbolo.includes("/"));
     expect(crypto.length).toBe(2);
     expect(r.status_file!.ordini.some((o) => !o.simbolo.includes("/"))).toBe(false);
-    expect(crypto[0]!.id).toMatch(/^agenti-2026-09-27-(BTC|ETH)USD-buy$/);
+    expect(crypto[0]!.id).toMatch(/^agenti-2026-09-27-\d{4}-(BTC|ETH)USD-buy$/);
     const stop = openStopsFor(env, "BTC/USD")[0]!;
     expect(stop.type).toBe("stop_limit");
     expect(stop.stopPrice).toBeLessThan(76_000 * 0.95);

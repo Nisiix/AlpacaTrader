@@ -1,5 +1,5 @@
 import { DuplicateOrderError, isProtectiveStop, type Broker, type Order, type Position } from "./broker/types.ts";
-import { LIMITS } from "./config.ts";
+import { CRYPTO_MIN_NOTIONAL, LIMITS, isCrypto } from "./config.ts";
 import { dailyVol } from "./indicators.ts";
 import type { Logger } from "./log.ts";
 
@@ -32,6 +32,11 @@ export async function manageStops(broker: Broker, runId: string, positions: Posi
   for (const p of positions.filter((x) => x.qty > 0)) {
     const existing = bySymbol.get(p.symbol) ?? [];
     bySymbol.delete(p.symbol);
+    // Briciola crypto (resto sotto il minimo negoziabile o sotto il milionesimo): Alpaca rifiuterebbe lo stop.
+    if (isCrypto(p.symbol) && (Math.floor(p.qty * 1e6 + 1e-6) <= 0 || p.qty * p.currentPrice < CRYPTO_MIN_NOTIONAL)) {
+      r.ok.push(`${p.symbol} ${p.qty}: briciola, nessuno stop`);
+      continue;
+    }
     // Senza storico la distanza non si può ricalcolare: uno stop già giusto per quantità resta dov'è.
     if (fixedPct === undefined && !closes[p.symbol] && existing.length === 1 && existing[0]!.qty === p.qty && existing[0]!.stopPrice) {
       r.ok.push(`${p.symbol} ${p.qty} @ ${existing[0]!.stopPrice.toFixed(2)} (storico non disponibile: stop lasciato com'era)`);

@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { AGENTS, LIMITS, SECTORS, sectorOf } from "../config.ts";
+import { AGENTS, LIMITS, SECTORS, isCrypto, sectorOf } from "../config.ts";
 import { EVENTS, eventBlockFor, type MarketEvent } from "../events.ts";
 import { isObject, writeJsonAtomic } from "../fsutil.ts";
 import { dailyVol, momentum, sma } from "../indicators.ts";
@@ -157,9 +157,9 @@ export class ContextAgent implements Agent {
       if (ev) attendi[s] = ev;
       else if (anticipaRibasso) attendi[s] = `Kronos anticipa un ribasso (${(fc * 100).toFixed(1)}% a ${AGENTS.kronos.horizon} sedute): si aspetta`;
       else if (o === "sfavorevole" && !anticipaRialzo) attendi[s] = `contesto sfavorevole (${sec}) e nessun rialzo anticipato da Kronos: si aspetta la candela successiva`;
-      // Della proiezione ci si fida sempre, salvo eventi in arrivo (trimestrale del titolo, Fed nei prossimi giorni):
+      // Della proiezione ci si fida sempre, salvo eventi in arrivo (trimestrale del titolo, Fed nei prossimi giorni per azioni ed ETF):
       // con contesto non favorevole è lei a decidere.
-      fidati[s] = !ev && !fedNear;
+      fidati[s] = !ev && !(fedNear && !isCrypto(s)); // la Fed non tocca le proiezioni delle crypto
     }
     return { aggiornato: v.now.toISOString(), fonte, generale, settori, motivo: motivi.join(" · "), attendi, fidatiDellaProiezione: fidati };
   }

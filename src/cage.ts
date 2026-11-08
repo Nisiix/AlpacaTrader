@@ -1,7 +1,7 @@
 import type { ProposedOrder } from "./brain/types.ts";
 import type { Account, Order, Position, Side } from "./broker/types.ts";
 import { isOpenOrder, isProtectiveStop } from "./broker/types.ts";
-import { AGENTS, CRYPTO, CRYPTO_MIN_NOTIONAL, LIMITS, MAX_LATENESS_MIN, UNIVERSE, isCrypto, type SlotKind } from "./config.ts";
+import { AGENTS, CRYPTO, CRYPTO_MIN_NOTIONAL, LIMITS, MAX_LATENESS_MIN, UNIVERSE, isCrypto, sectorOf, type SlotKind } from "./config.ts";
 import { EVENTS, eventBlockFor, type MarketEvent } from "./events.ts";
 import { dailyVol, indicatorsFor, sma, trendOf } from "./indicators.ts";
 import { setupOf } from "./journal.ts";
@@ -180,10 +180,12 @@ export function applyCage(i: CageInput): CageResult {
       const share = (valueOf(p.symbol) + cost) / i.account.equity;
       if (share > LIMITS.maxPositionPct) { reject(`porterebbe il titolo al ${pct(share)} del conto (massimo ${pct(LIMITS.maxPositionPct)})`); continue; }
       if (!symbols.has(p.symbol) && symbols.size >= LIMITS.maxPositions) { reject(`massimo ${LIMITS.maxPositions} titoli in portafoglio`); continue; }
-      const group = LIMITS.groups.find((g) => g.symbols.includes(p.symbol));
-      if (group) {
-        const g = (group.symbols.reduce((a, s) => a + valueOf(s), 0) + cost) / i.account.equity;
-        if (g > group.maxPct) { reject(`porterebbe il gruppo ${group.name} al ${pct(g)} del conto (massimo ${pct(group.maxPct)}): sono titoli che si muovono insieme`); continue; }
+      const settore = sectorOf(p.symbol);
+      if (settore !== "altro") {
+        const tetto = LIMITS.groupMaxBySector[settore] ?? LIMITS.groupMaxPct;
+        const membri = new Set([...held.keys(), ...added.keys(), p.symbol].filter((s) => sectorOf(s) === settore));
+        const g = ([...membri].reduce((a, s) => a + valueOf(s), 0) + cost) / i.account.equity;
+        if (g > tetto) { reject(`porterebbe il settore ${settore} al ${pct(g)} del conto (massimo ${pct(tetto)}): sono titoli che si muovono insieme`); continue; }
       }
       const closes = i.closes[p.symbol];
       const t = trendOf(closes, LIMITS.trendSmaDays, LIMITS.longSmaDays);
