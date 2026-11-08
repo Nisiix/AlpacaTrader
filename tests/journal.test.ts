@@ -242,3 +242,12 @@ describe("riepilogo del venerdì", () => {
     expect(env.outbox()).not.toContain("Riepilogo della settimana");
   });
 });
+
+describe("commissioni crypto", () => {
+  test("Alpaca trattiene la commissione in moneta: venduto il 99,7% di quanto comprato, il trade è chiuso", () => {
+    const j = emptyJournal();
+    applyFills(j, [fill("1", "buy", "AAVE/USD", 44.6, 130, "2026-11-08T14:31:00Z"), fill("2", "sell", "AAVE/USD", 44.4885, 132, "2026-11-08T14:36:00Z")]);
+    expect(j.trade[0]!.stato).toBe("chiuso");
+    expect(j.trade[0]!.risultato!).toBeCloseTo(132 / 130 - 1, 6);
+  });
+});

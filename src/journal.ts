@@ -162,8 +162,9 @@ export function applyFills(file: JournalFile, orders: Order[]): { opened: Trade[
     open.vendute += qty;
     open.incassato += qty * o.filledAvgPrice;
     open.quantita -= qty;
-    // Un resto frazionario (crypto) non tiene aperto il trade: oltre il 99,99% venduto è chiuso.
-    if (open.quantita > open.comprate * 1e-4) continue;
+    // Un resto frazionario non tiene aperto il trade: sulle crypto Alpaca trattiene la commissione in moneta (0,15-0,25%),
+    // quindi oltre il 99% venduto il trade è chiuso; sui titoli oltre il 99,99%.
+    if (open.quantita > open.comprate * dustShare(open.simbolo)) continue;
     open.quantita = 0;
     const entry = open.costo / open.comprate;
     const exit = open.incassato / open.vendute;
@@ -224,11 +225,13 @@ export function dailyPnl(file: JournalFile, today: string): DailyPnl {
   return { data: today, vendite, acquisti, realizzato: vendite.reduce((s, v) => s + v.pnl, 0), tradeChiusi: vendite.filter((v) => v.chiuso).length, perAgente };
 }
 
+const dustShare = (symbol: string) => (symbol.includes("/") ? 0.01 : 1e-4);
+
 // Trade rimasti aperti per un resto frazionario prima della correzione: si chiudono con le vendite già registrate.
 export function closeDust(file: JournalFile): Trade[] {
   const closed: Trade[] = [];
   for (const t of file.trade) {
-    if (t.stato !== "aperto" || t.vendute <= 0 || t.quantita > t.comprate * 1e-4) continue;
+    if (t.stato !== "aperto" || t.vendute <= 0 || t.quantita > t.comprate * dustShare(t.simbolo)) continue;
     const entry = t.costo / t.comprate;
     const exit = t.incassato / t.vendute;
     const last = t.vendite?.at(-1);
