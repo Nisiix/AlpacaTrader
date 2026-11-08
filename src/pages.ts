@@ -31,6 +31,7 @@ export function buildSnapshot(root: string, stateDir: string, outDir: string, ca
   writeFileSync(join(outDir, ".nojekyll"), "");
   const three = join(Bun.resolveSync("three/package.json", join(root, "src")), "..");
   copyFileSync(join(three, "build", "three.module.js"), join(outDir, "vendor", "three.module.js"));
+  copyFileSync(join(root, "src", "dashboard", "vendor", "lightweight-charts.js"), join(outDir, "vendor", "lightweight-charts.js"));
   copyFileSync(join(three, "examples", "jsm", "controls", "OrbitControls.js"), join(outDir, "vendor", "addons", "controls", "OrbitControls.js"));
   copyFileSync(join(three, "examples", "jsm", "renderers", "CSS2DRenderer.js"), join(outDir, "vendor", "addons", "renderers", "CSS2DRenderer.js"));
   writeFileSync(join(data, "status.json"), JSON.stringify(readJsonSafe(statusPath(stateDir)) ?? { versione: 0, nota: "nessuno stato" }));

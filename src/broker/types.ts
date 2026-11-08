@@ -76,6 +76,8 @@ export interface Broker {
   getCryptoPairs(): Promise<string[]>;
   // Barre intraday (timeframe Alpaca: "5Min", "15Min", "1Hour", "4Hour"), le ultime `count`, candela in corso esclusa.
   getIntradayBars(symbols: string[], timeframe: string, count: number): Promise<Record<string, IntradayBar[]>>;
+  // Storico del patrimonio del conto (per il rendimento per periodo in dashboard): un punto per candela di `timeframe`.
+  getPortfolioHistory?(start: string, end: string, timeframe: string): Promise<{ t: string; equity: number; pnl: number }[]>;
 }
 
 export interface IntradayBar {

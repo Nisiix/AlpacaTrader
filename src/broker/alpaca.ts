@@ -174,6 +174,22 @@ export class AlpacaBroker implements Broker {
       .sort();
   }
 
+  async getPortfolioHistory(start: string, end: string, timeframe: string): Promise<{ t: string; equity: number; pnl: number }[]> {
+    // intraday_reporting=continuous: anche fuori orario (crypto 24 ore su 24); pnl_reset=no_reset: guadagno dall'inizio del periodo.
+    const q = `timeframe=${encodeURIComponent(timeframe)}&start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}&intraday_reporting=continuous&pnl_reset=no_reset`;
+    const h = await this.request(this.baseUrl, `/v2/account/portfolio/history?${q}`);
+    const ts: number[] = h?.timestamp ?? [];
+    const eq: (number | null)[] = h?.equity ?? [];
+    const pl: (number | null)[] = h?.profit_loss ?? [];
+    const out: { t: string; equity: number; pnl: number }[] = [];
+    for (let i = 0; i < ts.length; i++) {
+      const e = eq[i];
+      if (e === null || e === undefined || !(Number(e) > 0)) continue;
+      out.push({ t: new Date(ts[i]! * 1000).toISOString(), equity: Number(e), pnl: Number(pl[i] ?? 0) });
+    }
+    return out;
+  }
+
   async getIntradayBars(symbols: string[], timeframe: string, count: number): Promise<Record<string, IntradayBar[]>> {
     const out: Record<string, IntradayBar[]> = {};
     if (!symbols.length) return out;

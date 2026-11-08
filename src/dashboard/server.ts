@@ -17,6 +17,8 @@ export interface DashboardOptions {
   // Valutazione a secco di un titolo con gli agenti del motore (solo quando la dashboard gira dentro bun run agents).
   valuta?: (symbol: string) => Promise<Valutazione>;
   // Candele intraday (5Min, 15Min, 1Hour, 4Hour) dal broker e proiezione di Kronos sulle prossime candele.
+  // Storico del patrimonio dal broker (rendimento per periodo).
+  storico?: (start: string, end: string, timeframe: string) => Promise<{ t: string; equity: number; pnl: number }[]>;
   candele?: (symbol: string, timeframe: string) => Promise<{ barre: { date: string; open: number; high: number; low: number; close: number; volume: number }[]; previsione: { rendimentoPrevisto: number; percorso: number[] } | null; nota?: string }>;
 }
 
@@ -43,6 +45,8 @@ export function startDashboard(o: DashboardOptions) {
       if (url.pathname === "/ws") return server.upgrade(req) ? undefined : new Response("websocket richiesto", { status: 426 });
       if (url.pathname === "/" || url.pathname === "/index.html") return new Response(html(), { headers: { "content-type": "text/html; charset=utf-8" } });
       if (url.pathname === "/vendor/three.module.js") return js(join(threeDir, "build", "three.module.js"));
+      // Grafici come sulle piattaforme di trading: TradingView Lightweight Charts (Apache 2.0), copiato nel repository.
+      if (url.pathname === "/vendor/lightweight-charts.js") return js(join(import.meta.dir, "vendor", "lightweight-charts.js"));
       if (url.pathname.startsWith("/vendor/addons/") && !url.pathname.includes("..")) return js(join(threeDir, "examples", "jsm", url.pathname.slice("/vendor/addons/".length)));
       if (url.pathname === "/api/status") {
         const r = readJson(statusPath(o.stateDir), isObject);
@@ -68,12 +72,24 @@ export function startDashboard(o: DashboardOptions) {
       if (url.pathname === "/api/candele") {
         const sym = url.searchParams.get("simbolo");
         const tf = url.searchParams.get("tf") ?? "";
-        if (!sym || !["5Min", "15Min", "1Hour", "4Hour"].includes(tf)) return Response.json({ errore: "servono simbolo e tf (5Min, 15Min, 1Hour, 4Hour)" }, { status: 400 });
+        if (!sym || !["1Min", "5Min", "15Min", "1Hour", "4Hour"].includes(tf)) return Response.json({ errore: "servono simbolo e tf (1Min, 5Min, 15Min, 1Hour, 4Hour)" }, { status: 400 });
         if (!o.candele) return Response.json({ errore: "le candele intraday arrivano solo con il motore acceso (bun run agents)" }, { status: 503 });
         try {
           return Response.json({ simbolo: sym, tf, ...(await o.candele(sym, tf)) });
         } catch (e) {
           return Response.json({ errore: (e as Error).message }, { status: 502 });
+        }
+      }
+      if (url.pathname === "/api/storico") {
+        const start = url.searchParams.get("dal") ?? "";
+        const end = url.searchParams.get("al") ?? new Date().toISOString();
+        const tf = url.searchParams.get("tf") ?? "1D";
+        if (!/^\d{4}-\d{2}-\d{2}/.test(start) || !["15Min", "1H", "1D"].includes(tf)) return Response.json({ errore: "servono dal (data) e tf (15Min, 1H, 1D)" }, { status: 400 });
+        if (!o.storico) return Response.json({ errore: "lo storico del patrimonio arriva solo con il motore acceso (bun run agents)", punti: [] }, { status: 503 });
+        try {
+          return Response.json({ dal: start, al: end, tf, punti: await o.storico(start, end, tf) });
+        } catch (e) {
+          return Response.json({ errore: (e as Error).message, punti: [] }, { status: 502 });
         }
       }
       if (url.pathname === "/api/previsioni") {

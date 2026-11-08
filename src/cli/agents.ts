@@ -123,7 +123,7 @@ try {
   };
   let dash: ReturnType<typeof startDashboard> | null = null;
   if (!args.noDashboard && !args.once) {
-    dash = startDashboard({ port: args.port ?? AGENTS.dashboardPort, stateDir: deps.stateDir, bus, valuta: (s) => valutaTitolo(engine, cache, s), candele });
+    dash = startDashboard({ port: args.port ?? AGENTS.dashboardPort, stateDir: deps.stateDir, bus, valuta: (s) => valutaTitolo(engine, cache, s), candele, ...(deps.broker.getPortfolioHistory ? { storico: (a: string, b: string, tf: string) => deps.broker.getPortfolioHistory!(a, b, tf) } : {}) });
     console.log(`dashboard su ${dash.url}`);
   }
   if (args.once) {

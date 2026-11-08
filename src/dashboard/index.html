@@ -178,7 +178,8 @@
   .lbl.bubble.chat b { color:#92400e; }
   .legend { padding:10px 20px 14px; color:var(--ink-3); font-size:13px; }
 
-  .filters { display:flex; gap:6px; }
+  .filters { display:flex; gap:6px; flex-wrap:wrap; }
+  .filters button { white-space:nowrap; }
   .filters button { font:inherit; font-size:13px; padding:4px 12px; border-radius:999px; border:1px solid var(--line); background:var(--card); color:var(--ink-2); cursor:pointer; }
   .filters button[aria-pressed="true"] { background:var(--ink); color:var(--card); border-color:var(--ink); }
   .filters button:focus-visible { outline:2px solid var(--agent); outline-offset:2px; }
@@ -241,75 +242,120 @@
   .scheda .prm input, .scheda .prm select { font:inherit; font-size:14px; padding:5px 8px; border-radius:8px; border:1px solid var(--line); background:var(--card); color:var(--ink); width:100%; }
   .scheda .prm.cambiato input, .scheda .prm.cambiato select { border-color:var(--agent); }
   .scheda .msg { font-size:13px; color:var(--ink-2); min-height:1em; }
+
+  /* Struttura: menu a sinistra (a scomparsa sul telefono), contenuto a destra. */
+  .app { display:grid; grid-template-columns:236px minmax(0, 1fr); min-height:100vh; background:linear-gradient(to right, var(--card) 235px, var(--line) 235px, var(--line) 236px, var(--bg) 236px); }
+  .app > main { min-width:0; }
+  .side { position:sticky; top:0; height:100vh; background:var(--card); border-right:1px solid var(--line); display:flex; flex-direction:column; padding:18px 12px; gap:20px; z-index:20; }
+  .brand { display:flex; gap:12px; align-items:center; padding:2px 8px; }
+  .brand b { font-size:16px; }
+  .side-nav { display:grid; gap:4px; }
+  .side-nav a { display:flex; align-items:center; gap:12px; padding:10px 12px; border-radius:10px; text-decoration:none; color:var(--ink-2); font-weight:500; font-size:15px; }
+  .side-nav a svg { width:20px; height:20px; fill:currentColor; flex:0 0 auto; }
+  .side-nav a:hover:not([aria-current="page"]) { background:var(--card-2); color:var(--ink); }
+  .side-nav a[aria-current="page"] { background:var(--ink); color:var(--card); font-weight:600; }
+  .side-nav a:focus-visible { outline:2px solid var(--agent); outline-offset:2px; }
+  .side-foot { margin-top:auto; padding:8px; color:var(--ink-3); font-size:13px; }
+  main { max-width:1280px; width:100%; margin:0 auto; padding:24px 24px 48px; display:block; }
+  .page-title { font-size:24px; font-weight:700; color:var(--ink); margin:0 0 16px; letter-spacing:-.02em; }
+  .page > section + section, .page > section + details, .page > details + section, .page > .cols + section, .page > section + .cols { margin-top:16px; }
+  .mobile-bar { display:none; }
+  .scrim { position:fixed; inset:0; background:rgba(10,15,25,.4); z-index:19; }
+  @media (max-width: 860px) {
+    .app { grid-template-columns:1fr; background:var(--bg); }
+    html, body { overflow-x:hidden; }
+    .side { position:fixed; left:0; top:0; bottom:0; width:264px; transform:translateX(-105%); transition:transform .2s ease; box-shadow:0 10px 40px rgba(0,0,0,.25); }
+    .side.open { transform:none; }
+    .mobile-bar { display:flex; position:sticky; top:0; z-index:15; align-items:center; gap:12px; padding:10px 12px; background:var(--card); border-bottom:1px solid var(--line); }
+    .menu-btn { font-size:20px; border:1px solid var(--line); background:var(--card-2); color:var(--ink); border-radius:10px; width:40px; height:40px; cursor:pointer; }
+    main { padding:14px 12px 40px; }
+    .page-title { font-size:20px; }
+  }
+  /* Investimenti: card dei titoli */
+  .inv-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(250px, 1fr)); gap:12px; }
+  .inv-card { text-align:left; font:inherit; color:inherit; background:var(--card-2); border:1px solid var(--line); border-radius:14px; padding:14px 16px; cursor:pointer; display:grid; gap:8px; align-content:start; }
+  .inv-card:hover { border-color:var(--agent); }
+  .inv-card:focus-visible { outline:2px solid var(--agent); outline-offset:2px; }
+  .inv-card[aria-pressed="true"] { border-color:var(--ink); box-shadow:0 0 0 1px var(--ink); }
+  .inv-card .h { display:flex; justify-content:space-between; align-items:baseline; gap:8px; }
+  .inv-card .s { font-size:17px; font-weight:700; }
+  .inv-card .big { font-size:20px; font-weight:700; letter-spacing:-.01em; }
+  .inv-card dl { display:grid; grid-template-columns:auto 1fr; gap:2px 10px; font-size:13px; margin:0; }
+  .inv-card dt { color:var(--ink-3); } .inv-card dd { margin:0; text-align:right; color:var(--ink-2); }
+  .spark { width:100%; height:38px; display:block; }
+  /* Grafico (TradingView Lightweight Charts) con la proiezione dei modelli disegnata sopra */
+  .chart-panel .title-head { display:flex; justify-content:space-between; align-items:center; gap:10px; }
+  .chart-panel .x { border:0; background:var(--card-2); border-radius:999px; width:32px; height:32px; cursor:pointer; color:var(--ink); font-size:15px; }
+  #chart { position:relative; height:460px; cursor:default; background:var(--card-2); }
+  .chart-ov { position:absolute; left:0; top:0; pointer-events:none; z-index:2; }
+  .ohlc { position:absolute; top:8px; left:10px; z-index:3; font-size:12px; color:var(--ink-2); pointer-events:none; line-height:1.45; max-width:calc(100% - 90px); }
+  .ohlc b { color:var(--ink); }
+  .kronos-box { position:absolute; top:8px; right:84px; z-index:3; font-size:12px; text-align:right; pointer-events:none; background:color-mix(in srgb, var(--card) 85%, transparent); padding:4px 8px; border-radius:8px; line-height:1.45; }
+  #eq-chart { position:relative; height:220px; }
+  .p-kpis { display:grid; grid-template-columns:repeat(auto-fill, minmax(170px, 1fr)); gap:10px; }
+  .p-kpis .kpi .val { font-size:18px; }
+  .days { display:grid; gap:4px; font-size:14px; }
+  .days .d { display:grid; grid-template-columns:110px 1fr 110px 70px; gap:10px; align-items:center; }
+  @media (max-width: 700px) { #chart { height:360px; } .days .d { grid-template-columns:90px 1fr 90px; } .days .d .n2 { display:none; } }
+  input[type="date"] { font:inherit; padding:6px 8px; border-radius:8px; border:1px solid var(--line); background:var(--card-2); color:var(--ink); }
+  details.fold > summary { cursor:pointer; list-style:none; }
+  details.fold > summary::-webkit-details-marker { display:none; }
+  .office-card dl.kv { font-size:13px; margin:8px 0; }
+  .office-card h4 { margin:12px 0 4px; font-size:13px; text-transform:uppercase; letter-spacing:.04em; color:var(--ink-3); }
   @media (prefers-reduced-motion: reduce) { * { transition:none !important; } }
 </style>
+<script src="./vendor/lightweight-charts.js"></script>
 <script type="importmap">{ "imports": { "three": "./vendor/three.module.js", "three/addons/": "./vendor/addons/" } }</script>
 </head>
 <body>
+<div class="app">
+<aside class="side" id="side" aria-label="menu">
+  <div class="brand"><span class="dot" id="live" title="collegamento in diretta"></span><div><b>Agenti Alpaca</b><div><span class="pill">conto paper</span></div></div></div>
+  <nav class="side-nav" aria-label="sezioni">
+      <a href="#dashboard" data-page="dashboard"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 13h8V3H3zm0 8h8v-6H3zm10 0h8V11h-8zm0-18v6h8V3z"/></svg><span>Dashboard</span></a>
+      <a href="#ufficio" data-page="ufficio"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 11a3 3 0 1 0-3-3 3 3 0 0 0 3 3m-8 0a3 3 0 1 0-3-3 3 3 0 0 0 3 3m0 2c-2.3 0-7 1.2-7 3.5V19h14v-2.5C15 14.2 10.3 13 8 13m8 0c-.3 0-.6 0-1 .1 1.2.8 2 2 2 3.4V19h6v-2.5c0-2.3-4.7-3.5-7-3.5"/></svg><span>Ufficio</span></a>
+      <a href="#investimenti" data-page="investimenti"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17l6-6 4 4 8-8v4h2V3h-8v2h4l-6 6-4-4-8 8z"/></svg><span>Investimenti</span></a>
+      <a href="#impostazioni" data-page="impostazioni"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.4 13a7.5 7.5 0 0 0 0-2l2.1-1.6-2-3.5-2.5 1a7.4 7.4 0 0 0-1.7-1L15 3h-4l-.4 2.7a7.4 7.4 0 0 0-1.7 1l-2.5-1-2 3.5L6.6 11a7.5 7.5 0 0 0 0 2l-2.1 1.6 2 3.5 2.5-1c.5.4 1.1.7 1.7 1L11 21h4l.4-2.7c.6-.3 1.2-.6 1.7-1l2.5 1 2-3.5zM13 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7"/></svg><span>Impostazioni</span></a>
+      <a href="#guida" data-page="guida"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2m1 17h-2v-2h2zm2.1-7.7-.9.9A3.3 3.3 0 0 0 13 15h-2v-.5a4.1 4.1 0 0 1 1.2-2.8l1.2-1.3a2 2 0 1 0-3.4-1.4H8a4 4 0 1 1 7.1 2.3"/></svg><span>Guida</span></a>
+  </nav>
+  <div class="side-foot"><span class="when" id="when">in attesa dello stato…</span></div>
+</aside>
+<div class="mobile-bar"><button type="button" class="menu-btn" id="menu-btn" aria-label="apri il menu" aria-expanded="false">☰</button><b>Agenti Alpaca</b><span class="why" id="mobile-page"></span></div>
+<div class="scrim" id="scrim" hidden></div>
 <main>
-  <div class="top">
-    <h1><span class="dot" id="live" title="collegamento in diretta"></span>Agenti Alpaca <span class="pill">conto paper</span></h1>
-    <nav class="nav" aria-label="sezioni">
-      <a href="#dashboard" data-page="dashboard">Dashboard</a>
-      <a href="#titoli" data-page="titoli">Titoli</a>
-      <a href="#agenti" data-page="agenti">Agenti</a>
-      <a href="#impostazioni" data-page="impostazioni">Impostazioni</a>
-    </nav>
-    <span class="when" id="when">in attesa dello stato…</span>
-  </div>
-
-  <!-- Dashboard: lo stato del motore, i numeri del conto e la situazione in breve. -->
+  <!-- Dashboard: lo stato del motore, il capitale (totale, investito, liquidità), il rendimento per periodo, la giornata. -->
   <div class="page" data-page="dashboard">
+    <h1 class="page-title">Dashboard</h1>
     <section class="hero" aria-live="polite">
     <p class="say" id="say">Sto leggendo lo stato del motore…</p>
     <p class="fix" id="fix" hidden></p>
     <div class="money" id="money" hidden>
-      <div><div class="lab">Patrimonio</div><div class="big" id="k-eq">–</div></div>
+      <div><div class="lab">Patrimonio totale</div><div class="big" id="k-eq">–</div></div>
       <div><div class="lab">Oggi</div><div class="val" id="k-day">–</div></div>
+      <div><div class="lab">Investito</div><div class="val" id="k-inv">–</div><div class="sub" id="k-inv-sub"></div></div>
       <div><div class="lab">Liquidità</div><div class="val" id="k-cash">–</div></div>
+      <div><div class="lab">Sulle posizioni aperte</div><div class="val" id="k-unr">–</div></div>
       <div><div class="lab">Rischio ammesso</div><div class="val" id="k-risk">–</div></div>
       <div id="k-cmp-wrap"><div class="lab">Dall'inizio, contro SPY</div><div class="val" id="k-cmp">–</div></div>
     </div>
   </section>
-    <section class="card" style="margin-top:16px">
-      <h2>In breve <small>la situazione adesso; i dettagli di oggi sono nella pagina <a href="#titoli">Titoli</a></small></h2>
-      <div class="kpis" id="dash-kpi"></div>
-    </section>
-    <section class="card" style="margin-top:16px">
-      <h2>Cervello delle previsioni <small>Kronos e gli altri modelli: pesa di più chi è più affidabile e indovina più spesso la direzione</small></h2>
-      <div id="cervello"></div>
-    </section>
-  </div>
-
-  <!-- Titoli: il grafico del titolo scelto e, sotto, tutto quello che è successo oggi. -->
-  <div class="page" data-page="titoli">
-    <section class="card" id="titoli">
-      <div class="title-head">
-        <h2 style="margin:0">Titoli <small id="live-note"></small></h2>
+    <section class="card" style="margin-top:16px" id="periodo-card">
+      <div class="top" style="margin-bottom:10px">
+        <h2 style="margin:0">Rendimento per periodo <small>patrimonio del conto e operazioni chiuse nel periodo scelto</small></h2>
+        <div class="filters" id="periodo-f" role="group" aria-label="periodo">
+          <button type="button" data-p="oggi" aria-pressed="true">Oggi</button><button type="button" data-p="7g" aria-pressed="false">7 giorni</button><button type="button" data-p="30g" aria-pressed="false">30 giorni</button><button type="button" data-p="mese" aria-pressed="false">Mese</button><button type="button" data-p="anno" aria-pressed="false">Anno</button><button type="button" data-p="tutto" aria-pressed="false">Tutto</button><button type="button" data-p="custom" aria-pressed="false">Date…</button>
+        </div>
       </div>
-      <div class="chips" id="chips" role="group" aria-label="scegli il titolo"></div>
-      <div class="sym-bar">
-        <div><div class="lab">Titolo</div><div class="val" id="t-sym">–</div></div>
-        <div><div class="lab">Ultimo prezzo</div><div class="val" id="t-price">–</div></div>
-        <div id="t-pos-wrap" hidden><div class="lab">Posizione</div><div class="val" id="t-pos">–</div></div>
-        <button type="button" class="btn" id="inv-btn">Analisi investimento</button>
-      </div>
-      <div class="tf-row" id="tf-row" role="group" aria-label="candele"><button type="button" data-tf="giorno">Giorno</button><button type="button" data-tf="4Hour">4 ore</button><button type="button" data-tf="1Hour">1 ora</button><button type="button" data-tf="15Min">15 min</button><button type="button" data-tf="5Min">5 min</button><span class="why" id="tf-note"></span></div>
-      <div class="chart-wrap"><canvas id="chart" aria-label="grafico a candele"></canvas><div id="tip"></div></div>
-      <div class="legend-row" id="legend-row"><span><i style="border-color:#8a94a6"></i><span id="lg-a">media 20</span></span><span><i style="border-color:var(--agent)"></i><span id="lg-b">media 50</span></span><span><i style="border-color:#b08900"></i><span id="lg-c">media 200</span></span><span><i style="border-color:var(--ink); border-top-style:dashed"></i>carico</span><span><i style="border-color:var(--down); border-top-style:dashed"></i>stop</span><span><i style="border-color:var(--up); border-top-style:dotted"></i>scenario Kronos, cono 50% e 80%</span><span>▲▼ operazioni</span></div>
-      <p class="why" id="chart-note" style="margin-top:8px"></p>
-      <details class="feed-box"><summary>Le azioni del motore di oggi su questo titolo</summary><div id="feed" style="margin-top:8px"></div></details>
+      <div class="row" id="periodo-date" hidden style="margin-bottom:10px"><label class="why">dal <input type="date" id="p-dal"></label><label class="why">al <input type="date" id="p-al"></label><button type="button" class="btn ghost" id="p-vai">Mostra</button></div>
+      <div id="periodo"></div>
+      <div id="eq-chart" style="margin-top:10px" role="img" aria-label="andamento del patrimonio nel periodo"></div>
+      <div id="periodo-giorni" style="margin-top:12px"></div>
     </section>
-    <h2 class="section-title">Oggi</h2>
-    <div class="cols">
+    <div class="cols" style="margin-top:16px">
       <div class="stack">
         <section class="card">
           <h2>Profitto e perdita di oggi</h2>
           <div id="pnl"></div>
-        </section>
-        <section class="card">
-          <h2>Posizioni aperte <small id="pos-n"></small></h2>
-          <div id="positions"></div>
         </section>
       </div>
       <div class="stack">
@@ -319,16 +365,12 @@
           <div id="decisions"></div>
           <p class="why" id="intraday-note" style="margin-top:8px"></p>
         </section>
-        <section class="card" id="intraday-card" hidden>
-          <h2>Operazioni intraday <small>si aprono e si chiudono in giornata</small></h2>
-          <div id="intraday"></div>
-        </section>
-        <section class="card" id="sim-card" hidden>
-          <h2>Simulazioni di oggi <small>dopo l'obiettivo del giorno: cosa avrebbero comprato gli agenti e come sta andando</small></h2>
-          <div id="simulazioni"></div>
-        </section>
       </div>
     </div>
+    <section class="card" style="margin-top:16px">
+      <h2>In breve <small>la situazione adesso</small></h2>
+      <div class="kpis" id="dash-kpi"></div>
+    </section>
     <section class="card" id="registro" style="margin-top:16px">
       <div class="top" style="margin-bottom:10px">
         <h2 style="margin:0">Registro della giornata <small>le azioni ripetute a ogni giro compaiono una volta sola</small></h2>
@@ -341,20 +383,16 @@
     </section>
   </div>
 
-  <!-- La scheda del titolo: verdetto, voti, custode e valutazione a secco, in un dialogo. -->
-  <dialog id="sheet" class="sheet" aria-labelledby="sheet-title">
-    <div class="sheet-head"><h2 id="sheet-title">Analisi investimento</h2><button type="button" class="x" id="sheet-x" aria-label="chiudi">✕</button></div>
-    <div class="row" style="justify-content:space-between; margin-bottom:10px"><span class="why" id="sheet-sub"></span><button class="btn" id="ask">Chiedi agli agenti adesso</button></div>
-    <p class="verdict" id="verdict">Scegli un titolo.</p>
-    <div id="verdict-body"></div>
-  </dialog>
-
-  <!-- Agenti: la squadra (risultati, custodi, voti) e la stessa squadra vista come ufficio 3D. -->
-  <div class="page" data-page="agenti">
-    <nav class="subnav" aria-label="vista degli agenti"><a href="#agenti/squadra" data-sub="squadra">Squadra</a><a href="#agenti/ufficio" data-sub="ufficio">Ufficio 3D</a></nav>
-    <div class="sub" data-sub="squadra">
-      <div class="cols">
-        <div class="stack">
+  <!-- Ufficio: la mappa 3D con gli agenti e, sotto, la squadra in forma schematica. -->
+  <div class="page" data-page="ufficio">
+    <h1 class="page-title">Ufficio</h1>
+      <details class="scene" id="scene-box" open>
+      <summary>Ufficio degli agenti <span class="hint">trascina per girare, rotella per avvicinarti</span></summary>
+      <div id="scene"></div>
+      <p class="legend">In fondo la <b>Direzione</b> (gli agenti generali) davanti alla <b>lavagna dei risultati</b>; poi i <b>Custodi</b>, una scrivania per titolo seguito, con la camicia del colore della fase (blu pronto, verde in posizione, rosso in uscita, grigio in attesa) e lo schermo con prezzo e andamento; infine la <b>Sala intraday</b> (arancione). A destra, oltre la porta, la <b>Sala caffè</b>: chi in questo giro non ha niente da fare si siede ai tavolini e scambia con i colleghi dati veri (dossier, candele, proiezioni di Kronos, lezioni dei trade chiusi); appena ha un trade da aprire o una posizione da seguire torna alla scrivania. Chi vota alza la mano, chi compra o vende si alza e lo schermo lampeggia. Mouse sopra per leggere, clic per aprire.</p>
+    </details>
+    <div class="cols" style="margin-top:16px">
+      <div class="stack">
           <section class="card">
             <h2>Capo ufficio <small>risultati di ogni agente, richiami e consigli</small></h2>
             <div id="capo"></div>
@@ -363,8 +401,8 @@
             <h2>Custodi <small>un investitore per titolo seguito; clic per il grafico</small></h2>
             <div class="custode-list" id="custodi"></div>
           </section>
-        </div>
-        <div class="stack">
+      </div>
+      <div class="stack">
           <section class="card">
             <h2>Ultimo giro <small>chi ha votato e il punteggio per titolo: sopra +0,5 si compra, sotto −0,5 si vende</small></h2>
             <div class="row" id="agents"></div>
@@ -380,21 +418,78 @@
             <h2>Sala caffè <small>chi non ha niente da fare si scambia dati e lezioni; chi ha un trade da aprire torna alla scrivania</small></h2>
             <div id="caffe"></div>
           </section>
-        </div>
       </div>
     </div>
-    <div class="sub" data-sub="ufficio">
-      <details class="scene" id="scene-box" open>
-      <summary>Ufficio degli agenti <span class="hint">trascina per girare, rotella per avvicinarti</span></summary>
-      <div id="scene"></div>
-      <p class="legend">In fondo la <b>Direzione</b> (gli agenti generali) davanti alla <b>lavagna dei risultati</b>; poi i <b>Custodi</b>, una scrivania per titolo seguito, con la camicia del colore della fase (blu pronto, verde in posizione, rosso in uscita, grigio in attesa) e lo schermo con prezzo e andamento; infine la <b>Sala intraday</b> (arancione). A destra, oltre la porta, la <b>Sala caffè</b>: chi in questo giro non ha niente da fare si siede ai tavolini e scambia con i colleghi dati veri (dossier, candele, proiezioni di Kronos, lezioni dei trade chiusi); appena ha un trade da aprire o una posizione da seguire torna alla scrivania. Chi vota alza la mano, chi compra o vende si alza e lo schermo lampeggia. Mouse sopra per leggere, clic per aprire.</p>
-    </details>
+    <div class="cols" style="margin-top:16px">
+      <div class="stack">
+    <section class="card">
+      <h2>Cervello delle previsioni <small>Kronos e gli altri modelli: pesa di più chi è più affidabile e indovina più spesso la direzione</small></h2>
+      <div id="cervello"></div>
+    </section>
+      </div>
+      <div class="stack">
+    <section class="card">
+      <h2>Biblioteca degli agenti <small>i principi dei libri di trading più noti, tradotti in regole che il motore applica</small></h2>
+      <div id="biblioteca"></div>
+    </section>
+      </div>
     </div>
   </div>
 
-  <!-- Impostazioni: come si regolano gli agenti, le chiavi e il motore, la guida. -->
+  <!-- Investimenti: le card dei titoli in portafoglio e in osservazione; clic per il grafico con la proiezione dei modelli. -->
+  <div class="page" data-page="investimenti">
+    <h1 class="page-title">Investimenti</h1>
+    <section class="card">
+      <h2>In portafoglio <small id="pos-n"></small></h2>
+      <div class="inv-grid" id="inv-held"></div>
+    </section>
+    <section class="card chart-panel" id="titoli" hidden>
+      <div class="title-head">
+        <h2 style="margin:0">Grafico <small id="live-note"></small></h2>
+        <button type="button" class="x" id="chart-x" aria-label="chiudi il grafico">✕</button>
+      </div>
+      <div class="sym-bar">
+        <div><div class="lab">Titolo</div><div class="val" id="t-sym">–</div></div>
+        <div><div class="lab">Ultimo prezzo</div><div class="val" id="t-price">–</div></div>
+        <div id="t-pos-wrap" hidden><div class="lab">Posizione</div><div class="val" id="t-pos">–</div></div>
+        <button type="button" class="btn" id="inv-btn">Analisi investimento</button>
+      </div>
+      <div class="tf-row" id="tf-row" role="group" aria-label="time frame delle candele"><span class="why">Time frame</span><button type="button" data-tf="1Min">1m</button><button type="button" data-tf="5Min">5m</button><button type="button" data-tf="15Min">15m</button><button type="button" data-tf="1Hour">1h</button><button type="button" data-tf="4Hour">4h</button><button type="button" data-tf="giorno">1G</button><span class="why" id="tf-note"></span></div>
+      <div class="chart-wrap"><div id="chart" role="img" aria-label="grafico a candele con la proiezione dei modelli"><div class="ohlc" id="ohlc"></div><div class="kronos-box" id="kronos-box" hidden></div></div></div>
+      <div class="legend-row" id="legend-row"><span><i style="border-color:#8a94a6"></i><span id="lg-a">media 20</span></span><span><i style="border-color:var(--agent)"></i><span id="lg-b">media 50</span></span><span><i style="border-color:#b08900"></i><span id="lg-c">media 200</span></span><span><i style="border-color:var(--ink); border-top-style:dashed"></i>carico</span><span><i style="border-color:var(--down); border-top-style:dashed"></i>stop</span><span><i style="border-color:var(--up); border-top-style:dotted"></i>proiezione dei modelli (Kronos e cervello), cono 50% e 80%</span><span>▲▼ operazioni</span><span><i style="border-color:var(--up)"></i>obiettivo</span></div>
+      <p class="why" id="chart-note" style="margin-top:8px"></p>
+      <details class="feed-box"><summary>Le azioni del motore di oggi su questo titolo</summary><div id="feed" style="margin-top:8px"></div></details>
+    </section>
+    <section class="card" style="margin-top:16px">
+      <h2>In osservazione <small>custodi, voti d'acquisto dell'ultimo giro e titoli in attesa</small></h2>
+      <div class="inv-grid" id="inv-watch"></div>
+      <details class="feed-box" style="margin-top:14px"><summary>Nel radar <small id="radar-n"></small></summary><div class="chips" id="chips" role="group" aria-label="scegli il titolo" style="margin-top:10px"></div></details>
+    </section>
+        <section class="card" id="intraday-card" hidden style="margin-top:16px">
+          <h2>Operazioni intraday <small>si aprono e si chiudono in giornata</small></h2>
+          <div id="intraday"></div>
+        </section>
+        <section class="card" id="sim-card" hidden style="margin-top:16px">
+          <h2>Simulazioni di oggi <small>dopo l'obiettivo del giorno: cosa avrebbero comprato gli agenti e come sta andando</small></h2>
+          <div id="simulazioni"></div>
+        </section>
+        <details class="card fold" style="margin-top:16px">
+          <summary><h2 style="display:inline">Tabella delle posizioni <small>quantità, carico, prezzo, guadagno e peso</small></h2></summary>
+          <div id="positions"></div>
+        </details>
+  </div>
+
+  <dialog id="sheet" class="sheet" aria-labelledby="sheet-title">
+    <div class="sheet-head"><h2 id="sheet-title">Analisi investimento</h2><button type="button" class="x" id="sheet-x" aria-label="chiudi">✕</button></div>
+    <div class="row" style="justify-content:space-between; margin-bottom:10px"><span class="why" id="sheet-sub"></span><button class="btn" id="ask">Chiedi agli agenti adesso</button></div>
+    <p class="verdict" id="verdict">Scegli un titolo.</p>
+    <div id="verdict-body"></div>
+  </dialog>
+
+  <!-- Impostazioni: come si regolano gli agenti, le chiavi e il motore. -->
   <div class="page" data-page="impostazioni">
-    <nav class="subnav" aria-label="impostazioni"><a href="#impostazioni/agenti" data-sub="agenti">Agenti</a><a href="#impostazioni/chiavi" data-sub="chiavi">Chiavi e motore</a><a href="#impostazioni/guida" data-sub="guida">Guida</a></nav>
+    <h1 class="page-title">Impostazioni</h1>
+    <nav class="subnav" aria-label="impostazioni"><a href="#impostazioni/agenti" data-sub="agenti">Agenti</a><a href="#impostazioni/chiavi" data-sub="chiavi">Chiavi e motore</a></nav>
     <div class="sub" data-sub="agenti">
       <section class="card">
         <h2>Schede degli agenti <small>cosa fanno e come si regolano; le modifiche valgono dal giro successivo</small></h2>
@@ -431,7 +526,11 @@
     </section>
     <p class="why" style="margin-top:12px">Le chiavi si salvano in <code>secrets.ts</code> sul tuo PC e non escono mai da qui; in lettura sono mascherate. Il motore le legge all'avvio: dopo un salvataggio premi «Riavvia il motore». Alpaca accetta solo chiavi del conto paper.</p>
     </div>
-    <div class="sub" data-sub="guida">
+  </div>
+
+  <!-- Guida -->
+  <div class="page" data-page="guida">
+    <h1 class="page-title">Guida</h1>
       <section class="card guide">
       <h2>Guida</h2>
       <h3>1. Mettere in moto</h3>
@@ -443,13 +542,13 @@
       <h3>2. Cosa fa il motore a ogni giro</h3>
       <p>Rinnova l'universo (titoli fissi + crypto della top 100 negoziabili su Alpaca), legge conto e prezzi, scarica le candele giornaliere, chiede a Kronos le proiezioni (una volta al giorno), valuta il contesto, fa votare gli agenti, somma i voti, passa dalla gabbia delle regole, invia gli ordini ammessi, mette gli stop su Alpaca, aggiorna diario e stato. La gabbia ammette acquisti di titoli solo a borsa aperta e di crypto sempre; nessun numero fisso di posizioni, al massimo il 10% del patrimonio per titolo, meno quando la proiezione di Kronos è incerta. Kronos è il segnale principale; contesto e notizie fanno da contorno. Raggiunto il +10% nella giornata, gli agenti continuano solo in simulazione fino al giorno dopo. Una posizione comprata oggi non si vende per un voto d'opinione nella candela successiva: escono solo stop e regole vincolanti. Dettagli in <code>docs/logica-del-motore.md</code>.</p>
       <h3>3. Le pagine</h3>
+      <p>Il menu è a sinistra (sul telefono si apre con ☰).</p>
       <ul>
-        <li><b>Dashboard</b>: la frase di stato, i numeri del conto e la situazione in breve (posizioni, operazioni di oggi, contesto, Kronos, agenti, esplorazione).</li>
-        <li><b>Titoli, parte «Oggi»</b> (sotto il grafico): profitto e perdita di oggi (per vendita e per agente), posizioni aperte, cosa ha deciso l'ultimo giro, le operazioni intraday quando ce ne sono, le simulazioni dopo il limite del giorno e, in fondo, il <b>registro</b> della giornata («Importanti» mostra ordini, posizioni, rifiuti, stop e avvisi; le azioni ripetute a ogni giro compaiono una volta sola, con quante volte e da che ora).</li>
-        <li><b>Titoli</b>: i titoli in tre gruppi (in portafoglio, sotto osservazione, nel radar). Per ciascuno: candele, medie 20/50/200, carico e stop, la candela di oggi in formazione, le scelte del motore di oggi (puntini voti, frecce ordini, × rifiuti), lo scenario di Kronos con il cono di probabilità (fasce 50% e 80%, con la probabilità di finire sopra o sotto il prezzo di adesso) ; il verdetto, i voti e il dossier del custode si aprono con il pulsante «Analisi investimento» (o «Riepilogo investimento» se il titolo è in portafoglio). Sopra il grafico si scelgono le candele: giorno, 4 ore, 1 ora, 15 e 5 minuti; sulle candele brevi le medie sono EMA 9, EMA 20 e media 50 e Kronos prevede le prossime 12 candele. «Chiedi agli agenti adesso» fa una valutazione a secco: nessun ordine parte dalla pagina.</li>
-        <li><b>Agenti → Squadra</b>: il capo ufficio con il giudizio su ogni agente (vinti, risultato, richiami, consigli), i custodi con la probabilità favorevole e la prossima azione, chi ha votato nell'ultimo giro con i punteggi per titolo e, aprendo la tendina, tutti i voti con il motivo.</li>
-        <li><b>Agenti → Ufficio 3D</b>: la stessa squadra come impiegati alle loro postazioni. In fondo la Direzione e la lavagna con successi e insuccessi di ogni agente, il capo nella stanza di vetro; poi i Custodi (la camicia dice la fase: blu pronto, verde in posizione, rosso in uscita, grigio in attesa) e la Sala intraday (arancione). Chi vota alza la mano, chi compra o vende si alza e lo schermo lampeggia. Oltre la porta, la <b>Sala caffè</b>: chi non ha niente da fare ci va e parla con i colleghi; appena ha un trade da aprire torna alla scrivania. Mouse sopra per leggere, clic per la scheda. I pulsanti in alto portano a ogni reparto (Direzione, Custodi, Intraday, Sala caffè, Capo) e zoomano; da telefono un dito ruota, due dita zoomano e spostano.</li>
-        <li><b>Impostazioni</b>: le <b>schede degli agenti</b> per regolare i parametri (valgono dal giro successivo), le <b>chiavi</b> di Alpaca, Telegram e X con il riavvio del motore, e questa guida.</li>
+        <li><b>Dashboard</b>: la frase di stato e il capitale (patrimonio totale, investito, liquidità, risultato sulle posizioni aperte, oggi, rischio ammesso, confronto con SPY); il <b>rendimento per periodo</b> con i filtri Oggi, 7 giorni, 30 giorni, Mese, Anno, Tutto o date a scelta (variazione del patrimonio dallo storico di Alpaca, risultato realizzato, operazioni chiuse e vinte, migliore e peggiore, ribasso massimo, grafico del patrimonio e risultato giorno per giorno); poi profitto e perdita di oggi, l'ultimo giro degli agenti, la situazione in breve e il <b>registro</b> della giornata («Importanti» mostra ordini, posizioni, rifiuti, stop e avvisi; le azioni ripetute compaiono una volta sola).</li>
+        <li><b>Ufficio</b>: la mappa 3D con gli agenti alle loro postazioni. In fondo la Direzione e la lavagna con successi e insuccessi di ogni agente, il capo nella stanza di vetro; poi i Custodi (la camicia dice la fase: blu pronto, verde in posizione, rosso in uscita, grigio in attesa) e la Sala intraday (arancione). Chi vota alza la mano, chi compra o vende si alza e lo schermo lampeggia. Oltre la porta, la <b>Sala caffè</b>. Mouse sopra per leggere, clic per la scheda dell'agente (situazione, ragionamento, giudizio del capo, impostazioni). Sotto la mappa: capo ufficio, custodi, ultimo giro con i punteggi e tutti i voti, esplorazione, sala caffè, il <b>cervello delle previsioni</b> e la <b>biblioteca degli agenti</b> (i principi dei libri di trading applicati dal motore).</li>
+        <li><b>Investimenti</b>: le card dei titoli e delle crypto in portafoglio (valore, guadagno, carico e prezzo, peso, da quanto è aperta, obiettivo e stop dell'intraday) e quelle in osservazione (custodi, voti, attese); più in basso il radar. Il clic su una card apre il <b>grafico</b> (TradingView Lightweight Charts: rotella per lo zoom, trascina per scorrere, mirino con apertura, massimo, minimo e chiusura) con la proiezione dei modelli e il cono di probabilità (fasce 50% e 80%, probabilità di finire sopra o sotto il prezzo di adesso), medie, carico, stop, obiettivo e frecce delle operazioni. Il time frame si sceglie sopra il grafico: 1m, 5m, 15m, 1h, 4h, 1G; le candele brevi si aggiornano da sole (1 e 5 minuti ogni 15 secondi). «Analisi investimento» apre verdetto, voti e dossier del custode; «Chiedi agli agenti adesso» fa una valutazione a secco: nessun ordine parte dalla pagina. Sotto: operazioni intraday, simulazioni e la tabella delle posizioni.</li>
+        <li><b>Impostazioni</b>: le <b>schede degli agenti</b> per regolare i parametri (valgono dal giro successivo), le <b>chiavi</b> di Alpaca, Telegram e X con il riavvio del motore.</li>
+        <li><b>Guida</b>: questa pagina.</li>
         <li><b>Pagina pubblica</b>: con «Pagina pubblica su GitHub Pages» nella scheda Motore e gabbia, il PC pubblica ogni N minuti un'istantanea in sola lettura, da aprire anche dal telefono. È visibile a chiunque abbia il link; chiavi e modifiche restano solo sulla dashboard del PC.</li>
       </ul>
       <h3>4. Gli agenti in breve</h3>
@@ -470,9 +569,9 @@
         <li>Niente messaggi Telegram: in Impostazioni → Chiavi e motore «Prova» invia un messaggio di verifica; i messaggi non inviati finiscono in <code>state/telegram-outbox.log</code>.</li>
       </ul>
     </section>
-    </div>
   </div>
 </main>
+</div>
 
 <script>
 // Modalità statica (GitHub Pages): la pagina legge l'istantanea che il motore pubblica in data/*.json. Sola lettura.
@@ -528,7 +627,7 @@ const fmt = (x, d = 2) => (x === null || x === undefined || Number.isNaN(x)) ? '
 const pct = (x) => (x === null || x === undefined) ? '–' : `${x >= 0 ? '+' : ''}${(x * 100).toFixed(2).replace('.', ',')}%`;
 const usd = (x) => (x === null || x === undefined) ? '–' : `${x >= 0 ? '+' : ''}${fmt(x)} $`;
 const money = (x) => `${fmt(x)} $`;
-const px = (x) => (x === null || x === undefined || Number.isNaN(x)) ? '–' : fmt(x, Math.abs(x) >= 100 ? 2 : Math.abs(x) >= 1 ? 3 : Math.abs(x) >= 0.01 ? 4 : 6);
+const px = (x) => (x === null || x === undefined || Number.isNaN(x)) ? '–' : Math.abs(x) > 0 && Math.abs(x) < 0.01 ? Number(x).toPrecision(4).replace('.', ',') : fmt(x, Math.abs(x) >= 100 ? 2 : Math.abs(x) >= 1 ? 3 : 4);
 const cls = (x) => x > 0 ? 'up' : x < 0 ? 'down' : '';
 const qty = (q) => Number.isInteger(q) ? String(q) : String(Number(q)).replace('.', ',');
 const hhmm = (iso) => new Date(iso).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
@@ -1045,7 +1144,7 @@ async function loadOfficeData() {
   try {
     const [b, j] = await Promise.all([fetch('/api/bars?ultime=30').then((r) => r.json()), fetch('/api/journal').then((r) => r.json())]);
     window.__bars = b.barre || {}; journal = j;
-    if (status) paintScene(status);
+    if (status) { paintScene(status); paintChips(status); }
   } catch {}
 }
 setInterval(() => { if (officeOn()) loadOfficeData(); }, 120_000);
@@ -1060,7 +1159,7 @@ const sceneBox = $('#scene-box');
 sceneBox.addEventListener('toggle', resize);
 let currentPage = 'dashboard';
 let currentSub = '';
-const officeOn = () => currentPage === 'agenti' && currentSub === 'ufficio';
+const officeOn = () => currentPage === 'ufficio';
 const clock = new THREE.Clock();
 function animate() {
   requestAnimationFrame(animate);
@@ -1164,19 +1263,19 @@ function renderCard() {
       ${(capo?.valutazioni || []).map((v) => `<div class="vote"><b>${esc(v.agente)}</b> <span class="pill ${v.giudizio === 'richiamato' ? 'down' : v.giudizio === 'ottimo' || v.giudizio === 'bene' ? 'up' : ''}">${esc(v.giudizio)}</span> <span class="why">${v.vinti}/${v.trade} vinti · ${usd(v.risultato)}</span><br><span class="why">${esc(v.messaggio)}</span>${v.consigli.length ? `<ul>${v.consigli.map((c) => `<li class="why">${esc(c)}</li>`).join('')}</ul>` : ''}</div>`).join('') || '<p class="why">Nessun trade chiuso ancora.</p>'}`;
   } else {
     let who;
-    if (it.kind === 'agente') { name = it.n; who = it.n; const a = st.agenti?.[it.n] || {}; title = agentName(it.n); sub = ROLE[it.n] || ''; body = `<p class="why">${a.errore ? `<span class="down">${esc(a.errore)}</span>` : `${a.segnali ?? 0} segnali nell'ultimo giro`}${a.note?.length ? ` · ${esc(a.note.join(' · ')).slice(0, 260)}` : ''}</p>`; }
-    else if (it.kind === 'custode') { name = 'custodi'; who = `custode ${it.c.simbolo}`; const c = it.c; title = `Custode di ${c.simbolo}`; sub = FASI[c.fase] || c.fase; body = `${c.dossier ? `<p><b class="${c.dossier.probabilita >= 0.6 ? 'up' : c.dossier.probabilita < 0.45 ? 'down' : ''}">${Math.round(c.dossier.probabilita * 100)}% favorevole</b> · ${esc(c.dossier.prossimaAzione)}</p>` : ''}<p class="why"><b>Tesi.</b> ${esc(c.tesi)}</p><p class="why"><b>Piano.</b> ${esc(c.piano)}</p><p class="why"><b>Rischio.</b> ${esc(c.rischio)}</p>${c.dossier?.memoria?.trade ? `<p class="why"><b>Memoria.</b> ${esc(c.dossier.memoria.lezione)}</p>` : ''}`; }
-    else { name = 'intraday'; who = 'intraday'; const x = it.x; title = `Operatore intraday ${x.simbolo}`; sub = `candele ${x.candela} · ${x.fase}`; body = `<p class="why">${esc(x.motivo)}</p>${x.obiettivo ? `<p class="why">Ingresso ${px(x.ingresso)} · obiettivo <span class="up">${px(x.obiettivo)}</span> · stop <span class="down">${px(x.stop)}</span></p>` : ''}`; }
+    if (it.kind === 'agente') { name = it.n; who = it.n; const a = st.agenti?.[it.n] || {}; title = agentName(it.n); sub = ROLE[it.n] || ''; body = `<h4>Ultimo giro</h4><dl class="kv"><dt>Segnali</dt><dd>${a.errore ? `<span class="down">${esc(a.errore)}</span>` : a.segnali ?? 0}</dd></dl>${a.note?.length ? `<ul>${a.note.slice(0, 6).map((n) => `<li class="why">${esc(String(n).slice(0, 220))}</li>`).join('')}</ul>` : ''}`; }
+    else if (it.kind === 'custode') { name = 'custodi'; who = `custode ${it.c.simbolo}`; const c = it.c; title = `Custode di ${c.simbolo}`; sub = FASI[c.fase] || c.fase; body = `<h4>Situazione</h4><dl class="kv">${c.dossier ? `<dt>Favorevole</dt><dd><b class="${c.dossier.probabilita >= 0.6 ? 'up' : c.dossier.probabilita < 0.45 ? 'down' : ''}">${Math.round(c.dossier.probabilita * 100)}%</b></dd><dt>Prossima azione</dt><dd>${esc(c.dossier.prossimaAzione)}</dd>` : ''}<dt>Fase</dt><dd>${esc(FASI[c.fase] || c.fase)}</dd></dl><h4>Ragionamento</h4><dl class="kv"><dt>Tesi</dt><dd>${esc(c.tesi)}</dd><dt>Piano</dt><dd>${esc(c.piano)}</dd><dt>Rischio</dt><dd>${esc(c.rischio)}</dd>${c.dossier?.memoria?.trade ? `<dt>Memoria</dt><dd>${esc(c.dossier.memoria.lezione)}</dd>` : ''}</dl>`; }
+    else { name = 'intraday'; who = 'intraday'; const x = it.x; title = `Operatore intraday ${x.simbolo}`; sub = `candele ${x.candela} · ${x.fase}`; body = `<h4>Operazione</h4><dl class="kv"><dt>Candela</dt><dd>${esc(x.candela)}${x.orizzonte ? ` · orizzonte ${esc(x.orizzonte)}` : ''}</dd><dt>Fase</dt><dd>${esc(x.fase)}</dd>${x.obiettivo ? `<dt>Ingresso</dt><dd>${px(x.ingresso)}</dd><dt>Obiettivo</dt><dd class="up">${px(x.obiettivo)}</dd><dt>Stop</dt><dd class="down">${px(x.stop)}</dd>` : ''}${x.controllo ? `<dt>Controllo</dt><dd>${esc(x.controllo)}</dd>` : ''}</dl><h4>Perché</h4><p class="why">${esc(x.motivo)}</p>`; }
     const v = val(who);
-    if (v) body += `<div class="vote"><b>Giudizio del capo:</b> <span class="pill ${v.giudizio === 'richiamato' ? 'down' : v.giudizio === 'ottimo' || v.giudizio === 'bene' ? 'up' : ''}">${esc(v.giudizio)}</span> <span class="why">${v.vinti}/${v.trade} vinti · ${usd(v.risultato)}</span><br><span class="why">${esc(v.messaggio)}</span>${v.consigli.length ? `<ul>${v.consigli.map((c) => `<li class="why">${esc(c)}</li>`).join('')}</ul>` : ''}</div>`;
+    if (v) body += `<h4>Giudizio del capo</h4><div class="vote" style="margin-top:0"><b>Giudizio:</b> <span class="pill ${v.giudizio === 'richiamato' ? 'down' : v.giudizio === 'ottimo' || v.giudizio === 'bene' ? 'up' : ''}">${esc(v.giudizio)}</span> <span class="why">${v.vinti}/${v.trade} vinti · ${usd(v.risultato)}</span><br><span class="why">${esc(v.messaggio)}</span>${v.consigli.length ? `<ul>${v.consigli.map((c) => `<li class="why">${esc(c)}</li>`).join('')}</ul>` : ''}</div>`;
     const sc = sched(name);
-    if (sc) body += `<details open><summary>Impostazioni (${sc.parametri.length})</summary><p class="why">${esc(sc.come)}</p><table>${sc.parametri.map((p) => `<tr><td class="why">${esc(p.etichetta)}</td><td class="n ${p.cambiato ? 'agent-c' : ''}">${esc(fmtP(p))}</td></tr>`).join('')}</table></details>`;
+    if (sc) body += `<h4>Impostazioni</h4><details open><summary>${sc.parametri.length} parametri</summary><p class="why">${esc(sc.come)}</p><table>${sc.parametri.map((p) => `<tr><td class="why">${esc(p.etichetta)}</td><td class="n ${p.cambiato ? 'agent-c' : ''}">${esc(fmtP(p))}</td></tr>`).join('')}</table></details>`;
   }
   card.innerHTML = `<button type="button" class="x" aria-label="chiudi">✕</button><div class="portrait"></div><h3>${esc(title)}</h3><div class="why">${esc(sub)}</div>${body}
     <div class="row" style="margin-top:10px">${it.kind === 'custode' || it.kind === 'intraday' ? '<button type="button" class="btn" data-go="titolo">Apri il grafico</button>' : ''}${name || it.kind === 'capo' ? '<button type="button" class="btn ghost" data-go="schede">Modifica le impostazioni</button>' : ''}</div>`;
   card.querySelector('.portrait').appendChild(portrait.renderer.domElement);
   card.querySelector('.x').addEventListener('click', closeCard);
-  card.querySelector('[data-go="titolo"]')?.addEventListener('click', () => { selectSymbol(it.kind === 'custode' ? it.c.simbolo : it.x.simbolo); location.hash = 'titoli'; });
+  card.querySelector('[data-go="titolo"]')?.addEventListener('click', () => { openChart(it.kind === 'custode' ? it.c.simbolo : it.x.simbolo); });
   card.querySelector('[data-go="schede"]')?.addEventListener('click', () => { location.hash = 'impostazioni/agenti'; setTimeout(() => document.querySelector(`#schede form[data-agente="${name || 'motore'}"]`)?.scrollIntoView({ behavior: 'smooth' }), 400); });
 }
 animate();
@@ -1251,6 +1350,12 @@ function paintMoney(st) {
   const dayPct = c.patrimonio - c.pnlGiorno > 0 ? c.pnlGiorno / (c.patrimonio - c.pnlGiorno) : null;
   $('#k-day').textContent = `${usd(c.pnlGiorno)}${dayPct !== null ? ` (${pct(dayPct)})` : ''}${st.giornata && st.giornata.obiettivoPct > 0 ? ` · tetto ${pct(st.giornata.obiettivoPct)}` : ''}`; $('#k-day').className = `val ${cls(c.pnlGiorno)}`;
   $('#k-cash').textContent = money(c.contanti);
+  const pos = st.posizioni || [];
+  const inv = pos.reduce((a, p) => a + Math.abs(p.valore || 0), 0);
+  const unr = pos.reduce((a, p) => a + (p.prezzoAttuale - p.prezzoCarico) * p.quantita, 0);
+  $('#k-inv').textContent = money(inv);
+  $('#k-inv-sub').textContent = `${c.patrimonio ? Math.round((inv / c.patrimonio) * 100) : 0}% del patrimonio · ${pos.length} ${pos.length === 1 ? 'posizione' : 'posizioni'}`;
+  $('#k-unr').textContent = usd(unr); $('#k-unr').className = `val ${cls(unr)}`;
   $('#k-risk').textContent = `${Math.round((st.rischio ?? 1) * 100)}%`;
   const cmp = st.confronto;
   $('#k-cmp-wrap').hidden = !cmp;
@@ -1279,7 +1384,7 @@ function paintPositions(st) {
   const eq = st.conto?.patrimonio || 1;
   $('#positions').innerHTML = `<table class="stack-sm"><thead><tr><th>Titolo</th><th class="n">Quantità</th><th class="n">Carico</th><th class="n">Prezzo</th><th class="n">Guadagno</th><th class="n">Peso</th></tr></thead><tbody>${pos.map((p) => {
     const gain = (p.prezzoAttuale - p.prezzoCarico) * p.quantita;
-    return `<tr><td><b>${esc(p.simbolo)}</b>${p.dal ? `<br><span class="why" title="${esc(new Date(p.dal).toLocaleString('it-IT', { timeZone: 'Europe/Rome' }))}">dal ${quando(p.dal)} · da ${durata(p.dal)}</span>` : ''}</td><td class="n" data-l="Quantità">${qty(p.quantita)}</td><td class="n" data-l="Carico">${fmt(p.prezzoCarico)}</td><td class="n" data-l="Prezzo">${fmt(p.prezzoAttuale)}</td><td class="n ${cls(gain)}" data-l="Guadagno">${usd(gain)} <span class="why">${pct(p.variazione)}</span></td><td class="n" data-l="Peso">${(p.valore / eq * 100).toFixed(1).replace('.', ',')}%</td></tr>`;
+    return `<tr><td><b>${esc(p.simbolo)}</b>${p.dal ? `<br><span class="why" title="${esc(new Date(p.dal).toLocaleString('it-IT', { timeZone: 'Europe/Rome' }))}">dal ${quando(p.dal)} · da ${durata(p.dal)}</span>` : ''}</td><td class="n" data-l="Quantità">${qty(p.quantita)}</td><td class="n" data-l="Carico">${px(p.prezzoCarico)}</td><td class="n" data-l="Prezzo">${px(p.prezzoAttuale)}</td><td class="n ${cls(gain)}" data-l="Guadagno">${usd(gain)} <span class="why">${pct(p.variazione)}</span></td><td class="n" data-l="Peso">${(p.valore / eq * 100).toFixed(1).replace('.', ',')}%</td></tr>`;
   }).join('')}</tbody></table>`;
 }
 
@@ -1294,7 +1399,7 @@ function paintPnl(st) {
   }
   const per = Object.entries(pl.perAgente || {});
   if (per.length) html += `<div class="row" style="margin-top:12px"><span class="why">Per agente:</span>${per.sort((a, b) => b[1].pnl - a[1].pnl).map(([a, g]) => `<span class="pill ${cls(g.pnl)}">${agentName(a)} ${usd(g.pnl)}</span>`).join('')}</div>`;
-  if (pl.acquisti?.length) html += `<p class="why" style="margin-top:10px">Comprato oggi: ${pl.acquisti.slice().sort((a, b) => String(a.ora).localeCompare(String(b.ora))).map((a) => `<b>${esc(a.simbolo)}</b> ${qty(a.quantita)} a ${fmt(a.prezzo)}${a.ora ? ` alle ${quando(a.ora)}` : ''}`).join(', ')}.</p>`;
+  if (pl.acquisti?.length) html += `<p class="why" style="margin-top:10px">Comprato oggi: ${pl.acquisti.slice().sort((a, b) => String(a.ora).localeCompare(String(b.ora))).map((a) => `<b>${esc(a.simbolo)}</b> ${qty(a.quantita)} a ${px(a.prezzo)}${a.ora ? ` alle ${quando(a.ora)}` : ''}`).join(', ')}.</p>`;
   $('#pnl').innerHTML = html;
 }
 
@@ -1347,10 +1452,11 @@ function paint(st) {
   sayState();
   if (!status) { $('#when').textContent = lastTick ? `ultimo giro iniziato ${hhmm(lastTick.t)}` : 'nessuno stato'; return; }
   $('#when').textContent = `ultimo giro ${hhmm(status.aggiornato)} (${ago(status.aggiornato)})`;
-  paintMoney(status); paintPositions(status); paintPnl(status); paintDecisions(status); paintScores(status); paintAgents(status); paintScene(status); paintCustodi(status); paintChips(status); paintIntraday(status); paintVotes(status); paintSimulazioni(status); paintCapo(status); paintCaffe(status); paintEsplorazione(status); paintKpi(status); paintCervello(status);
+  paintMoney(status); paintPositions(status); paintPnl(status); paintDecisions(status); paintScores(status); paintAgents(status); paintScene(status); paintCustodi(status); paintChips(status); paintIntraday(status); paintVotes(status); paintSimulazioni(status); paintCapo(status); paintCaffe(status); paintEsplorazione(status); paintKpi(status); paintCervello(status); paintBiblioteca(status);
 }
+let periodoPronto = false;
 async function loadStatus() {
-  try { paint(await (await fetch('/api/status')).json()); } catch (e) { $('#say').textContent = 'La dashboard non riesce a leggere lo stato.'; $('#fix').hidden = false; $('#fix').textContent = e.message; }
+  try { paint(await (await fetch('/api/status')).json()); if (status && !periodoPronto && currentPage === 'dashboard') { periodoPronto = true; loadPeriodo(); } } catch (e) { $('#say').textContent = 'La dashboard non riesce a leggere lo stato.'; $('#fix').hidden = false; $('#fix').textContent = e.message; }
 }
 
 // ---------- scheda per titolo ----------
@@ -1360,7 +1466,7 @@ function paintCustodi(st) {
   const list = st.custodi || [];
   $('#custodi').innerHTML = list.length ? list.map((c) => { const p = c.dossier ? Math.round(c.dossier.probabilita * 100) : null; return `<button type="button" data-sym="${esc(c.simbolo)}"><div class="row" style="justify-content:space-between"><span><b>${esc(c.simbolo)}</b>${p !== null ? ` <b class="${p >= 60 ? 'up' : p < 45 ? 'down' : ''}">${p}%</b>` : ''}</span><span class="pill ${faseCls(c.fase)}">${FASI[c.fase] || esc(c.fase)}</span></div><div class="why" style="margin-top:4px">${esc(c.dossier?.prossimaAzione || c.stato)}</div></button>`; }).join('')
     : `<p class="empty">Nessun custode attivo: nasce uno per ogni crypto in trend (sopra le medie, slancio a 3 e 12 mesi positivo) o in portafoglio. ${st.universo?.crypto?.length ? `Universo di oggi: ${st.universo.crypto.length} coppie${st.universo.fonteCrypto ? ` (${esc(st.universo.fonteCrypto)})` : ''}.` : ''}</p>`;
-  for (const b of $('#custodi').querySelectorAll('button')) b.addEventListener('click', () => { selectSymbol(b.dataset.sym); location.hash = 'titoli'; });
+  for (const b of $('#custodi').querySelectorAll('button')) b.addEventListener('click', () => { openChart(b.dataset.sym); });
 }
 
 let selected = null;
@@ -1369,7 +1475,7 @@ let tf = 'giorno';      // candele del grafico: giorno, 4Hour, 1Hour, 15Min, 5Mi
 let tfForecast = null;  // proiezione di Kronos sulle prossime candele intraday
 let tfNote = '';
 try { tf = localStorage.getItem('agenti.candele') || 'giorno'; } catch {}
-const TF_LABEL = { giorno: 'giorno', '4Hour': '4 ore', '1Hour': '1 ora', '15Min': '15 min', '5Min': '5 min' };
+const TF_LABEL = { giorno: 'giorno', '4Hour': '4 ore', '1Hour': '1 ora', '15Min': '15 min', '5Min': '5 min', '1Min': '1 min' };
 let forecasts = null;   // /api/previsioni
 let journal = null;     // /api/journal
 let valutazione = null; // ultima valutazione a secco
@@ -1379,6 +1485,17 @@ function symbolsOf(st) {
   const uni = [...(st?.universo?.titoli || []), ...(st?.universo?.crypto || [])];
   return [...new Set([...held, ...cust, ...uni, ...Object.keys(st?.prezzi || {})])];
 }
+let panelOpen = false;
+// Linea dell'andamento recente (ultime 30 chiusure giornaliere più il prezzo di adesso) per le card.
+function spark(sym, price) {
+  const c = (window.__bars?.[sym] || []).map((b) => b.close);
+  if (price) c.push(price);
+  if (c.length < 3) return '';
+  const lo = Math.min(...c), hi = Math.max(...c), w = 200, h = 38;
+  const pts = c.map((v, i) => `${((i / (c.length - 1)) * w).toFixed(1)},${(h - 3 - ((v - lo) / (hi - lo || 1)) * (h - 6)).toFixed(1)}`).join(' ');
+  const col = c.at(-1) >= c[0] ? 'var(--up)' : 'var(--down)';
+  return `<svg class="spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-hidden="true"><polyline points="${pts}" fill="none" stroke="${col}" stroke-width="1.6" vector-effect="non-scaling-stroke"/></svg>`;
+}
 function paintChips(st) {
   const syms = symbolsOf(st);
   if (!selected || !syms.includes(selected)) { selected = (st.posizioni?.[0]?.simbolo) || (st.custodi?.[0]?.simbolo) || syms[0] || null; if (selected) loadSymbol(selected); }
@@ -1386,20 +1503,60 @@ function paintChips(st) {
   const held = new Map((st.posizioni || []).map((p) => [p.simbolo, p]));
   const cust = new Map((st.custodi || []).map((c) => [c.simbolo, c]));
   const voted = new Set((st.segnali || []).filter((x) => x.lato === 'buy').map((x) => x.simbolo));
-  const waiting = new Set((st.inAttesa || []).map((w) => w.simbolo));
+  const waiting = new Map((st.inAttesa || []).map((w) => [w.simbolo, w.motivo]));
+  const intra = new Map((st.intraday || []).map((x) => [x.simbolo, x]));
   const groups = { held: [], watch: [], idle: [] };
-  for (const s of syms) groups[held.has(s) ? 'held' : cust.has(s) || voted.has(s) || waiting.has(s) ? 'watch' : 'idle'].push(s);
-  const chip = (s, kind) => { const p = held.get(s), c = cust.get(s); const tag = p ? `<span>${pct(p.variazione)}</span>` : c?.dossier ? `<span>${Math.round(c.dossier.probabilita * 100)}%</span>` : waiting.has(s) ? '<span>in attesa</span>' : voted.has(s) ? '<span>votato</span>' : ''; return `<button type="button" class="chip ${kind}" data-sym="${esc(s)}" aria-pressed="${s === selected}" title="${p ? 'in portafoglio' : c ? `custode: ${FASI[c.fase] || c.fase}` : waiting.has(s) ? 'in attesa del contesto' : voted.has(s) ? 'votato dagli agenti nell\u2019ultimo giro' : 'nel radar, nessuna azione'}">${c ? '<span class="k"></span>' : ''}${esc(s)}${tag}</button>`; };
-  const labels = { held: `In portafoglio (${groups.held.length})`, watch: `Sotto osservazione (${groups.watch.length})`, idle: `Nel radar (${groups.idle.length})` };
-  $('#chips').className = 'chip-groups';
-  $('#chips').innerHTML = ['held', 'watch', 'idle'].filter((k) => groups[k].length).map((k) => `<div class="chip-group"><span class="glab">${labels[k]}</span>${groups[k].map((s) => chip(s, k)).join('')}</div>`).join('');
-  for (const b of $('#chips').querySelectorAll('.chip')) b.addEventListener('click', () => selectSymbol(b.dataset.sym));
-  if (selected) paintTitle();
+  for (const s of syms) groups[held.has(s) ? 'held' : cust.has(s) || voted.has(s) || waiting.has(s) || (intra.get(s)?.ingresso ?? null) !== null ? 'watch' : 'idle'].push(s);
+  const eq = st.conto?.patrimonio || 1;
+  const pos = st.posizioni || [];
+  const investito = pos.reduce((a, p) => a + Math.abs(p.valore || 0), 0);
+  const sel = (s) => String(panelOpen && s === selected);
+  $('#pos-n').textContent = pos.length ? `${pos.length} · investito ${money(investito)} (${Math.round((investito / eq) * 100)}% del patrimonio)` : '';
+  $('#inv-held').innerHTML = pos.length ? pos.slice().sort((a, b) => b.valore - a.valore).map((p) => {
+    const gain = (p.prezzoAttuale - p.prezzoCarico) * p.quantita;
+    const it = intra.get(p.simbolo); const inPos = it?.fase === 'in posizione';
+    const chi = inPos ? `intraday su candele ${it.candela}${it.orizzonte ? ` · orizzonte ${it.orizzonte}` : ''}` : (p.agenti || []).map(agentName).join(', ');
+    return `<button type="button" class="inv-card" data-sym="${esc(p.simbolo)}" aria-pressed="${sel(p.simbolo)}">
+      <div class="h"><span class="s">${esc(p.simbolo)}</span><span class="pill ${p.simbolo.includes('/') ? 'agent' : ''}">${p.simbolo.includes('/') ? 'crypto' : 'azione'}${inPos ? ' · intraday' : ''}</span></div>
+      <div class="h"><span class="big">${money(p.valore)}</span><span class="${cls(gain)}"><b>${usd(gain)}</b><br><span style="float:right">${pct(p.variazione)}</span></span></div>
+      ${spark(p.simbolo, p.prezzoAttuale)}
+      <dl><dt>Quantità</dt><dd>${qty(p.quantita)}</dd><dt>Carico → adesso</dt><dd>${px(p.prezzoCarico)} → ${px(p.prezzoAttuale)}</dd><dt>Peso</dt><dd>${((p.valore / eq) * 100).toFixed(1).replace('.', ',')}%</dd>${p.dal ? `<dt>Aperta da</dt><dd>${durata(p.dal)}</dd>` : ''}${inPos && it.obiettivo ? `<dt>Obiettivo · stop</dt><dd><span class="up">${px(it.obiettivo)}</span> · <span class="down">${px(it.stop)}</span></dd>` : ''}</dl>
+      ${chi ? `<div class="why">${esc(chi)}</div>` : ''}
+    </button>`;
+  }).join('') : '<p class="empty">Nessuna posizione aperta: gli agenti aspettano un’occasione.</p>';
+  const prezzo = (s) => st.prezzi?.[s];
+  $('#inv-watch').innerHTML = groups.watch.length ? groups.watch.map((s) => {
+    const c = cust.get(s); const it = intra.get(s); const p = c?.dossier ? Math.round(c.dossier.probabilita * 100) : null;
+    const stato = (it?.ingresso ?? null) !== null ? ['up', 'ingresso intraday votato'] : voted.has(s) ? ['agent', 'votato nell’ultimo giro'] : waiting.has(s) ? ['warn', 'in attesa'] : c ? [faseCls(c.fase), FASI[c.fase] || c.fase] : ['', 'osservato'];
+    const perche = waiting.get(s) || c?.dossier?.prossimaAzione || it?.motivo || c?.stato || '';
+    return `<button type="button" class="inv-card" data-sym="${esc(s)}" aria-pressed="${sel(s)}">
+      <div class="h"><span class="s">${esc(s)}</span><span class="pill ${stato[0]}">${esc(stato[1])}</span></div>
+      <div class="h"><span class="big">${prezzo(s) ? `${px(prezzo(s))} $` : '–'}</span>${p !== null ? `<span><b class="${p >= 60 ? 'up' : p < 45 ? 'down' : ''}">${p}%</b> <span class="why">favorevole</span></span>` : ''}</div>
+      ${spark(s, prezzo(s))}
+      ${perche ? `<div class="why">${esc(String(perche).slice(0, 180))}${String(perche).length > 180 ? '…' : ''}</div>` : ''}
+    </button>`;
+  }).join('') : '<p class="empty">Nessun titolo sotto osservazione in questo giro.</p>';
+  $('#radar-n').textContent = `(${groups.idle.length})`;
+  $('#chips').innerHTML = groups.idle.map((s) => `<button type="button" class="chip idle" data-sym="${esc(s)}" aria-pressed="${sel(s)}">${esc(s)}</button>`).join('');
+  for (const b of document.querySelectorAll('#inv-held .inv-card, #inv-watch .inv-card, #chips .chip')) b.addEventListener('click', () => openChart(b.dataset.sym));
+  if (selected && panelOpen) paintTitle();
 }
+// Clic su una card: si apre il grafico del titolo con la proiezione dei modelli.
+function openChart(sym) {
+  panelOpen = true; $('#titoli').hidden = false;
+  selectSymbol(sym);
+  if (location.hash.replace('#', '').split('/')[0] !== 'investimenti') location.hash = 'investimenti';
+  setTimeout(() => { drawChart(); $('#titoli').scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 80);
+}
+$('#chart-x').addEventListener('click', () => { panelOpen = false; $('#titoli').hidden = true; for (const b of document.querySelectorAll('.inv-card, #chips .chip')) b.setAttribute('aria-pressed', 'false'); });
+// Menu a sinistra: sul telefono si apre con ☰ e si chiude toccando fuori o scegliendo una voce.
+function menu(open) { $('#side').classList.toggle('open', open); $('#scrim').hidden = !open; $('#menu-btn').setAttribute('aria-expanded', String(open)); }
+$('#menu-btn').addEventListener('click', () => menu(!$('#side').classList.contains('open')));
+$('#scrim').addEventListener('click', () => menu(false));
 function selectSymbol(sym) {
   if (!sym) return;
   selected = sym; valutazione = null;
-  for (const b of $('#chips').querySelectorAll('.chip')) b.setAttribute('aria-pressed', String(b.dataset.sym === sym));
+  for (const b of document.querySelectorAll('.inv-card, #chips .chip')) b.setAttribute('aria-pressed', String(panelOpen && b.dataset.sym === sym));
   loadSymbol(sym);
 }
 async function loadSymbol(sym) {
@@ -1417,7 +1574,9 @@ async function loadSymbol(sym) {
 }
 setInterval(() => { forecasts = null; }, 10 * 60_000);
 // Candele intraday: si rileggono ogni minuto mentre la pagina Titoli è aperta.
-setInterval(() => { if (tf !== 'giorno' && selected && currentPage === 'titoli') loadSymbol(selected); }, 60_000);
+// Candele intraday in diretta: 1 e 5 minuti ogni 15 secondi, le altre ogni 30, mentre il grafico è aperto.
+let giriGrafico = 0;
+setInterval(() => { giriGrafico++; if (tf !== 'giorno' && selected && currentPage === 'investimenti' && panelOpen && (['1Min', '5Min'].includes(tf) || giriGrafico % 2 === 0)) loadSymbol(selected); }, 15_000);
 function paintTf() {
   for (const b of $('#tf-row').querySelectorAll('button')) b.setAttribute('aria-pressed', String(b.dataset.tf === tf));
   $('#tf-note').textContent = tfNote;
@@ -1473,115 +1632,164 @@ function actionsFor(sym) {
 let chartProb = null;
 function erfJs(x) { const t = 1 / (1 + 0.3275911 * Math.abs(x)); const y = 1 - ((((1.061405429 * t - 1.453152027) * t + 1.421413741) * t - 0.284496736) * t + 0.254829592) * t * Math.exp(-x * x); return x >= 0 ? y : -y; }
 // Il grafico: ultime 120 candele, medie 20/50/200, carico e stop, il percorso previsto da Kronos con il cono di incertezza, le operazioni.
-let chartGeom = null;
-function drawChart() {
-  const cv = $('#chart'); const dpr = Math.min(2, window.devicePixelRatio || 1);
-  const W = cv.clientWidth, H = cv.clientHeight; if (!W) return;
-  cv.width = W * dpr; cv.height = H * dpr;
-  const ctx = cv.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, H);
-  const all = bars; const N = Math.min(120, all.length);
-  ctx.font = '12px Figtree, system-ui, sans-serif';
-  if (!N) { ctx.fillStyle = cssVar('--ink-3'); ctx.fillText(status ? 'Le barre arrivano con il primo giro riuscito del motore.' : 'Nessun dato.', 16, 28); chartGeom = null; return; }
-  const lb = liveBar(selected);
-  const view = [...all.slice(-(lb ? N - 1 : N)), ...(lb ? [lb] : [])]; const closesAll = all.map((b) => b.close);
-  const intra = tf !== 'giorno';
-  const fc = intra ? tfForecast : forecasts?.previsioni?.[selected]; const path = fc?.percorso || [];
-  const vol = dailyVolOf(closesAll);
-  const last = all[all.length - 1].close;
-  const pos = (status?.posizioni || []).find((p) => p.simbolo === selected);
-  const stopPct = valutazione?.livelli?.stopPct ?? Math.min(0.10, Math.max(0.05, Math.round(2.5 * vol * Math.sqrt(5) * 200) / 200));
-  const carico = pos?.prezzoCarico ?? null;
-  const stop = carico !== null ? carico * (1 - stopPct) : null;
-  const H_FC = path.length; const slots = view.length + H_FC + 1;
-  let lo = Math.min(...view.map((b) => b.low)), hi = Math.max(...view.map((b) => b.high));
-  for (let k = 0; k < path.length; k++) { const band = vol * Math.sqrt(k + 1) * 1.2816; lo = Math.min(lo, last * (1 + path[k] - band)); hi = Math.max(hi, last * (1 + path[k] + band)); }
-  if (stop !== null) lo = Math.min(lo, stop); if (carico !== null) hi = Math.max(hi, carico);
-  const pad = (hi - lo) * 0.06 || hi * 0.02; lo -= pad; hi += pad;
-  const L = 8, R = 84, T = 14, B = 26; const pw = W - L - R, ph = H - T - B;
-  // Il futuro ha una zona sua (un quarto del grafico): il cono si legge anche con 120 candele di storia.
-  const histW = H_FC ? pw * 0.76 : pw, fcW = pw - histW;
-  const x = (i) => i < view.length ? L + ((i + 0.5) / view.length) * histW : L + histW + ((i - view.length + 0.5) / (H_FC + 0.3)) * fcW;
-  const y = (v) => T + (1 - (v - lo) / (hi - lo)) * ph;
-  const cw = Math.max(2, (histW / view.length) * 0.62);
-  // griglia e scala
-  ctx.strokeStyle = cssVar('--line'); ctx.fillStyle = cssVar('--ink-3'); ctx.lineWidth = 1; ctx.textAlign = 'left';
-  for (let g = 0; g <= 5; g++) { const v = lo + ((hi - lo) * g) / 5; const yy = y(v); ctx.beginPath(); ctx.moveTo(L, yy); ctx.lineTo(W - R, yy); ctx.stroke(); ctx.fillText(px(v), W - R + 6, yy + 4); }
-  // date (ogni ~20 barre)
-  ctx.textAlign = 'center';
-  const lab = (d) => intra ? new Date(d).toLocaleString('it-IT', { timeZone: 'Europe/Rome', ...(tf === '4Hour' ? { day: '2-digit', month: '2-digit', hour: '2-digit' } : { hour: '2-digit', minute: '2-digit' }) }) : d.slice(5);
-  for (let i = 0; i < view.length; i += Math.ceil(view.length / 6)) ctx.fillText(lab(view[i].date), x(i), H - 8);
-  // zona futura
-  const F0 = view.length; // prima colonna del futuro
-  if (H_FC) { ctx.fillStyle = cssVar('--agent-bg'); ctx.globalAlpha = 0.35; ctx.fillRect(L + histW, T, fcW, ph); ctx.globalAlpha = 1; ctx.fillStyle = cssVar('--ink-3'); ctx.fillText(intra ? `prossime ${H_FC} candele` : `prossime ${H_FC} sedute`, (x(F0) + x(slots - 1)) / 2, H - 8); }
-  // medie
-  const nClosed = view.length - (lb ? 1 : 0);
-  // medie: sul giornaliero 20/50/200; sulle candele brevi EMA 9 e 20 (quelle che usa l'intraday) e media 50.
-  const emaSeries = (n) => { const k = 2 / (n + 1); const out = []; let e = null; closesAll.forEach((c, i) => { if (i < n - 1) { out.push(null); return; } if (e === null) e = closesAll.slice(0, n).reduce((a, b) => a + b, 0) / n; else e = c * k + e * (1 - k); out.push(e); }); return out; };
-  const line = (n, color, dash, exp = false) => { const es = exp ? emaSeries(n) : null; ctx.beginPath(); ctx.strokeStyle = color; ctx.lineWidth = 1.5; ctx.setLineDash(dash || []); let started = false; for (let i = 0; i < nClosed; i++) { const gi = all.length - nClosed + i; const v = exp ? es[gi] : smaAt(closesAll, gi, n); if (v === null || v === undefined) continue; const xx = x(i), yy = y(v); if (!started) { ctx.moveTo(xx, yy); started = true; } else ctx.lineTo(xx, yy); } ctx.stroke(); ctx.setLineDash([]); };
-  if (intra) { line(50, '#b08900'); line(20, cssVar('--agent'), null, true); line(9, '#8a94a6', [2, 3], true); }
-  else { line(200, '#b08900'); line(50, cssVar('--agent')); line(20, '#8a94a6', [2, 3]); }
-  // candele
-  const up = cssVar('--up'), down = cssVar('--down');
-  view.forEach((b, i) => { const c = b.close >= b.open ? up : down; ctx.strokeStyle = c; ctx.fillStyle = c; ctx.lineWidth = 1; const xx = x(i); ctx.beginPath(); ctx.moveTo(xx, y(b.high)); ctx.lineTo(xx, y(b.low)); ctx.stroke(); const top = y(Math.max(b.open, b.close)), bot = y(Math.min(b.open, b.close)); if (b.live) { ctx.lineWidth = 1.5; ctx.strokeRect(xx - cw / 2, top, cw, Math.max(1, bot - top)); ctx.globalAlpha = 0.35; ctx.fillRect(xx - cw / 2, top, cw, Math.max(1, bot - top)); ctx.globalAlpha = 1; } else ctx.fillRect(xx - cw / 2, top, cw, Math.max(1, bot - top)); });
-  if (lb) { ctx.fillStyle = cssVar('--ink-3'); ctx.textAlign = 'center'; ctx.fillText(intra ? 'ora' : 'oggi', x(view.length - 1), T + 10); ctx.beginPath(); ctx.strokeStyle = cssVar('--line'); ctx.setLineDash([2, 3]); ctx.moveTo(x(view.length - 1), T + 14); ctx.lineTo(x(view.length - 1), T + ph); ctx.stroke(); ctx.setLineDash([]); }
-  // livelli
-  const hline = (v, color, dash, label) => { if (v === null || v === undefined) return; ctx.beginPath(); ctx.strokeStyle = color; ctx.lineWidth = 1.2; ctx.setLineDash(dash); ctx.moveTo(L, y(v)); ctx.lineTo(W - R, y(v)); ctx.stroke(); ctx.setLineDash([]); ctx.fillStyle = color; ctx.textAlign = 'left'; ctx.fillText(label, L + 6, y(v) - 4); };
-  hline(carico, cssVar('--ink'), [6, 4], `carico ${px(carico)}`);
-  hline(stop, down, [6, 4], `stop ${px(stop)} (${pct(-stopPct)})`);
-  // scenario Kronos: percorso previsto e cono di probabilità (fascia 50% più scura, 80% più chiara); a destra la
-  // probabilità che a fine orizzonte il prezzo stia sopra o sotto quello di adesso.
-  if (H_FC) {
-    const x0 = x(F0 - 1 - (lb ? 1 : 0));
-    const toward = fc.rendimentoPrevisto >= 0 ? up : down;
-    const band = (z, alpha) => { ctx.beginPath(); ctx.fillStyle = toward; ctx.globalAlpha = alpha; ctx.moveTo(x0, y(last)); for (let k = 0; k < H_FC; k++) ctx.lineTo(x(F0 + k), y(last * (1 + path[k] + vol * Math.sqrt(k + 1) * z))); for (let k = H_FC - 1; k >= 0; k--) ctx.lineTo(x(F0 + k), y(last * (1 + path[k] - vol * Math.sqrt(k + 1) * z))); ctx.closePath(); ctx.fill(); ctx.globalAlpha = 1; };
-    band(1.2816, 0.10); band(0.6745, 0.16);
-    ctx.beginPath(); ctx.strokeStyle = toward; ctx.lineWidth = 2; ctx.setLineDash([3, 4]); ctx.moveTo(x0, y(last));
-    for (let k = 0; k < H_FC; k++) ctx.lineTo(x(F0 + k), y(last * (1 + path[k])));
-    ctx.stroke(); ctx.setLineDash([]);
-    for (let k = 0; k < H_FC; k++) { ctx.beginPath(); ctx.fillStyle = toward; ctx.arc(x(F0 + k), y(last * (1 + path[k])), 2.5, 0, Math.PI * 2); ctx.fill(); }
-    const sd = vol * Math.sqrt(H_FC); const pUp = sd > 0 ? 0.5 * (1 + erfJs(path[H_FC - 1] / sd / Math.SQRT2)) : 0.5;
-    // In alto nella zona del futuro: dove porta Kronos e la probabilità di finire sopra o sotto il prezzo di adesso.
-    const xr = L + pw - 4;
-    ctx.textAlign = 'right'; ctx.font = 'bold 12px Figtree, system-ui, sans-serif';
-    ctx.fillStyle = toward; ctx.fillText(`Kronos ${pct(fc.rendimentoPrevisto)} → ${px(last * (1 + fc.rendimentoPrevisto))}`, xr, T + 14);
-    ctx.fillStyle = up; ctx.fillText(`↑ ${Math.round(pUp * 100)}% sopra`, xr, T + 30);
-    ctx.fillStyle = down; ctx.fillText(`↓ ${Math.round((1 - pUp) * 100)}% sotto`, xr, T + 46);
-    ctx.font = '11px Figtree, system-ui, sans-serif'; ctx.fillStyle = cssVar('--ink-3');
-    ctx.fillText('fasce 50% e 80%', xr, T + ph - 6);
-    ctx.font = '12px Figtree, system-ui, sans-serif';
-    chartProb = pUp;
-  } else chartProb = null;
-  // operazioni
-  for (const t of tradesFor(selected)) { const td = intra ? t.at : t.date; if (!td) continue; let i = intra ? view.findIndex((b, j) => !b.live && b.date <= td && (!view[j + 1] || view[j + 1].date > td)) : view.findIndex((b) => b.date >= td); if (!intra && i < 0 && td > view[view.length - 1].date) i = view.length - 1; if (i < 0 || (lb && i === view.length - 1)) continue; ctx.fillStyle = t.side === 'buy' ? up : down; ctx.textAlign = 'center'; ctx.font = 'bold 14px Figtree, system-ui, sans-serif'; ctx.fillText(t.side === 'buy' ? '▲' : '▼', x(i), t.side === 'buy' ? y(view[i].low) + 16 : y(view[i].high) - 6); ctx.font = '12px Figtree, system-ui, sans-serif'; }
-  // Le scelte di oggi sul titolo: voti (puntini), ordini (frecce piene), rifiuti (×), vicino alla candela di oggi.
-  const acts = actionsFor(selected);
-  if (acts.length) {
-    const xi = x(view.length - 1); const bTop = y(view[view.length - 1].high), bBot = y(view[view.length - 1].low);
-    let upK = 0, downK = 0;
-    for (const e of acts) {
-      const buy = e.lato === 'buy' || e.stato === 'aperto'; const col = e.tipo === 'rifiuto' ? cssVar('--warn') : buy ? up : down;
-      ctx.fillStyle = col; ctx.textAlign = 'center';
-      if (e.tipo === 'ordine' || e.tipo === 'trade') { ctx.font = 'bold 15px Figtree, system-ui, sans-serif'; ctx.fillText(buy ? '▲' : '▼', xi, buy ? bBot + 16 + 14 * downK++ : bTop - 6 - 14 * upK++); }
-      else if (e.tipo === 'rifiuto' && e.quantita) { ctx.font = 'bold 13px Figtree, system-ui, sans-serif'; ctx.fillText('×', xi, bTop - 6 - 14 * upK++); }
-      else if (e.tipo === 'segnale') { ctx.beginPath(); ctx.arc(xi, buy ? bBot + 10 + 10 * downK++ : bTop - 10 - 10 * upK++, 3, 0, Math.PI * 2); ctx.fill(); }
-    }
-    ctx.font = '12px Figtree, system-ui, sans-serif';
-  }
-  chartGeom = { x, y, N: view.length, slots, view, path, last, vol, L, R, W, H, T, ph, lb, histW, fcW };
+// Il grafico, come sulle piattaforme di trading: TradingView Lightweight Charts (zoom con la rotella, trascinamento,
+// mirino con OHLC, scala dei prezzi). Candele, volumi, medie (20/50/200 sul giornaliero, EMA 9/20 e media 50 sulle brevi),
+// carico, stop e obiettivo, operazioni (frecce) e la proiezione dei modelli (Kronos combinato dal cervello) con il cono
+// di incertezza al 50% e all'80%, disegnato sopra il grafico e allineato alle sue coordinate.
+const LWC = window.LightweightCharts;
+let lwc = null, ov = null, cone = null, fitKey = '', lastTimes = [], futureInfo = new Map();
+const S = {};
+const romeSec = (iso) => { const ms = Date.parse(iso); const loc = new Date(ms).toLocaleString('sv-SE', { timeZone: 'Europe/Rome' }); return Math.round(Date.parse(loc.replace(' ', 'T') + 'Z') / 1000); };
+const TF_SEC = { '1Min': 60, '5Min': 300, '15Min': 900, '1Hour': 3600, '4Hour': 14400 };
+function themeOpts() {
+  return { layout: { background: { type: 'solid', color: cssVar('--card-2') }, textColor: cssVar('--ink-2'), fontFamily: 'Figtree, system-ui, sans-serif', fontSize: 12 }, grid: { vertLines: { color: cssVar('--line') }, horzLines: { color: cssVar('--line') } }, rightPriceScale: { borderColor: cssVar('--line') }, timeScale: { borderColor: cssVar('--line') } };
 }
-$('#chart').addEventListener('mousemove', (ev) => {
-  const g = chartGeom; const tip = $('#tip'); if (!g) { tip.style.display = 'none'; return; }
-  const rect = ev.currentTarget.getBoundingClientRect(); const mx = ev.clientX - rect.left, my = ev.clientY - rect.top;
-  const rel = mx - g.L; const i = rel < g.histW ? Math.floor((rel / g.histW) * g.N) : g.N + Math.floor(((rel - g.histW) / g.fcW) * (g.path.length + 0.3));
-  if (i < 0 || i >= g.slots) { tip.style.display = 'none'; return; }
-  let html;
-  if (i < g.N) { const b = g.view[i]; const acts = b.live ? actionsFor(selected) : []; html = `<b>${tf === 'giorno' ? b.date : new Date(b.date).toLocaleString('it-IT', { timeZone: 'Europe/Rome', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}${b.live ? ` · in formazione (${b.letture} letture)` : ''}</b><br>apertura ${px(b.open)} · massimo ${px(b.high)}<br>minimo ${px(b.low)} · ${b.live ? 'ultimo' : 'chiusura'} ${px(b.close)} <span class="${cls(b.close - b.open)}">${pct(b.close / b.open - 1)}</span>${acts.length ? `<br>${acts.length} azioni oggi: vedi sotto il grafico` : ''}`; }
-  else { const k = i - g.N; if (k >= g.path.length) { tip.style.display = 'none'; return; } const s1 = g.vol * Math.sqrt(k + 1); const pU = 0.5 * (1 + erfJs(g.path[k] / s1 / Math.SQRT2)); html = `<b>Scenario Kronos, ${tf === 'giorno' ? 'seduta' : 'candela'} +${k + 1}</b><br>atteso ${px(g.last * (1 + g.path[k]))} (${pct(g.path[k])})<br>50%: ${px(g.last * (1 + g.path[k] - s1 * 0.6745))} – ${px(g.last * (1 + g.path[k] + s1 * 0.6745))}<br>80%: ${px(g.last * (1 + g.path[k] - s1 * 1.2816))} – ${px(g.last * (1 + g.path[k] + s1 * 1.2816))}<br><span class="up">↑ ${Math.round(pU * 100)}%</span> · <span class="down">↓ ${Math.round((1 - pU) * 100)}%</span>`; }
-  tip.innerHTML = html; tip.style.display = 'block';
-  tip.style.left = `${Math.min(mx + 14, g.W - 230)}px`; tip.style.top = `${Math.max(4, my - 60)}px`;
-});
-$('#chart').addEventListener('mouseleave', () => { $('#tip').style.display = 'none'; });
-new ResizeObserver(() => drawChart()).observe($('#chart'));
+function ensureChart() {
+  if (lwc) return lwc;
+  if (!LWC) return null;
+  const el = $('#chart');
+  lwc = LWC.createChart(el, { autoSize: true, ...themeOpts(), crosshair: { mode: LWC.CrosshairMode.Normal }, timeScale: { rightOffset: 3, borderColor: cssVar('--line') }, localization: { locale: 'it-IT', priceFormatter: (p) => px(p) } });
+  const quiet = { priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false };
+  S.vol = lwc.addHistogramSeries({ priceScaleId: 'vol', priceFormat: { type: 'volume' }, ...quiet });
+  lwc.priceScale('vol').applyOptions({ scaleMargins: { top: 0.84, bottom: 0 } });
+  S.c = lwc.addCandlestickSeries({ borderVisible: false, priceFormat: { type: 'custom', formatter: (p) => px(p), minMove: 1e-9 } });
+  S.m1 = lwc.addLineSeries({ lineWidth: 1, lineStyle: LWC.LineStyle.Dotted, ...quiet });
+  S.m2 = lwc.addLineSeries({ lineWidth: 2, ...quiet });
+  S.m3 = lwc.addLineSeries({ lineWidth: 2, ...quiet });
+  // Bordi del cono all'80%: invisibili, servono perché la scala dei prezzi includa tutto il cono.
+  S.u80 = lwc.addLineSeries({ color: 'rgba(0,0,0,0)', lineWidth: 1, ...quiet });
+  S.l80 = lwc.addLineSeries({ color: 'rgba(0,0,0,0)', lineWidth: 1, ...quiet });
+  S.fc = lwc.addLineSeries({ lineWidth: 2, lineStyle: LWC.LineStyle.Dashed, pointMarkersVisible: true, pointMarkersRadius: 2.5, priceLineVisible: false, lastValueVisible: true, title: 'proiezione' });
+  S.lines = [];
+  ov = document.createElement('canvas'); ov.className = 'chart-ov'; el.appendChild(ov);
+  lwc.timeScale().subscribeVisibleLogicalRangeChange(() => requestAnimationFrame(drawCone));
+  lwc.subscribeCrosshairMove(onCross);
+  new ResizeObserver(() => requestAnimationFrame(drawCone)).observe(el);
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { lwc.applyOptions(themeOpts()); drawChart(); });
+  return lwc;
+}
+function drawCone() {
+  if (!ov || !lwc) return;
+  const el = $('#chart'); const dpr = Math.min(2, window.devicePixelRatio || 1);
+  const W = el.clientWidth, H = el.clientHeight;
+  ov.width = W * dpr; ov.height = H * dpr; ov.style.width = `${W}px`; ov.style.height = `${H}px`;
+  const ctx = ov.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, H);
+  if (!cone || !cone.pts.length) return;
+  const ts = lwc.timeScale(); const paneW = W - lwc.priceScale('right').width(); const paneH = H - ts.height();
+  ctx.save(); ctx.beginPath(); ctx.rect(0, 0, paneW, paneH); ctx.clip();
+  const x = (t) => ts.timeToCoordinate(t); const y = (v) => S.c.priceToCoordinate(v);
+  const x0 = x(cone.t0), y0 = y(cone.last);
+  if (x0 === null || y0 === null) { ctx.restore(); return; }
+  // zona del futuro, leggermente colorata
+  const xEnd = x(cone.pts.at(-1).t);
+  if (xEnd !== null) { ctx.fillStyle = cssVar('--agent-bg'); ctx.globalAlpha = 0.35; ctx.fillRect(x0, 0, xEnd - x0 + 8, paneH); ctx.globalAlpha = 1; }
+  for (const [k, alpha] of [['80', 0.10], ['50', 0.17]]) {
+    ctx.beginPath(); ctx.fillStyle = cone.color; ctx.globalAlpha = alpha; ctx.moveTo(x0, y0);
+    for (const p of cone.pts) { const xx = x(p.t), yy = y(p[`u${k}`]); if (xx !== null && yy !== null) ctx.lineTo(xx, yy); }
+    for (const p of [...cone.pts].reverse()) { const xx = x(p.t), yy = y(p[`l${k}`]); if (xx !== null && yy !== null) ctx.lineTo(xx, yy); }
+    ctx.closePath(); ctx.fill(); ctx.globalAlpha = 1;
+  }
+  ctx.restore();
+}
+function onCross(param) {
+  const box = $('#ohlc');
+  if (!param || !param.time || !param.seriesData) { box.innerHTML = defaultLegend(); return; }
+  const b = param.seriesData.get(S.c);
+  const f = futureInfo.get(param.time);
+  if (b && b.open !== undefined) {
+    const label = typeof param.time === 'number' ? new Date(param.time * 1000).toLocaleString('it-IT', { timeZone: 'UTC', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : param.time;
+    box.innerHTML = `<b>${esc(selected)}</b> · ${label}${b.live ? ' · in formazione' : ''}<br>A <b>${px(b.open)}</b> · Max <b>${px(b.high)}</b> · Min <b>${px(b.low)}</b> · C <b>${px(b.close)}</b> <span class="${cls(b.close - b.open)}">${pct(b.close / b.open - 1)}</span>`;
+  } else if (f) {
+    box.innerHTML = `<b>Proiezione, ${tf === 'giorno' ? 'seduta' : 'candela'} +${f.k}</b><br>atteso <b>${px(f.mid)}</b> (${pct(f.r)}) · 50%: ${px(f.l50)} – ${px(f.u50)} · 80%: ${px(f.l80)} – ${px(f.u80)}<br><span class="up">↑ ${Math.round(f.pUp * 100)}% sopra</span> · <span class="down">↓ ${Math.round((1 - f.pUp) * 100)}% sotto</span> il prezzo di adesso`;
+  } else box.innerHTML = defaultLegend();
+}
+let legendText = '';
+const defaultLegend = () => legendText;
+// Le date dei titoli seguono le sedute (niente sabato e domenica); le crypto ogni giorno.
+function nextDays(from, n, crypto) {
+  const out = []; const d = new Date(`${from}T12:00:00Z`);
+  while (out.length < n) { d.setUTCDate(d.getUTCDate() + 1); const wd = d.getUTCDay(); if (!crypto && (wd === 0 || wd === 6)) continue; out.push(d.toISOString().slice(0, 10)); }
+  return out;
+}
+function drawChart() {
+  const el = $('#chart');
+  if (!ensureChart()) { $('#ohlc').textContent = 'Libreria del grafico non caricata: ricarica la pagina.'; return; }
+  if (!el.clientWidth) return;
+  const intra = tf !== 'giorno';
+  lwc.applyOptions({ ...themeOpts(), timeScale: { timeVisible: intra, secondsVisible: false, borderColor: cssVar('--line') } });
+  const up = cssVar('--up'), down = cssVar('--down');
+  S.c.applyOptions({ upColor: up, downColor: down, wickUpColor: up, wickDownColor: down });
+  S.m1.applyOptions({ color: '#8a94a6' }); S.m2.applyOptions({ color: cssVar('--agent') }); S.m3.applyOptions({ color: '#b08900' });
+  for (const l of S.lines) S.c.removePriceLine(l); S.lines = [];
+  futureInfo = new Map(); cone = null; chartProb = null;
+  if (!bars.length) {
+    for (const k of ['c', 'vol', 'm1', 'm2', 'm3', 'u80', 'l80', 'fc']) S[k].setData([]);
+    S.c.setMarkers([]); legendText = status ? `<b>${esc(selected || '')}</b> · le candele arrivano con il primo giro riuscito del motore${tfNote ? ` · ${esc(tfNote)}` : ''}` : 'Nessun dato.'; $('#ohlc').innerHTML = legendText; $('#kronos-box').hidden = true; drawCone(); return;
+  }
+  const crypto = String(selected).includes('/');
+  const tOf = (b) => intra ? romeSec(b.date) : String(b.date).slice(0, 10);
+  const all = bars.slice(-400);
+  const candles = []; const seen = new Set();
+  for (const b of all) { const t = tOf(b); if (seen.has(t)) continue; seen.add(t); candles.push({ time: t, open: b.open, high: b.high, low: b.low, close: b.close, volume: b.volume }); }
+  const lastT = candles.at(-1).time; const last = candles.at(-1).close;
+  // La candela in formazione: dall'ultima chiusura al prezzo di adesso.
+  const lb = liveBar(selected);
+  let liveT = null;
+  if (lb) { liveT = intra ? lastT + TF_SEC[tf] : String(lb.date).slice(0, 10); if (intra || liveT > lastT) candles.push({ time: liveT, open: lb.open, high: lb.high, low: lb.low, close: lb.close, live: true }); else liveT = null; }
+  S.c.setData(candles.map(({ volume, ...c }) => c));
+  S.vol.setData(candles.filter((c) => c.volume !== undefined).map((c) => ({ time: c.time, value: c.volume || 0, color: c.close >= c.open ? 'rgba(19,122,82,.35)' : 'rgba(180,51,42,.35)' })));
+  const closes = candles.filter((c) => !c.live).map((c) => c.close);
+  const times = candles.filter((c) => !c.live).map((c) => c.time);
+  const ema = (n) => { const k = 2 / (n + 1); let e = null; return closes.map((c, i) => { if (i < n - 1) return null; e = e === null ? closes.slice(0, n).reduce((a, b) => a + b, 0) / n : c * k + e * (1 - k); return e; }); };
+  const sma = (n) => closes.map((_, i) => smaAt(closes, i, n));
+  const toLine = (vals) => vals.map((v, i) => (v === null || v === undefined ? null : { time: times[i], value: v })).filter(Boolean);
+  if (intra) { S.m1.setData(toLine(ema(9))); S.m2.setData(toLine(ema(20))); S.m3.setData(toLine(sma(50))); }
+  else { S.m1.setData(toLine(sma(20))); S.m2.setData(toLine(sma(50))); S.m3.setData(toLine(sma(200))); }
+  // Proiezione dei modelli: percorso medio, cono 50% e 80% dalla volatilità delle candele, probabilità a fine orizzonte.
+  const fc = intra ? tfForecast : forecasts?.previsioni?.[selected];
+  const path = fc?.percorso || [];
+  const vol = dailyVolOf(closes) || 0;
+  if (path.length) {
+    const fts = intra ? path.map((_, k) => lastT + (k + 1) * TF_SEC[tf]) : nextDays(lastT, path.length, crypto);
+    const color = (fc.rendimentoPrevisto ?? path.at(-1)) >= 0 ? up : down;
+    const pts = path.map((r, k) => { const s1 = vol * Math.sqrt(k + 1); const pUp = s1 > 0 ? 0.5 * (1 + erfJs(r / s1 / Math.SQRT2)) : 0.5; return { t: fts[k], k: k + 1, r, mid: last * (1 + r), u50: last * (1 + r + s1 * 0.6745), l50: last * (1 + r - s1 * 0.6745), u80: last * (1 + r + s1 * 1.2816), l80: last * (1 + r - s1 * 1.2816), pUp }; });
+    for (const p of pts) futureInfo.set(p.t, p);
+    S.fc.applyOptions({ color });
+    S.fc.setData([{ time: lastT, value: last }, ...pts.map((p) => ({ time: p.t, value: p.mid }))]);
+    S.u80.setData(pts.map((p) => ({ time: p.t, value: p.u80 }))); S.l80.setData(pts.map((p) => ({ time: p.t, value: p.l80 })));
+    cone = { t0: lastT, last, color, pts };
+    chartProb = pts.at(-1).pUp;
+    const kb = $('#kronos-box'); kb.hidden = false;
+    kb.innerHTML = `<b style="color:${color}">Proiezione ${pct(fc.rendimentoPrevisto ?? path.at(-1))} → ${px(last * (1 + (fc.rendimentoPrevisto ?? path.at(-1))))}</b><br><span class="up">↑ ${Math.round(chartProb * 100)}% sopra</span> · <span class="down">↓ ${Math.round((1 - chartProb) * 100)}% sotto</span><br><span class="why">${path.length} ${intra ? `candele da ${TF_LABEL[tf]}` : 'sedute'} · fasce 50% e 80%</span>`;
+  } else { for (const k of ['fc', 'u80', 'l80']) S[k].setData([]); $('#kronos-box').hidden = true; }
+  // Livelli: carico e stop della posizione, obiettivo e stop dell'operazione intraday.
+  const pos = (status?.posizioni || []).find((p) => p.simbolo === selected);
+  const it = (status?.intraday || []).find((x) => x.simbolo === selected && x.fase === 'in posizione');
+  const dCloses = intra ? (window.__bars?.[selected] || []).map((b) => b.close) : closes;
+  const stopPct = valutazione?.livelli?.stopPct ?? Math.min(0.10, Math.max(0.05, Math.round(2.5 * (dailyVolOf(dCloses) || 0.02) * Math.sqrt(5) * 200) / 200));
+  const line = (price, color, title, style = LWC.LineStyle.Dashed) => { if (price === null || price === undefined || !(price > 0)) return; S.lines.push(S.c.createPriceLine({ price, color, lineWidth: 1, lineStyle: style, axisLabelVisible: true, title })); };
+  if (pos) { line(pos.prezzoCarico, cssVar('--ink'), 'carico'); if (!it) line(pos.prezzoCarico * (1 - stopPct), down, 'stop'); }
+  if (it) { line(it.obiettivo, up, 'obiettivo', LWC.LineStyle.Solid); line(it.stop, down, 'stop intraday'); }
+  // Operazioni dal diario: frecce sulla candela in cui sono avvenute.
+  const findT = (iso, date) => {
+    if (!intra) { const d = String(date || iso).slice(0, 10); let best = null; for (const t of times) { if (t <= d) best = t; else break; } return best === null ? null : (d > times.at(-1) ? (liveT ?? times.at(-1)) : best); }
+    const s = romeSec(iso); if (s < times[0]) return null; let best = times[0]; for (const t of times) { if (t <= s) best = t; else break; } return s >= lastT + TF_SEC[tf] && liveT ? liveT : best;
+  };
+  const marks = [];
+  for (const t of tradesFor(selected)) { const tt = findT(t.at || t.date, t.date); if (tt === null) continue; marks.push({ time: tt, position: t.side === 'buy' ? 'belowBar' : 'aboveBar', color: t.side === 'buy' ? up : down, shape: t.side === 'buy' ? 'arrowUp' : 'arrowDown', text: `${t.side === 'buy' ? 'acquisto' : 'vendita'} ${px(t.price)}${t.pnl !== undefined ? ` ${usd(t.pnl)}` : ''}` }); }
+  marks.sort((a, b) => (a.time < b.time ? -1 : a.time > b.time ? 1 : 0));
+  S.c.setMarkers(marks);
+  legendText = `<b>${esc(selected)}</b> · ${intra ? `candele da ${TF_LABEL[tf]}` : 'giornaliero'} · ultimo <b>${px(lb?.close ?? last)}</b>${tfNote ? ` · <span class="why">${esc(tfNote)}</span>` : ''}<br><span class="why">${intra ? 'EMA 9 · EMA 20 · media 50' : 'media 20 · 50 · 200'}</span>`;
+  $('#ohlc').innerHTML = legendText;
+  const key = `${selected}|${tf}`;
+  if (key !== fitKey) {
+    fitKey = key;
+    const n = candles.length, ahead = path.length + 3;
+    lwc.timeScale().setVisibleLogicalRange({ from: Math.max(0, n - (intra ? 120 : 90)), to: n + ahead });
+  }
+  requestAnimationFrame(drawCone);
+}
+
 
 function paintTitle() {
   if (!selected) return;
@@ -1669,11 +1877,98 @@ $('#ask').addEventListener('click', async () => {
   b.disabled = false; b.textContent = 'Chiedi agli agenti adesso';
 });
 
+// ---------- biblioteca degli agenti ----------
+function paintBiblioteca(st) {
+  const b = st.biblioteca;
+  if (!b) { $('#biblioteca').innerHTML = '<p class="empty">La biblioteca arriva con il prossimo giro del motore.</p>'; return; }
+  const m = b.mese; const usato = m.pct < 0 ? Math.min(1, -m.pct / m.soglia) : 0;
+  $('#biblioteca').innerHTML = `<div class="vote" style="margin-top:0"><b>Regola del 6% (Elder)</b> · risultato realizzato del mese <b class="${cls(m.pnl)}">${usd(m.pnl)}</b> (${pct(m.pct)}); oltre −${Math.round(m.soglia * 100)}% gli acquisti si fermano fino al mese dopo.
+    <div class="bar" style="margin-top:6px"><i class="down" style="left:0; width:${Math.round(usato * 100)}%"></i></div></div>
+    ${b.principi.map((p) => `<details class="vote"><summary style="cursor:pointer"><b>${esc(p.autore)}</b> <span class="why">· ${esc(p.libro)}</span> ${p.applicato ? '<span class="pill up">applicato</span>' : '<span class="pill">non applicabile</span>'}</summary><dl class="kv" style="margin-top:6px"><dt>Principio</dt><dd>${esc(p.principio)}</dd><dt>Nel motore</dt><dd>${esc(p.nelMotore)}</dd></dl></details>`).join('')}`;
+}
+
+// ---------- rendimento per periodo ----------
+let periodo = 'oggi';
+try { periodo = localStorage.getItem('agenti.periodo') || 'oggi'; } catch {}
+let eqChart = null, eqSeries = null;
+const giornoLocale = (d) => d.toLocaleDateString('sv-SE', { timeZone: 'Europe/Rome' });
+function rangeOf(p) {
+  const now = new Date(); const oggi = giornoLocale(now);
+  const mezzanotte = (d) => new Date(`${d}T00:00:00`);
+  const giorni = (n) => new Date(now.getTime() - n * 86_400_000);
+  if (p === 'oggi') return { dal: mezzanotte(oggi), al: now, tf: '15Min', nome: 'oggi' };
+  if (p === '7g') return { dal: giorni(7), al: now, tf: '1H', nome: 'negli ultimi 7 giorni' };
+  if (p === '30g') return { dal: giorni(30), al: now, tf: '1D', nome: 'negli ultimi 30 giorni' };
+  if (p === 'mese') { const d = mezzanotte(`${oggi.slice(0, 8)}01`); return { dal: d, al: now, tf: now - d < 3 * 86_400_000 ? '1H' : '1D', nome: 'questo mese' }; }
+  if (p === 'anno') return { dal: mezzanotte(`${oggi.slice(0, 4)}-01-01`), al: now, tf: '1D', nome: 'quest’anno' };
+  if (p === 'tutto') { const primo = (journal?.trade || []).map((t) => t.apertoIl).filter(Boolean).sort()[0]; return { dal: primo ? mezzanotte(giornoLocale(new Date(primo))) : giorni(365), al: now, tf: '1D', nome: 'dall’inizio' }; }
+  const a = $('#p-dal').value || oggi, b = $('#p-al').value || oggi;
+  const dal = mezzanotte(a), al = new Date(Math.min(now.getTime(), new Date(`${b}T23:59:59`).getTime()));
+  const span = al - dal;
+  return { dal, al, tf: span <= 2 * 86_400_000 ? '15Min' : span <= 10 * 86_400_000 ? '1H' : '1D', nome: `dal ${a} al ${b}` };
+}
+async function loadPeriodo() {
+  for (const b of $('#periodo-f').querySelectorAll('button')) b.setAttribute('aria-pressed', String(b.dataset.p === periodo));
+  $('#periodo-date').hidden = periodo !== 'custom';
+  if (!journal) { try { journal = await (await fetch('/api/journal')).json(); } catch { journal = { trade: [] }; } }
+  const r = rangeOf(periodo);
+  let punti = [], nota = '';
+  try {
+    const res = await fetch(`/api/storico?dal=${encodeURIComponent(r.dal.toISOString())}&al=${encodeURIComponent(r.al.toISOString())}&tf=${r.tf}`);
+    const d = await res.json(); punti = d.punti || []; if (d.errore) nota = d.errore;
+  } catch (e) { nota = e.message; }
+  // Operazioni chiuse nel periodo (dal diario): risultato realizzato, vinti, migliore e peggiore.
+  const chiusi = (journal?.trade || []).filter((t) => t.stato === 'chiuso' && t.chiusoIl && Date.parse(t.chiusoIl) >= r.dal.getTime() && Date.parse(t.chiusoIl) <= r.al.getTime());
+  const pnlOf = (t) => (t.incassato ?? 0) - (t.costo ?? 0);
+  const realizzato = chiusi.reduce((a, t) => a + pnlOf(t), 0);
+  const vinti = chiusi.filter((t) => pnlOf(t) > 0).length;
+  const ord = chiusi.slice().sort((a, b) => pnlOf(b) - pnlOf(a));
+  // Patrimonio: primo e ultimo punto dello storico di Alpaca (oggi, senza storico: la variazione del giorno del conto).
+  let varEq = null, varPct = null, maxDd = null;
+  if (punti.length >= 2) {
+    const e0 = punti[0].equity, e1 = punti.at(-1).equity; varEq = e1 - e0; varPct = e0 > 0 ? e1 / e0 - 1 : null;
+    let peak = -Infinity; maxDd = 0; for (const p of punti) { peak = Math.max(peak, p.equity); maxDd = Math.min(maxDd, p.equity / peak - 1); }
+  }
+  if (varEq === null && periodo === 'oggi' && status?.conto) { varEq = status.conto.pnlGiorno; const base = status.conto.patrimonio - status.conto.pnlGiorno; varPct = base > 0 ? varEq / base : null; }
+  const tile = (lab, val, sub = '') => `<div class="kpi"><div class="lab">${lab}</div><div class="val">${val}</div>${sub ? `<div class="why">${sub}</div>` : ''}</div>`;
+  $('#periodo').innerHTML = `<div class="p-kpis">
+    ${tile('Variazione del patrimonio', varEq === null ? '–' : `<span class="${cls(varEq)}">${usd(varEq)}</span>`, varPct === null ? (nota ? esc(cleanErr(nota)) : '') : `<span class="${cls(varPct)}">${pct(varPct)}</span> ${esc(r.nome)}`)}
+    ${tile('Realizzato', `<span class="${cls(realizzato)}">${usd(realizzato)}</span>`, `operazioni chiuse ${esc(r.nome)}`)}
+    ${tile('Operazioni chiuse', String(chiusi.length), chiusi.length ? `${vinti} in guadagno (${Math.round((vinti / chiusi.length) * 100)}%)` : 'nessuna')}
+    ${tile('Migliore · peggiore', chiusi.length ? `<span class="up">${usd(pnlOf(ord[0]))}</span> · <span class="down">${usd(pnlOf(ord.at(-1)))}</span>` : '–', chiusi.length ? `${esc(ord[0].simbolo)} · ${esc(ord.at(-1).simbolo)}` : '')}
+    ${tile('Ribasso massimo', maxDd === null ? '–' : `<span class="${maxDd < 0 ? 'down' : ''}">${pct(maxDd)}</span>`, 'dal massimo del patrimonio nel periodo')}
+  </div>`;
+  // Andamento del patrimonio: verde sopra il punto di partenza, rosso sotto.
+  const el = $('#eq-chart');
+  if (window.LightweightCharts && punti.length >= 2) {
+    el.hidden = false;
+    if (!eqChart) {
+      eqChart = LWC.createChart(el, { autoSize: true, ...themeOpts(), handleScroll: false, handleScale: false, localization: { locale: 'it-IT', priceFormatter: (p) => fmt(p, 0) } });
+      eqSeries = eqChart.addBaselineSeries({ lineWidth: 2, priceLineVisible: false });
+    }
+    eqChart.applyOptions({ ...themeOpts(), timeScale: { timeVisible: r.tf !== '1D', secondsVisible: false, borderColor: cssVar('--line') } });
+    eqSeries.applyOptions({ baseValue: { type: 'price', price: punti[0].equity }, topLineColor: cssVar('--up'), topFillColor1: 'rgba(19,122,82,.25)', topFillColor2: 'rgba(19,122,82,.03)', bottomLineColor: cssVar('--down'), bottomFillColor1: 'rgba(180,51,42,.03)', bottomFillColor2: 'rgba(180,51,42,.25)' });
+    const seen = new Set(); const data = [];
+    for (const p of punti) { const t = r.tf === '1D' ? giornoLocale(new Date(p.t)) : romeSec(p.t); if (seen.has(t)) { data[data.length - 1].value = p.equity; continue; } seen.add(t); data.push({ time: t, value: p.equity }); }
+    eqSeries.setData(data); eqChart.timeScale().fitContent();
+  } else el.hidden = true;
+  // Giorno per giorno: risultato realizzato e numero di operazioni chiuse.
+  const perGiorno = new Map();
+  for (const t of chiusi) { const d = giornoLocale(new Date(t.chiusoIl)); const g = perGiorno.get(d) ?? { pnl: 0, n: 0, v: 0 }; g.pnl += pnlOf(t); g.n++; if (pnlOf(t) > 0) g.v++; perGiorno.set(d, g); }
+  const giorni = [...perGiorno].sort((a, b) => b[0].localeCompare(a[0]));
+  const maxAbs = Math.max(1, ...giorni.map(([, g]) => Math.abs(g.pnl)));
+  $('#periodo-giorni').innerHTML = giorni.length > 1 || (giorni.length === 1 && periodo !== 'oggi') ? `<h3 style="font-size:14px; margin:6px 0">Giorno per giorno <small class="why">risultato realizzato delle operazioni chiuse</small></h3><div class="days">${giorni.slice(0, 60).map(([d, g]) => `<div class="d"><span>${new Date(`${d}T12:00:00`).toLocaleDateString('it-IT', { weekday: 'short', day: '2-digit', month: '2-digit' })}</span><div class="bar"><i class="${g.pnl < 0 ? 'down' : ''}" style="${g.pnl >= 0 ? `left:50%; width:${(g.pnl / maxAbs) * 50}%` : `left:${50 - (-g.pnl / maxAbs) * 50}%; width:${(-g.pnl / maxAbs) * 50}%`}"></i></div><b class="n ${cls(g.pnl)}" style="text-align:right">${usd(g.pnl)}</b><span class="why n2">${g.v}/${g.n} vinti</span></div>`).join('')}</div>` : '';
+}
+for (const b of $('#periodo-f').querySelectorAll('button')) b.addEventListener('click', () => { periodo = b.dataset.p; try { localStorage.setItem('agenti.periodo', periodo); } catch {} if (periodo === 'custom' && !$('#p-dal').value) { const o = giornoLocale(new Date()); $('#p-al').value = o; $('#p-dal').value = `${o.slice(0, 8)}01`; } loadPeriodo(); });
+$('#p-vai').addEventListener('click', loadPeriodo);
+setInterval(() => { if (currentPage === 'dashboard') loadPeriodo(); }, 120_000);
+
 // ---------- pagine ----------
-const PAGES = ['dashboard', 'titoli', 'agenti', 'impostazioni'];
-const SUBS = { agenti: ['squadra', 'ufficio'], impostazioni: ['agenti', 'chiavi', 'guida'] };
+const PAGES = ['dashboard', 'ufficio', 'investimenti', 'impostazioni', 'guida'];
+const SUBS = { impostazioni: ['agenti', 'chiavi'] };
+const NOMI_PAGINE = { dashboard: 'Dashboard', ufficio: 'Ufficio', investimenti: 'Investimenti', impostazioni: 'Impostazioni', guida: 'Guida' };
 // I vecchi indirizzi (segnalibri, link nella guida) portano alla nuova sistemazione.
-const OLD = { panoramica: 'dashboard', oggi: 'titoli', cronologia: 'titoli/registro', '3d': 'agenti/ufficio', guida: 'impostazioni/guida', schede: 'impostazioni/agenti' };
+const OLD = { panoramica: 'dashboard', oggi: 'investimenti', cronologia: 'dashboard/registro', '3d': 'ufficio', titoli: 'investimenti', 'titoli/registro': 'dashboard/registro', agenti: 'ufficio', 'agenti/squadra': 'ufficio', 'agenti/ufficio': 'ufficio', 'impostazioni/guida': 'guida', schede: 'impostazioni/agenti' };
 function showPage() {
   let h = location.hash.replace('#', '');
   if (OLD[h]) { location.replace(`#${OLD[h]}`); return; }
@@ -1684,16 +1979,18 @@ function showPage() {
   currentSub = subs ? (subs.includes(sb) ? sb : subs.includes(saved) ? saved : subs[0]) : '';
   if (window.STATIC_MODE && currentPage === 'impostazioni' && currentSub === 'chiavi') currentSub = 'agenti';
   for (const el of document.querySelectorAll('.page')) el.classList.toggle('on', el.dataset.page === currentPage);
-  for (const a of document.querySelectorAll('.nav a')) { if (a.dataset.page === currentPage) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); }
+  for (const a of document.querySelectorAll('.side-nav a')) { if (a.dataset.page === currentPage) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); }
+  $('#mobile-page').textContent = NOMI_PAGINE[currentPage] || ''; menu(false);
   const page = document.querySelector(`.page[data-page="${currentPage}"]`);
   for (const el of page.querySelectorAll('.sub')) el.classList.toggle('on', el.dataset.sub === currentSub);
   for (const a of page.querySelectorAll('.subnav a')) a.setAttribute('aria-current', String(a.dataset.sub === currentSub));
   if (subs) try { localStorage.setItem(`agenti.sotto.${currentPage}`, currentSub); } catch {}
-  if (currentPage === 'titoli') { drawChart(); }
+  if (currentPage === 'investimenti') { if (panelOpen) drawChart(); if (!window.__bars) loadOfficeData(); }
+  if (currentPage === 'dashboard') loadPeriodo();
   if (officeOn()) { resize(); loadOfficeData(); }
   if (currentPage === 'impostazioni' && currentSub === 'chiavi') loadSettings();
   if (currentPage === 'impostazioni' && currentSub === 'agenti' && !$('#schede').children.length) loadCards();
-  if (currentPage === 'titoli' && sb === 'registro') setTimeout(() => $('#registro').scrollIntoView({ behavior: 'smooth' }), 50);
+  if (currentPage === 'dashboard' && sb === 'registro') setTimeout(() => $('#registro').scrollIntoView({ behavior: 'smooth' }), 50);
   try { localStorage.setItem('agenti.pagina', currentPage); } catch {}
 }
 window.addEventListener('hashchange', showPage);
@@ -1736,12 +2033,12 @@ function paintKpi(st) {
   const att = st.esplorazione?.attive || [];
   const tile = (lab, val, sub = '', href = '') => `<${href ? `a href="${href}"` : 'div'} class="kpi">${`<div class="lab">${lab}</div><div class="val">${val}</div>${sub ? `<div class="why">${sub}</div>` : ''}`}</${href ? 'a' : 'div'}>`;
   $('#dash-kpi').innerHTML = [
-    tile('Posizioni aperte', String(pos.length), `${crypto} crypto, ${pos.length - crypto} azioni · investito ${eq ? Math.round((investito / eq) * 100) : 0}% del conto`, '#titoli'),
-    tile('Operazioni di oggi', `${pl.acquisti.length} acquisti · ${pl.vendite.length} vendite`, `incassato <span class="${cls(pl.realizzato)}">${usd(pl.realizzato)}</span>, sulle aperte <span class="${cls(pl.nonRealizzato)}">${usd(pl.nonRealizzato)}</span>`, '#titoli'),
+    tile('Posizioni aperte', String(pos.length), `${crypto} crypto, ${pos.length - crypto} azioni · investito ${eq ? Math.round((investito / eq) * 100) : 0}% del conto`, '#investimenti'),
+    tile('Operazioni di oggi', `${pl.acquisti.length} acquisti · ${pl.vendite.length} vendite`, `incassato <span class="${cls(pl.realizzato)}">${usd(pl.realizzato)}</span>, sulle aperte <span class="${cls(pl.nonRealizzato)}">${usd(pl.nonRealizzato)}</span>`, '#investimenti'),
     tile('Contesto', esc(st.contesto?.generale || 'n.d.'), `${fg ? `Fear & Greed ${fg.valore} (${esc(fg.classe)}) · ` : ''}rischio ammesso ${Math.round((st.rischio ?? 1) * 100)}%`),
     tile('Kronos', st.kronos ? `${st.kronos.simboli} proiezioni` : 'n.d.', esc(st.kronos?.stato || '')),
-    tile('Agenti', `${(st.caffe?.operativi || []).length} al lavoro · ${(st.caffe?.presenti || []).length} in pausa`, `${(st.custodi || []).length} custodi · ${(st.intraday || []).filter((x) => x.fase === 'in posizione').length} operazioni intraday aperte${st.analisi ? ` · analisi d'ingresso ogni ${st.analisi.ogniMinuti} min${st.analisi.prossima ? `, prossima alle ${hhmm(st.analisi.prossima)}` : ''}` : ''}`, '#agenti/squadra'),
-    tile('Esplorazione', `${att.length} opportunità`, att.length ? att.map((x) => esc(x.simbolo)).join(', ') : 'nessuna aperta', '#agenti/squadra'),
+    tile('Agenti', `${(st.caffe?.operativi || []).length} al lavoro · ${(st.caffe?.presenti || []).length} in pausa`, `${(st.custodi || []).length} custodi · ${(st.intraday || []).filter((x) => x.fase === 'in posizione').length} operazioni intraday aperte${st.analisi ? ` · analisi d'ingresso ogni ${st.analisi.ogniMinuti} min${st.analisi.prossima ? `, prossima alle ${hhmm(st.analisi.prossima)}` : ''}` : ''}`, '#ufficio'),
+    tile('Esplorazione', `${att.length} opportunità`, att.length ? att.map((x) => esc(x.simbolo)).join(', ') : 'nessuna aperta', '#ufficio'),
   ].join('');
 }
 const NOMI_MODELLI = { kronos: 'Kronos', chronos2: 'Chronos-2', timesfm: 'TimesFM 2.5' };
@@ -1775,7 +2072,7 @@ function paintEsplorazione(st) {
     ${e.esito ? `<p class="why" style="margin-top:6px">${esc(e.esito)}</p>` : ''}
     ${(e.attive || []).length ? `<div class="why" style="margin:10px 0 4px">Opportunità al lavoro</div>${e.attive.map(row).join('')}` : '<p class="empty" style="margin-top:8px">Nessuna opportunità aperta.</p>'}
     ${(e.recenti || []).length ? `<details style="margin-top:8px"><summary class="why" style="cursor:pointer">Chiuse di recente (${e.recenti.length})</summary>${e.recenti.map(row).join('')}</details>` : ''}`;
-  for (const b of $('#esplorazione').querySelectorAll('button[data-sym]')) b.addEventListener('click', () => { selectSymbol(b.dataset.sym); location.hash = 'titoli'; });
+  for (const b of $('#esplorazione').querySelectorAll('button[data-sym]')) b.addEventListener('click', () => { openChart(b.dataset.sym); });
 }
 function paintVotes(st) {
   const sig = st.segnali || [];
