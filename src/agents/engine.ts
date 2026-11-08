@@ -62,7 +62,7 @@ export interface AgentsStatus {
   mercatoAperto: boolean;
   finestraIngressi: boolean;
   conto: { patrimonio: number; contanti: number; pnlGiorno: number } | null;
-  posizioni: { simbolo: string; quantita: number; prezzoCarico: number; prezzoAttuale: number; variazione: number; valore: number }[];
+  posizioni: { simbolo: string; quantita: number; prezzoCarico: number; prezzoAttuale: number; variazione: number; valore: number; dal?: string; agenti?: string[] }[];
   prezzi: Record<string, number>;
   rischio: number;
   pesi: Record<string, number>;
@@ -569,7 +569,11 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
       mercatoAperto: snap.clock.isOpen,
       finestraIngressi: entry && snap.clock.isOpen,
       conto: { patrimonio: account.equity, contanti: account.cash, pnlGiorno: account.equity - account.lastEquity },
-      posizioni: positions.map((p) => ({ simbolo: p.symbol, quantita: p.qty, prezzoCarico: p.avgEntryPrice, prezzoAttuale: p.currentPrice, variazione: lossPct(p), valore: p.marketValue })),
+      posizioni: positions.map((p) => {
+        // Da quando la si tiene e chi l'ha votata: dal diario (il trade aperto su quel titolo).
+        const t = journal.trade.find((x) => x.simbolo === p.symbol && x.stato === "aperto");
+        return { simbolo: p.symbol, quantita: p.qty, prezzoCarico: p.avgEntryPrice, prezzoAttuale: p.currentPrice, variazione: lossPct(p), valore: p.marketValue, ...(t ? { dal: t.apertoIl, agenti: t.contesto?.agenti ?? [] } : {}) };
+      }),
       prezzi: snap.prices,
       rischio: alloc.rischio,
       pesi: weights,
@@ -748,6 +752,17 @@ const usd = (x: number) => `${x >= 0 ? "+" : ""}${x.toFixed(2)} $`;
 const qty = (q: number) => (Number.isInteger(q) ? String(q) : q.toFixed(6).replace(/0+$/, "").replace(/\.$/, ""));
 
 // Il conto della giornata: ogni vendita con il suo guadagno o perdita in dollari, il totale, chi l'ha votata.
+// Orari in ora di Roma: solo l'ora se è lo stesso giorno, altrimenti giorno e ora; durata leggibile.
+const quando = (iso: string, oggi: string) => {
+  const d = new Date(iso);
+  const ora = d.toLocaleTimeString("it-IT", { timeZone: "Europe/Rome", hour: "2-digit", minute: "2-digit" });
+  return romeTime(d).date === oggi ? ora : `${d.toLocaleDateString("it-IT", { timeZone: "Europe/Rome", day: "2-digit", month: "2-digit" })} ${ora}`;
+};
+export const durata = (da: string, a: string) => {
+  const m = Math.max(0, Math.round((Date.parse(a) - Date.parse(da)) / 60_000));
+  return m < 60 ? `${m} min` : m < 1440 ? `${Math.floor(m / 60)} h ${m % 60 ? `${m % 60} min` : ""}`.trim() : `${Math.floor(m / 1440)} g ${Math.floor((m % 1440) / 60)} h`;
+};
+
 export function pnlText(p: AgentsStatus["pnlOggi"]): string[] {
   const lines = [`💰 Profitto e perdita del ${p.data}`];
   if (!p.vendite.length && !p.acquisti.length) {
@@ -756,10 +771,10 @@ export function pnlText(p: AgentsStatus["pnlOggi"]): string[] {
   }
   const parziali = p.vendite.length - p.tradeChiusi;
   lines.push(`Realizzato ${usd(p.realizzato)} su ${p.vendite.length} vendit${p.vendite.length === 1 ? "a" : "e"} (${p.tradeChiusi} trade chius${p.tradeChiusi === 1 ? "o" : "i"}${parziali ? `, ${parziali} parzial${parziali === 1 ? "e" : "i"}` : ""})`);
-  for (const v of p.vendite) lines.push(` • ${v.simbolo} ${qty(v.quantita)} × ${v.carico.toFixed(2)} → ${v.prezzo.toFixed(2)}: ${usd(v.pnl)} (${pct(v.risultato)})${v.chiuso ? "" : " parziale"} · ${v.motivo}${v.agenti.length ? ` · agenti ${v.agenti.join(", ")}` : ""}`);
+  for (const v of p.vendite) lines.push(` • ${v.simbolo} ${qty(v.quantita)} × ${v.carico.toFixed(2)} → ${v.prezzo.toFixed(2)}: ${usd(v.pnl)} (${pct(v.risultato)})${v.chiuso ? "" : " parziale"}${v.aperto && v.ora ? ` · comprato ${quando(v.aperto, p.data)}, venduto ${quando(v.ora, p.data)} (${durata(v.aperto, v.ora)})` : ""} · ${v.motivo}${v.agenti.length ? ` · agenti ${v.agenti.join(", ")}` : ""}`);
   const perAgente = Object.entries(p.perAgente).sort((a, b) => b[1].pnl - a[1].pnl);
   if (perAgente.length) lines.push(`Per agente: ${perAgente.map(([a, g]) => `${a} ${usd(g.pnl)} (${g.operazioni} op.)`).join(", ")}`);
-  if (p.acquisti.length) lines.push(`Acquisti di oggi: ${p.acquisti.map((a) => `${a.simbolo} ${qty(a.quantita)} @ ${a.prezzo.toFixed(2)}${a.agenti.length ? ` (${a.agenti.join(", ")})` : ""}`).join("; ")}`);
+  if (p.acquisti.length) lines.push(`Acquisti di oggi: ${p.acquisti.map((a) => `${a.simbolo} ${qty(a.quantita)} @ ${a.prezzo.toFixed(2)}${a.ora ? ` alle ${quando(a.ora, p.data)}` : ""}${a.agenti.length ? ` (${a.agenti.join(", ")})` : ""}`).join("; ")}`);
   lines.push(`Non realizzato sulle posizioni aperte ${usd(p.nonRealizzato)} · totale giornata ${usd(p.realizzato + p.nonRealizzato)}`);
   return lines;
 }

@@ -186,12 +186,14 @@ export interface DailySale {
   motivo: string;
   agenti: string[];
   chiuso: boolean; // la vendita ha azzerato il trade
+  ora?: string; // ISO della vendita
+  aperto?: string; // ISO dell'apertura del trade
 }
 
 export interface DailyPnl {
   data: string;
   vendite: DailySale[];
-  acquisti: { simbolo: string; quantita: number; prezzo: number; agenti: string[] }[];
+  acquisti: { simbolo: string; quantita: number; prezzo: number; agenti: string[]; ora?: string }[];
   realizzato: number;
   tradeChiusi: number;
   perAgente: Record<string, { pnl: number; operazioni: number }>;
@@ -204,7 +206,7 @@ export function dailyPnl(file: JournalFile, today: string): DailyPnl {
   const acquisti: DailyPnl["acquisti"] = [];
   for (const t of file.trade) {
     const agenti = t.contesto?.agenti ?? [];
-    for (const a of t.acquisti ?? []) if (romeDateOf(a.data) === today) acquisti.push({ simbolo: t.simbolo, quantita: a.quantita, prezzo: a.prezzo, agenti });
+    for (const a of t.acquisti ?? []) if (romeDateOf(a.data) === today) acquisti.push({ simbolo: t.simbolo, quantita: a.quantita, prezzo: a.prezzo, agenti, ora: a.data });
     const sales = t.vendite ?? [];
     sales.forEach((v, i) => {
       if (romeDateOf(v.data) !== today) return;
@@ -218,11 +220,11 @@ export function dailyPnl(file: JournalFile, today: string): DailyPnl {
         pnl = t.incassato - t.costo - before;
         risultato = v.carico * v.quantita ? pnl / (v.carico * v.quantita) : risultato;
       }
-      vendite.push({ simbolo: t.simbolo, quantita: v.quantita, carico: v.carico, prezzo: v.prezzo, pnl, risultato, motivo: v.motivo, agenti, chiuso: last });
+      vendite.push({ simbolo: t.simbolo, quantita: v.quantita, carico: v.carico, prezzo: v.prezzo, pnl, risultato, motivo: v.motivo, agenti, chiuso: last, ora: v.data, aperto: t.apertoIl });
     });
     // Trade chiusi oggi da una versione precedente del diario, senza l'elenco delle vendite: conta il saldo.
     if (!sales.length && t.stato === "chiuso" && t.chiusoIl && romeDateOf(t.chiusoIl) === today) {
-      vendite.push({ simbolo: t.simbolo, quantita: t.vendute, carico: t.prezzoIngresso ?? t.costo / t.comprate, prezzo: t.prezzoUscita ?? t.incassato / t.vendute, pnl: t.incassato - t.costo, risultato: t.risultato ?? 0, motivo: t.motivoUscita ?? "sconosciuto", agenti, chiuso: true });
+      vendite.push({ simbolo: t.simbolo, quantita: t.vendute, carico: t.prezzoIngresso ?? t.costo / t.comprate, prezzo: t.prezzoUscita ?? t.incassato / t.vendute, pnl: t.incassato - t.costo, risultato: t.risultato ?? 0, motivo: t.motivoUscita ?? "sconosciuto", agenti, chiuso: true, ora: t.chiusoIl, aperto: t.apertoIl });
     }
   }
   const perAgente: DailyPnl["perAgente"] = {};

@@ -136,7 +136,7 @@ describe("profitto e perdita del giorno", () => {
     expect(p.perAgente.trend).toEqual({ pnl: 0, operazioni: 2 });
     expect(p.perAgente.rientro!.operazioni).toBe(2);
     // L'aggiunta di oggi su NVDA si elenca tra gli acquisti; quella di ieri no.
-    expect(p.acquisti).toEqual([{ simbolo: "NVDA", quantita: 1, prezzo: 190, agenti: ["trend"] }]);
+    expect(p.acquisti).toEqual([{ simbolo: "NVDA", quantita: 1, prezzo: 190, agenti: ["trend"], ora: "2026-09-24T14:05:00Z" }]);
     // Ieri: nessuna vendita, solo gli acquisti del 22 (ora di Roma).
     const ieri = dailyPnl(j, "2026-09-22");
     expect(ieri.vendite).toHaveLength(0);
@@ -152,6 +152,9 @@ describe("profitto e perdita del giorno", () => {
     expect(p.vendite).toHaveLength(1);
     expect(p.vendite[0]!.pnl).toBeCloseTo(-2.5, 6); // prezzo invariato: si perde solo la commissione
     expect(p.realizzato).toBeCloseTo(j.trade[0]!.incassato - j.trade[0]!.costo, 6);
+    // Gli orari: acquisto (apertura del trade) e vendita.
+    expect(p.vendite[0]).toMatchObject({ aperto: "2026-09-24T08:00:00Z", ora: "2026-09-24T12:00:00Z" });
+    expect(p.acquisti[0]!.ora).toBe("2026-09-24T08:00:00Z");
   });
 
   test("un trade chiuso oggi da un diario vecchio, senza elenco vendite, conta col saldo incassato - costo", () => {
