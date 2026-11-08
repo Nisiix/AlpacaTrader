@@ -162,7 +162,9 @@ export function applyFills(file: JournalFile, orders: Order[]): { opened: Trade[
     open.vendute += qty;
     open.incassato += qty * o.filledAvgPrice;
     open.quantita -= qty;
-    if (open.quantita > 0) continue;
+    // Un resto frazionario (crypto) non tiene aperto il trade: oltre il 99,99% venduto è chiuso.
+    if (open.quantita > open.comprate * 1e-4) continue;
+    open.quantita = 0;
     const entry = open.costo / open.comprate;
     const exit = open.incassato / open.vendute;
     Object.assign(open, { stato: "chiuso", chiusoIl: when, prezzoIngresso: entry, prezzoUscita: exit, risultato: exit / entry - 1, giorni: daysBetween(open.apertoIl, when), motivoUscita: exitReason(o, intent) });
@@ -220,6 +222,20 @@ export function dailyPnl(file: JournalFile, today: string): DailyPnl {
     g.operazioni += 1;
   }
   return { data: today, vendite, acquisti, realizzato: vendite.reduce((s, v) => s + v.pnl, 0), tradeChiusi: vendite.filter((v) => v.chiuso).length, perAgente };
+}
+
+// Trade rimasti aperti per un resto frazionario prima della correzione: si chiudono con le vendite già registrate.
+export function closeDust(file: JournalFile): Trade[] {
+  const closed: Trade[] = [];
+  for (const t of file.trade) {
+    if (t.stato !== "aperto" || t.vendute <= 0 || t.quantita > t.comprate * 1e-4) continue;
+    const entry = t.costo / t.comprate;
+    const exit = t.incassato / t.vendute;
+    const last = t.vendite?.at(-1);
+    Object.assign(t, { stato: "chiuso", quantita: 0, chiusoIl: last?.data ?? t.apertoIl, prezzoIngresso: entry, prezzoUscita: exit, risultato: exit / entry - 1, giorni: daysBetween(t.apertoIl, last?.data ?? t.apertoIl), motivoUscita: last?.motivo ?? "sconosciuto" });
+    closed.push(t);
+  }
+  return closed;
 }
 
 export interface Stats {

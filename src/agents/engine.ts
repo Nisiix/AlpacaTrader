@@ -17,7 +17,7 @@ import type { Simulazione } from "../simulations.ts";
 import { clientOrderId, sendOne, waitForFills, type ExecOutcome } from "../execute.ts";
 import { writeJsonAtomic } from "../fsutil.ts";
 import { indicatorsFor } from "../indicators.ts";
-import { applyFills, contextFor, dailyPnl, learnFromJournal, learningStatus, pruneJournal, readJournal, recordIntent, statsOf, writeJournal, type DailyPnl, type Stats } from "../journal.ts";
+import { applyFills, closeDust, contextFor, dailyPnl, learnFromJournal, learningStatus, pruneJournal, readJournal, recordIntent, statsOf, writeJournal, type DailyPnl, type Stats } from "../journal.ts";
 import { activeLessons, learnFromBrokerReject, learnFromStopLoss, pruneLessons, readLessons, writeLessons, type Lesson } from "../lessons.ts";
 import { acquireLock, inspectLock, releaseLock, type LockData } from "../lock.ts";
 import { Logger, type Redactor } from "../log.ts";
@@ -474,6 +474,7 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
       log.warn(`diario: ordini della settimana non leggibili: ${(e as Error).message}`);
     }
     const fills = applyFills(journal, filled);
+    fills.closed.push(...closeDust(journal));
     for (const t of fills.opened) bus.emit("trade", { stato: "aperto", simbolo: t.simbolo, quantita: t.comprate, prezzo: t.costo / t.comprate, agenti: t.contesto?.agenti ?? [] });
     for (const t of fills.closed) bus.emit("trade", { stato: "chiuso", simbolo: t.simbolo, risultato: t.risultato ?? 0, pnl: t.incassato - t.costo, giorni: t.giorni ?? 0, uscita: t.motivoUscita ?? "sconosciuto", agenti: t.contesto?.agenti ?? [] });
     learned.push(...learnFromJournal(lessonsFile, journal, today));
