@@ -1,365 +1,319 @@
 # Come decide il motore degli agenti
 
-Questo documento spiega, in ordine, cosa fa il bot a ogni giro e perché. Vale per `bun run agents` (il motore sempre
-acceso); i numeri sono in `src/config.ts` e si possono cambiare lì. Tutto gira su un conto **paper** Alpaca: nessun
-denaro vero.
+Questo documento spiega cosa fa il bot e perché, nell'ordine in cui lo fa. Vale per il motore sempre acceso
+(`bun run agents`, su Windows `avvia-bot.cmd`); i numeri stanno in `src/config.ts` e quasi tutti si cambiano dalla pagina
+Impostazioni della dashboard. Tutto gira su un conto **paper** Alpaca: nessun denaro vero. Il motore si rifiuta di partire
+con un indirizzo o una chiave che non siano paper.
+
+---
 
 ## 1. Il ritmo
 
-Ogni 5 minuti (`AGENTS.tickMinutes`) il motore fa un **giro**. Un giro è sempre lo stesso, giorno e notte, feriali e
-festivi: quello che cambia è cosa la gabbia lascia passare (i titoli azionari solo a borsa aperta, le crypto sempre).
-
-1. **Universo del giorno.** Una volta al giorno rinnova l'elenco delle crypto: tutte le coppie USD negoziabili su Alpaca
-   che stanno nella top 100 per capitalizzazione (CoinGecko), stablecoin escluse, massimo 40. I titoli azionari sono
-   fissi: SPY, QQQ, AAPL, MSFT, NVDA, GLD (scelti con i backtest). Dentro questo universo la scelta è quotidiana.
-2. **Alpaca.** Conto, posizioni, ordini recenti, orologio di borsa, prezzi di tutto l'universo.
-3. **Barre giornaliere.** Una volta al giorno scarica le candele giornaliere di tutto (320 sedute) e le salva in
-   `state/bars.json`: servono alle medie, alla volatilità, al momentum e ai grafici della dashboard.
-4. **Memoria del rischio.** Interruttore sulla perdita (a −5% dal massimo blocca gli acquisti, si riarma da solo dopo 5
-   giorni di borsa), registro degli errori (lezioni: dopo uno stop niente riacquisto per 5 giorni, due rifiuti uguali
-   bloccano il titolo), diario dei trade.
-5. **Kronos.** Una volta al giorno chiede al sidecar le proiezioni a 5 sedute per tutto l'universo (percorso giorno per
-   giorno) e le salva in `state/previsioni.json`. Kronos è la fonte principale per **anticipare** la direzione. Le
-   proiezioni oltre ±25% sono rumore del modello: il motore le toglie a tutti (agenti, contesto, gabbia), non le usa né per
-   entrare né per aspettare; restano sul grafico con la nota «fuori misura».
-6. **Contesto economico** (agente `contesto`), prima di tutti gli altri. Regole sui dati: SPY sopra o sotto la media a
-   200, volatilità, oro e obbligazioni che salgono con SPY che scende, settori con la maggioranza dei titoli sotto la
-   media a 50 (il settore crypto si misura su tutto l'universo crypto), **ampiezza**: la quota media, settore per settore
-   con lo stesso peso, di titoli a rischio (indici, tecnologia, crypto; non oro e obbligazioni, che sono rifugi) sopra la
-   media a 50 — sotto il 50% il clima è al massimo neutro, sotto il 30% sfavorevole, anche con SPY sopra la 200 —, Fed
-   nei prossimi 2 giorni. Più, se c'è
-   `claude -p`, una lettura con ricerca web ogni 6 ore (se claude risponde con un errore, il motivo va nel registro e
-   si riprova dopo un'ora: intanto valgono le regole). Esito: favorevole / neutro / sfavorevole, generale e per settore.
-   **Il contesto corrente non decide da solo**: se Kronos anticipa un rialzo (≥ +1% a 5 sedute) il settore debole non
-   ferma l'ingresso; se anticipa un ribasso (≤ −1%) si aspetta anche con contesto buono. Gli eventi (Fed, trimestrali)
-   bloccano comunque.
-7. **Gli agenti osservano** la stessa vista (prezzi, chiusure, indicatori, posizioni, diario, proiezioni, contesto) e
-   votano. Nessun agente ordina niente.
-8. **L'allocatore** somma i voti pesati per titolo. Sopra +0,5 si compra, sotto −0,5 si vende; le regole vincolanti
-   (stop, obiettivo, fine giornata, proiezione contraria) vendono senza voto. Decide il peso di ogni posizione: **al
-   massimo il 10% del conto** (meno se il titolo è nervoso), **proporzionale alla fiducia nella proiezione di Kronos**
-   (probabilità che si avveri = rendimento atteso / volatilità sull'orizzonte: 50% → 40% del peso, ≥ 80% → peso pieno,
-   senza proiezione 60%). Fino a 8 titoli. Il limite di volatilità annua (12%) è spento per scelta dell'utente. A borsa
-   chiusa non spreca posti sui titoli azionari: i posti liberi vanno alle crypto.
-9. **La gabbia** (`src/cage.ts`) è il codice che dice l'ultima parola: titoli solo a borsa aperta (crypto sempre),
-   niente short, niente leva, solo azioni intere (crypto frazionarie, minimo 10 $), massimo 8 posizioni, massimo 10% per
-   titolo, gruppi correlati limitati, mai sotto la media a 200 giorni; sopra la 50 **oppure** con un rialzo netto
-   anticipato da Kronos (≥ +1%: un solo pattern contrario è prudenza, non blocco); niente acquisti nel giorno della Fed o
-   nei 2 giorni prima di una trimestrale (non per l'intraday, che si chiude in giornata), lezioni del registro, stop loss e
-   uscita di trend eseguiti dal codice. Un acquisto per titolo al giorno (l'ID dell'ordine lo impedisce).
-   **Obiettivo giornaliero**: raggiunto il +1% del patrimonio rispetto alla chiusura di ieri, niente nuovi acquisti fino a
-   domani e l'intraday incassa; oltre il −2% niente nuovi acquisti (gli stop proteggono il resto). I profitti restano nel
-   conto e le taglie sono percentuali del patrimonio corrente: si reinvestono da soli.
-10. **Invio** degli ordini ammessi, stop GTC su Alpaca per ogni posizione (scalato sulla volatilità, 5–10%; sulle crypto
-    `stop_limit`), diario aggiornato con le esecuzioni, lezioni, stato per la dashboard, eventi nel registro, Telegram.
-11. **Riepilogo** su Telegram dopo le 22:05 con il conto di profitto e perdita del giorno: ogni vendita in $ e %, il
-    totale realizzato, il conto per agente, il non realizzato.
-
-## 2. Gli agenti
-
-| Agente | Cosa guarda | Cosa vota |
+| Cosa | Quando | Perché |
 |---|---|---|
-| **trend** | chiusura sopra le medie a 50 e 200 giorni, rendimento a 12 mesi positivo (crypto: anche a 3 mesi), classifica per momentum a 6 mesi | compra i migliori 5 (forza 1 → 0,5); vende chi ha chiuso sotto la 50 |
-| **rientro** | RSI(2) sotto 10 con prezzo sopra la media a 200 | compra a taglia ridotta (5%), esce a RSI 70 o dopo 5 sedute |
-| **regime** | SPY contro la media a 200, volatilità | rischio ammesso: 1 o 0,5 (moltiplica le taglie) |
-| **orizzonte** | posizioni vecchie di 60 sedute | chiede di uscire se lo slancio è finito |
-| **uscite** | ogni posizione: stop sulla volatilità, massimo visto, proiezione di Kronos | **vincolante**: stop, presa di profitto, proiezione negativa → vende |
-| **profitto** | posizioni a +3% | vende metà e lascia correre il resto (walk-forward: più vinti, perdita massima minore) |
-| **contesto** | vedi sopra | niente ordini: esposizione × 0,75 (neutro) o × 0,5 (sfavorevole), ma non sui titoli dove Kronos anticipa un rialzo (lì la taglia la decide la fiducia nella proiezione); chi aspetta (evento «in attesa», non un ordine rifiutato) |
-| **kronos** | proiezioni a 5 sedute; scarta quelle oltre ±25% (rumore), classifica rialzi e ribassi separatamente e tiene il 25% più netto di ciascuno | compra (0,5 → 1 con la proiezione) sopra la media a 200; vende (0,5) i titoli in portafoglio con ribasso anticipato |
-| **custodi** | **un investitore per ogni titolo o crypto in trend** (o in portafoglio): nessun numero fisso, tanti quanti sono i titoli che meritano attenzione, zero se il mercato non offre niente | vedi sotto |
-| **intraday** | candele a 5 min / 15 min / 4 ore, scelte dalla volatilità | operazioni che si chiudono in giornata, vedi sotto |
+| **Giro** | ogni **5 minuti**, giorno e notte, feriali e festivi | conto, prezzi, uscite, stop, protezione del profitto, operazioni intraday aperte |
+| **Analisi d'ingresso** | ogni **15 minuti** (dentro un giro) | decidere se investire e su cosa: scansione intraday con Kronos e nuovi acquisti; tre volte il tempo per Kronos |
+| **Esplorazione** | ogni **minuto**, se qualche agente è in pausa | passare in rassegna il radar dei titoli fuori dall'universo |
+| **Storico e proiezioni giornaliere** | appena c'è una **giornata conclusa** nuova | azioni dalle 16:15 di New York (22:15 italiane), crypto a mezzanotte UTC (01:00) |
+| **Universo crypto, trimestrali** | una volta al giorno | top 100 per capitalizzazione negoziabili su Alpaca; date dei conti da Nasdaq |
+| **Riepilogo Telegram** | dopo le 22:05 | profitto e perdita del giorno, per operazione e per agente |
+
+Non ci sono sveglie a orari fissi: le azioni seguono l'orologio vero della borsa (Alpaca: apertura, chiusura, festivi,
+ora legale), le crypto lavorano 24 ore su 24.
+
+---
+
+## 2. Un giro, passo per passo
+
+1. **Universo.** Azioni di base (SPY, QQQ, AAPL, MSFT, NVDA, GLD), crypto del giorno (fino a 40 coppie) e i titoli
+   scoperti dall'esplorazione ancora attivi.
+2. **Alpaca.** Conto, posizioni, ordini, orologio della borsa, prezzi.
+3. **Trimestrali** (una volta al giorno) e **storico giornaliero** (solo giornate concluse, 320 sedute).
+4. **Memoria del rischio.** Registro degli errori (dopo uno stop niente riacquisto per 5 giorni di borsa; due rifiuti
+   uguali di Alpaca bloccano quel titolo per 5 giorni), limite del giorno, diario dei trade.
+5. **Previsioni.** Kronos e il cervello delle previsioni (capitolo 3), riportate al prezzo di adesso.
+6. **Fonti esterne.** Fear & Greed delle crypto, funding dei futures; le notizie le leggono i custodi.
+7. **Contesto economico**, prima di tutti gli altri agenti: decide dove aspettare e di quali proiezioni fidarsi.
+8. **Gli agenti votano**, tutti sulla stessa vista. Nessun agente ordina niente da solo.
+9. **L'ufficio rivede i voti**: gli esploratori votano le loro scoperte, il **capo ufficio** applica i richiami, la
+   **sala caffè** le lezioni di squadra.
+10. **Allocatore**: dai voti alle quantità (capitolo 5).
+11. **Gabbia**: l'ultima parola, con regole scritte nel codice.
+12. **Invio** degli ordini, **stop GTC su Alpaca** per ogni posizione, diario, stato per la dashboard, eventi, Telegram.
+13. **Sala caffè ed esplorazione**: chi non ha niente da fare va in pausa e cerca nuove occasioni.
+
+---
+
+## 3. Le previsioni
+
+### Kronos, la fonte principale
+
+Kronos è un modello addestrato su 12 miliardi di candele di 45 borse. Gira in un processo Python a parte (il «sidecar»),
+che il motore accende da solo. Prevede il percorso del prezzo:
+
+- **giornaliero**: le prossime 5 sedute, per tutto l'universo, una volta per giornata conclusa;
+- **intraday**: le prossime candele da 5 e 15 minuti, 1 ora, 4 ore, letto a più orizzonti (15 e 30 minuti, 1, 2, 4,
+  8 ore).
+
+Ogni previsione è la media di più **campioni** (percorsi generati). Più campioni, previsione più stabile: l'errore
+casuale scende con la radice del numero. Il motore misura quanto impiega il PC e **sale con i campioni** finché il tempo
+per titolo resta in quello concesso: **6 s** per le giornaliere, **3 s** per l'intraday, **1,5 s** per l'esplorazione
+(una prima scrematura: chi entra nell'universo si riproietta col budget pieno), **0,7 s** per i grafici; tra 4 e 128
+campioni.
+
+### Giornate concluse e prezzo di adesso
+
+- Lo storico contiene solo **giornate finite**, e si rinnova appena ne finisce una: le medie, le uscite di trend e
+  Kronos lavorano sempre sull'ultima seduta conclusa.
+- Kronos prevede il rendimento **dall'ultima chiusura**. Prima di ogni decisione la previsione e il percorso si riportano
+  **al prezzo di adesso**: se Kronos vedeva +2% e il titolo oggi è già salito del 2,5%, da qui l'attesa è negativa e non
+  si compra; se il calo previsto è già avvenuto, non si vende sul fondo.
+- Proiezioni oltre ±25% (giornaliere), oltre ±25% o oltre 4 volte la volatilità delle candele (intraday) sono **rumore
+  del modello** e non si usano (succede sui prezzi minuscoli, es. 0,000005 $).
+- Se il sidecar non risponde, restano le ultime proiezioni, con la giornata su cui sono state calcolate.
+
+### La probabilità di successo
+
+Per ogni previsione il motore calcola la probabilità che si avveri: Φ(rendimento atteso / (volatilità × √orizzonte)).
+Un +4% su un titolo che si muove del 5% al giorno vale meno di un +4% su uno che si muove dell'1%. Questa probabilità
+decide taglie, ingressi contro tendenza, scelta della candela intraday e uscite.
+
+### Il cervello delle previsioni
+
+Accanto a Kronos il sidecar può far girare **Chronos-2** (Amazon) e **TimesFM 2.5** (Google), gratuiti, se installati
+con `installa-kronos`. La previsione usata è la **media pesata**: peso = **affidabilità a priori** × **risultati
+misurati**.
+
+| Modello | Addestramento | Prove pubblicate sui rendimenti | Affidabilità |
+|---|---|---|---|
+| Kronos | 12 miliardi di candele da 45 borse | RankIC 0,034 (il migliore) | **1** |
+| Chronos-2 | dati generici e sintetici | RankIC 0,005 | **0,13** |
+| TimesFM 2.5 | dati generici e sintetici | RankIC negativo | **0,05** |
+
+Ogni previsione di ogni modello si confronta con il prezzo vero alla scadenza. Fino a 100 previsioni valutate conta solo
+l'affidabilità (Kronos ~85%); poi la quota di direzioni giuste oltre il caso la conferma, la alza o la azzera, con conti
+separati per il giornaliero e per ogni candela. Kronos tiene almeno metà del peso finché non risulta peggiore del caso.
+
+### Di quali previsioni fidarsi
+
+Con un evento in arrivo (Fed nei prossimi giorni per azioni ed ETF, trimestrale del titolo) il contesto non si fida della
+proiezione **per entrare o per tenere**. Per **uscire** e per **controllare i costi** vale sempre: una proiezione non
+fidata può far vendere o fermare un acquisto, mai far comprare.
+
+---
+
+## 4. L'ufficio: gli agenti e i loro compiti
+
+| Agente | Compito | Vota |
+|---|---|---|
+| **kronos** | proiezioni a 5 sedute | compra i rialzi oltre +1% (forza 0,5 → 1 con la proiezione); sotto la media a 200 solo contro tendenza (≥ +2% con probabilità ≥ 60%, metà taglia); vende (0,5) un titolo in portafoglio con ribasso netto |
+| **trend** | sopra le medie a 50 e 200 giorni, rendimento a 12 mesi positivo (crypto anche a 3 mesi), classifica per momentum a 6 mesi | compra (1 → 0,5 per classifica); vende chi chiude sotto la 50, salvo Kronos ancora al rialzo |
+| **rientro** | RSI(2) sotto 10 sopra la media a 200 | compra a taglia ridotta (5%); esce a RSI 70 o dopo 5 sedute |
+| **custodi** | un investitore per ogni titolo in trend, con rialzo netto di Kronos o in portafoglio; nessun numero fisso | tesi, piano, rischio e dossier; vota ingressi e uscite (sotto) |
+| **intraday** | operazioni da minuti a ore su candele brevi | capitolo 6 |
+| **uscite** | regole vincolanti di ogni posizione | capitolo 7 |
+| **profitto** | posizioni a +3% | vende metà, salvo Kronos che vede altro rialzo |
+| **orizzonte** | posizioni di 60 sedute | chiede di uscire se lo slancio è finito |
+| **regime** | SPY per le azioni, BTC per le crypto | rischio ammesso: sotto la media a 200 o con volatilità alta, esposizione dimezzata |
+| **contesto** | ampiezza dei mercati per settore, Fed, Fear & Greed, lettura macro con `claude -p` ogni 6 ore | rischio ammesso (neutro × 0,75, sfavorevole × 0,5) e «attese»: settore debole senza rialzo di Kronos, ribasso anticipato, eventi |
+
+Regime e contesto guardano entrambi la salute del mercato: vale la riduzione più forte, non il prodotto. Dove Kronos
+anticipa un rialzo, o per l'intraday, la riduzione del contesto non si applica.
 
 ### Il custode
 
-Nasce quando un titolo rispetta i criteri del trend (sopra le medie, slancio a 12 mesi positivo; per le crypto anche a
-3 mesi), **oppure quando Kronos anticipa un rialzo netto su un titolo sopra la media a 200**, o quando è in portafoglio;
-muore dopo 12 giri fuori dai criteri. Dichiara sempre:
+Nasce quando un titolo merita attenzione e muore dopo 12 giri fuori dai criteri. Dichiara **tesi**, **piano** (entrare sul
+rientro verso la media a 20, ordinato, o aspettare se oltre il 15% sopra la 50; uscire sotto la 50 o con slancio a 3 mesi
+negativo), **rischio** e un **dossier** che diventa la **probabilità che il titolo sia favorevole**:
 
-- **Tesi**: perché il titolo merita attenzione (medie, slancio).
-- **Piano**: entrare ora (meglio sul rientro verso la media a 20 giorni: forza 0,8; ingresso ordinato 0,6; prezzo oltre il
-  15% sopra la media a 50: solo 0,25, meglio aspettare), tenere finché il prezzo resta sopra la media a 50, uscire sotto
-  la 50 (0,9) o con slancio a 3 mesi negativo (0,6).
-- **Rischio**: stop sulla volatilità, peso massimo, numero massimo di posizioni.
-- **Dossier**, aggiornato a ogni giro, con quattro fonti e un peso ciascuna → **probabilità che il titolo sia favorevole**
-  e **prossima azione** in chiaro:
-  - Kronos (45%): probabilità di rialzo = rendimento atteso a 5 sedute diviso la volatilità sull'orizzonte (normale).
-  - Grafico (25%): massimi e minimi crescenti o calanti, rottura dei massimi a 20 sedute, medie allineate, rientro sulla
-    media a 20, eccesso oltre il 15% sopra la 50, RSI(14) oltre 75 o sotto 30, compressione di volatilità, slancio a 3 mesi.
-  - Notizie (15%): titoli recenti da Google News e, con un bearer token in Impostazioni, i post su X (ogni ora), tono da
-    parole chiave (rally, ETF, approvazione… contro hack, crollo, causa…).
-  - Contesto (15%): favorevole 0,8 / neutro 0,5 / sfavorevole o in attesa 0,2.
-- **Memoria del titolo**: dal diario, i trade passati su quel simbolo (quanti, vinti, media, quanti chiusi dallo stop, quale
-  ingresso ha reso di più). Con 3 o più trade in perdita il custode entra con **metà taglia e forza ridotta**; con storia
-  positiva entra con più fiducia; se ha reso solo il rientro, l'ingresso "in trend" vale meno.
+- Kronos 45%: probabilità di rialzo a 5 sedute;
+- grafico 25%: massimi e minimi, rotture, medie, rientri, eccessi, RSI, compressione di volatilità;
+- notizie 15%: Google News, Alpaca/Benzinga, X (con token);
+- contesto 15%: favorevole, neutro, sfavorevole; per le crypto anche Fear & Greed e funding.
 
-La forza del voto d'ingresso segue il dossier (50% → invariata, 80% → +30%, 30% → −20%) e la memoria; un ribasso anticipato
-da Kronos (≤ −1%) ferma l'ingresso anche in trend; un rialzo anticipato (≥ +1%) lo rafforza del 15%. Le uscite sono regole
-e non si modulano.
+Più la **memoria del titolo** dal diario: con 3 o più trade in perdita su quel simbolo entra con metà taglia e forza ridotta.
 
-### L'intraday
+### Il capo ufficio
 
-Decide **Kronos, non il contesto macro**: entra se Kronos vede un rialzo (≥ +0,5%) oppure, senza proiezione contraria, se il
-giornaliero è in trend; mai contro un ribasso previsto. I pattern di più orizzonti sono prudenza: giornaliero sotto le medie,
-settimanale in calo (un mese sotto −2%, o negativo con medie brevi girate), intraday con le candele per lo più sotto la
-media a 20 → **due contrari = fuori, uno contrario = metà taglia e serve un Kronos netto (≥ +1%)**. I candidati sono
-ordinati per proiezione.
+A ogni giro rilegge il diario per ogni agente (e per la squadra dei custodi): trade, vinti, risultato, Kronos all'ingresso.
+Con meno di 3 trade è «nuovo»; in attivo con almeno il 55% di vinti «bene» (65% «ottimo»); in attivo con pochi vinti «da
+seguire»; in perdita **richiamato**: i suoi voti d'acquisto di più giorni sotto una soglia di Kronos (la maggiore tra
++1%, la soglia migliore dell'ufficio e la media dei suoi trade vinti) non contano, gli altri pesano il 60%. Un voto
+intraday richiamato perde solo forza: la soglia a 5 sedute è un altro orizzonte. Le vendite non si toccano.
 
-- **Candela**: volatilità giornaliera a 20 giorni ≥ 3% → 5 minuti; ≥ 1,5% → 15 minuti; altrimenti 4 ore.
-- **Ingresso**: rottura dei massimi delle 20 candele precedenti con un movimento di almeno mezzo ATR, oppure rientro sulla
-  media a 20 candele (trend sulla candela già in corso, tocco della media, ripartenza sopra il massimo della candela del
-  rientro). Non si entra oltre 3 ATR sopra il livello di rottura (si insegue).
-- **Obiettivo**: il maggiore tra 1% (titoli) / 2% (crypto) e 1,5 ATR. **Stop**: 1,2 ATR (minimo 0,4%). Rapporto
-  obiettivo/stop almeno 1,2. Si entra solo se il movimento atteso prima della chiusura (ATR × √candele rimaste) copre
-  almeno l'80% dell'obiettivo.
-- **Finestre** (ora di Roma): titoli 15:45–20:30, chiusura forzata 21:45; crypto 00:10–20:00, chiusura forzata 23:30.
-- **Uscite vincolanti**: obiettivo raggiunto, stop, due candele chiuse sotto la media a 20, fine giornata.
-- Peso massimo 10% del conto per operazione, al massimo 3 operazioni aperte, un ingresso per titolo al giorno. Se il
-  processo riparte, le operazioni aperte si ricostruiscono dal diario e dal carico.
+### La sala caffè
 
-## Il capo ufficio
+Dai trade chiusi raggruppa per tipo d'ingresso, settore e forza di Kronos: con almeno 3 trade, vinti sotto il 40% e
+media negativa → **prudenza** (×0,85 sul voto), vinti dal 60% e media positiva → **fiducia** (×1,1), in totale tra ×0,7
+e ×1,15. Chi non ha niente da fare va in pausa; chi ha di nuovo un trade da aprire torna alla scrivania nello stesso giro.
+I colleghi si scambiano solo dati veri: dossier, proiezioni, candele, lezioni.
 
-A ogni giro, prima che i voti vengano sommati, il capo ufficio rilegge il diario: per ogni agente (generali e custodi)
-conta i trade chiusi, i vinti, il risultato medio e la proiezione di Kronos che c'era all'ingresso. Con meno di 3 trade
-l'agente è «nuovo»; in attivo con almeno il 55% di vinti è «bene» o «ottimo»; in attivo ma con pochi vinti è «da seguire»
-(consiglio: la soglia di Kronos che nell'ufficio ha reso di più); in perdita è **richiamato**: finché non migliora i suoi voti
-d'acquisto sotto una soglia minima di Kronos (la maggiore tra 1%, la soglia migliore dell'ufficio e la proiezione media dei suoi
-trade vinti) non contano, gli altri pesano il 60%; riceve consigli presi da chi ha avuto successo (tipo d'ingresso migliore,
-troppe uscite dallo stop). Le vendite non si toccano. Il capo non fa ordini.
+### L'esplorazione
 
-## 3. Cosa impara il motore
+Ogni minuto, gli agenti in pausa passano 6 titoli del **radar** (azioni ed ETF liquidi fuori dall'universo: tecnologia,
+finanza, salute, energia, consumi, indici) con i criteri del motore: sopra la media a 200, momentum a 12 mesi positivo,
+grafico almeno al 50%, Kronos oltre +1% e non fuori misura (sotto la 200 solo contro tendenza). Chi trova
+un'opportunità torna alla scrivania, il titolo **entra nell'universo per 3 giorni** e lo scopritore lo vota finché
+l'opportunità regge. Si chiude quando è comprato (lo segue il suo custode), quando svanisce o dopo 3 giorni.
 
-- **Pesi degli agenti**: dal diario, dopo il periodo di osservazione (30 trade chiusi): chi ha votato ingressi che perdono
-  scende a 0,5, chi vince con campione affidabile sale a 1,2.
-- **Lezioni**: un titolo o un tipo d'ingresso che perde con costanza non si compra per un po' (solo stringendo, mai
-  allargando).
-- **Memoria per titolo** (custodi): vedi sopra.
-- **Proiezioni** e **universo** si rinnovano ogni giorno; i custodi nascono e muoiono con i criteri.
+---
 
-## 4. Perché così
+## 5. Entrare: dal voto all'ordine
 
-- Il metodo di fondo (trend sopra le medie, momentum assoluto, stop sulla volatilità, uscita di trend, presa di profitto
-  parziale, volatilità di portafoglio al 12%) è quello che nei backtest 2021–2026 ha dato +65% con perdita massima −7,6% e
-  giornate positive il 53–54% delle volte: il guadagno sta nel fatto che i giorni buoni valgono più dei cattivi.
-- Kronos è la fonte principale per anticipare, ma da solo è rumoroso (zero-shot): per questo guida solo le proiezioni più
-  nette e sempre dentro le regole della gabbia.
-- Ogni ingresso intraday ha obiettivo e stop dichiarati prima di entrare e una scadenza certa (la fine della giornata):
-  niente posizioni che "si vedrà domani".
-- Il contesto, le notizie e la memoria affinano; la gabbia protegge. Qualunque vantaggio di backtest va letto tagliato del
-  25–50%.
+### L'allocatore
 
-## Ingressi contro tendenza guidati da Kronos
+1. **Somma i voti** pesati per titolo (tutti gli agenti con peso 1; richiami e lezioni li hanno già corretti). Da +0,5
+   si compra, da −0,5 si vende. Le regole vincolanti vendono senza voto.
+2. **Filtri per un ingresso nuovo di più giorni**:
+   - il contesto non dice di aspettare;
+   - **costi**: Kronos deve prevedere almeno **2 volte** i costi di andata e ritorno (crypto 0,5% → +1%; azioni ~0,05%
+     → +0,1%); con Kronos attivo, senza proiezione utilizzabile non si entra;
+   - **evidenza combinata** del dossier: almeno 50% sopra la media a 200, 60% sotto.
+3. **Taglia**: al massimo il **10% del conto** per titolo, meno se il titolo è nervoso (valore × volatilità giornaliera ≤
+   0,25% del conto) × rischio ammesso × **fiducia in Kronos** (50% → 40% della taglia, ≥ 80% → piena) × evidenza (al
+   minimo metà); sotto la media a 200 ancora × 0,5, mai oltre il 5%.
+4. **Riparto del capitale**: nessun numero fisso di titoli o di agenti. Se i contanti (meno l'1% di riserva e meno gli
+   ordini d'acquisto ancora aperti) non bastano, si dividono in proporzione alla **qualità** (fiducia × evidenza ×
+   punteggio), rispettando il **35% per settore** in ordine di punteggio. Una posizione nuova vale la pena da 0,2% del
+   conto e 100 $; un'aggiunta da 2%.
+5. Gli acquisti si decidono solo nei giri con **analisi d'ingresso** (ogni 15 minuti); le vendite in ogni giro.
 
-Sotto la media a 200 il motore non compra per trend, ma **Kronos può anticipare un'inversione**: se prevede almeno **+2% a
-5 sedute** (mai oltre ±25%) con **probabilità di successo almeno del 60%** (Φ del rendimento atteso sulla volatilità del
-titolo × √5), l'agente Kronos, il custode del titolo e lo scopritore della sala caffè possono votare l'acquisto. La taglia
-è al massimo **metà del peso massimo** (5% del conto) e scala con la fiducia; la gabbia rifiuta oltre. Le uscite restano
-quelle di sempre: stop sulla volatilità su Alpaca, si tiene finché Kronos vede il rialzo, si esce quando la proiezione gira
-(custode, agente uscite, uscita di trend della gabbia). Parametri nella scheda di Kronos.
+### La gabbia
 
-## Scelta dei titoli: Kronos più tutte le fonti
+Il codice che dice l'ultima parola (`src/cage.ts`):
 
-Un ingresso nuovo di più giorni (non intraday) passa da tre filtri, chiunque abbia votato:
-1. **voti e punteggio** (Kronos, trend, rientro, custodi, esplorazione), con richiami del capo e lezioni della sala caffè;
-2. **evidenza combinata** del dossier del custode: Kronos 45%, grafico 25%, notizie e post (Google News, Alpaca/Benzinga,
-   X) 15%, contesto 15% (con Fear & Greed e funding per le crypto). Sotto **50%** (sopra la media a 200) o **60%** (sotto
-   la 200) non si entra: il titolo resta in attesa con il motivo;
-3. **taglia**: peso massimo × fiducia in Kronos (probabilità che la proiezione si avveri) × evidenza (al minimo metà,
-   dall'80% piena). **Sotto la media a 200** la taglia si moltiplica ancora per 0,5 e non supera mai il 5% del conto:
-   a parità di tutto, contro tendenza si investe sempre la metà.
+- titoli solo a **borsa aperta**, crypto sempre; niente short, niente leva; azioni intere, crypto frazionarie (minimo 10 $);
+- massimo **10% per titolo** (meno se nervoso) e **35% per settore** (anche crypto e titoli scoperti);
+- metodo: sopra la media a 200 e sopra la 50, **oppure** con un rialzo netto di Kronos (≥ +1%); sotto la 200 solo contro
+  tendenza (Kronos ≥ +2% con probabilità ≥ 60%, metà taglia). L'intraday ha le sue regole;
+- niente acquisti di azioni ed ETF nel **giorno della Fed** (le crypto sì) e di un titolo nei **2 giorni di borsa prima
+  della trimestrale** fino al giorno dei conti;
+- registro degli errori, contanti sufficienti, un ordine aperto uguale non si duplica;
+- **stop loss** e **uscita di trend** eseguiti dal codice, senza voto (non rimandati se una vendita è già in corso).
 
-## Niente numeri fissi: riparto del capitale
+---
 
-Non c'è un numero massimo di agenti, titoli o operazioni (le posizioni hanno solo una sicurezza tecnica a 1000; Kronos
-vota ogni rialzo oltre la soglia; l'intraday non ha più il tetto di 3 operazioni; l'esplorazione non ha un tetto di
-scoperte). Quello che limita è il **capitale**: se i contanti (meno l'1% di riserva) non bastano per tutto quello che gli
-agenti chiedono, l'allocatore li **divide in proporzione alla qualità** di ogni occasione, cioè fiducia in Kronos ×
-evidenza del dossier × punteggio dei voti, senza dare a nessuno più di quanto ha chiesto; quello che avanza va agli altri.
-Una posizione nuova vale la pena sopra lo 0,2% del conto; le aggiunte a una posizione aperta sopra il 2%.
+## 6. L'intraday: trade da pochi minuti a più giorni
 
-## Intraday: candela e orizzonte con la probabilità più alta
+Decide **Kronos sulle candele brevi**, non le medie giornaliere né il contesto macro.
 
-Titoli e crypto usano **le stesse candele: 5 e 15 minuti, 1 ora e 4 ore**. Si valuta solo una candela che può completarsi
-nel tempo rimasto (azioni: fino a 15 minuti dalla chiusura vera di Alpaca; crypto: durata massima 12 ore), quindi la 4 ore
-per le azioni vale solo nelle prime ore di seduta.
+### Ingresso (nell'analisi ogni 15 minuti)
 
-Su ogni candela servono medie brevi in ordine (EMA 9 sopra EMA 20 e prezzo sopra la 9, oppure rottura/rientro),
-obiettivo raggiungibile e rapporto obiettivo/stop ≥ 1,2. Poi **una sola proiezione di Kronos per candela**, letta a più
-**orizzonti, dai quarti d'ora alle ore** (15, 30 minuti, 1, 2, 4, 8 ore, nei limiti di 20 candele e del tempo rimasto):
-- per ogni orizzonte, rendimento previsto e **probabilità di successo** (rendimento sulla volatilità delle candele);
-- vale solo se il rialzo copre **2 volte i costi** di andata e ritorno (crypto 1%, azioni 0,1%);
-- si sceglie la coppia **candela + orizzonte** con la probabilità più alta (almeno 55%).
+Titoli e crypto usano le **stesse candele: 5 e 15 minuti, 1 ora, 4 ore**, ognuna solo se può completarsi nel tempo
+rimasto (azioni fino a 30 minuti dalla chiusura vera; crypto entro la durata massima di 12 ore).
 
-La taglia scala con la fiducia (55% → metà, 70% e oltre → piena); grafico superiore e Kronos a 5 sedute contrari la
-dimezzano ciascuno. Stop minimo 0,4% sulle azioni e **1% sulle crypto** (sopra il costo di 0,5%).
+1. **Grafico della candela**: EMA 9 sopra EMA 20 e prezzo sopra la 9, oppure rottura dei massimi delle 20 candele o
+   rientro sulla media a 20; mai oltre 3 ATR sopra (si insegue). Se il grafico non è ancora allineato **decide Kronos da
+   solo**: serve una probabilità più alta (65%) e la taglia si dimezza (è un'inversione anticipata).
+2. **Kronos**: una proiezione per titolo e candela, letta a ogni orizzonte che sta nel tempo rimasto. Per ognuno: rialzo
+   previsto e probabilità. Vale solo se il rialzo copre **2 volte i costi**; si sceglie la **coppia candela + orizzonte
+   con la probabilità più alta** (almeno 55%). Fino a 40 coppie titolo-candela per analisi, prima rotture e rientri, poi
+   medie in ordine, poi i casi in cui decide Kronos da solo.
+3. **Obiettivo = il rialzo che Kronos prevede** sull'orizzonte scelto, mai sotto il minimo dei costi (azioni 0,3%,
+   crypto 1,2%). **Stop** = 1,2 ATR della candela (minimo 0,4% azioni, 1% crypto). Si entra solo se l'obiettivo vale
+   almeno **1,2 volte lo stop**.
+4. **Taglia**: 10% del conto × fiducia (55% → metà, 70% → piena); il grafico della candela superiore sotto la sua media
+   e il Kronos a 5 sedute contrario la dimezzano ciascuno.
 
-La posizione si segue sulla candela **più breve** (5 min → 1 min, 15 min → 5 min, 1 ora → 15 min, 4 ore → 1 ora), con
-Kronos sull'orizzonte d'ingresso (senza superare il tempo rimasto):
-- vede ancora salire con almeno il 60% → oltre l'obiettivo **si lascia correre**, lo stop sale sopra il carico;
-- vede un calo che azzererebbe il guadagno → **si incassa** (protezione del profitto);
-- in perdita, vede un calo verso lo stop con rialzo al 35% o meno → **si taglia prima**;
+Esempio: Kronos vede +1,5% in 15 minuti sulle candele da 5 minuti di BTC, con probabilità alta; stop 1% → si entra con
+obiettivo +1,5% e controllo sulle candele da 1 minuto. Se il prezzo arriva all'obiettivo e Kronos non vede altro, si
+incassa: un trade di pochi minuti. (Verificato nel motore vero, `tests/intraday-motore.test.ts`.)
+
+### Mentre è aperta (a ogni giro, ogni 5 minuti)
+
+La posizione si segue sulla **candela più breve** (5 min → 1 min, 15 min → 5 min, 1 ora → 15 min, 4 ore → 1 ora), con
+Kronos sull'orizzonte d'ingresso:
+
+- **all'obiettivo**: se Kronos lì vede ancora salire (≥ 60%) **si lascia correre** e lo stop sale sopra il carico; se no
+  si incassa;
+- Kronos vede un calo che azzererebbe il guadagno → **protezione del profitto**, si incassa;
+- in perdita, Kronos vede un calo verso lo stop con rialzo al 35% o meno → **si taglia prima**;
 - **orizzonte scaduto** (1,5 volte quello d'ingresso) senza obiettivo e senza rialzo probabile → si chiude;
-- restano stop, obiettivo, media a 20 persa e chiusura di giornata.
+- due candele chiuse sotto la media a 20 → il movimento è finito; stop;
+- limite del giorno raggiunto → si incassa.
 
-Un'operazione intraday ha **solo queste uscite**: la proiezione a 5 sedute, la presa di profitto a +3% e l'uscita di trend
-giornaliera non la toccano (resta lo stop di emergenza). Il blocco «un ingresso al giorno per titolo» scatta a ordine
-eseguito: un voto scartato dall'allocatore o dalla gabbia si ripresenta al giro dopo.
+### A fine finestra: chiudere o continuare
 
-## Protezione del profitto
+Alla chiusura della borsa (azioni, 15 minuti prima) o dopo 12 ore (crypto), l'operazione si chiude **salvo che il trend
+continui**: se è in guadagno e il metodo di più giorni la comprerebbe adesso (sopra la media a 200, sopra la 50 o Kronos
+netto, Kronos a 5 sedute oltre 2 volte i costi con probabilità ≥ 55%, nessuna attesa del contesto né trimestrale nei
+prossimi giorni) viene **promossa a posizione di più giorni** e da lì la seguono le regole del capitolo 7.
 
-Con una posizione in guadagno oltre i costi (0,2% azioni, 0,6% crypto), se Kronos vede nelle **prossime 2 sedute** (dal
-percorso previsto giorno per giorno) un calo che riporterebbe il guadagno a zero, l'agente uscite **vende subito**: meglio
-un profitto minore che tornare a pari o in perdita. Proiezione a 5 sedute **netta al ribasso** (−1% o meno, la stessa
-soglia con cui si compra) su un titolo in portafoglio → si esce. La presa di profitto parziale a +3% aspetta se Kronos
-anticipa altro rialzo.
+Un'operazione intraday ha solo le sue uscite: la proiezione a 5 sedute, la presa di profitto e l'uscita di trend
+giornaliera non la toccano (resta lo stop di emergenza). Un ingresso per titolo al giorno, contato a ordine eseguito.
 
-## Il cervello delle previsioni: Kronos e gli altri modelli
+---
 
-Accanto a Kronos il sidecar fa girare altri due modelli gratuiti (Apache 2.0) sulla stessa serie: **Chronos-2** (Amazon) e
-**TimesFM 2.5** (Google). Kronos legge le candele intere ed è addestrato sui mercati; gli altri due sono modelli generici
-sulla serie delle chiusure. Gli studi su dati finanziari dicono che i modelli generici, usati così come sono, prevedono
-poco la direzione dei rendimenti: per questo non si fa una media alla cieca, ma **ogni modello deve dimostrare quanto vale**.
+## 7. Uscire da una posizione di più giorni
 
-- Ogni previsione di ogni modello (giornaliera a 5 sedute e su ogni candela intraday) si registra e, alla scadenza, si
-  confronta con il prezzo vero: direzione giusta o sbagliata, e quanto avrebbe reso seguirla.
-- **Scala di affidabilità a priori** (0-1), metà dai dati finanziari con cui il modello è stato addestrato, metà dalle
-  prove pubblicate sulla previsione dei rendimenti (RankIC nel confronto del lavoro su KiT, 2026):
+Regole vincolanti dell'agente **uscite**, in quest'ordine:
 
-  | Modello | Addestramento | Prove sui rendimenti | Affidabilità |
-  |---|---|---|---|
-  | Kronos | 12 miliardi di candele da 45 borse | RankIC 0,034 (il migliore dei pubblici) | **1** |
-  | Chronos-2 | corpus generico e sintetico, nessun dato finanziario dichiarato | RankIC 0,005 | **0,13** |
-  | TimesFM 2.5 | corpus generico e sintetico | RankIC negativo | **0,05** |
+1. **Stop sulla volatilità**: 2,5 × volatilità giornaliera × √5, tra il 5% e il 10% dal carico; c'è anche uno **stop
+   GTC su Alpaca** che vale a motore spento (crypto: `stop_limit`).
+2. **Trimestrale in arrivo**: nell'ultima seduta utile (stesso giorno se i conti escono dopo la chiusura, il giorno prima
+   se prima dell'apertura o orario ignoto), negli ultimi 90 minuti. Salto atteso = 3 × volatilità (almeno 3%):
 
-- **Peso = affidabilità × risultati misurati.** Fino a 100 previsioni valutate (per tipo) conta solo l'affidabilità:
-  Kronos pesa circa l'85%, Chronos-2 l'11%, TimesFM il 4%. Poi la bravura misurata (direzioni giuste oltre il caso,
-  ridotta sui campioni piccoli; una quota del 53% vale «come atteso») moltiplica l'affidabilità tra 0 e 3: chi non supera
-  il caso pesa zero, chi indovina molto di più guadagna peso, ma un modello meno allenato deve indovinare molto di più per
-  pesare quanto Kronos. Conti separati per previsione giornaliera e per candela (5 min, 15 min, 1 ora, 4 ore).
-- Kronos, finché non risulta peggiore del caso, tiene **almeno metà del peso**. La scala si può cambiare da Impostazioni
-  → Kronos.
-- Tutto il resto del motore resta com'è: probabilità, soglie, costi, taglie e uscite lavorano sulla previsione combinata.
-- Nella pagina Dashboard, «Cervello delle previsioni» mostra per ogni modello previsioni valutate, direzione giusta, resa e
-  peso di adesso. Se Chronos-2 o TimesFM non sono installati (installa-kronos), si lavora con il solo Kronos.
+   | Posizione | Decisione |
+   |---|---|
+   | guadagno oltre il salto atteso | vende **metà**: il cuscinetto copre un salto contrario |
+   | guadagno più piccolo | **metà** se Kronos vede rialzo con probabilità ≥ 60%, altrimenti **tutto** |
+   | perdita | **tutto**; solo una perdita piccola con Kronos favorevole: **metà** |
 
-## Fiducia nelle proiezioni: ridurre il rischio sì, aumentarlo no
+   Kronos non conosce i conti, quindi sceglie solo tra metà e tutto. Se il motore era spento, decide appena la borsa apre.
+3. **Protezione del profitto**: in guadagno oltre i costi (0,2% azioni, 0,6% crypto) e Kronos vede nelle prossime 2
+   sedute un calo che lo azzererebbe → si incassa adesso.
+4. **Proiezione netta al ribasso** (−1% o meno a 5 sedute, dal prezzo di adesso) → si esce.
 
-Con eventi in arrivo (Fed nei prossimi giorni, trimestrale) il contesto non si fida della proiezione **per entrare o per
-tenere**. Per **uscire** e per **controllare i costi** la proiezione vale sempre: una proiezione non fidata non può far
-comprare, ma può sempre far vendere o fermare un acquisto. Con Kronos attivo, un titolo senza proiezione utilizzabile
-non entra (non si può verificare che il rialzo copra i costi).
+Poi, non vincolanti o della gabbia: **presa di profitto** a +3% (metà, salvo Kronos ancora al rialzo), **uscita di
+trend** (chiusura sotto la media a 50, salvo Kronos ancora al rialzo), **custodi** e **trend** (sotto la 50), **orizzonte**
+(60 sedute e slancio finito), **rientro** (RSI 70 o 5 sedute). Un titolo comprato oggi non si vende per un voto
+d'opinione prima di una candela giornaliera nuova: escono solo stop e regole vincolanti.
 
-## Ordini e contanti
+---
 
-Il riparto del capitale non ridistribuisce i contanti già impegnati da ordini d'acquisto aperti. Uno stop o un'uscita di
-trend non si rimanda se una vendita è già in corso. Non ci sono sveglie: acquisti e uscite seguono la seduta vera.
-Gli ordini hanno un ID per giro: più acquisti dello stesso titolo nella giornata (un'aggiunta, un'operazione intraday)
-sono ammessi; le quantità crypto si troncano al milionesimo (mai per eccesso) e le briciole non ricevono stop.
+## 8. Limiti del giorno e sicurezze
 
-## Dati e previsioni sempre allineati al momento giusto
+- **Limite di guadagno del giorno**: raggiunto il +10% del patrimonio rispetto alla chiusura di ieri, niente acquisti veri
+  fino a domani: gli agenti continuano **in simulazione** (operazioni virtuali misurate) e l'intraday incassa. Nessun
+  limite alla perdita del giorno: proteggono stop e uscite.
+- **Interruttore** (−5% dal massimo): spento di serie, attivabile dalle impostazioni come freno d'emergenza.
+- **Ordini**: un ID per giro (un nuovo tentativo non si duplica; Alpaca rifiuta l'ID già usato), verifica dopo un timeout,
+  stop tolto prima di una vendita, quantità crypto troncate al milionesimo, briciole senza stop.
+- **Un solo processo** sullo stato (`state/run.lock`). Dopo un riavvio il motore riparte da `state/`.
 
-- **Giornate concluse**: lo storico giornaliero contiene solo giornate finite. La seduta di un giorno di New York entra
-  dalle 16:15 locali (22:15 italiane); la candela crypto di un giorno UTC a mezzanotte UTC (01:00 italiane). Storico e
-  proiezioni di Kronos si rinnovano appena ne arriva una nuova: le azioni dopo la chiusura americana, le crypto dopo la
-  mezzanotte UTC. (Prima si rinnovavano alla mezzanotte italiana, quando a New York il giorno non era ancora cambiato:
-  medie, uscite di trend e Kronos lavoravano ogni giorno con una seduta di ritardo.)
-- **Proiezioni dal prezzo di adesso**: Kronos prevede il rendimento dall'ultima chiusura; ogni proiezione e ogni percorso
-  si riportano al prezzo del momento prima di decidere. Un rialzo previsto e già avvenuto in giornata non si compra due
-  volte; un calo previsto e già avvenuto non fa vendere sul fondo.
-- Se il sidecar non risponde al ricalcolo, restano le ultime proiezioni (con la giornata su cui sono state calcolate).
-- **Tetto per settore già nel riparto**: i contanti si dividono rispettando il 35% per settore in ordine di punteggio, così
-  non restano fermi su un titolo che la gabbia rifiuterebbe.
-- **Rientro (RSI a 2 giorni)**: le chiusure concluse più il prezzo di adesso (a borsa aperta; le crypto sempre).
+---
 
-## Kronos: quanti più campioni possibile, analisi d'ingresso ogni 15 minuti
+## 9. Cosa impara il motore
 
-Ogni previsione di Kronos è la media di più percorsi generati («campioni»): più campioni, previsione più stabile (l'errore
-casuale scende con la radice del numero). Il costo non è proporzionale (Kronos genera i campioni insieme: sul PC 8 campioni
-costano quanto 4), quindi il motore **sale con i campioni** finché il tempo per titolo misurato resta in quello concesso, e
-scende se il PC è più carico: **6 s per titolo** per le giornaliere (una volta per giornata conclusa), **3 s per titolo e
-candela** per l'intraday, **1,5 s** per la scrematura dell'esplorazione (chi entra nell'universo si riproietta con il
-budget pieno); tra 4 e 128 campioni. Lo stato è nella riga di Kronos della dashboard.
+- **Capo ufficio** e **sala caffè** (capitolo 4), dal diario dei trade, da subito e con limiti.
+- **Cervello delle previsioni**: quanto vale ogni modello, per il giornaliero e per ogni candela.
+- **Memoria per titolo** dei custodi.
+- **Registro degli errori**: solo sicurezza (dopo uno stop, dopo due rifiuti di Alpaca).
 
-Il giro resta ogni **5 minuti** per conto, uscite, stop, protezione del profitto e operazioni intraday aperte (una
-posizione su candele da 5 minuti non può aspettarne 15). L'**analisi d'ingresso** (scansione intraday con Kronos sulle
-candele e nuovi acquisti) si fa **ogni 15 minuti**: tre volte il tempo per Kronos, più campioni, previsioni più stabili.
-Tra un'analisi e l'altra in dashboard restano le candidate dell'ultima.
+---
 
-## Uscita intelligente prima delle trimestrali
+## 10. Dove vedere tutto
 
-Nell'ultima seduta prima dei conti (lo stesso giorno se escono dopo la chiusura, il giorno prima se escono prima
-dell'apertura o l'orario non è noto; l'orario arriva da Nasdaq), negli ultimi 90 minuti, l'agente uscite decide per ogni
-azione in portafoglio. Salto atteso ai conti = 3 × volatilità giornaliera (almeno 3%).
+Dashboard su `http://127.0.0.1:8787` (anche da telefono e, in sola lettura, sulla pagina pubblica di GitHub Pages):
 
-| Posizione | Decisione |
-|---|---|
-| in guadagno oltre il salto atteso | vende **metà**: il cuscinetto copre anche un salto contrario, l'altra metà resta per un salto favorevole |
-| in guadagno più piccolo del salto | **metà** se Kronos vede ancora rialzo con probabilità ≥ 60%, altrimenti **tutto** |
-| in perdita | **tutto**; solo una perdita piccola (sotto un quarto del salto atteso) con Kronos favorevole: **metà** |
+- **Dashboard**: frase di stato, soldi, situazione in breve (posizioni, operazioni di oggi, contesto, Kronos con i
+  campioni, agenti con la prossima analisi d'ingresso, esplorazione), **cervello delle previsioni**;
+- **Titoli**: grafico con candele giorno, 4 ore, 1 ora, 15 e 5 minuti e lo scenario di Kronos; dialogo «Analisi
+  investimento» / «Riepilogo investimento»; la parte **Oggi** (profitto e perdita, posizioni, ultimo giro, intraday,
+  simulazioni, registro);
+- **Agenti**: squadra, capo ufficio, custodi, sala caffè, esplorazione, ufficio 3D;
+- **Impostazioni**: schede degli agenti con i parametri, chiavi, riavvio, guida.
 
-Kronos non conosce i conti, quindi decide solo tra metà e tutto, mai di tenere tutta la posizione. Se la metà è già stata
-venduta (anche dalla presa di profitto), il resto resta. Se il motore era spento nell'ultima seduta e i conti non sono ancora
-usciti, decide appena la borsa apre. Gli acquisti restano bloccati dai 2 giorni di borsa prima fino al giorno dei conti.
+Telegram riceve ordini, allarmi e il riepilogo serale.
 
-## Regole del primo motore riviste
+---
 
-- **Rischio ammesso per classe**: il regime guarda lo SPY per le azioni e il BTC per le crypto (sotto la media a 200 o con
-  volatilità alta: esposizione dimezzata). Regime e contesto misurano la stessa cosa, quindi non si moltiplicano: vale
-  la riduzione più forte.
-- **Tetto per settore** al 35% per ogni settore, crypto e titoli scoperti compresi (prima: solo un gruppo fisso di 4 titoli).
-- **Calendario**: la Fed blocca gli acquisti di azioni ed ETF nel giorno della decisione, non le crypto; le trimestrali
-  arrivano ogni giorno da Nasdaq per tutti i titoli seguiti.
-- **Imparare dai risultati**: lo fanno capo ufficio e sala caffè. Del registro degli errori restano le regole di
-  sicurezza (dopo uno stop, dopo due rifiuti di Alpaca); le lezioni statistiche e i pesi degli agenti dopo 90 giorni
-  sono tolti, per non punire due volte lo stesso errore. Tutti gli agenti votano con lo stesso peso.
-- **Sveglie classiche** (con `claude -p` a voto, anche nel cloud), testimone, riconciliazione e backtest: tolti dal codice.
+## Perché così
 
-## Sala caffè: gli agenti imparano gli uni dagli altri
-
-A ogni giro, dopo i richiami del capo ufficio, il motore (`src/agents/caffe.ts`):
-
-1. **Lezioni di squadra.** Dai trade chiusi del diario (esclusi quelli chiusi dalla vecchia uscita in giornata) raggruppa
-   per tipo d'ingresso, settore, forza di Kronos all'ingresso e ingresso + settore. Con almeno 3 trade nel gruppo: vinti
-   sotto il 40% e media negativa → **prudenza**; vinti dal 60% e media positiva → **fiducia**.
-2. **Apprendimento.** Ogni voto d'acquisto non vincolante che ricade in una lezione cambia forza: ×0,85 per lezione di
-   prudenza, ×1,1 per lezione di fiducia, in totale mai sotto ×0,7 né sopra ×1,15, e mai oltre 1. Vendite e regole non si
-   toccano. Il voto porta scritto da quale lezione viene.
-3. **Chi va in pausa.** Alla scrivania: chi vota, chi frena il rischio (regime, contesto sotto 100%), i custodi con una
-   posizione, un'uscita, un ingresso pronto o un voto, gli operatori intraday in posizione o con un ingresso votato. Tutti
-   gli altri vanno in sala caffè. Chi ha di nuovo un trade da aprire torna alla scrivania nello stesso giro.
-4. **Cosa si dicono.** Solo dati veri: il dossier dei custodi (probabilità, Kronos, grafico, notizie, memoria) a un
-   collega dello stesso settore, la lettura degli agenti generali, le candele degli operatori intraday, le proiezioni più
-   nette di Kronos e quelle scartate, le lezioni di squadra raccontate da chi ne ha più esperienza, la lezione comune del
-   capo ufficio.
-
-### Esplorazione: chi è in pausa cerca nuove occasioni
-
-Gli agenti in sala caffè non restano fissi sul loro titolo (`src/agents/esplorazione.ts`). Ogni minuto (anche tra un giro e l'altro), se qualcuno è
-in pausa, prendono i prossimi 8 titoli del **radar** (azioni ed ETF liquidi fuori dall'universo, in `RADAR_SECTORS` con il
-loro settore: tecnologia, finanza, salute, energia, consumi, indici; le crypto della top 100 negoziabili su Alpaca sono
-già tutte nell'universo) e li passano con i criteri del motore:
-
-1. storico sufficiente, **sopra la media a 200**, momentum a 12 mesi positivo, lettura del grafico almeno al 50%;
-2. **Kronos** al rialzo oltre la soglia (+1% a 5 sedute) e non fuori misura (oltre ±25% è rumore).
-
-Chi trova un'opportunità (di preferenza un custode dello stesso settore, poi un custode o un operatore della stessa classe,
-crypto o azioni, poi chiunque sia in pausa) **torna alla scrivania** e lo annuncia ai colleghi. Il titolo **entra
-nell'universo per 3 giorni**: da lì prezzi, contesto, custode, gabbia, stop e uscite lo trattano come ogni altro titolo. Lo
-scopritore lo **vota a ogni giro** (forza da Kronos e dal grafico) finché l'opportunità regge; il voto passa da punteggi,
-richiami del capo, lezioni della sala caffè, allocatore e gabbia. La scoperta si chiude quando il titolo è comprato (lo
-segue il suo custode), quando Kronos non vede più il rialzo o il prezzo scende sotto la 200 (svanita), o dopo 3 giorni
-(scaduta); un titolo del radar in portafoglio resta nell'universo finché lo si tiene. Al massimo 6 scoperte al giorno;
-i settori nuovi non pesano sull'ampiezza del contesto.
-
-Il capo ufficio giudica anche la **squadra dei custodi** insieme: un custode segue un titolo solo e raramente arriva a 3
-trade; il richiamo della squadra vale per ogni custode che non ha ancora un giudizio proprio.
-
-## 5. Dove vedere tutto
-
-Dashboard su `http://127.0.0.1:8787`, quattro voci: **Dashboard** (frase di stato, soldi, situazione in breve), **Titoli**
-(grafico con candele giorno/4 ore/1 ora/15/5 minuti, scheda del titolo in un dialogo «Analisi/Riepilogo investimento» e, sotto,
-la parte «Oggi»: profitto e perdita di oggi, posizioni, ultimo giro, intraday quando c'è un'operazione aperta, simulazioni, registro della giornata con le azioni ripetute
-a ogni giro raggruppate), **Titoli** (candele con medie, carico, stop, candela di oggi in formazione, scelte del motore,
-scenario di Kronos, dossier del custode; «Chiedi agli agenti adesso» per una valutazione a secco), **Agenti** (Squadra: capo
-ufficio, custodi, punteggi e voti; Ufficio 3D), **Impostazioni** (schede degli agenti, chiavi e riavvio, guida). La stessa
-pagina, in sola lettura, può essere pubblicata su GitHub Pages. Telegram riceve ordini, allarmi e il riepilogo serale.
+- **Kronos guida, il resto protegge.** Kronos anticipa la direzione ed è il miglior modello pubblico sui rendimenti, ma
+  resta rumoroso: per questo serve probabilità, copertura dei costi, gabbia e uscite scritte nel codice.
+- **Ogni decisione al momento giusto.** Dati di giornate concluse, previsioni riportate al prezzo di adesso, analisi
+  d'ingresso con il tempo per molti campioni, controllo delle posizioni ogni 5 minuti.
+- **Il capitale va alle occasioni migliori**, senza numeri fissi di titoli o agenti, con tetti per titolo e per settore.
+- **Nessun backtest promette il futuro**: i valori di base vengono da backtest 2021–2026 sul motore di allora; oggi la
+  misura è il diario dei trade veri e il confronto di ogni previsione con il prezzo reale.

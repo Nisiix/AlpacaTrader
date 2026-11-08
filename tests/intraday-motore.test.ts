@@ -87,4 +87,26 @@ describe("intraday nel motore vero: candele da 5 minuti, Kronos, ordini", () => 
     const r2 = await agente().observe(view({ "BTC/USD": 0.002 }));
     expect(r2.segnali.find((x) => x.lato === "sell")!.perche).toContain("durata massima");
   });
+
+  test("medie brevi non ancora in ordine: decide Kronos da solo, con probabilità più alta e metà taglia", async () => {
+    setCryptoUniverse(["BTC/USD"]);
+    const now = new Date("2026-09-27T21:00:00+02:00");
+    // Candele in leggera discesa con oscillazioni: EMA 9 sotto EMA 20, nessuna rottura né rientro.
+    const end = Math.floor(now.getTime() / 300_000) * 300_000;
+    const bars: IntradayBar[] = Array.from({ length: 120 }, (_, i) => {
+      const k = 119 - i;
+      const c = 76_000 * (1 + 0.0008 * k) * (1 + (k % 2 === 0 ? 0.003 : -0.003));
+      return { t: new Date(end - (k + 1) * 300_000).toISOString(), open: c, high: c * 1.002, low: c * 0.998, close: c, volume: 1_000 };
+    });
+    const prezzo = bars.at(-1)!.close;
+    const v = { today: "2026-09-27", now, prices: { "BTC/USD": prezzo }, closes: { "BTC/USD": syntheticCloses(prezzo, 0.02, 260) }, indicators: {}, positions: [], account: { equity: 100_000, lastEquity: 100_000, cash: 100_000, status: "ACTIVE" }, journal: emptyJournal(), mercatoAperto: false } as unknown as AgentView;
+    const con = (rialzo: number) => new IntradayAgent(async (syms, tf) => Object.fromEntries(syms.map((x) => [x, tf === "5Min" ? bars : []])), async (b, step, h) => Object.fromEntries(Object.keys(b).map((x) => [x, Array.from({ length: h }, (_, i) => (step === 5 ? Math.min(rialzo, (rialzo / 3) * (i + 1)) : 0))])));
+    const forte = await con(0.015).observe(v);
+    const buy = forte.segnali.find((x) => x.lato === "buy")!;
+    expect(buy.perche).toContain("Kronos anticipa la ripartenza sulle candele 5Min");
+    expect(buy.pesoMassimo!).toBeLessThanOrEqual(AGENTS.intraday.maxWeight / 2 + 1e-9);
+    const debole = await con(0.008).observe(v); // +0,8%: non copre 2 volte i costi crypto (1%)
+    expect(debole.segnali.filter((x) => x.lato === "buy")).toEqual([]);
+    expect(debole.intraday!.find((x) => x.simbolo === "BTC/USD")!.motivo).toContain("non basta");
+  });
 });
