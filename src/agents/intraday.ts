@@ -245,6 +245,16 @@ export class IntradayAgent implements Agent {
       }
       return out;
     };
+    const sdOf = (b: IntradayBar[]) => {
+      const rets = b.slice(-50).map((x, i, arr) => (i ? x.close / arr[i - 1]!.close - 1 : 0)).slice(1);
+      return rets.length > 5 ? Math.sqrt(rets.reduce((a2, x) => a2 + x * x, 0) / rets.length) : null;
+    };
+    // Proiezione credibile: entro maxAbs e entro zMax volte la volatilità delle candele sull'orizzonte.
+    const credibile = (b: IntradayBar[], k: number, candele: number) => {
+      if (Math.abs(k) > AGENTS.kronos.maxAbs) return false;
+      const sd = sdOf(b);
+      return sd === null || sd <= 0 || Math.abs(k) / (sd * Math.sqrt(candele)) <= c.kronos.zMax;
+    };
     const probOf = (b: IntradayBar[], k: number, candele: number) => {
       const rets = b.slice(-50).map((x, i, arr) => (i ? x.close / arr[i - 1]!.close - 1 : 0)).slice(1);
       const sd = rets.length > 5 ? Math.sqrt(rets.reduce((a2, x) => a2 + x * x, 0) / rets.length) : null;
@@ -256,9 +266,10 @@ export class IntradayAgent implements Agent {
     const migliore = (s: string, tf: string, path: number[], b: IntradayBar[], disponibili: number) => {
       const opz = orizzonti(tf).filter((o) => o.h <= disponibili && o.n <= path.length).map((o) => {
         const k = retAt(path, o.n);
-        return { ...o, k, pr: probOf(b, k, o.n), passa: k > 0 && k >= costoDi(s) };
+        const fuori = !credibile(b, k, o.n);
+        return { ...o, k, pr: fuori ? null : probOf(b, k, o.n), fuori, passa: !fuori && k > 0 && k >= costoDi(s) };
       });
-      opz.sort((a, d) => Number(d.passa) - Number(a.passa) || (d.pr ?? 0) - (a.pr ?? 0) || d.k - a.k);
+      opz.sort((a, d) => Number(d.passa) - Number(a.passa) || Number(a.fuori) - Number(d.fuori) || (d.pr ?? 0) - (a.pr ?? 0) || d.k - a.k);
       return opz[0] ?? null;
     };
 
@@ -286,8 +297,9 @@ export class IntradayAgent implements Agent {
       const kpath = lowK.get(`${s}|${lo}`);
       const ctrlMin = Math.max(tfMinutes(lo) * 3, Math.min(op.orizzonteMin ?? 60, Math.max(minutiPer(s), 0) || tfMinutes(lo) * 3));
       const nl = kpath ? Math.min(kpath.length, nCandele(lo, ctrlMin)) : 0;
-      const kl = kpath ? retAt(kpath, nl) : undefined;
       const bl = barsOf(s, lo);
+      const klRaw = kpath ? retAt(kpath, nl) : undefined;
+      const kl = klRaw !== undefined && (!bl || credibile(bl, klRaw, nl)) ? klRaw : undefined;
       const pl = kl !== undefined && bl ? probOf(bl, kl, nl) : null;
       const orizzonteCtrl = etichetta(nl * tfMinutes(lo));
       const controllo = kl !== undefined ? `candele ${lo} a ${orizzonteCtrl}: Kronos ${pct(kl)}${pl !== null ? ` (${Math.round(pl * 100)}% al rialzo)` : ""}` : `candele ${lo}: nessuna proiezione`;
@@ -351,7 +363,7 @@ export class IntradayAgent implements Agent {
       const scored = list.map((x) => {
         const path = kIn.get(`${s}|${x.tf}`);
         const o = path ? migliore(s, x.tf, path, barsOf(s, x.tf)!, minutiPer(s)) : null;
-        return { ...x, k: o?.k, pr: o?.pr ?? null, h: o?.h, passa: o?.passa ?? false };
+        return { ...x, k: o?.k, pr: o?.pr ?? null, h: o?.h, passa: o?.passa ?? false, fuori: o?.fuori ?? false };
       });
       const valide = scored.filter((x) => x.ok === null);
       const conK = valide.filter((x) => x.k !== undefined).sort((a, b) => Number(b.passa) - Number(a.passa) || (b.pr ?? 0) - (a.pr ?? 0) || (b.k ?? 0) - (a.k ?? 0));
@@ -361,6 +373,7 @@ export class IntradayAgent implements Agent {
       let motivo: string | null = best.ok;
       if (!motivo) {
         if (this.forecast && k === undefined) motivo = "in attesa della proiezione di Kronos sulle candele brevi";
+        else if (best.fuori) motivo = `proiezione di Kronos sulle candele ${tf} fuori misura (${pct(k!)}): rumore del modello, non si usa`;
         else if (k !== undefined && (!best.passa || (pr ?? 0) < c.kronos.minProb)) motivo = `Kronos a ${etichetta(h!)} sulle candele ${tf}: ${pct(k)}${pr !== null ? `, probabilità ${Math.round(pr * 100)}%` : ""}: non basta (serve un rialzo di almeno ${pct(costoDi(s))}, ${AGENTS.costi.margineCosti} volte i costi, con probabilità ≥ ${Math.round(c.kronos.minProb * 100)}%)`;
         else if (k === undefined && !(fc !== undefined && fc >= AGENTS.kronos.anticipaSoglia / 2) && !read.entra) motivo = "senza Kronos intraday serve una rottura o un rientro";
       }

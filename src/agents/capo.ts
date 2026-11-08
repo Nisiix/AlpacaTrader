@@ -156,8 +156,10 @@ export function applyGuidance(reports: Record<string, AgentReport>, capo: CapoRe
         kept.push(s);
         continue;
       }
+      // Un voto intraday si regge su Kronos sulle candele brevi (già filtrato da costi e probabilità nell'agente): la soglia
+      // del richiamo è sul Kronos a 5 sedute, un altro orizzonte, quindi qui vale solo la forza ridotta.
       const fc = s.kronos ?? previsioni?.[s.simbolo];
-      if (rule.kronosMin !== null && (fc === undefined || fc < rule.kronosMin)) {
+      if (!s.intraday && rule.kronosMin !== null && (fc === undefined || fc < rule.kronosMin)) {
         note.push(`capo ufficio: voto di ${s.agente} su ${s.simbolo} scartato (Kronos ${pct(fc ?? null)} sotto la soglia del richiamo ${pct(rule.kronosMin)})`);
         continue;
       }

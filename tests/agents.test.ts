@@ -803,7 +803,8 @@ describe("intraday", () => {
     // In posizione oltre l'obiettivo: sulla candela più breve (5 min) Kronos vede ancora salire → si lascia correre.
     const st = r.intraday!.find((x) => x.simbolo === "BTC/USD")!;
     const lastB = bars["BTC/USD"]!.at(-1)!; bars["BTC/USD"]!.push({ ...lastB, t: new Date(Date.parse(lastB.t) + 5 * 60_000).toISOString() });
-    byStep[5] = 0.02;
+    // Valori credibili per candele da 5 minuti che si muovono di circa lo 0,1% (oltre 4 volte la volatilità è rumore).
+    byStep[5] = 0.004;
     const pos = [{ symbol: "BTC/USD", qty: 0.05, avgEntryPrice: 76_450, currentPrice: st.obiettivo! + 50, marketValue: 3_900 }];
     const r2 = await a.observe(view({ closes, prices: { ...prices, "BTC/USD": st.obiettivo! + 50 }, now: day("2026-09-22", "16:40"), today: "2026-09-22", positions: pos }));
     expect(r2.segnali.filter((x) => x.lato === "sell" && x.simbolo === "BTC/USD")).toEqual([]);
@@ -813,10 +814,22 @@ describe("intraday", () => {
     expect(st2.controllo).toContain("candele 5Min");
     // Ora sulla candela breve Kronos gira al ribasso: oltre l'obiettivo si incassa.
     bars["BTC/USD"]!.push({ ...lastB, t: new Date(Date.parse(lastB.t) + 10 * 60_000).toISOString() });
-    byStep[5] = -0.01;
+    byStep[5] = -0.004;
     const r3 = await a.observe(view({ closes, prices: { ...prices, "BTC/USD": st.obiettivo! + 50 }, now: day("2026-09-22", "16:45"), today: "2026-09-22", positions: pos }));
     expect(r3.segnali.find((x) => x.lato === "sell" && x.simbolo === "BTC/USD")!.perche).toMatch(/obiettivo raggiunto|protezione del profitto/);
     bars["BTC/USD"]!.splice(-2);
+  });
+
+  test("una proiezione intraday fuori misura (es. prezzi minuscoli) è rumore: niente ingresso", async () => {
+    setCryptoUniverse(["PEPE/USD"]);
+    const base = 0.00000506;
+    const mk = (tf: string) => { const m = tf.endsWith("Min") ? Number(tf.replace("Min", "")) : Number(tf.replace("Hour", "")) * 60; return candles(base, 40, [base * 1.001, base * 1.002, base * 1.004], m); };
+    const closes: Record<string, number[]> = { "PEPE/USD": syntheticCloses(base, 0.04, 260) };
+    for (const sym of UNIVERSE) closes[sym] = syntheticCloses(PRICES[sym]!, 0.01, 260);
+    const a = new IntradayAgent(async (syms, tf) => Object.fromEntries(syms.map((x) => [x, mk(tf)])), async (b) => Object.fromEntries(Object.keys(b).map((x) => [x, 0.2])));
+    const r = await a.observe(view({ closes, prices: { ...PRICES, "PEPE/USD": base * 1.004 }, now: day("2026-09-22", "16:30"), today: "2026-09-22" }));
+    expect(r.segnali.filter((x) => x.lato === "buy")).toEqual([]);
+    expect(r.intraday!.find((x) => x.simbolo === "PEPE/USD")!.motivo).toContain("fuori misura");
   });
 
   test("il flusso completo: il voto intraday diventa una proposta intraday e la gabbia la ammette a mercato aperto fuori dalla vecchia finestra", () => {
@@ -1222,5 +1235,19 @@ describe("ottimizzazioni: intraday separato, soglie simmetriche, costi e contant
     expect(orizzonti("1Hour").map((o) => o.h)).toEqual([60, 120, 240, 480]);
     expect(orizzonti("4Hour").map((o) => o.h)).toEqual([240, 480]);
     expect(AGENTS.intraday.candele).toEqual(["5Min", "15Min", "1Hour", "4Hour"]);
+  });
+});
+
+describe("capo ufficio e intraday", () => {
+  test("il richiamo usa la soglia del Kronos a 5 sedute solo per i voti di più giorni; un voto intraday perde solo forza", async () => {
+    const { applyGuidance } = await import("../src/agents/capo.ts");
+    const capo = { aggiornato: "", sintesi: "", migliori: [], sogliaKronos: null, ingressoMigliore: null, valutazioni: [{ agente: "intraday", giudizio: "richiamato", kronosMin: 0.01, forza: 0.5, messaggio: "", consigli: [] }, { agente: "trend", giudizio: "richiamato", kronosMin: 0.01, forza: 0.5, messaggio: "", consigli: [] }] } as any;
+    const reports = {
+      intraday: { segnali: [{ agente: "intraday", simbolo: "BTC/USD", lato: "buy" as const, forza: 1, orizzonteSedute: 1, intraday: true, perche: "candele 15Min" }] },
+      trend: { segnali: [{ agente: "trend", simbolo: "SPY", lato: "buy" as const, forza: 1, orizzonteSedute: 60, perche: "in trend" }] },
+    };
+    applyGuidance(reports, capo, { "BTC/USD": -0.02, SPY: 0.002 });
+    expect(reports.intraday.segnali[0]!.forza).toBe(0.5);
+    expect(reports.trend.segnali).toEqual([]);
   });
 });

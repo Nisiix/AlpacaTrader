@@ -270,7 +270,9 @@ export const AGENTS = {
     // a ogni candela chiusa) da cui si leggono più orizzonti, in minuti: dai quarti d'ora alle ore. Si sceglie la coppia
     // candela + orizzonte con la probabilità di successo più alta, purché stia nel tempo rimasto, il rialzo previsto copra
     // `costi.margineCosti` volte i costi e la probabilità sia ≥ minProb. perGiro = coppie titolo-candela guardate a giro.
-    kronos: { orizzontiMin: [15, 30, 60, 120, 240, 480] as number[], maxCandele: 20, perGiro: 24, minProb: 0.55 },
+    // zMax: una proiezione oltre zMax volte la volatilità delle candele sull'orizzonte (o oltre kronos.maxAbs) è rumore del
+    // modello (succede sui prezzi minuscoli, es. 0,000005 $) e non si usa, come le giornaliere fuori misura.
+    kronos: { orizzontiMin: [15, 30, 60, 120, 240, 480] as number[], maxCandele: 20, perGiro: 24, minProb: 0.55, zMax: 4 },
     // Scaduto l'orizzonte scelto (× questo fattore) senza obiettivo e senza rialzo ancora probabile, si chiude.
     scadenzaOrizzonte: 1.5,
     // Le candele su cui si cerca l'ingresso: con Kronos si sceglie quella con la probabilità di successo più alta.
