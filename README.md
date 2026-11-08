@@ -106,7 +106,7 @@ Solo paper: l'endpoint `https://paper-api.alpaca.markets` è scritto nel codice.
 
 ```sh
 cp secrets.example.ts secrets.ts   # poi riempi i campi (chiavi paper PK..., token e chat id del bot)
-bun run telegram-chat-id           # dopo aver scritto /start al bot: stampa il chat id
+bun run telegram-chat-id [--scrivi]   # dopo aver scritto /start al bot: stampa il chat id; con --scrivi lo mette in secrets.ts (su Windows: doppio clic su imposta-telegram.cmd)
 bun run schedule                   # resta acceso, ogni 30 s lancia la sveglia dovuta
 bun run once [--slot 15:40] [--force]   # una sveglia subito (la più recente di oggi)
 bun run status                     # lock, ultimo testimone, conto
