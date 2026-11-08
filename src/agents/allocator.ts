@@ -15,6 +15,8 @@ export interface Score {
   perche: string[];
   // Se tutti i voti di acquisto vengono da comparti a taglia ridotta, il peso massimo che chiedono.
   pesoMassimo?: number;
+  // Se tutti i voti di acquisto sono intraday, l'operazione lo è (si chiude in giornata).
+  intraday?: boolean;
 }
 
 export interface Allocation {
@@ -50,6 +52,7 @@ export function scoreSignals(signals: Signal[], weights: Record<string, number>)
     const w = (weights[s.agente] ?? AGENTS.weights.base) * s.forza;
     if (s.lato === "buy") {
       sc.compra += w;
+      sc.intraday = sc.compra === w ? !!s.intraday : sc.intraday && !!s.intraday;
       // Un voto senza limite di taglia (es. il trend) toglie il limite; se tutti i voti lo hanno, vale il più piccolo.
       if (s.pesoMassimo === undefined) sc.pesoMassimo = Infinity;
       else if (sc.pesoMassimo !== Infinity) sc.pesoMassimo = Math.min(sc.pesoMassimo ?? Infinity, s.pesoMassimo);
@@ -105,6 +108,9 @@ export function allocate(view: AgentView, reports: Record<string, AgentReport>, 
   for (const sc of punteggi) {
     if (sc.punteggio < AGENTS.buyScore) break;
     if (forced.has(sc.simbolo)) continue;
+    // Titoli azionari a borsa chiusa (o fuori finestra, salvo intraday): non si propongono e non occupano un posto,
+    // così i posti liberi vanno alle crypto, che trattano sempre.
+    if (!isCrypto(sc.simbolo) && (view.mercatoAperto === false || (view.finestraIngressi === false && !sc.intraday))) continue;
     const wait = view.contesto?.attendi[sc.simbolo];
     if (wait && !held.has(sc.simbolo)) {
       inAttesa.push({ simbolo: sc.simbolo, motivo: wait });
@@ -137,7 +143,7 @@ export function allocate(view: AgentView, reports: Record<string, AgentReport>, 
     if (delta / equity < AGENTS.minAddPct) continue;
     const qty = roundQty(sc.simbolo, delta / price);
     if (qty <= 0 || (isCrypto(sc.simbolo) && qty * price < CRYPTO_MIN_NOTIONAL)) continue;
-    proposte.push({ symbol: sc.simbolo, side: "buy", qty, why: sc.perche.join(" · "), confidence: conf(sc.punteggio), expect: `peso obiettivo ${(w * scale * 100).toFixed(1)}% del conto${scale < 1 ? ` (ridotto per la volatilità di portafoglio, obiettivo ${(AGENTS.volTarget.annual * 100).toFixed(0)}% annuo)` : ""}` });
+    proposte.push({ symbol: sc.simbolo, side: "buy", qty, why: sc.perche.join(" · "), confidence: conf(sc.punteggio), expect: `${sc.intraday ? "intraday: " : ""}peso obiettivo ${(w * scale * 100).toFixed(1)}% del conto${scale < 1 ? ` (ridotto per la volatilità di portafoglio, obiettivo ${(AGENTS.volTarget.annual * 100).toFixed(0)}% annuo)` : ""}`, intraday: sc.intraday || undefined });
   }
   return { proposte, punteggi, rischio, pesi: weights, inAttesa };
 }

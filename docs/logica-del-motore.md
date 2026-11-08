@@ -1,0 +1,131 @@
+# Come decide il motore degli agenti
+
+Questo documento spiega, in ordine, cosa fa il bot a ogni giro e perché. Vale per `bun run agents` (il motore sempre
+acceso); i numeri sono in `src/config.ts` e si possono cambiare lì. Tutto gira su un conto **paper** Alpaca: nessun
+denaro vero.
+
+## 1. Il ritmo
+
+Ogni 5 minuti (`AGENTS.tickMinutes`) il motore fa un **giro**. Un giro è sempre lo stesso, giorno e notte, feriali e
+festivi: quello che cambia è cosa la gabbia lascia passare (i titoli azionari solo a borsa aperta, le crypto sempre).
+
+1. **Universo del giorno.** Una volta al giorno rinnova l'elenco delle crypto: tutte le coppie USD negoziabili su Alpaca
+   che stanno nella top 100 per capitalizzazione (CoinGecko), stablecoin escluse, massimo 40. I titoli azionari sono
+   fissi: SPY, QQQ, AAPL, MSFT, NVDA, GLD (scelti con i backtest). Dentro questo universo la scelta è quotidiana.
+2. **Alpaca.** Conto, posizioni, ordini recenti, orologio di borsa, prezzi di tutto l'universo.
+3. **Barre giornaliere.** Una volta al giorno scarica le candele giornaliere di tutto (320 sedute) e le salva in
+   `state/bars.json`: servono alle medie, alla volatilità, al momentum e ai grafici della dashboard.
+4. **Memoria del rischio.** Interruttore sulla perdita (a −5% dal massimo blocca gli acquisti, si riarma da solo dopo 5
+   giorni di borsa), registro degli errori (lezioni: dopo uno stop niente riacquisto per 5 giorni, due rifiuti uguali
+   bloccano il titolo), diario dei trade.
+5. **Kronos.** Una volta al giorno chiede al sidecar le proiezioni a 5 sedute per tutto l'universo (percorso giorno per
+   giorno) e le salva in `state/previsioni.json`. Kronos è la fonte principale per **anticipare** la direzione.
+6. **Contesto economico** (agente `contesto`), prima di tutti gli altri. Regole sui dati: SPY sopra o sotto la media a
+   200, volatilità, oro e obbligazioni che salgono con SPY che scende, settori con la maggioranza dei titoli sotto la
+   media a 50 (il settore crypto si misura su tutto l'universo crypto), Fed nei prossimi 2 giorni. Più, se c'è
+   `claude -p`, una lettura con ricerca web ogni 6 ore. Esito: favorevole / neutro / sfavorevole, generale e per settore.
+   **Il contesto corrente non decide da solo**: se Kronos anticipa un rialzo (≥ +1% a 5 sedute) il settore debole non
+   ferma l'ingresso; se anticipa un ribasso (≤ −1%) si aspetta anche con contesto buono. Gli eventi (Fed, trimestrali)
+   bloccano comunque.
+7. **Gli agenti osservano** la stessa vista (prezzi, chiusure, indicatori, posizioni, diario, proiezioni, contesto) e
+   votano. Nessun agente ordina niente.
+8. **L'allocatore** somma i voti pesati per titolo. Sopra +0,5 si compra, sotto −0,5 si vende; le regole vincolanti
+   (stop, obiettivo, fine giornata, proiezione contraria) vendono senza voto. Decide il peso di ogni posizione (massimo
+   20% del conto, meno se il titolo è nervoso; comparti a taglia ridotta per rientro e intraday) e riduce tutto se la
+   volatilità di portafoglio supera il 12% annuo. A borsa chiusa non spreca posti sui titoli azionari: i posti liberi
+   vanno alle crypto.
+9. **La gabbia** (`src/cage.ts`) è il codice che dice l'ultima parola: titoli solo a borsa aperta (crypto sempre),
+   niente short, niente leva, solo azioni intere (crypto frazionarie, minimo 10 $), massimo 5 posizioni, massimo 20% per
+   titolo, gruppi correlati limitati, compra solo chi chiude sopra le medie a 50 e 200 giorni, niente acquisti nel giorno
+   della Fed o nei 2 giorni prima di una trimestrale, lezioni del registro, stop loss e uscita di trend eseguiti dal
+   codice. Un acquisto per titolo al giorno (l'ID dell'ordine lo impedisce).
+10. **Invio** degli ordini ammessi, stop GTC su Alpaca per ogni posizione (scalato sulla volatilità, 5–10%; sulle crypto
+    `stop_limit`), diario aggiornato con le esecuzioni, lezioni, stato per la dashboard, eventi nel registro, Telegram.
+11. **Riepilogo** su Telegram dopo le 22:05 con il conto di profitto e perdita del giorno: ogni vendita in $ e %, il
+    totale realizzato, il conto per agente, il non realizzato.
+
+## 2. Gli agenti
+
+| Agente | Cosa guarda | Cosa vota |
+|---|---|---|
+| **trend** | chiusura sopra le medie a 50 e 200 giorni, rendimento a 12 mesi positivo (crypto: anche a 3 mesi), classifica per momentum a 6 mesi | compra i migliori 5 (forza 1 → 0,5); vende chi ha chiuso sotto la 50 |
+| **rientro** | RSI(2) sotto 10 con prezzo sopra la media a 200 | compra a taglia ridotta (5%), esce a RSI 70 o dopo 5 sedute |
+| **regime** | SPY contro la media a 200, volatilità | rischio ammesso: 1 o 0,5 (moltiplica le taglie) |
+| **orizzonte** | posizioni vecchie di 60 sedute | chiede di uscire se lo slancio è finito |
+| **uscite** | ogni posizione: stop sulla volatilità, massimo visto, proiezione di Kronos | **vincolante**: stop, presa di profitto, proiezione negativa → vende |
+| **profitto** | posizioni a +3% | vende metà e lascia correre il resto (walk-forward: più vinti, perdita massima minore) |
+| **contesto** | vedi sopra | niente ordini: esposizione × 0,75 (neutro) o × 0,5 (sfavorevole); chi aspetta |
+| **kronos** | proiezioni a 5 sedute, solo il 25% più nette e nel verso del trend | compra/vende (0,5) |
+| **custodi** | **un investitore per ogni titolo o crypto in trend** (o in portafoglio): nessun numero fisso, tanti quanti sono i titoli che meritano attenzione, zero se il mercato non offre niente | vedi sotto |
+| **intraday** | candele a 5 min / 15 min / 4 ore, scelte dalla volatilità | operazioni che si chiudono in giornata, vedi sotto |
+
+### Il custode
+
+Nasce quando un titolo rispetta i criteri del trend (sopra le medie, slancio a 12 mesi positivo; per le crypto anche a
+3 mesi) o quando è in portafoglio; muore dopo 12 giri fuori dai criteri. Dichiara sempre:
+
+- **Tesi**: perché il titolo merita attenzione (medie, slancio).
+- **Piano**: entrare ora (meglio sul rientro verso la media a 20 giorni: forza 0,8; ingresso ordinato 0,6; prezzo oltre il
+  15% sopra la media a 50: solo 0,25, meglio aspettare), tenere finché il prezzo resta sopra la media a 50, uscire sotto
+  la 50 (0,9) o con slancio a 3 mesi negativo (0,6).
+- **Rischio**: stop sulla volatilità, peso massimo, numero massimo di posizioni.
+- **Dossier**, aggiornato a ogni giro, con quattro fonti e un peso ciascuna → **probabilità che il titolo sia favorevole**
+  e **prossima azione** in chiaro:
+  - Kronos (45%): probabilità di rialzo = rendimento atteso a 5 sedute diviso la volatilità sull'orizzonte (normale).
+  - Grafico (25%): massimi e minimi crescenti o calanti, rottura dei massimi a 20 sedute, medie allineate, rientro sulla
+    media a 20, eccesso oltre il 15% sopra la 50, RSI(14) oltre 75 o sotto 30, compressione di volatilità, slancio a 3 mesi.
+  - Notizie (15%): titoli recenti da Google News (ogni ora), tono da parole chiave (rally, ETF, approvazione… contro hack,
+    crollo, causa…).
+  - Contesto (15%): favorevole 0,8 / neutro 0,5 / sfavorevole o in attesa 0,2.
+- **Memoria del titolo**: dal diario, i trade passati su quel simbolo (quanti, vinti, media, quanti chiusi dallo stop, quale
+  ingresso ha reso di più). Con 3 o più trade in perdita il custode entra con **metà taglia e forza ridotta**; con storia
+  positiva entra con più fiducia; se ha reso solo il rientro, l'ingresso "in trend" vale meno.
+
+La forza del voto d'ingresso segue il dossier (50% → invariata, 80% → +30%, 30% → −20%) e la memoria; un ribasso anticipato
+da Kronos (≤ −1%) ferma l'ingresso anche in trend; un rialzo anticipato (≥ +1%) lo rafforza del 15%. Le uscite sono regole
+e non si modulano.
+
+### L'intraday
+
+Opera solo nel verso del trend giornaliero (prezzo sopra le medie a 50 e 200) e mai contro una proiezione di Kronos
+negativa; i candidati sono ordinati per proiezione.
+
+- **Candela**: volatilità giornaliera a 20 giorni ≥ 3% → 5 minuti; ≥ 1,5% → 15 minuti; altrimenti 4 ore.
+- **Ingresso**: rottura dei massimi delle 20 candele precedenti con un movimento di almeno mezzo ATR, oppure rientro sulla
+  media a 20 candele (trend sulla candela già in corso, tocco della media, ripartenza sopra il massimo della candela del
+  rientro). Non si entra oltre 3 ATR sopra il livello di rottura (si insegue).
+- **Obiettivo**: il maggiore tra 1% (titoli) / 2% (crypto) e 1,5 ATR. **Stop**: 1,2 ATR (minimo 0,4%). Rapporto
+  obiettivo/stop almeno 1,2. Si entra solo se il movimento atteso prima della chiusura (ATR × √candele rimaste) copre
+  almeno l'80% dell'obiettivo.
+- **Finestre** (ora di Roma): titoli 15:45–20:30, chiusura forzata 21:45; crypto 00:10–20:00, chiusura forzata 23:30.
+- **Uscite vincolanti**: obiettivo raggiunto, stop, due candele chiuse sotto la media a 20, fine giornata.
+- Peso massimo 10% del conto per operazione, al massimo 3 operazioni aperte, un ingresso per titolo al giorno. Se il
+  processo riparte, le operazioni aperte si ricostruiscono dal diario e dal carico.
+
+## 3. Cosa impara il motore
+
+- **Pesi degli agenti**: dal diario, dopo il periodo di osservazione (30 trade chiusi): chi ha votato ingressi che perdono
+  scende a 0,5, chi vince con campione affidabile sale a 1,2.
+- **Lezioni**: un titolo o un tipo d'ingresso che perde con costanza non si compra per un po' (solo stringendo, mai
+  allargando).
+- **Memoria per titolo** (custodi): vedi sopra.
+- **Proiezioni** e **universo** si rinnovano ogni giorno; i custodi nascono e muoiono con i criteri.
+
+## 4. Perché così
+
+- Il metodo di fondo (trend sopra le medie, momentum assoluto, stop sulla volatilità, uscita di trend, presa di profitto
+  parziale, volatilità di portafoglio al 12%) è quello che nei backtest 2021–2026 ha dato +65% con perdita massima −7,6% e
+  giornate positive il 53–54% delle volte: il guadagno sta nel fatto che i giorni buoni valgono più dei cattivi.
+- Kronos è la fonte principale per anticipare, ma da solo è rumoroso (zero-shot): per questo guida solo le proiezioni più
+  nette e sempre dentro le regole della gabbia.
+- Ogni ingresso intraday ha obiettivo e stop dichiarati prima di entrare e una scadenza certa (la fine della giornata):
+  niente posizioni che "si vedrà domani".
+- Il contesto, le notizie e la memoria affinano; la gabbia protegge. Qualunque vantaggio di backtest va letto tagliato del
+  25–50%.
+
+## 5. Dove vedere tutto
+
+Dashboard su `http://127.0.0.1:8787`: **Panoramica** (frase di stato, soldi, profitto e perdita di oggi, posizioni, ultimo
+giro, operazioni intraday), **Titoli** (candele con medie, carico, stop, candela di oggi in formazione, scelte del motore,
+scenario di Kronos; «Chiedi agli agenti adesso» per una valutazione a secco), **Agenti** (custodi con dossier, agenti, punteggi,
+voti), **Cronologia**, **Vista 3D**. Telegram riceve ordini, allarmi e il riepilogo serale.

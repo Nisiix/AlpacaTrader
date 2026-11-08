@@ -6,6 +6,8 @@ import { runAgentsBacktest } from "../src/agents/backtest.ts";
 import { ClaudeMacro, ContextAgent } from "../src/agents/context.ts";
 import { CustodiAgent, newsScore } from "../src/agents/custode.ts";
 import { ExitAgent } from "../src/agents/exits.ts";
+import { IntradayAgent, readBars, timeframeFor } from "../src/agents/intraday.ts";
+import type { IntradayBar } from "../src/broker/types.ts";
 import { selectPairs } from "../src/agents/universe.ts";
 import { EventBus, readEvents } from "../src/agents/bus.ts";
 import { emptyCache, inEntryWindow, runTick, statusPath, summaryText, type AgentsStatus, type EngineDeps } from "../src/agents/engine.ts";
@@ -226,9 +228,11 @@ function engineDeps(env: TestEnv, agents: Agent[] = [new TrendAgent(), new Pullb
 }
 
 describe("motore", () => {
-  test("finestra di ingresso: lun-ven 15:40-17:30 ora di Roma", () => {
+  test("finestra di ingresso: lun-ven per tutta la seduta (15:35-21:55 ora di Roma)", () => {
     expect(inEntryWindow(day("2026-09-24", "15:41"))).toBe(true);
-    expect(inEntryWindow(day("2026-09-24", "17:31"))).toBe(false);
+    expect(inEntryWindow(day("2026-09-24", "17:31"))).toBe(true);
+    expect(inEntryWindow(day("2026-09-24", "21:50"))).toBe(true);
+    expect(inEntryWindow(day("2026-09-24", "21:58"))).toBe(false);
     expect(inEntryWindow(day("2026-09-24", "09:00"))).toBe(false);
     expect(inEntryWindow(day("2026-09-26", "16:00"))).toBe(false); // sabato
   });
@@ -263,15 +267,18 @@ describe("motore", () => {
     const r2 = await runTick(deps, cache);
     expect(r2.status_file!.ordini).toEqual([]);
     expect(ordersFor(env, st.ordini[0]!.simbolo).length).toBe(1);
-    // Fuori finestra con un titolo che non è più in portafoglio: la gabbia rifiuta l'acquisto.
+    // Alle 18:31 la seduta è ancora aperta: un titolo uscito dal portafoglio si ricompra (ID del giorno: lo stesso ordine non si duplica).
     env.setFake((s) => {
       delete s.positions.GLD;
       s.cash += 1_000_000;
     });
     env.clock.t = day("2026-09-24", "18:31").getTime();
     const r3 = await runTick(deps, cache);
-    expect(r3.status_file!.ordini.filter((o) => o.lato === "buy")).toEqual([]);
-    expect(r3.status_file!.rifiuti.some((x) => x.reason.includes("solo alla sveglia di apertura"))).toBe(true);
+    expect(r3.status_file!.ordini.filter((o) => o.lato === "buy" && o.simbolo === "GLD").length + r3.status_file!.rifiuti.filter((x) => x.symbol === "GLD").length).toBeGreaterThanOrEqual(1);
+    // A borsa chiusa (22:30) nessun acquisto di titoli.
+    env.clock.t = day("2026-09-24", "22:30").getTime();
+    const r4 = await runTick(deps, cache);
+    expect(r4.status_file!.ordini.filter((o) => o.lato === "buy" && !o.simbolo.includes("/"))).toEqual([]);
     expect(readdirSync(join(env.logsDir)).some((f) => f.startsWith("agenti-2026-09-24"))).toBe(true);
   });
 
@@ -312,7 +319,7 @@ describe("motore", () => {
   });
 
   test("il riepilogo elenca il profitto e la perdita di ogni vendita del giorno, il totale e il conto per agente", () => {
-    const base = { versione: 1 as const, aggiornato: "2026-09-24T20:10:00.000Z", giro: "g", mercatoAperto: false, finestraIngressi: false, conto: null, posizioni: [], prezzi: {}, rischio: 1, pesi: {}, agenti: {}, segnali: [], punteggi: [], ordini: [], rifiuti: [], contesto: null, inAttesa: [], stopSuAlpaca: null, acquistiBloccati: null, lezioniAttive: [], allarmi: [], diario: { stato: "x", statistiche: { trade: 0, vinti: 0, percVinti: null, mediaVincita: null, mediaPerdita: null, attesa: null, campione: "nessuno" as const } }, confronto: null, ultimoRiepilogo: null, tradeChiusiOggi: [], custodi: [], universo: { titoli: [], crypto: [], fonteCrypto: null, aggiornatoCrypto: null }, kronos: { stato: "non configurato", proiezioniDel: null, simboli: 0 } };
+    const base = { versione: 1 as const, aggiornato: "2026-09-24T20:10:00.000Z", giro: "g", mercatoAperto: false, finestraIngressi: false, conto: null, posizioni: [], prezzi: {}, rischio: 1, pesi: {}, agenti: {}, segnali: [], punteggi: [], ordini: [], rifiuti: [], contesto: null, inAttesa: [], stopSuAlpaca: null, acquistiBloccati: null, lezioniAttive: [], allarmi: [], diario: { stato: "x", statistiche: { trade: 0, vinti: 0, percVinti: null, mediaVincita: null, mediaPerdita: null, attesa: null, campione: "nessuno" as const } }, confronto: null, ultimoRiepilogo: null, tradeChiusiOggi: [], custodi: [], intraday: [], universo: { titoli: [], crypto: [], fonteCrypto: null, aggiornatoCrypto: null }, kronos: { stato: "non configurato", proiezioniDel: null, simboli: 0 } };
     const st: AgentsStatus = {
       ...base,
       pnlOggi: {
@@ -553,7 +560,9 @@ describe("universo crypto e custodi", () => {
     closes["SOL/USD"] = syntheticCloses(180, 0.01, 260);
     const prices = { ...PRICES, "BTC/USD": closes["BTC/USD"]!.at(-1)!, "ETH/USD": closes["ETH/USD"]!.at(-1)!, "SOL/USD": closes["SOL/USD"]!.at(-1)! };
     const r = await a.observe(view({ closes, prices, indicators: indicatorsFor(closes, prices, LIMITS.trendSmaDays, LIMITS.volLookbackDays, LIMITS.longSmaDays, LIMITS.rankMomentumDays), previsioni: { "BTC/USD": 0.03 } }));
-    expect(r.custodi!.map((c) => c.simbolo).sort()).toEqual(["BTC/USD", "SOL/USD"]);
+    // Custodi anche sui titoli in trend (tutto l'universo sintetico sale); tra le crypto solo BTC e SOL, ETH scende.
+    expect(r.custodi!.map((c) => c.simbolo).filter((x) => x.includes("/")).sort()).toEqual(["BTC/USD", "SOL/USD"]);
+    expect(r.custodi!.some((c) => c.simbolo === "SPY")).toBe(true);
     for (const c of r.custodi!) {
       expect(["pronto", "osserva"]).toContain(c.fase);
       expect(c.tesi).toContain(c.simbolo);
@@ -573,7 +582,20 @@ describe("universo crypto e custodi", () => {
     expect(newsScore([{ titolo: "Bitcoin ETF inflows hit record" }, { titolo: "Exchange hack drains funds" }, { titolo: "Quiet day" }])).toBeCloseTo(0.5, 6);
     expect(newsScore([{ titolo: "Solana rally to all-time high" }])!).toBeGreaterThan(0.5);
     expect(newsScore([])).toBeNull();
-    expect(r.segnali.filter((s) => s.lato === "buy").map((s) => s.agente).sort()).toEqual(["custode BTC/USD", "custode SOL/USD"]);
+    // Memoria del titolo: con 3 trade persi su SOL il custode entra con metà taglia e forza ridotta.
+    const j = emptyJournal();
+    for (let i = 0; i < 3; i++) j.trade.push({ id: `s${i}`, simbolo: "SOL/USD", stato: "chiuso", apertoIl: "2026-08-0" + (i + 1) + "T10:00:00Z", comprate: 1, costo: 100, vendute: 1, incassato: 95, quantita: 0, contesto: { setup: "", momentum20: null, volGiornaliera: null, distanzaMedia: null, fiducia: null, attesa: "", perche: "SOL/USD in trend, +5% sopra la media a 50: ingresso ordinato", agenti: ["custode SOL/USD"] }, chiusoIl: "2026-08-1" + i + "T10:00:00Z", prezzoIngresso: 100, prezzoUscita: 95, risultato: -0.05, giorni: 7, motivoUscita: "stop su Alpaca" });
+    const rm = await new CustodiAgent().observe(view({ closes, prices, indicators: indicatorsFor(closes, prices, LIMITS.trendSmaDays, LIMITS.volLookbackDays, LIMITS.longSmaDays, LIMITS.rankMomentumDays), journal: j }));
+    const solSig = rm.segnali.find((s) => s.agente === "custode SOL/USD" && s.lato === "buy")!;
+    const btcSig = rm.segnali.find((s) => s.agente === "custode BTC/USD" && s.lato === "buy")!;
+    expect(solSig.pesoMassimo).toBe(LIMITS.maxPositionPct / 2);
+    expect(solSig.forza).toBeLessThan(btcSig.forza);
+    expect(solSig.perche).toContain("memoria");
+    const memo = rm.custodi!.find((c) => c.simbolo === "SOL/USD")!.dossier!.memoria;
+    expect(memo.trade).toBe(3);
+    expect(memo.daStop).toBe(3);
+    expect(memo.lezione).toContain("metà taglia");
+    expect(r.segnali.filter((s) => s.lato === "buy" && s.simbolo.includes("/")).map((s) => s.agente).sort()).toEqual(["custode BTC/USD", "custode SOL/USD"]);
     // In portafoglio e sotto la media a 50: il custode chiede di uscire.
     const down = { ...closes, "BTC/USD": [...closes["BTC/USD"]!.slice(0, -1), 60_000] };
     const p2 = { ...prices, "BTC/USD": 60_000 };
@@ -587,6 +609,105 @@ describe("universo crypto e custodi", () => {
   });
 });
 
+describe("intraday", () => {
+  // Candele sintetiche: `n` candele piatte attorno a `base`, poi la coda data (chiusure) con massimi/minimi coerenti.
+  const candles = (base: number, n: number, tail: number[], minutes = 5): IntradayBar[] => {
+    const out: IntradayBar[] = [];
+    const t0 = Date.parse("2026-09-24T13:30:00Z");
+    const closes = [...Array.from({ length: n }, (_, i) => base * (1 + 0.001 * Math.sin(i))), ...tail];
+    closes.forEach((c, i) => {
+      const o = i ? closes[i - 1]! : c;
+      out.push({ t: new Date(t0 + i * minutes * 60_000).toISOString(), open: o, high: Math.max(o, c) * 1.001, low: Math.min(o, c) * 0.999, close: c, volume: 1000 });
+    });
+    return out;
+  };
+
+  test("la candela segue la volatilità: nervoso 5 minuti, medio 15, calmo 4 ore", () => {
+    expect(timeframeFor(syntheticCloses(100, 0.04, 60))).toBe("5Min");
+    expect(timeframeFor(syntheticCloses(100, 0.02, 60))).toBe("15Min");
+    expect(timeframeFor(syntheticCloses(100, 0.005, 60))).toBe("4Hour");
+  });
+
+  test("lettura delle candele: la rottura dei massimi a 20 candele sopra la media entra; il piatto no; l'RSI tirato no", () => {
+    const flat = candles(100, 40, [100.05, 99.95, 100.02]);
+    expect(readBars(flat, 100, false).entra).toBe(false);
+    const breakout = candles(100, 40, [100.15, 100.35, 100.6]);
+    const r = readBars(breakout, 100.6, false);
+    expect(r.entra).toBe(true);
+    expect(r.pattern).toContain("rottura");
+    expect(r.targetPct).toBeGreaterThanOrEqual(AGENTS.intraday.target.stocks);
+    expect(r.stopPct).toBeGreaterThanOrEqual(AGENTS.intraday.minStopPct);
+    // Un balzo di 8 punti su candele da pochi centesimi: oltre 3 ATR dalla media, si insegue e non si entra.
+    const tired = candles(100, 40, [100.1, 100.2, 108]);
+    expect(readBars(tired, 108, false).entra).toBe(false);
+    expect(readBars(tired, 108, false).pattern).toContain("esteso");
+  });
+
+  test("l'agente: entra su rottura nel verso del trend con peso ridotto; esce all'obiettivo, allo stop, a fine giornata; non entra contro Kronos", async () => {
+    setCryptoUniverse(["BTC/USD", "ETH/USD"]);
+    const fetched: string[] = [];
+    const bars: Record<string, IntradayBar[]> = { NVDA: candles(180, 40, [180.2, 180.5, 180.9]), "BTC/USD": candles(76_000, 40, [76_100, 76_250, 76_450]) };
+    const a = new IntradayAgent(async (syms, tf) => { fetched.push(`${tf}:${syms.join(",")}`); return Object.fromEntries(syms.filter((x) => bars[x]).map((x) => [x, bars[x]!])); });
+    const closes: Record<string, number[]> = {};
+    for (const sym of UNIVERSE) closes[sym] = syntheticCloses(PRICES[sym]!, 0.01, 260);
+    closes["BTC/USD"] = syntheticCloses(76_000, 0.035, 260);
+    closes["ETH/USD"] = syntheticCloses(2_100, 0.035, 260);
+    const prices = { ...PRICES, NVDA: 180.9, "BTC/USD": 76_450, "ETH/USD": 2_100 };
+    // Martedì 16:30 Roma: dentro la finestra dei titoli e delle crypto.
+    const now = day("2026-09-22", "16:30");
+    const r = await a.observe(view({ closes, prices, now, today: "2026-09-22", previsioni: { "BTC/USD": 0.02, NVDA: -0.02 } }));
+    const buys = r.segnali.filter((x) => x.lato === "buy");
+    // BTC entra (rottura, Kronos a favore); NVDA no: Kronos anticipa un ribasso.
+    expect(buys.map((x) => x.simbolo)).toEqual(["BTC/USD"]);
+    expect(buys[0]!.intraday).toBe(true);
+    expect(buys[0]!.pesoMassimo).toBe(AGENTS.intraday.maxWeight);
+    expect(buys[0]!.perche).toContain("5Min");
+    expect(fetched.some((f) => f.startsWith("5Min:") && f.includes("BTC/USD"))).toBe(true);
+    const st = r.intraday!.find((x) => x.simbolo === "BTC/USD")!;
+    expect(st.obiettivo!).toBeGreaterThan(76_450);
+    expect(st.stop!).toBeLessThan(76_450);
+    // In posizione: all'obiettivo vende (vincolante).
+    const pos = [{ symbol: "BTC/USD", qty: 0.1, avgEntryPrice: 76_450, currentPrice: st.obiettivo!, marketValue: 7_800 }];
+    const r2 = await a.observe(view({ closes, prices: { ...prices, "BTC/USD": st.obiettivo! + 1 }, now: day("2026-09-22", "17:30"), today: "2026-09-22", positions: pos }));
+    const sell = r2.segnali.find((x) => x.lato === "sell" && x.simbolo === "BTC/USD")!;
+    expect(sell.vincolante).toBe(true);
+    expect(sell.perche).toContain("obiettivo raggiunto");
+    // Allo stop vende.
+    const r3 = await a.observe(view({ closes, prices: { ...prices, "BTC/USD": st.stop! - 1 }, now: day("2026-09-22", "17:35"), today: "2026-09-22", positions: pos }));
+    expect(r3.segnali.find((x) => x.lato === "sell")!.perche).toContain("stop intraday");
+    // Fine giornata: vende comunque.
+    const r4 = await a.observe(view({ closes, prices: { ...prices, "BTC/USD": 76_500 }, now: day("2026-09-22", "23:40"), today: "2026-09-22", positions: pos }));
+    expect(r4.segnali.find((x) => x.lato === "sell")!.perche).toContain("chiusura di giornata");
+    // Stesso giorno, dopo l'uscita: niente secondo ingresso su BTC.
+    const r5 = await a.observe(view({ closes, prices, now: day("2026-09-22", "18:00"), today: "2026-09-22" }));
+    expect(r5.segnali.filter((x) => x.lato === "buy" && x.simbolo === "BTC/USD")).toEqual([]);
+    // Fuori orario per i titoli (22:30): NVDA non è candidata neanche con Kronos favorevole.
+    const r6 = await a.observe(view({ closes, prices, now: day("2026-09-22", "22:30"), today: "2026-09-22", previsioni: { NVDA: 0.03 } }));
+    expect(r6.segnali.filter((x) => x.simbolo === "NVDA")).toEqual([]);
+  });
+
+  test("il flusso completo: il voto intraday diventa una proposta intraday e la gabbia la ammette a mercato aperto fuori dalla vecchia finestra", () => {
+    const sig = [{ agente: "intraday", simbolo: "NVDA", lato: "buy" as const, forza: 1, orizzonteSedute: 1, intraday: true, pesoMassimo: 0.1, perche: "rottura" }];
+    const sc = scoreSignals(sig, { intraday: 1 });
+    expect(sc[0]!.intraday).toBe(true);
+    const alloc = allocate(view({ positions: [] }), { intraday: { segnali: sig } }, { intraday: 1 });
+    expect(alloc.proposte[0]!.intraday).toBe(true);
+    expect(alloc.proposte[0]!.qty * PRICES.NVDA! / 100_000).toBeLessThanOrEqual(0.1 + 1e-9);
+    const v = view({});
+    const base = { today: "2026-09-24", slotKind: "mid" as const, marketOpen: true, latenessMin: 0, account: v.account, positions: [], prices: v.prices, closes: v.closes, recentOrders: [], lessons: [], buyBlock: null };
+    const ok = applyCage({ ...base, proposals: [{ symbol: "NVDA", side: "buy", qty: 10, why: "intraday", intraday: true }] });
+    expect(ok.orders.map((o) => o.symbol)).toEqual(["NVDA"]);
+    const closed = applyCage({ ...base, marketOpen: false, proposals: [{ symbol: "NVDA", side: "buy", qty: 10, why: "intraday", intraday: true }] });
+    expect(closed.rejected[0]!.reason).toBe("mercato chiuso");
+    // Crypto dell'universo del giorno: non più "fuori universo".
+    setCryptoUniverse(["BTC/USD", "ETH/USD", "SOL/USD"]);
+    const c2 = { ...view({}).closes, "SOL/USD": syntheticCloses(180, 0.01, 260) };
+    const sol = applyCage({ ...base, closes: c2, prices: { ...v.prices, "SOL/USD": 180 }, proposals: [{ symbol: "SOL/USD", side: "buy", qty: 1, why: "trend" }] });
+    expect(sol.rejected.find((r) => r.symbol === "SOL/USD")?.reason).not.toBe("fuori universo");
+    setCryptoUniverse(["BTC/USD", "ETH/USD"]);
+  });
+});
+
 describe("contesto economico", () => {
   test("regole: con SPY sopra la 200 e settori in trend è favorevole; con SPY sotto la 200 è sfavorevole e tutti aspettano", async () => {
     const ok = await new ContextAgent(null, []).assess(view());
@@ -596,7 +717,15 @@ describe("contesto economico", () => {
     const bad = await new ContextAgent(null, []).assess(view({ falling: ["SPY"] }));
     expect(bad.generale).toBe("sfavorevole");
     expect(bad.attendi.NVDA).toContain("candela successiva");
-    expect(bad.fidatiDellaProiezione.NVDA).toBe(false);
+    // Della proiezione ci si fida anche con contesto brutto: è lei ad anticipare.
+    expect(bad.fidatiDellaProiezione.NVDA).toBe(true);
+    // Kronos anticipa un rialzo su NVDA: il contesto sfavorevole non la ferma più; su GLD anticipa un ribasso: si aspetta anche se il contesto è buono.
+    const kr = await new ContextAgent(null, []).assess(view({ falling: ["SPY"], previsioni: { NVDA: 0.02 } }));
+    expect(kr.attendi.NVDA).toBeUndefined();
+    expect(kr.attendi.MSFT).toContain("nessun rialzo anticipato");
+    const down = await new ContextAgent(null, []).assess(view({ previsioni: { GLD: -0.02 } }));
+    expect(down.generale).toBe("favorevole");
+    expect(down.attendi.GLD).toContain("Kronos anticipa un ribasso");
   });
 
   test("settore debole: si aspetta solo in quel settore; la Fed vicina rende tutto neutro e toglie fiducia alla proiezione", async () => {

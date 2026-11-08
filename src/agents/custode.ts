@@ -19,7 +19,55 @@ export interface Dossier {
   kronos: { punteggio: number | null; nota: string };
   notizie: { punteggio: number | null; titoli: { titolo: string; fonte: string; quando: string }[]; nota: string };
   contesto: { punteggio: number; nota: string };
+  // La memoria storica del titolo: come sono andati i trade passati degli agenti su questo simbolo (dal diario).
+  memoria: Memoria;
   prossimaAzione: string;
+}
+
+export interface Memoria {
+  trade: number;
+  vinti: number;
+  media: number | null; // risultato medio per trade (frazione)
+  daStop: number; // uscite per stop
+  giorniMedi: number | null;
+  ultimo: { chiusoIl: string; risultato: number; uscita: string } | null;
+  // Quale tipo d'ingresso ha reso di più su questo titolo: "rientro" (vicino alla media a 20) o "trend" (ingresso ordinato).
+  ingressoMigliore: "rientro" | "trend" | null;
+  lezione: string; // una riga in italiano
+  // Come la memoria modula il custode: moltiplicatore della forza d'ingresso e peso massimo (se ridotto).
+  forza: number;
+  pesoMassimo: number | null;
+}
+
+// La memoria del titolo dal diario: i criteri del motore restano la fonte principale, la storia li affina.
+export function symbolMemory(journal: AgentView["journal"], symbol: string): Memoria {
+  const closed = journal.trade.filter((t) => t.simbolo === symbol && t.stato === "chiuso" && t.risultato !== undefined);
+  const n = closed.length;
+  const empty: Memoria = { trade: 0, vinti: 0, media: null, daStop: 0, giorniMedi: null, ultimo: null, ingressoMigliore: null, lezione: "nessun trade passato su questo titolo: si seguono i criteri del motore", forza: 1, pesoMassimo: null };
+  if (!n) return empty;
+  const res = closed.map((t) => t.risultato!);
+  const vinti = res.filter((r) => r > 0).length;
+  const media = res.reduce((a, b) => a + b, 0) / n;
+  const daStop = closed.filter((t) => /stop/i.test(t.motivoUscita ?? "")).length;
+  const giorni = closed.map((t) => t.giorni ?? 0);
+  const last = [...closed].sort((a, b) => (a.chiusoIl ?? "").localeCompare(b.chiusoIl ?? "")).at(-1)!;
+  const byKind = (re: RegExp) => closed.filter((t) => re.test(t.contesto?.perche ?? ""));
+  const rientro = byKind(/rientro|media a 20|punto d'ingresso/i), trend = byKind(/ingresso ordinato|sopra le medie/i);
+  const avg = (ts: typeof closed) => (ts.length ? ts.reduce((a, t) => a + t.risultato!, 0) / ts.length : null);
+  const mr = avg(rientro), mt = avg(trend);
+  const ingressoMigliore = mr !== null && mt !== null ? (mr >= mt ? "rientro" : "trend") : mr !== null && rientro.length >= 2 ? "rientro" : mt !== null && trend.length >= 2 ? "trend" : null;
+  let forza = 1, pesoMassimo: number | null = null, lezione: string;
+  const pctS = (x: number) => `${x >= 0 ? "+" : ""}${(x * 100).toFixed(1)}%`;
+  if (n >= 3 && media < 0 && vinti / n < 0.5) {
+    forza = 0.7;
+    pesoMassimo = LIMITS.maxPositionPct / 2;
+    lezione = `${n} trade, ${vinti} vinti, media ${pctS(media)}${daStop >= 2 ? `, ${daStop} chiusi dallo stop` : ""}: qui si entra con metà taglia e solo con un buon punto d'ingresso`;
+  } else if (n >= 3 && media > 0 && vinti / n >= 0.5) {
+    forza = 1.1;
+    lezione = `${n} trade, ${vinti} vinti, media ${pctS(media)}: il metodo su questo titolo ha funzionato, si entra con fiducia`;
+  } else lezione = `${n} trade, ${vinti} vinti, media ${pctS(media)}: campione ancora piccolo, si seguono i criteri del motore`;
+  if (ingressoMigliore) lezione += `; l'ingresso ${ingressoMigliore === "rientro" ? "sul rientro alla media a 20" : "in trend"} ha reso di più`;
+  return { trade: n, vinti, media, daStop, giorniMedi: giorni.reduce((a, b) => a + b, 0) / n, ultimo: { chiusoIl: last.chiusoIl ?? "", risultato: last.risultato!, uscita: last.motivoUscita ?? "" }, ingressoMigliore, lezione, forza, pesoMassimo };
 }
 
 export type NewsFetcher = (symbol: string) => Promise<{ titolo: string; fonte: string; quando: string }[]>;
@@ -28,7 +76,7 @@ export type NewsFetcher = (symbol: string) => Promise<{ titolo: string; fonte: s
 export function googleNews(timeoutMs = 10_000): NewsFetcher {
   return async (symbol) => {
     const base = symbol.split("/")[0]!;
-    const q = encodeURIComponent(`${base} crypto`);
+    const q = encodeURIComponent(symbol.includes("/") ? `${base} crypto` : `${base} stock`);
     const res = await fetch(`https://news.google.com/rss/search?q=${q}&hl=en-US&gl=US&ceid=US:en`, { signal: AbortSignal.timeout(timeoutMs), headers: { "user-agent": "alpaca-paper-agent/1.0" } });
     if (!res.ok) throw new Error(`Google News ${res.status}`);
     const xml = await res.text();
@@ -134,8 +182,10 @@ export class CustodiAgent implements Agent {
     const wait = v.contesto?.attendi[s];
     const cs = wait ? 0.2 : o === "favorevole" ? 0.8 : o === "neutro" ? 0.5 : 0.2;
     const contesto = { punteggio: cs, nota: wait ? wait : `contesto ${o}` };
-    // Pesi: tecnica 35, Kronos 25, notizie 15, contesto 25; le fonti mancanti ridistribuiscono il loro peso.
-    const parts: [number, number | null][] = [[0.35, tecnica.punteggio], [0.25, kronos.punteggio], [0.15, notizie.punteggio], [0.25, contesto.punteggio]];
+    const memoria = symbolMemory(v.journal, s);
+    // Pesi: Kronos 45 (la fonte principale per anticipare), tecnica 25, notizie 15, contesto 15; le fonti mancanti
+    // ridistribuiscono il loro peso.
+    const parts: [number, number | null][] = [[0.45, kronos.punteggio], [0.25, tecnica.punteggio], [0.15, notizie.punteggio], [0.15, contesto.punteggio]];
     const wsum = parts.reduce((a, [w, x]) => a + (x === null ? 0 : w), 0);
     const probabilita = wsum ? parts.reduce((a, [w, x]) => a + (x === null ? 0 : w * x), 0) / wsum : 0.5;
     const p = Math.round(probabilita * 100);
@@ -147,26 +197,27 @@ export class CustodiAgent implements Agent {
     else if (p >= 60) prossimaAzione = `Entrare al prossimo giro se il prezzo tiene sopra la media a 20 (${num(m20)}): ${p}% favorevole. Stop a ${num(livelli.stop)}.`;
     else if (p >= 45) prossimaAzione = `Aspettare una conferma (chiusura sopra ${num(m20)} o rottura dei massimi a 20 sedute): ${p}% favorevole, non basta per la taglia piena.`;
     else prossimaAzione = `Restare fuori: ${p}% favorevole. Si rivaluta al prossimo giro.`;
-    return { aggiornato: v.now.toISOString(), probabilita, tecnica, kronos, notizie, contesto, prossimaAzione };
+    return { aggiornato: v.now.toISOString(), probabilita, tecnica, kronos, notizie, contesto, memoria, prossimaAzione };
   }
 
-  // Candidate: crypto dell'universo in trend (sopra le medie, momentum 12 e 3 mesi positivi), le migliori per momentum a 6 mesi.
+  // Candidate: tutti i titoli e le crypto dell'universo in trend (sopra le medie, momentum a 12 mesi positivo; per le
+  // crypto anche a 3 mesi). Nessun numero fisso: tanti custodi quanti sono i titoli che meritano attenzione, nessuno se
+  // il mercato non offre niente. Il tetto in configurazione è solo una sicurezza.
   private candidates(v: AgentView): string[] {
     const out: { s: string; mom: number }[] = [];
     for (const s of AGENTS.universe) {
-      if (!isCrypto(s)) continue;
       const c = v.closes[s];
       const t = trendOf(c, LIMITS.trendSmaDays, LIMITS.longSmaDays);
       if (!c || !t || t.close <= t.sma || t.close <= t.long) continue;
       if ((momentum(c, AGENTS.absMomentum.days) ?? -1) <= AGENTS.absMomentum.min) continue;
-      if ((momentum(c, AGENTS.cryptoMomentumDays) ?? -1) <= 0) continue;
+      if (isCrypto(s) && (momentum(c, AGENTS.cryptoMomentumDays) ?? -1) <= 0) continue;
       out.push({ s, mom: momentum(c, LIMITS.rankMomentumDays) ?? 0 });
     }
     return out.sort((a, b) => b.mom - a.mom).slice(0, AGENTS.custodi.maxCandidates).map((x) => x.s);
   }
 
   async observe(v: AgentView): Promise<AgentReport> {
-    const held = new Map(v.positions.filter((p) => p.qty > 0 && isCrypto(p.symbol)).map((p) => [p.symbol, p]));
+    const held = new Map(v.positions.filter((p) => p.qty > 0 && AGENTS.universe.includes(p.symbol)).map((p) => [p.symbol, p]));
     const cands = new Set(this.candidates(v));
     const active = new Set([...held.keys(), ...cands]);
     for (const s of active) if (!this.custodi.has(s)) this.custodi.set(s, { simbolo: s, dalle: v.today, inattivoDa: 0 });
@@ -183,14 +234,21 @@ export class CustodiAgent implements Agent {
       st.dossier = c.dossier;
       // Il dossier modula la forza del voto d'ingresso (mai le uscite, che sono regole): 50% → invariata, 80% → +30%, 30% → -20%.
       for (const sg of mine) {
-        if (sg.lato === "buy") sg.forza = clamp01(sg.forza * (0.5 + c.dossier.probabilita));
+        if (sg.lato === "buy") {
+          const m = c.dossier.memoria;
+          sg.forza = clamp01(sg.forza * (0.5 + c.dossier.probabilita) * m.forza);
+          if (m.pesoMassimo !== null) sg.pesoMassimo = Math.min(sg.pesoMassimo ?? Infinity, m.pesoMassimo);
+          // Se la storia dice che qui ha reso solo il rientro, un ingresso "in trend" esteso vale meno.
+          if (m.ingressoMigliore === "rientro" && !/vicino alla media/.test(sg.perche)) sg.forza = clamp01(sg.forza * 0.8);
+          if (m.trade) sg.perche += ` · memoria: ${m.lezione}`;
+        }
         sg.perche += ` · dossier ${Math.round(c.dossier.probabilita * 100)}% favorevole`;
       }
       segnali.push(...mine);
       stati.push(st);
     }
     const inPos = stati.filter((s) => s.fase === "in posizione" || s.fase === "in uscita").length;
-    return { segnali, custodi: stati, note: [stati.length ? `${stati.length} custodi attivi (${inPos} in posizione): ${stati.map((s) => `${s.simbolo} ${s.fase}`).join(", ")}` : "nessuna crypto in trend da seguire"] };
+    return { segnali, custodi: stati, note: [stati.length ? `${stati.length} custodi attivi (${inPos} in posizione): ${stati.map((s) => `${s.simbolo} ${s.fase}`).join(", ")}` : "nessun titolo in trend da seguire"] };
   }
 
   private judge(c: Custode, v: AgentView, pos: AgentView["positions"][number] | undefined, candidate: boolean, segnali: Signal[]): CustodeStato {
@@ -228,15 +286,19 @@ export class CustodiAgent implements Agent {
       return { ...base, fase: "in posizione", piano: `Tenere finché il prezzo resta sopra la media a ${LIMITS.trendSmaDays} giorni (${num(m50)}). ${warn ? `Attenzione: sotto la media a ${AGENTS.custodi.pullbackSmaDays} giorni (${num(m20)}), si osserva senza agire.` : `Uscita normale sul trend; presa di profitto parziale secondo le regole del motore.`}`, stato: `In posizione da ${c.dalle}, ${pct(gain, 2)} dal carico ${num(carico)}; stop a ${num(stop)}.` };
     }
     if (!candidate) return { ...base, fase: "attende", piano: "Nessun ingresso: il titolo non rispetta più i criteri (medie, momentum). Il custode resta in ascolto qualche giro, poi lascia.", stato: `Fuori dai criteri da ${c.inattivoDa} giri.` };
+    const fc = v.previsioni?.[s];
+    // Kronos prima del contesto: un ribasso anticipato ferma l'ingresso anche in trend; un rialzo anticipato lo rafforza.
+    if (fc !== undefined && fc <= -AGENTS.kronos.anticipaSoglia) return { ...base, fase: "attende", piano: `Aspettare: Kronos anticipa un ribasso (${pct(fc)} a ${AGENTS.kronos.horizon} sedute). Si rientra quando la proiezione torna positiva.`, stato: "Trend intatto ma proiezione contraria: fermo." };
     if (v.contesto?.attendi[s]) return { ...base, fase: "attende", piano: `Aspettare: ${v.contesto.attendi[s]}.`, stato: "Pronto a entrare appena il contesto lo permette." };
+    const spinta = fc !== undefined && fc >= AGENTS.kronos.anticipaSoglia ? 1.15 : 1;
     // Candidata: ingresso migliore vicino alla media a 20 giorni; troppo lontano dalla 50 si aspetta un rientro.
     if (dist50 !== null && dist50 > AGENTS.custodi.extendedPct) {
       segnali.push({ agente, simbolo: s, lato: "buy", forza: 0.25, orizzonteSedute: horizon, perche: `${s} in trend ma ${pct(dist50)} sopra la media a ${LIMITS.trendSmaDays} giorni: ingresso solo a taglia ridotta, meglio aspettare un rientro` });
       return { ...base, fase: "osserva", piano: `Aspettare un rientro verso la media a ${AGENTS.custodi.pullbackSmaDays} giorni (${num(m20)}): il prezzo è ${pct(dist50)} sopra la ${LIMITS.trendSmaDays}, troppo esteso per entrare pieno.`, stato: `Candidata dal ${c.dalle}, non in portafoglio.` };
     }
     const nearPullback = m20 !== null && price !== null && price <= m20 * 1.02;
-    const forza = nearPullback ? 0.8 : 0.6;
-    segnali.push({ agente, simbolo: s, lato: "buy", forza, orizzonteSedute: horizon, perche: `${s} in trend (${pct(mom3)} a 3 mesi, ${pct(mom12, 0)} a 12), ${nearPullback ? `vicino alla media a ${AGENTS.custodi.pullbackSmaDays} giorni: buon punto d'ingresso` : `${pct(dist50)} sopra la media a ${LIMITS.trendSmaDays}: ingresso ordinato`}` });
+    const forza = Math.min(1, (nearPullback ? 0.8 : 0.6) * spinta);
+    segnali.push({ agente, simbolo: s, lato: "buy", forza, orizzonteSedute: horizon, perche: `${s} in trend (${pct(mom3)} a 3 mesi, ${pct(mom12, 0)} a 12), ${nearPullback ? `vicino alla media a ${AGENTS.custodi.pullbackSmaDays} giorni: buon punto d'ingresso` : `${pct(dist50)} sopra la media a ${LIMITS.trendSmaDays}: ingresso ordinato`}${spinta > 1 ? `, Kronos anticipa ${pct(fc!)}` : ""}` });
     return { ...base, fase: "pronto", piano: `Entrare ${nearPullback ? "ora, sul rientro verso la media a 20 giorni" : "con ordine a mercato, taglia piena dal motore"}; stop iniziale a ${num(stop)} (${pct(-stopPct)}). Uscita quando il prezzo chiude sotto la media a ${LIMITS.trendSmaDays} giorni.`, stato: `Candidata dal ${c.dalle}, in attesa che l'allocatore e la gabbia confermino.` };
   }
 }

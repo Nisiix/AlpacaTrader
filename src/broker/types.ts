@@ -73,6 +73,17 @@ export interface Broker {
   getDailyBars(symbols: string[], days: number): Promise<Record<string, Bar[]>>;
   // Coppie crypto negoziabili su Alpaca (es. "SOL/USD"); i broker senza crypto rispondono con la lista vuota.
   getCryptoPairs(): Promise<string[]>;
+  // Barre intraday (timeframe Alpaca: "5Min", "15Min", "1Hour", "4Hour"), le ultime `count`, candela in corso esclusa.
+  getIntradayBars(symbols: string[], timeframe: string, count: number): Promise<Record<string, IntradayBar[]>>;
+}
+
+export interface IntradayBar {
+  t: string; // ISO dell'apertura della candela
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
 }
 
 export interface Bar {

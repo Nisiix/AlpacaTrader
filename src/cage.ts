@@ -1,7 +1,7 @@
 import type { ProposedOrder } from "./brain/types.ts";
 import type { Account, Order, Position, Side } from "./broker/types.ts";
 import { isOpenOrder, isProtectiveStop } from "./broker/types.ts";
-import { CRYPTO, CRYPTO_MIN_NOTIONAL, ENTRY_SLOT, LIMITS, MAX_LATENESS_MIN, UNIVERSE, isCrypto, type SlotKind } from "./config.ts";
+import { AGENTS, CRYPTO, CRYPTO_MIN_NOTIONAL, ENTRY_SLOT, LIMITS, MAX_LATENESS_MIN, UNIVERSE, isCrypto, type SlotKind } from "./config.ts";
 import { EVENTS, eventBlockFor, type MarketEvent } from "./events.ts";
 import { dailyVol, indicatorsFor, sma, trendOf } from "./indicators.ts";
 import { setupOf } from "./journal.ts";
@@ -80,7 +80,8 @@ export function maxWeightFor(closes: number[] | undefined): { max: number; vol: 
 export function applyCage(i: CageInput): CageResult {
   const orders: PlannedOrder[] = [];
   const rejected: Rejection[] = [];
-  const universe = new Set<string>([...UNIVERSE, ...CRYPTO]);
+  // L'universo del giorno: titoli fissi, crypto di base e le coppie scelte oggi (top per capitalizzazione).
+  const universe = new Set<string>([...UNIVERSE, ...CRYPTO, ...AGENTS.universe]);
   const held = new Map(i.positions.filter((p) => p.qty > 0).map((p) => [p.symbol, p]));
   const stopLoss = i.positions.filter((p) => p.qty > 0 && lossPct(p) <= -stopPctFor(i.closes[p.symbol]));
 
@@ -151,7 +152,7 @@ export function applyCage(i: CageInput): CageResult {
       if (p.qty > q) { reject(`niente short: in portafoglio ce ne sono ${q}`); continue; }
     } else {
       if (i.buyBlock) { reject(i.buyBlock); continue; }
-      if (i.slotKind !== ENTRY_SLOT && !isCrypto(p.symbol)) { reject("gli acquisti si fanno solo alla sveglia di apertura, sulle chiusure di ieri"); continue; }
+      if (i.slotKind !== ENTRY_SLOT && !isCrypto(p.symbol) && !p.intraday) { reject("gli acquisti si fanno solo alla sveglia di apertura, sulle chiusure di ieri"); continue; }
       const ev = eventBlockFor(p.symbol, i.today, i.events ?? EVENTS);
       if (ev) { reject(ev); continue; }
       const price = i.prices[p.symbol];

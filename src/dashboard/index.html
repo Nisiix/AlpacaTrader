@@ -29,6 +29,13 @@
   p { margin:0; }
   .top { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
   .top .when { color:var(--ink-3); font-size:14px; }
+  .nav { display:flex; gap:4px; flex-wrap:wrap; }
+  .nav a { text-decoration:none; font-size:14px; padding:6px 12px; border-radius:999px; color:var(--ink-2); }
+  .nav a[aria-current="page"] { background:var(--ink); color:var(--card); font-weight:600; }
+  .nav a:hover:not([aria-current="page"]) { background:var(--card); }
+  .nav a:focus-visible { outline:2px solid var(--agent); outline-offset:2px; }
+  .page { display:none; } .page.on { display:block; }
+  .page[data-page="3d"] #scene { height:calc(100vh - 260px); min-height:420px; }
   .dot { width:10px; height:10px; border-radius:50%; background:var(--down); display:inline-block; box-shadow:0 0 0 3px var(--down-bg); }
   .dot.on { background:var(--ok); box-shadow:0 0 0 3px var(--up-bg); }
 
@@ -77,7 +84,7 @@
   details.scene summary::-webkit-details-marker { display:none; }
   details.scene summary span.hint { color:var(--ink-3); font-weight:400; font-size:14px; }
   details.scene summary:focus-visible { outline:2px solid var(--agent); outline-offset:-2px; }
-  #scene { position:relative; height:420px; background:#0b0f16; }
+  #scene { position:relative; height:480px; background:#0b0f16; }
   #scene canvas { display:block; }
   .lbl { color:#e6edf3; font-size:11px; background:rgba(11,15,22,.7); padding:2px 5px; border-radius:4px; white-space:nowrap; pointer-events:none; }
   .lbl.agent { color:#8fb0ff; }
@@ -127,6 +134,21 @@
   .custode-list { display:grid; gap:10px; }
   .custode-list button { text-align:left; font:inherit; background:var(--card-2); border:1px solid var(--line); border-radius:10px; padding:10px 12px; color:var(--ink); cursor:pointer; }
   .custode-list button:hover { border-color:var(--agent); }
+  .form { display:grid; gap:12px; max-width:520px; }
+  .form label { display:grid; gap:4px; font-size:14px; color:var(--ink-2); }
+  .form input, .form select { font:inherit; padding:9px 11px; border-radius:10px; border:1px solid var(--line); background:var(--card-2); color:var(--ink); }
+  .form input:focus-visible, .form select:focus-visible { outline:2px solid var(--agent); outline-offset:1px; }
+  .btn.ghost { background:var(--card-2); color:var(--ink); border:1px solid var(--line); }
+  code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size:13px; background:var(--card-2); padding:1px 5px; border-radius:5px; }
+  .guide h3 { font-size:15px; margin:18px 0 6px; } .guide p, .guide li { max-width:80ch; color:var(--ink-2); } .guide ol, .guide ul { padding-left:22px; margin:6px 0; } .guide li { margin:4px 0; }
+  .schede { display:grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap:14px; }
+  .scheda { border:1px solid var(--line); border-radius:12px; padding:14px 16px; background:var(--card-2); display:grid; gap:8px; align-content:start; }
+  .scheda h3 { margin:0; font-size:16px; } .scheda .ruolo { color:var(--ink-2); font-size:14px; } .scheda details { font-size:14px; } .scheda summary { cursor:pointer; color:var(--agent); }
+  .scheda .prm { display:grid; grid-template-columns: 1fr 120px; gap:6px 10px; align-items:center; font-size:14px; padding:4px 0; border-top:1px solid var(--line); }
+  .scheda .prm small { display:block; color:var(--ink-3); font-size:12px; }
+  .scheda .prm input, .scheda .prm select { font:inherit; font-size:14px; padding:5px 8px; border-radius:8px; border:1px solid var(--line); background:var(--card); color:var(--ink); width:100%; }
+  .scheda .prm.cambiato input, .scheda .prm.cambiato select { border-color:var(--agent); }
+  .scheda .msg { font-size:13px; color:var(--ink-2); min-height:1em; }
   @media (prefers-reduced-motion: reduce) { * { transition:none !important; } }
 </style>
 <script type="importmap">{ "imports": { "three": "/vendor/three.module.js", "three/addons/": "/vendor/addons/" } }</script>
@@ -135,6 +157,15 @@
 <main>
   <div class="top">
     <h1><span class="dot" id="live" title="collegamento in diretta"></span>Agenti Alpaca <span class="pill">conto paper</span></h1>
+    <nav class="nav" aria-label="sezioni">
+      <a href="#panoramica" data-page="panoramica">Panoramica</a>
+      <a href="#titoli" data-page="titoli">Titoli</a>
+      <a href="#agenti" data-page="agenti">Agenti</a>
+      <a href="#cronologia" data-page="cronologia">Cronologia</a>
+      <a href="#3d" data-page="3d">Vista 3D</a>
+      <a href="#impostazioni" data-page="impostazioni">Impostazioni</a>
+      <a href="#guida" data-page="guida">Guida</a>
+    </nav>
     <span class="when" id="when">in attesa dello stato…</span>
   </div>
 
@@ -150,76 +181,174 @@
     </div>
   </section>
 
-  <section class="card" id="titoli">
-    <h2>Titolo per titolo <small id="live-note"></small></h2>
-    <div class="chips" id="chips" role="group" aria-label="scegli il titolo"></div>
-    <div class="title-grid">
-      <div>
-        <div class="chart-wrap"><canvas id="chart" aria-label="grafico a candele"></canvas><div id="tip"></div></div>
-        <div class="legend-row"><span><i style="border-color:#8a94a6"></i>media 20</span><span><i style="border-color:var(--agent)"></i>media 50</span><span><i style="border-color:#b08900"></i>media 200</span><span><i style="border-color:var(--ink); border-top-style:dashed"></i>carico</span><span><i style="border-color:var(--down); border-top-style:dashed"></i>stop</span><span><i style="border-color:var(--up); border-top-style:dotted"></i>scenario Kronos</span><span>▲▼ operazioni</span></div>
-        <p class="why" id="chart-note" style="margin-top:8px"></p>
-        <div id="feed" style="margin-top:10px"></div>
+  <!-- Panoramica: soldi, posizioni, cosa è successo nell'ultimo giro. -->
+  <div class="page" data-page="panoramica">
+    <div class="cols">
+      <div class="stack">
+        <section class="card">
+          <h2>Profitto e perdita di oggi</h2>
+          <div id="pnl"></div>
+        </section>
+        <section class="card">
+          <h2>Posizioni aperte <small id="pos-n"></small></h2>
+          <div id="positions"></div>
+        </section>
       </div>
-      <div class="stack" style="gap:12px">
-        <div class="row" style="justify-content:space-between">
-          <div><div class="lab" style="color:var(--ink-3); font-size:13px">Ultimo prezzo</div><div class="val" style="font-size:22px; font-weight:700" id="t-price">–</div></div>
-          <button class="btn" id="ask">Chiedi agli agenti adesso</button>
-        </div>
-        <p class="verdict" id="verdict">Scegli un titolo.</p>
-        <div id="verdict-body"></div>
+      <div class="stack">
+        <section class="card">
+          <h2>Ultimo giro degli agenti</h2>
+          <div class="row" id="context" style="margin-bottom:10px"></div>
+          <div id="decisions"></div>
+        </section>
+        <section class="card">
+          <h2>Operazioni intraday <small>si aprono e si chiudono in giornata</small></h2>
+          <div id="intraday"></div>
+        </section>
       </div>
-    </div>
-  </section>
-
-  <div class="cols">
-    <div class="stack">
-      <section class="card">
-        <h2>Posizioni aperte <small id="pos-n"></small></h2>
-        <div id="positions"></div>
-      </section>
-      <section class="card">
-        <h2>Profitto e perdita di oggi</h2>
-        <div id="pnl"></div>
-      </section>
-    </div>
-    <div class="stack">
-      <section class="card">
-        <h2>Ultimo giro degli agenti</h2>
-        <div class="row" id="context" style="margin-bottom:10px"></div>
-        <div id="decisions"></div>
-      </section>
-      <section class="card">
-        <h2>Punteggi <small>sopra +0,5 si compra, sotto −0,5 si vende</small></h2>
-        <div id="scores"></div>
-      </section>
-      <section class="card">
-        <h2>Custodi</h2>
-        <div class="custode-list" id="custodi"></div>
-      </section>
-      <section class="card">
-        <h2>Agenti</h2>
-        <div class="row" id="agents"></div>
-        <p class="why" id="journal" style="margin-top:10px"></p>
-      </section>
     </div>
   </div>
 
-  <details class="scene" id="scene-box">
-    <summary>Vista 3D <span class="hint">agenti, regole e titoli in movimento</span></summary>
-    <div id="scene"></div>
-    <p class="legend">Blocchi = titoli (altezza = peso, colore = guadagno/perdita); sfere = agenti; fili = voti; anello = regole.</p>
-  </details>
+  <!-- Titoli: il grafico e il verdetto, titolo per titolo. -->
+  <div class="page" data-page="titoli">
+    <section class="card" id="titoli">
+      <h2>Titolo per titolo <small id="live-note"></small></h2>
+      <div class="chips" id="chips" role="group" aria-label="scegli il titolo"></div>
+      <div class="title-grid">
+        <div>
+          <div class="chart-wrap"><canvas id="chart" aria-label="grafico a candele"></canvas><div id="tip"></div></div>
+          <div class="legend-row"><span><i style="border-color:#8a94a6"></i>media 20</span><span><i style="border-color:var(--agent)"></i>media 50</span><span><i style="border-color:#b08900"></i>media 200</span><span><i style="border-color:var(--ink); border-top-style:dashed"></i>carico</span><span><i style="border-color:var(--down); border-top-style:dashed"></i>stop</span><span><i style="border-color:var(--up); border-top-style:dotted"></i>scenario Kronos</span><span>▲▼ operazioni</span></div>
+          <p class="why" id="chart-note" style="margin-top:8px"></p>
+          <div id="feed" style="margin-top:10px"></div>
+        </div>
+        <div class="stack" style="gap:12px">
+          <div class="row" style="justify-content:space-between">
+            <div><div class="lab" style="color:var(--ink-3); font-size:13px">Ultimo prezzo</div><div class="val" style="font-size:22px; font-weight:700" id="t-price">–</div></div>
+            <button class="btn" id="ask">Chiedi agli agenti adesso</button>
+          </div>
+          <p class="verdict" id="verdict">Scegli un titolo.</p>
+          <div id="verdict-body"></div>
+        </div>
+      </div>
+    </section>
+  </div>
 
-  <section class="card">
-    <div class="top" style="margin-bottom:10px">
-      <h2 style="margin:0">Cronologia</h2>
-      <div class="filters" role="group" aria-label="filtro eventi">
-        <button type="button" data-f="important" aria-pressed="true">Importanti</button>
-        <button type="button" data-f="all" aria-pressed="false">Tutto</button>
+  <!-- Agenti: chi sono, cosa seguono, come votano. -->
+  <div class="page" data-page="agenti">
+    <div class="cols">
+      <div class="stack">
+        <section class="card">
+          <h2>Custodi <small>un investitore per ogni titolo in trend</small></h2>
+          <div class="custode-list" id="custodi"></div>
+        </section>
+      </div>
+      <div class="stack">
+        <section class="card">
+          <h2>Agenti dell'ultimo giro</h2>
+          <div class="row" id="agents"></div>
+          <p class="why" id="journal" style="margin-top:10px"></p>
+        </section>
+        <section class="card">
+          <h2>Punteggi <small>sopra +0,5 si compra, sotto −0,5 si vende</small></h2>
+          <div id="scores"></div>
+        </section>
+        <section class="card">
+          <h2>Voti dell'ultimo giro</h2>
+          <div id="votes"></div>
+        </section>
       </div>
     </div>
-    <div id="events"></div>
-  </section>
+    <section class="card" style="margin-top:16px">
+      <h2>Schede degli agenti <small>cosa fanno e come si regolano; le modifiche valgono dal giro successivo</small></h2>
+      <div id="schede" class="schede"></div>
+    </section>
+  </div>
+
+  <!-- Impostazioni: chiavi di Alpaca e Telegram. -->
+  <div class="page" data-page="impostazioni">
+    <div class="cols">
+      <section class="card">
+        <h2>Alpaca <small>conto paper, chiavi che iniziano con PK</small></h2>
+        <form id="f-alpaca" class="form" autocomplete="off">
+          <label>Key id <input name="alpacaKeyId" type="text" placeholder="" spellcheck="false"></label>
+          <label>Secret <input name="alpacaSecretKey" type="password" placeholder="" spellcheck="false"></label>
+          <p class="why" id="alpaca-now"></p>
+          <div class="row"><button type="button" class="btn ghost" id="prova-alpaca">Prova</button><button type="submit" class="btn">Salva</button></div>
+          <p class="why" id="alpaca-msg"></p>
+        </form>
+      </section>
+      <section class="card">
+        <h2>Telegram <small>bot per ordini, allarmi e riepilogo serale</small></h2>
+        <form id="f-telegram" class="form" autocomplete="off">
+          <label>Token del bot <input name="telegramBotToken" type="password" placeholder="123456789:AAAA…" spellcheck="false"></label>
+          <label>Chat id <input name="telegramChatId" type="text" placeholder="si trova con «Prova» dopo aver scritto /start al bot" spellcheck="false"></label>
+          <p class="why" id="telegram-now"></p>
+          <div class="row"><button type="button" class="btn ghost" id="prova-telegram">Prova</button><button type="submit" class="btn">Salva</button></div>
+          <p class="why" id="telegram-msg"></p>
+        </form>
+      </section>
+    </div>
+    <p class="why" style="margin-top:12px">Le chiavi si salvano in <code>secrets.ts</code> sul tuo PC e non escono mai da qui; in lettura sono mascherate. Il motore le legge all'avvio: dopo un salvataggio riavvia il bot (Ctrl-C, poi <code>avvia-bot.cmd</code>). Alpaca accetta solo chiavi del conto paper.</p>
+  </div>
+
+  <!-- Guida: come funziona e come si usa. -->
+  <div class="page" data-page="guida">
+    <section class="card guide">
+      <h2>Guida</h2>
+      <h3>1. Mettere in moto</h3>
+      <ol>
+        <li><b>Chiavi.</b> In <a href="#impostazioni">Impostazioni</a> inserisci key id e secret del conto <b>paper</b> di Alpaca (app.alpaca.markets → Paper → API Keys) e, se vuoi gli avvisi, il token del bot Telegram (da @BotFather). Scrivi <code>/start</code> al bot, poi «Prova»: il chat id viene trovato da solo. «Salva» scrive <code>secrets.ts</code>.</li>
+        <li><b>Kronos.</b> Una volta sola: doppio clic su <code>installa-kronos.cmd</code> (serve Python 3.10+ con «Add to PATH»). Da lì il motore accende il sidecar da solo; i pesi del modello arrivano al primo avvio (1-2 minuti).</li>
+        <li><b>Avvio.</b> Doppio clic su <code>avvia-bot.cmd</code>: il motore fa un giro ogni 5 minuti e questa pagina si aggiorna da sola. Per ripartire da zero: <code>chiudi-posizioni.cmd</code> (vende tutto, toglie gli stop), poi riavvia.</li>
+      </ol>
+      <h3>2. Cosa fa il motore a ogni giro</h3>
+      <p>Rinnova l'universo (titoli fissi + crypto della top 100 negoziabili su Alpaca), legge conto e prezzi, scarica le candele giornaliere, chiede a Kronos le proiezioni (una volta al giorno), valuta il contesto, fa votare gli agenti, somma i voti, passa dalla gabbia delle regole, invia gli ordini ammessi, mette gli stop su Alpaca, aggiorna diario e stato. La gabbia ammette acquisti di titoli solo a borsa aperta e di crypto sempre; massimo 5 posizioni, 20% per titolo, solo in trend. Dettagli in <code>docs/logica-del-motore.md</code>.</p>
+      <h3>3. Le pagine</h3>
+      <ul>
+        <li><b>Panoramica</b>: la frase di stato (motore, Alpaca, borsa, Kronos), patrimonio e giornata, profitto e perdita di oggi (realizzato per vendita e per agente, non realizzato), posizioni, cosa ha deciso l'ultimo giro, operazioni intraday.</li>
+        <li><b>Titoli</b>: i titoli in tre gruppi (in portafoglio, sotto osservazione, nel radar). Per ciascuno: candele, medie 20/50/200, carico e stop, la candela di oggi in formazione, le scelte del motore di oggi (puntini voti, frecce ordini, × rifiuti) e lo scenario di Kronos con il cono d'incertezza. «Chiedi agli agenti adesso» fa una valutazione a secco: nessun ordine parte dalla pagina.</li>
+        <li><b>Agenti</b>: i custodi con dossier (probabilità favorevole, prossima azione, grafico, Kronos, notizie, contesto, memoria del titolo), gli agenti dell'ultimo giro, punteggi e voti, e le <b>schede</b> per regolare i parametri di ogni agente.</li>
+        <li><b>Cronologia</b>: il registro degli eventi del giorno («Importanti» mostra ordini, posizioni, rifiuti, stop e avvisi).</li>
+        <li><b>Vista 3D</b>: i titoli come blocchi (altezza = peso, colore = guadagno), gli agenti come sfere, i voti come fili.</li>
+      </ul>
+      <h3>4. Gli agenti in breve</h3>
+      <ul>
+        <li><b>Trend</b> compra chi chiude sopra le medie a 50 e 200 con rendimento a 12 mesi positivo; vende sotto la 50. <b>Rientro</b> compra gli ipervenduti di breve dentro un trend lungo. <b>Regime</b> riduce le taglie se il mercato è brutto. <b>Uscite</b> e <b>Presa di profitto</b> sono regole vincolanti: stop sulla volatilità, metà a +3%.</li>
+        <li><b>Contesto</b> legge il clima; non decide da solo: se <b>Kronos</b> anticipa un rialzo il settore debole non ferma l'ingresso, se anticipa un ribasso si aspetta.</li>
+        <li><b>Custodi</b>: un investitore per ogni titolo in trend, senza numero fisso. Tesi, piano, rischio, dossier e memoria dei trade passati su quel titolo.</li>
+        <li><b>Intraday</b>: candele a 5 min / 15 min / 4 ore scelte dalla volatilità; obiettivo e stop dall'ATR; chiusura entro la giornata.</li>
+      </ul>
+      <h3>5. Se qualcosa non va</h3>
+      <ul>
+        <li>«Alpaca rifiuta le chiavi»: rigenera key id e secret <i>insieme</i> nel conto paper e salvali in Impostazioni, poi riavvia.</li>
+        <li>«Il motore sembra fermo»: la finestra del bot è chiusa o il PC dorme; rilancia <code>avvia-bot.cmd</code>.</li>
+        <li>Kronos «non installato» o «non risponde»: <code>installa-kronos.cmd</code>, poi guarda <code>logs/kronos-AAAA-MM-GG.log</code>.</li>
+        <li>Niente messaggi Telegram: in Impostazioni «Prova» invia un messaggio di verifica; i messaggi non inviati finiscono in <code>state/telegram-outbox.log</code>.</li>
+      </ul>
+    </section>
+  </div>
+
+  <!-- Cronologia: il registro degli eventi. -->
+  <div class="page" data-page="cronologia">
+    <section class="card">
+      <div class="top" style="margin-bottom:10px">
+        <h2 style="margin:0">Cronologia</h2>
+        <div class="filters" role="group" aria-label="filtro eventi">
+          <button type="button" data-f="important" aria-pressed="true">Importanti</button>
+          <button type="button" data-f="all" aria-pressed="false">Tutto</button>
+        </div>
+      </div>
+      <div id="events"></div>
+    </section>
+  </div>
+
+  <!-- Vista 3D: pagina a sé. -->
+  <div class="page" data-page="3d">
+    <details class="scene" id="scene-box" open>
+      <summary>Vista 3D <span class="hint">agenti, regole e titoli in movimento</span></summary>
+      <div id="scene"></div>
+      <p class="legend">Blocchi = titoli (altezza = peso, colore = guadagno/perdita); sfere = agenti; fili = voti; anello = regole.</p>
+    </details>
+  </div>
 </main>
 
 <script type="module">
@@ -238,7 +367,7 @@ const cls = (x) => x > 0 ? 'up' : x < 0 ? 'down' : '';
 const qty = (q) => Number.isInteger(q) ? String(q) : String(Number(q)).replace('.', ',');
 const hhmm = (iso) => new Date(iso).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
 const DEFAULT_SYMBOLS = ['SPY', 'QQQ', 'AAPL', 'MSFT', 'NVDA', 'GLD', 'BTC/USD', 'ETH/USD', 'IWM', 'TLT'];
-const AGENT_NAMES = { trend: 'Trend', rientro: 'Rientro', regime: 'Regime', orizzonte: 'Orizzonte', uscite: 'Uscite', contesto: 'Contesto', profitto: 'Presa di profitto', kronos: 'Kronos' };
+const AGENT_NAMES = { trend: 'Trend', rientro: 'Rientro', regime: 'Regime', orizzonte: 'Orizzonte', uscite: 'Uscite', contesto: 'Contesto', profitto: 'Presa di profitto', kronos: 'Kronos', custodi: 'Custodi', intraday: 'Intraday' };
 const agentName = (n) => AGENT_NAMES[n] ?? n;
 
 // ---------- scena 3D (pannello apribile) ----------
@@ -313,11 +442,11 @@ function resize() {
 }
 new ResizeObserver(resize).observe(host); resize();
 const sceneBox = $('#scene-box');
-try { if (localStorage.getItem('agenti.scena') === 'aperta') sceneBox.open = true; } catch {}
-sceneBox.addEventListener('toggle', () => { try { localStorage.setItem('agenti.scena', sceneBox.open ? 'aperta' : 'chiusa'); } catch {} resize(); });
+sceneBox.addEventListener('toggle', resize);
+let currentPage = 'panoramica';
 function animate() {
   requestAnimationFrame(animate);
-  if (!sceneBox.open) return;
+  if (currentPage !== '3d' || !sceneBox.open) return;
   const now = performance.now();
   for (const s of symbols.values()) {
     s.mesh.scale.y += (s.targetH - s.mesh.scale.y) * 0.08; s.mesh.position.y = s.mesh.scale.y / 2;
@@ -496,7 +625,7 @@ function paint(st) {
   sayState();
   if (!status) { $('#when').textContent = lastTick ? `ultimo giro iniziato ${hhmm(lastTick.t)}` : 'nessuno stato'; return; }
   $('#when').textContent = `ultimo giro ${hhmm(status.aggiornato)} (${ago(status.aggiornato)})`;
-  paintMoney(status); paintPositions(status); paintPnl(status); paintDecisions(status); paintScores(status); paintAgents(status); paintScene(status); paintCustodi(status); paintChips(status);
+  paintMoney(status); paintPositions(status); paintPnl(status); paintDecisions(status); paintScores(status); paintAgents(status); paintScene(status); paintCustodi(status); paintChips(status); paintIntraday(status); paintVotes(status);
 }
 async function loadStatus() {
   try { paint(await (await fetch('/api/status')).json()); } catch (e) { $('#say').textContent = 'La dashboard non riesce a leggere lo stato.'; $('#fix').hidden = false; $('#fix').textContent = e.message; }
@@ -509,7 +638,7 @@ function paintCustodi(st) {
   const list = st.custodi || [];
   $('#custodi').innerHTML = list.length ? list.map((c) => { const p = c.dossier ? Math.round(c.dossier.probabilita * 100) : null; return `<button type="button" data-sym="${esc(c.simbolo)}"><div class="row" style="justify-content:space-between"><span><b>${esc(c.simbolo)}</b>${p !== null ? ` <b class="${p >= 60 ? 'up' : p < 45 ? 'down' : ''}">${p}%</b>` : ''}</span><span class="pill ${faseCls(c.fase)}">${FASI[c.fase] || esc(c.fase)}</span></div><div class="why" style="margin-top:4px">${esc(c.dossier?.prossimaAzione || c.stato)}</div></button>`; }).join('')
     : `<p class="empty">Nessun custode attivo: nasce uno per ogni crypto in trend (sopra le medie, slancio a 3 e 12 mesi positivo) o in portafoglio. ${st.universo?.crypto?.length ? `Universo di oggi: ${st.universo.crypto.length} coppie${st.universo.fonteCrypto ? ` (${esc(st.universo.fonteCrypto)})` : ''}.` : ''}</p>`;
-  for (const b of $('#custodi').querySelectorAll('button')) b.addEventListener('click', () => { selectSymbol(b.dataset.sym); $('#titoli').scrollIntoView({ behavior: 'smooth', block: 'start' }); });
+  for (const b of $('#custodi').querySelectorAll('button')) b.addEventListener('click', () => { selectSymbol(b.dataset.sym); location.hash = 'titoli'; });
 }
 
 let selected = null;
@@ -762,6 +891,102 @@ $('#ask').addEventListener('click', async () => {
   } catch (e) { $('#verdict').className = 'verdict down'; $('#verdict').textContent = 'Valutazione non riuscita.'; $('#verdict-body').innerHTML = `<p class="why">${esc(e.message)}</p>`; }
   b.disabled = false; b.textContent = 'Chiedi agli agenti adesso';
 });
+
+// ---------- pagine ----------
+const PAGES = ['panoramica', 'titoli', 'agenti', 'cronologia', '3d', 'impostazioni', 'guida'];
+function showPage() {
+  const h = location.hash.replace('#', '');
+  currentPage = PAGES.includes(h) ? h : 'panoramica';
+  for (const el of document.querySelectorAll('.page')) el.classList.toggle('on', el.dataset.page === currentPage);
+  for (const a of document.querySelectorAll('.nav a')) { if (a.dataset.page === currentPage) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); }
+  if (currentPage === 'titoli') { drawChart(); }
+  if (currentPage === '3d') resize();
+  if (currentPage === 'impostazioni') loadSettings();
+  if (currentPage === 'agenti' && !$('#schede').children.length) loadCards();
+  try { localStorage.setItem('agenti.pagina', currentPage); } catch {}
+}
+window.addEventListener('hashchange', showPage);
+if (!location.hash) { try { const p = localStorage.getItem('agenti.pagina'); if (p && PAGES.includes(p)) location.hash = p; } catch {} }
+showPage();
+
+function paintIntraday(st) {
+  const list = st.intraday || [];
+  const open = list.filter((x) => x.fase === 'in posizione'), rest = list.filter((x) => x.fase !== 'in posizione');
+  if (!list.length) { $('#intraday').innerHTML = '<p class="empty">Nessuna operazione intraday: fuori orario o nessun ingresso sulle candele.</p>'; return; }
+  const row = (x) => `<tr><td><b>${esc(x.simbolo)}</b><br><span class="why">${esc(x.candela)}</span></td><td><span class="pill ${x.fase === 'in posizione' ? 'up' : x.fase === 'cerca ingresso' ? 'agent' : ''}">${esc(x.fase)}</span></td><td class="n">${x.ingresso !== null ? px(x.ingresso) : '–'}</td><td class="n up">${x.obiettivo !== null ? px(x.obiettivo) : '–'}</td><td class="n down">${x.stop !== null ? px(x.stop) : '–'}</td><td class="why">${esc(x.motivo)}</td></tr>`;
+  $('#intraday').innerHTML = `<table><thead><tr><th>Titolo</th><th>Fase</th><th class="n">Ingresso</th><th class="n">Obiettivo</th><th class="n">Stop</th><th>Perché</th></tr></thead><tbody>${[...open, ...rest].slice(0, 40).map(row).join('')}</tbody></table>`;
+}
+function paintVotes(st) {
+  const sig = st.segnali || [];
+  $('#votes').innerHTML = sig.length ? sig.map((s) => `<div class="vote"><span class="pill agent">${agentName(s.agente)}</span> <span class="${s.lato === 'buy' ? 'up' : 'down'}"><b>${s.lato === 'buy' ? 'compra' : 'vendi'} ${esc(s.simbolo)}</b></span> forza ${s.forza.toFixed(2).replace('.', ',')}${s.vincolante ? ' <span class="pill warn">regola</span>' : ''}${s.intraday ? ' <span class="pill">intraday</span>' : ''}<br><span class="why">${esc(s.perche)}</span></div>`).join('') : '<p class="empty">Nessun voto nell\u2019ultimo giro.</p>';
+}
+
+// ---------- impostazioni ----------
+async function loadSettings() {
+  try {
+    const s = await (await fetch('/api/impostazioni')).json();
+    $('#alpaca-now').textContent = s.alpacaKeyId ? `Attuali: key ${s.alpacaKeyId}, secret ${s.alpacaSecretKey}. Lascia vuoto un campo per non cambiarlo.` : 'Nessuna chiave Alpaca salvata.';
+    $('#telegram-now').textContent = s.telegramBotToken ? `Attuali: token ${s.telegramBotToken}${s.telegramChatId ? `, chat id ${s.telegramChatId}` : ', chat id mancante'}.` : 'Nessun bot Telegram salvato (i messaggi finiscono in state/telegram-outbox.log).';
+  } catch {}
+}
+const formData = (f) => Object.fromEntries([...new FormData(f).entries()].map(([k, v]) => [k, String(v).trim()]));
+async function saveSettings(form, msgEl) {
+  msgEl.textContent = 'Salvo…';
+  const r = await fetch('/api/impostazioni', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(formData(form)) });
+  const d = await r.json();
+  msgEl.textContent = d.ok ? `${d.cambiati.length ? `Cambiati: ${d.cambiati.join(', ')}. ` : 'Niente di nuovo. '}${d.nota}` : `Non salvato: ${d.errore}`;
+  if (d.ok) { form.reset(); loadSettings(); }
+}
+async function testSettings(form, msgEl) {
+  msgEl.textContent = 'Provo…';
+  const r = await fetch('/api/impostazioni/prova', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ...formData($('#f-alpaca')), ...formData($('#f-telegram')) }) });
+  const d = await r.json();
+  msgEl.textContent = form.id === 'f-alpaca' ? `Alpaca: ${d.alpaca}` : `Telegram: ${d.telegram}`;
+  if (d.chatId && form.id === 'f-telegram') form.elements.telegramChatId.value = d.chatId;
+}
+$('#f-alpaca').addEventListener('submit', (e) => { e.preventDefault(); saveSettings(e.target, $('#alpaca-msg')); });
+$('#f-telegram').addEventListener('submit', (e) => { e.preventDefault(); saveSettings(e.target, $('#telegram-msg')); });
+$('#prova-alpaca').addEventListener('click', () => testSettings($('#f-alpaca'), $('#alpaca-msg')));
+$('#prova-telegram').addEventListener('click', () => testSettings($('#f-telegram'), $('#telegram-msg')));
+
+// ---------- schede degli agenti ----------
+const fmtVal = (p, v) => p.tipo === 'percento' ? String(Math.round(v * 10000) / 100) : String(v);
+const parseVal = (p, raw) => p.tipo === 'percento' ? Number(String(raw).replace(',', '.')) / 100 : p.tipo === 'bool' ? raw : String(raw).replace(',', '.');
+async function loadCards() {
+  const d = await (await fetch('/api/agenti/schede')).json();
+  $('#schede').innerHTML = d.schede.map((c) => `<form class="scheda" data-agente="${esc(c.agente)}"><h3>${esc(c.titolo)}</h3><div class="ruolo">${esc(c.ruolo)}</div><details><summary>Come decide</summary><div class="ruolo" style="margin-top:6px">${esc(c.come)}</div></details>
+    ${c.parametri.map((p) => `<label class="prm ${p.cambiato ? 'cambiato' : ''}" title="di serie: ${esc(fmtVal(p, p.diSerie))}"><span>${esc(p.etichetta)}${p.tipo === 'percento' ? ' (%)' : ''}<small>${esc(p.descrizione)}</small></span>${p.tipo === 'bool' ? `<select name="${esc(p.chiave)}" data-tipo="bool"><option value="true" ${p.attuale ? 'selected' : ''}>sì</option><option value="false" ${!p.attuale ? 'selected' : ''}>no</option></select>` : p.tipo === 'scelta' ? `<select name="${esc(p.chiave)}" data-tipo="scelta">${p.opzioni.map((o) => `<option ${o === p.attuale ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select>` : `<input name="${esc(p.chiave)}" data-tipo="${p.tipo}" value="${esc(fmtVal(p, p.attuale))}" ${p.tipo === 'ora' ? 'placeholder="HH:MM"' : `type="number" step="${p.tipo === 'intero' ? 1 : p.tipo === 'percento' ? 0.01 : (p.passo ?? 0.01)}" ${p.min !== undefined ? `min="${p.tipo === 'percento' ? p.min * 100 : p.min}"` : ''} ${p.max !== undefined ? `max="${p.tipo === 'percento' ? p.max * 100 : p.max}"` : ''}`}>`}</label>`).join('')}
+    <div class="row" style="justify-content:space-between"><button type="button" class="btn ghost reset">Di serie</button><button type="submit" class="btn">Salva</button></div><div class="msg"></div></form>`).join('');
+  for (const f of $('#schede').querySelectorAll('form')) {
+    const card = d.schede.find((c) => c.agente === f.dataset.agente);
+    f.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const body = {};
+      for (const p of card.parametri) { const el = f.elements[p.chiave]; body[p.chiave] = parseVal(p, el.value); }
+      const r = await fetch('/api/agenti/schede', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ...(await currentSaved()), ...body }) });
+      const x = await r.json();
+      f.querySelector('.msg').textContent = x.ok ? x.nota : `Non salvato: ${x.errori.join('; ')}`;
+      if (x.ok) loadCards();
+    });
+    f.querySelector('.reset').addEventListener('click', async () => {
+      const body = {};
+      for (const p of card.parametri) body[p.chiave] = '';
+      const saved = await currentSaved();
+      for (const k of Object.keys(body)) delete saved[k];
+      const r = await fetch('/api/agenti/schede', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(saved) });
+      const x = await r.json();
+      f.querySelector('.msg').textContent = x.ok ? 'Riportati ai valori di serie.' : `Errore: ${x.errori.join('; ')}`;
+      if (x.ok) loadCards();
+    });
+  }
+}
+// I valori salvati di tutte le schede (il salvataggio di una scheda non deve cancellare le altre).
+async function currentSaved() {
+  const d = await (await fetch('/api/agenti/schede')).json();
+  const out = {};
+  for (const c of d.schede) for (const p of c.parametri) if (p.cambiato) out[p.chiave] = p.attuale;
+  return out;
+}
 
 // ---------- cronologia ----------
 const evBox = $('#events');

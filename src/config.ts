@@ -129,8 +129,9 @@ export const AGENTS = {
   // nel backtest ago 2025 - nov 2026 hanno tolto 5-6 punti.
   // La gabbia accetta comunque vendite su tutto UNIVERSE ∪ CRYPTO.
   universe: ["SPY", "QQQ", "AAPL", "MSFT", "NVDA", "GLD"] as string[],
-  // Finestra degli ingressi, ora di Roma: dopo i primi 10 minuti di seduta, fino a metà pomeriggio USA.
-  entryWindow: { from: "15:40", to: "17:30" },
+  // Finestra degli ingressi sui titoli, ora di Roma: tutta la seduta (dopo i primi 5 minuti, fino a 5 minuti dalla
+  // chiusura). Le crypto non hanno finestra. Il bot decide a ogni giro se investire o no.
+  entryWindow: { from: "15:35", to: "21:55" },
   // Punteggio netto (somma pesata dei segnali) oltre il quale si compra / sotto il quale si vende.
   buyScore: 0.5,
   sellScore: -0.5,
@@ -149,7 +150,9 @@ export const AGENTS = {
   // Kronos (sidecar Python, opzionale): si considerano solo le previsioni più nette (quota) e solo se concordano col trend.
   // Kronos: il sidecar lo accende il motore (tools/kronos, venv da installa-kronos); porta e modello qui. Le proiezioni si
   // calcolano una volta al giorno sulle barre giornaliere e restano in state/previsioni.json (anche per la dashboard).
-  kronos: { topShare: 0.25, horizon: 5, timeoutMs: 600_000, port: 8765, model: "small" as "mini" | "small" | "base", lookback: 400, samples: 3 },
+  // Kronos è la fonte principale per anticipare la direzione: una proiezione oltre anticipaSoglia (in valore assoluto)
+  // vale come segnale di rialzo o ribasso in arrivo: sblocca l'attesa del contesto (rialzo) o ferma gli ingressi (ribasso).
+  kronos: { topShare: 0.25, horizon: 5, timeoutMs: 600_000, port: 8765, model: "small" as "mini" | "small" | "base", lookback: 400, samples: 3, anticipaSoglia: 0.01 },
   // Riepilogo su Telegram una volta al giorno, alla prima passata dopo quest'ora di Roma.
   summaryAfter: "22:05",
   // Presa di profitto parziale (agente "profitto"): a +3% vende metà e lascia correre il resto col trend. Scelta col
@@ -180,7 +183,28 @@ export const AGENTS = {
   cryptoUniverse: { enabled: true, topMarketCap: 100, maxPairs: 40, refreshHours: 24, coingeckoUrl: "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=100&page=1" },
   // Custodi: un agente per ogni crypto in portafoglio o tra le migliori candidate; ognuno segue il suo titolo
   // con tesi, piano e rischio dichiarati, dentro le stesse regole del motore.
-  custodi: { enabled: true, maxCandidates: 5, pullbackSmaDays: 20, extendedPct: 0.15, keepIdleTicks: 12 },
+  // Custodi senza numero fisso: uno per ogni titolo o crypto in trend (maxCandidates è solo una sicurezza).
+  custodi: { enabled: true, maxCandidates: 100, pullbackSmaDays: 20, extendedPct: 0.15, keepIdleTicks: 12 },
+  // Intraday (agente "intraday"): operazioni che si aprono e chiudono nella stessa giornata, solo nel verso del trend
+  // giornaliero. L'agente sceglie da solo la candela (5 min / 15 min / 4 ore) dalla volatilità del titolo: più è nervoso,
+  // più la candela è corta. Entra su rottura dei massimi delle ultime 20 candele o su rientro sulla media a 20 candele;
+  // esce all'obiettivo, allo stop (ATR), alla rottura al ribasso della media a 20 candele, o comunque prima della chiusura.
+  intraday: {
+    enabled: true,
+    timeframes: { fast: "5Min", mid: "15Min", slow: "4Hour" } as Record<"fast" | "mid" | "slow", string>,
+    // Soglie di volatilità giornaliera (deviazione standard dei rendimenti a 20 giorni) per la scelta della candela.
+    volFast: 0.03, volMid: 0.015,
+    bars: 120, // candele di storia per medie, ATR e massimi
+    target: { stocks: 0.01, crypto: 0.02 }, // obiettivo di profitto; se l'ATR dice di più, vale l'ATR × targetAtr
+    targetAtr: 1.5, stopAtr: 1.2, minStopPct: 0.004,
+    maxWeight: 0.1, // peso massimo di un'operazione intraday (comparto a taglia ridotta)
+    maxOpen: 3, // operazioni intraday aperte contemporaneamente
+    // Finestre, ora di Roma: ingressi solo se resta tempo per chiudere in giornata; poi chiusura forzata.
+    entry: { stocks: { from: "15:45", to: "20:30" }, crypto: { from: "00:10", to: "20:00" } },
+    closeBy: { stocks: "21:45", crypto: "23:30" },
+    rsiMax: 70, // solo informativo nelle note
+    maxExtensionAtr: 3, // oltre tanti ATR sopra la media a 20 candele non si entra
+  },
 };
 
 // Sostituisce le crypto nell'universo degli agenti con la lista data (le azioni restano).

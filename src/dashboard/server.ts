@@ -4,6 +4,9 @@ import { listEventDays, readEvents, type BusEvent, type EventBus } from "../agen
 import { barsPath, forecastsPath, statusPath, type Valutazione } from "../agents/engine.ts";
 import { readJson, isObject } from "../fsutil.ts";
 import { readWitness } from "../witness.ts";
+import { ROOT } from "../deps.ts";
+import { maskedSettings, testSettings, writeSecretsFile } from "../settings.ts";
+import { agentCardsWithValues, saveAgentSettings } from "../agent-settings.ts";
 
 // Dashboard locale: una pagina (3D + pannelli) servita da Bun, stato da agents-status.json, eventi dal registro
 // JSONL e in diretta via WebSocket. Solo lettura: da qui non parte nessun ordine.
@@ -74,6 +77,23 @@ export function startDashboard(o: DashboardOptions) {
         } catch (e) {
           return Response.json({ errore: (e as Error).message }, { status: 502 });
         }
+      }
+      // Impostazioni: chiavi (mascherate in lettura), prova, salvataggio in secrets.ts; schede degli agenti.
+      if (url.pathname === "/api/impostazioni" && req.method === "GET") return Response.json(maskedSettings(ROOT));
+      if (url.pathname === "/api/impostazioni" && req.method === "POST") {
+        const body = (await req.json().catch(() => ({}))) as Record<string, string>;
+        const r = writeSecretsFile(ROOT, body);
+        return Response.json(r.ok ? { ok: true, cambiati: r.cambiati, nota: "Salvato in secrets.ts. Il motore legge le chiavi all'avvio: riavvia il bot (Ctrl-C e avvia-bot.cmd) per usare quelle nuove." } : { ok: false, errore: r.errore }, { status: r.ok ? 200 : 400 });
+      }
+      if (url.pathname === "/api/impostazioni/prova" && req.method === "POST") {
+        const body = (await req.json().catch(() => ({}))) as Record<string, string>;
+        return Response.json(await testSettings(ROOT, body));
+      }
+      if (url.pathname === "/api/agenti/schede" && req.method === "GET") return Response.json({ schede: agentCardsWithValues(o.stateDir) });
+      if (url.pathname === "/api/agenti/schede" && req.method === "POST") {
+        const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
+        const r = saveAgentSettings(o.stateDir, body);
+        return Response.json(r.ok ? { ok: true, salvati: r.salvati, nota: "Impostazioni salvate: valgono dal prossimo giro del motore." } : { ok: false, errori: r.errori }, { status: r.ok ? 200 : 400 });
       }
       if (url.pathname === "/api/journal") {
         const p = join(o.stateDir, "journal.json");

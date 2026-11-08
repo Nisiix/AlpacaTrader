@@ -116,3 +116,44 @@ describe("sessioni cloud", () => {
     expect(nearbySlot(at("12:00"), 45, 20)).toBeNull();
   });
 });
+
+describe("impostazioni degli agenti e chiavi", () => {
+  test("i parametri si validano, si salvano solo se diversi da quelli di serie, si applicano al motore e si tolgono", async () => {
+    const { AGENTS, LIMITS } = await import("../src/config.ts");
+    const { saveAgentSettings, applyAgentSettings, agentCardsWithValues, validate } = await import("../src/agent-settings.ts");
+    const { mkdtempSync } = await import("node:fs");
+    const { tmpdir } = await import("node:os");
+    const dir = mkdtempSync(`${tmpdir()}/imp-`);
+    expect(validate("LIMITS.maxPositions", 50).ok).toBe(false);
+    expect(validate("AGENTS.exit.mode", "boh").ok).toBe(false);
+    expect(validate("AGENTS.intraday.closeBy.stocks", "25:00").ok).toBe(false);
+    const before = LIMITS.maxPositions;
+    const r = saveAgentSettings(dir, { "LIMITS.maxPositions": 7, "AGENTS.intraday.target.crypto": 0.03, "AGENTS.buyScore": 0.5 });
+    expect(r.ok && Object.keys(r.salvati).sort()).toEqual(["AGENTS.intraday.target.crypto", "LIMITS.maxPositions"]); // buyScore è di serie: non salvato
+    expect(LIMITS.maxPositions).toBe(7);
+    expect(AGENTS.intraday.target.crypto).toBe(0.03);
+    const cards = agentCardsWithValues(dir);
+    expect(cards.find((c) => c.agente === "motore")!.parametri.find((p) => p.chiave === "LIMITS.maxPositions")!.cambiato).toBe(true);
+    saveAgentSettings(dir, {});
+    applyAgentSettings(dir);
+    expect(LIMITS.maxPositions).toBe(before);
+    expect(AGENTS.intraday.target.crypto).toBe(0.02);
+  });
+
+  test("secrets.ts: scrittura con campi vuoti che non toccano il resto, lettura mascherata, chiavi non paper rifiutate", async () => {
+    const { writeSecretsFile, maskedSettings, readSecretsFile } = await import("../src/settings.ts");
+    const { mkdtempSync } = await import("node:fs");
+    const { tmpdir } = await import("node:os");
+    const dir = mkdtempSync(`${tmpdir()}/sec-`);
+    expect(writeSecretsFile(dir, { alpacaKeyId: "AKLIVE123", alpacaSecretKey: "x" })).toEqual({ ok: false, errore: expect.stringContaining("PAPER") });
+    const w = writeSecretsFile(dir, { alpacaKeyId: "PKTEST12345678", alpacaSecretKey: "segretissimo123", telegramBotToken: "123456:ABC-def", telegramChatId: "42" });
+    expect(w.ok).toBe(true);
+    const w2 = writeSecretsFile(dir, { telegramChatId: "43" });
+    expect(w2.ok && w2.cambiati).toEqual(["telegramChatId"]);
+    expect(readSecretsFile(dir).alpacaKeyId).toBe("PKTEST12345678");
+    const m = maskedSettings(dir);
+    expect(m.alpacaKeyId).toBe("PKTE…678");
+    expect(m.alpacaSecretKey).not.toContain("segretissimo");
+    expect(m.telegramChatId).toBe("43");
+  });
+});

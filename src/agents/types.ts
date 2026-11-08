@@ -2,6 +2,7 @@ import type { Account, Position, Side } from "../broker/types.ts";
 import type { Indicator } from "../indicators.ts";
 import type { JournalFile } from "../journal.ts";
 import type { CustodeStato } from "./custode.ts";
+import type { IntradayStato } from "./intraday.ts";
 
 // Un segnale è un'opinione: un agente, un titolo, un lato, una forza tra 0 e 1 e il perché in italiano.
 // Nessun agente ordina niente: l'allocatore somma i segnali pesati e la gabbia decide cosa passa.
@@ -18,6 +19,8 @@ export interface Signal {
   pesoMassimo?: number;
   // Vendita vincolante parziale: quota della posizione da vendere (1 = tutta).
   frazione?: number;
+  // Voto di un'operazione intraday: la proposta che ne nasce si chiude in giornata.
+  intraday?: boolean;
 }
 
 export interface AgentView {
@@ -33,6 +36,9 @@ export interface AgentView {
   previsioni?: Record<string, number>;
   // Contesto economico deciso prima degli altri agenti: settori in cui si aspetta, proiezioni di cui fidarsi.
   contesto?: MarketContext;
+  // Borsa aperta adesso e finestra degli ingressi sui titoli: l'allocatore non spreca posti su titoli non negoziabili.
+  mercatoAperto?: boolean;
+  finestraIngressi?: boolean;
 }
 
 export type Outlook = "favorevole" | "neutro" | "sfavorevole";
@@ -58,6 +64,8 @@ export interface AgentReport {
   note?: string[];
   // Solo l'agente dei custodi: lo stato di ogni custode (tesi, piano, rischio, livelli), per la dashboard.
   custodi?: CustodeStato[];
+  // Solo l'agente intraday: operazioni aperte e candidate con candela, obiettivo e stop.
+  intraday?: IntradayStato[];
 }
 
 export interface Agent {

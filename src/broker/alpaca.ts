@@ -1,6 +1,6 @@
 import { CRYPTO_STOP_LIMIT_GAP, HTTP_TIMEOUT_MS, MARKET_DATA_URL, PAPER_TRADING_URL, isCrypto } from "../config.ts";
 import { assertPaperUrl } from "../guard.ts";
-import type { Account, Bar, Broker, MarketClock, Order, OrderRequest, Position, StopOrderRequest } from "./types.ts";
+import type { Account, Bar, Broker, IntradayBar, MarketClock, Order, OrderRequest, Position, StopOrderRequest } from "./types.ts";
 import { BrokerError, DuplicateOrderError } from "./types.ts";
 
 const num = (v: unknown) => (v === null || v === undefined || v === "" ? 0 : Number(v));
@@ -169,6 +169,32 @@ export class AlpacaBroker implements Broker {
       .filter((a: any) => a.tradable && typeof a.symbol === "string" && a.symbol.endsWith("/USD"))
       .map((a: any) => String(a.symbol))
       .sort();
+  }
+
+  async getIntradayBars(symbols: string[], timeframe: string, count: number): Promise<Record<string, IntradayBar[]>> {
+    const out: Record<string, IntradayBar[]> = {};
+    if (!symbols.length) return out;
+    const minutes = timeframe.endsWith("Min") ? Number(timeframe.replace("Min", "")) : timeframe.endsWith("Hour") ? Number(timeframe.replace("Hour", "")) * 60 : 1440;
+    // Abbastanza indietro da coprire `count` candele anche con notti e fine settimana (titoli: ~6,5 ore al giorno).
+    const spanMin = minutes * count * (minutes >= 240 ? 4 : 3) + 3 * 1440;
+    const start = new Date(Date.now() - spanMin * 60_000).toISOString();
+    const now = Date.now();
+    const closedBefore = (t: string) => Date.parse(t) + minutes * 60_000 <= now; // candela finita
+    const fetchAll = async (path: string) => {
+      let token = "";
+      for (let page = 0; page < 10; page++) {
+        const data = await this.request(MARKET_DATA_URL, `${path}${token ? `&page_token=${encodeURIComponent(token)}` : ""}`);
+        for (const [sym, bars] of Object.entries<any[]>(data?.bars ?? {})) (out[sym] ??= []).push(...bars.filter((b) => closedBefore(String(b.t))).map((b) => ({ t: String(b.t), open: Number(b.o), high: Number(b.h), low: Number(b.l), close: Number(b.c), volume: Number(b.v ?? 0) })));
+        token = data?.next_page_token ?? "";
+        if (!token) break;
+      }
+    };
+    const stocks = symbols.filter((s) => !isCrypto(s));
+    const crypto = symbols.filter(isCrypto);
+    if (stocks.length) await fetchAll(`/v2/stocks/bars?timeframe=${encodeURIComponent(timeframe)}&adjustment=all&feed=iex&limit=10000&start=${start}&symbols=${stocks.map(encodeURIComponent).join(",")}`);
+    if (crypto.length) await fetchAll(`/v1beta3/crypto/us/bars?timeframe=${encodeURIComponent(timeframe)}&limit=10000&start=${start}&symbols=${crypto.map(encodeURIComponent).join(",")}`);
+    for (const sym of Object.keys(out)) out[sym] = out[sym]!.sort((a, b) => a.t.localeCompare(b.t)).slice(-count);
+    return out;
   }
 
   async getDailyBars(symbols: string[], days: number): Promise<Record<string, Bar[]>> {

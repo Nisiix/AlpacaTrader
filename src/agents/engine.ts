@@ -7,7 +7,9 @@ import { AGENTS, DAILY_BARS_DAYS, LIMITS, UNIVERSE, isCrypto, setCryptoUniverse 
 import type { KronosForecastPath } from "../kronos-sidecar.ts";
 import { stopPctFor } from "../stops.ts";
 import type { CustodeStato } from "./custode.ts";
+import type { IntradayStato } from "./intraday.ts";
 import { refreshCryptoUniverse, type TopFetcher } from "./universe.ts";
+import { applyAgentSettings } from "../agent-settings.ts";
 import { clientOrderId, sendOne, waitForFills, type ExecOutcome } from "../execute.ts";
 import { writeJsonAtomic } from "../fsutil.ts";
 import { indicatorsFor } from "../indicators.ts";
@@ -74,6 +76,7 @@ export interface AgentsStatus {
   pnlOggi: DailyPnl & { nonRealizzato: number };
   // I custodi (un investitore per crypto seguita), l'universo crypto del giorno, lo stato di Kronos.
   custodi: CustodeStato[];
+  intraday: IntradayStato[];
   universo: { titoli: string[]; crypto: string[]; fonteCrypto: string | null; aggiornatoCrypto: string | null };
   kronos: { stato: string; proiezioniDel: string | null; simboli: number };
 }
@@ -219,6 +222,9 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
 
   try {
     bus.emit("tick", { giro });
+    // Le impostazioni degli agenti cambiate dalla dashboard valgono dal giro successivo, senza riavvio.
+    const settings = applyAgentSettings(deps.stateDir);
+    for (const e of settings.errori) log.warn(`impostazioni agenti: ${e}`);
     // 2. L'universo crypto del giorno, poi Alpaca.
     await loadUniverse(deps, cache, today, (m) => {
       log.info(m);
@@ -281,7 +287,7 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
       log.info(m);
       bus.emit("nota", { testo: m });
     });
-    const view: AgentView = { today, now: startedAt, prices: snap.prices, closes, indicators, positions: snap.positions, account: snap.account, journal, previsioni };
+    const view: AgentView = { today, now: startedAt, prices: snap.prices, closes, indicators, positions: snap.positions, account: snap.account, journal, previsioni, mercatoAperto: snap.clock.isOpen, finestraIngressi: inEntryWindow(startedAt) && snap.clock.isOpen };
     const reports: Record<string, AgentReport> = {};
     const agentStatus: AgentsStatus["agenti"] = {};
     // Il contesto economico si valuta per primo: decide dove si aspetta e di quali proiezioni fidarsi.
@@ -433,6 +439,7 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
       tradeChiusiOggi: fills.closed.map((t) => ({ simbolo: t.simbolo, risultato: t.risultato ?? 0, giorni: t.giorni ?? 0, uscita: t.motivoUscita ?? "sconosciuto" })),
       pnlOggi: { ...dailyPnl(journal, today), nonRealizzato: positions.reduce((s, p) => s + (p.currentPrice - p.avgEntryPrice) * p.qty, 0) },
       custodi: Object.values(reports).flatMap((r) => r.custodi ?? []),
+      intraday: Object.values(reports).flatMap((r) => r.intraday ?? []),
       universo: { titoli: AGENTS.universe.filter((s) => !isCrypto(s)), crypto: AGENTS.universe.filter(isCrypto), fonteCrypto: cache.universeInfo?.fonte ?? null, aggiornatoCrypto: cache.universeInfo?.aggiornato ?? null },
       kronos: { stato: deps.kronosStato?.() ?? (deps.forecaster ? "attivo" : "non configurato"), proiezioniDel: cache.previsioni?.date ?? null, simboli: Object.keys(cache.previsioni?.data ?? {}).length },
     };
@@ -474,6 +481,7 @@ export interface Valutazione {
   verdetto: string; // una frase
   previsione: (KronosForecastPath & { orizzonte: number }) | null;
   custode: CustodeStato | null;
+  intraday: IntradayStato | null;
   note: string[];
 }
 
@@ -494,7 +502,7 @@ export async function valutaTitolo(deps: EngineDeps, cache: EngineCache, symbol:
   const buyBlock = br.kind === "corrupt" ? "interruttore illeggibile" : evaluateBreaker(br.file, account.equity, account.lastEquity, now.toISOString()).buyBlock;
   const journal = readJournal(deps.stateDir, now).file;
   const previsioniNum = cache.previsioni?.date === today ? Object.fromEntries(Object.entries(cache.previsioni.data).map(([k, v]) => [k, v.rendimentoPrevisto])) : undefined;
-  const view: AgentView = { today, now, prices, closes, indicators, positions, account, journal, previsioni: previsioniNum };
+  const view: AgentView = { today, now, prices, closes, indicators, positions, account, journal, previsioni: previsioniNum, mercatoAperto: clock.isOpen, finestraIngressi: inEntryWindow(now) && clock.isOpen };
   const ctxAgent = deps.agents.find((a): a is ContextAgent => a instanceof ContextAgent);
   let contesto: MarketContext | null = null;
   if (ctxAgent) {
@@ -558,6 +566,7 @@ export async function valutaTitolo(deps: EngineDeps, cache: EngineCache, symbol:
     verdetto,
     previsione: fc ? { ...fc, orizzonte: AGENTS.kronos.horizon } : null,
     custode,
+    intraday: Object.values(reports).flatMap((r) => r.intraday ?? []).find((k) => k.simbolo === symbol) ?? null,
     note,
   };
 }

@@ -12,6 +12,8 @@ export interface ProposedOrder {
   why: string;
   confidence?: "bassa" | "media" | "alta" | null;
   expect?: string;
+  // Operazione intraday (agente "intraday"): si apre e si chiude in giornata; la gabbia la ammette a mercato aperto.
+  intraday?: boolean;
 }
 
 export interface Decision {

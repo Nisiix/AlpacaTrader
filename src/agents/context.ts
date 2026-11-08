@@ -120,15 +120,23 @@ export class ContextAgent implements Agent {
     if (problem) motivi.push(problem);
     const attendi: Record<string, string> = {};
     const fidati: Record<string, boolean> = {};
+    const fedNear = this.events.some((e) => e.kind === "fed" && e.date >= v.today && e.date <= addDaysStr(v.today, AGENTS.context.waitDaysBeforeEvent));
     const symbols = new Set([...AGENTS.universe, ...v.positions.map((p) => p.symbol)]);
     for (const s of symbols) {
       const sec = sectorOf(s);
       const o = worst(generale, settori[sec] ?? "favorevole");
       const ev = eventBlockFor(s, v.today, this.events);
-      if (o === "sfavorevole") attendi[s] = `contesto sfavorevole (${sec}): si aspetta la candela successiva`;
-      else if (ev) attendi[s] = ev;
-      // La proiezione guida solo con contesto favorevole: con dubbi si aspetta una candela nuova invece di fidarsi.
-      fidati[s] = o === "favorevole" && !ev;
+      const fc = v.previsioni?.[s];
+      const anticipaRialzo = fc !== undefined && fc >= AGENTS.kronos.anticipaSoglia;
+      const anticipaRibasso = fc !== undefined && fc <= -AGENTS.kronos.anticipaSoglia;
+      // Il contesto corrente non decide da solo: se Kronos anticipa un rialzo, il settore debole non ferma l'ingresso;
+      // se anticipa un ribasso, si aspetta anche con contesto buono. Gli eventi (Fed, trimestrali) bloccano comunque.
+      if (ev) attendi[s] = ev;
+      else if (anticipaRibasso) attendi[s] = `Kronos anticipa un ribasso (${(fc * 100).toFixed(1)}% a ${AGENTS.kronos.horizon} sedute): si aspetta`;
+      else if (o === "sfavorevole" && !anticipaRialzo) attendi[s] = `contesto sfavorevole (${sec}) e nessun rialzo anticipato da Kronos: si aspetta la candela successiva`;
+      // Della proiezione ci si fida sempre, salvo eventi in arrivo (trimestrale del titolo, Fed nei prossimi giorni):
+      // con contesto non favorevole è lei a decidere.
+      fidati[s] = !ev && !fedNear;
     }
     return { aggiornato: v.now.toISOString(), fonte, generale, settori, motivo: motivi.join(" · "), attendi, fidatiDellaProiezione: fidati };
   }

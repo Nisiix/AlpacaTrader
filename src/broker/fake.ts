@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { writeJsonAtomic } from "../fsutil.ts";
 import { isCrypto } from "../config.ts";
 import { addDays, romeTime } from "../slots.ts";
-import type { Account, Bar, Broker, MarketClock, Order, OrderRequest, Position, StopOrderRequest } from "./types.ts";
+import type { Account, Bar, Broker, IntradayBar, MarketClock, Order, OrderRequest, Position, StopOrderRequest } from "./types.ts";
 import { BrokerError, DuplicateOrderError, isOpenOrder, isProtectiveStop } from "./types.ts";
 
 export interface FakeFaults {
@@ -31,6 +31,8 @@ export interface FakeState {
   closes: Record<string, number[]>;
   // auto = aperto 15:30-22:00 ora di Roma nei giorni feriali
   clock: "auto" | "open" | "closed";
+  // Barre intraday per simbolo e timeframe, per provare l'agente intraday a tavolino.
+  intraday?: Record<string, Record<string, IntradayBar[]>>;
   faults: FakeFaults;
   submits: number;
 }
@@ -221,6 +223,37 @@ export class FakeBroker implements Broker {
     if (s.faults.crashAfterSubmits !== undefined && s.submits >= s.faults.crashAfterSubmits) process.kill(process.pid, "SIGKILL");
     if (outageNow) throw new BrokerError("timeout: nessuna risposta da Alpaca (l'ordine però è arrivato)", undefined, true);
     return order;
+  }
+
+  // Barre intraday finte: quelle messe nello stato (s.intraday[sym][timeframe]) se ci sono, altrimenti una passeggiata
+  // deterministica intorno al prezzo, così la scelta della candela e gli ingressi si possono provare a tavolino.
+  async getIntradayBars(symbols: string[], timeframe: string, count: number): Promise<Record<string, IntradayBar[]>> {
+    const s = this.load();
+    this.checkOutage(s, "getIntradayBars");
+    const minutes = timeframe.endsWith("Min") ? Number(timeframe.replace("Min", "")) : timeframe.endsWith("Hour") ? Number(timeframe.replace("Hour", "")) * 60 : 1440;
+    const out: Record<string, IntradayBar[]> = {};
+    for (const sym of symbols) {
+      const stored = s.intraday?.[sym]?.[timeframe];
+      if (stored) {
+        out[sym] = stored.slice(-count);
+        continue;
+      }
+      const price = s.prices[sym];
+      if (!price) continue;
+      let seed = [...sym].reduce((a, c) => a + c.charCodeAt(0), 0);
+      const rnd = () => ((seed = (seed * 9301 + 49297) % 233280) / 233280 - 0.5);
+      const vol = (FAKE_VOL[sym] ?? 0.02) * Math.sqrt(minutes / 390);
+      const end = Math.floor(this.now().getTime() / (minutes * 60_000)) * minutes * 60_000;
+      const bars: IntradayBar[] = [];
+      let c = price * (1 - vol * 3);
+      for (let i = count; i >= 1; i--) {
+        const o = c;
+        c = o * (1 + rnd() * vol * 2 + (price - o) / price / count);
+        bars.push({ t: new Date(end - i * minutes * 60_000).toISOString(), open: o, high: Math.max(o, c) * (1 + vol * 0.3), low: Math.min(o, c) * (1 - vol * 0.3), close: c, volume: 1000 });
+      }
+      out[sym] = bars;
+    }
+    return out;
   }
 
   // Barre finte dalle chiusure: apertura = chiusura precedente, massimo e minimo un po' oltre, volume costante.
