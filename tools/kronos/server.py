@@ -96,7 +96,10 @@ def to_df(bs):
     df["timestamps"] = pd.to_datetime(df["timestamps"])
     return df
 
-def forecast(symbols, horizon, series=None, step_minutes=None):
+def forecast(symbols, horizon, series=None, step_minutes=None, samples=None):
+    # Campioni: quanti percorsi Kronos genera e media per ogni serie. Più campioni = media più stabile (l'errore casuale
+    # scende con la radice del numero), ma tempo proporzionale. Il motore li sceglie richiesta per richiesta.
+    n_samples = max(1, min(128, int(samples or a.samples)))
     data = series if series is not None else bars(symbols, a.lookback)
     out = {}
     for s in symbols:
@@ -114,7 +117,7 @@ def forecast(symbols, horizon, series=None, step_minutes=None):
         else:
             y_ts = pd.Series(pd.bdate_range(last_ts + pd.Timedelta(days=1), periods=horizon))
         t0 = time.time()
-        pred = predictor.predict(df=df[["open", "high", "low", "close", "volume", "amount"]], x_timestamp=df["timestamps"], y_timestamp=y_ts, pred_len=horizon, T=a.T, top_p=a.top_p, sample_count=a.samples, verbose=False)
+        pred = predictor.predict(df=df[["open", "high", "low", "close", "volume", "amount"]], x_timestamp=df["timestamps"], y_timestamp=y_ts, pred_len=horizon, T=a.T, top_p=a.top_p, sample_count=n_samples, verbose=False)
         last = float(df["close"].iloc[-1])
         path = [float(x) / last - 1 for x in pred["close"].values]
         out[s] = {"pred_ret": path[-1], "path": path, "last_close": last, "seconds": round(time.time() - t0, 2), "modelli": {"kronos": path}, "_c": df["close"].to_numpy(dtype=np.float64)}
@@ -139,7 +142,12 @@ class H(BaseHTTPRequestHandler):
             series = body.get("series")
             symbols = [str(x) for x in (body.get("symbols") or (list(series.keys()) if isinstance(series, dict) else []))][:60]
             horizon = max(1, min(20, int(body.get("horizon", 5))))
-            self._json(200, {"model": a.model, "horizon": horizon, "forecasts": forecast(symbols, horizon, series if isinstance(series, dict) else None, body.get("step_minutes"))})
+            samples = body.get("samples")
+            t0 = time.time()
+            out = forecast(symbols, horizon, series if isinstance(series, dict) else None, body.get("step_minutes"), samples)
+            secs = round(time.time() - t0, 2)
+            print(f"previsione: {len(out)} serie, {samples or a.samples} campioni, passo {body.get('step_minutes') or 'giorno'}, {secs} s")
+            self._json(200, {"model": a.model, "horizon": horizon, "samples": samples or a.samples, "secondi": secs, "forecasts": out})
         except Exception as e:
             self._json(500, {"error": str(e)})
     def log_message(self, fmt, *args): print(time.strftime("%H:%M:%S"), fmt % args)

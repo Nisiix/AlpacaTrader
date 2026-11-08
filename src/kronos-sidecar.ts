@@ -24,6 +24,30 @@ export interface KronosForecastPath {
   del?: string;
 }
 
+// Quanti campioni chiedere: il massimo che sta nel tempo concesso per serie, dai secondi per campione misurati sulle
+// richieste precedenti (media mobile: si adatta anche quando il PC è più carico). Prima di ogni misura vale il numero iniziale.
+export class Campionatore {
+  private msPerCampione: number | null = null;
+  ultimi: number;
+  constructor(private tipo: "giorno" | "intraday") {
+    this.ultimi = AGENTS.kronos.campioni[tipo].iniziali;
+  }
+  quanti(): number {
+    const c = AGENTS.kronos.campioni;
+    if (this.msPerCampione === null) return (this.ultimi = Math.max(c.min, Math.min(c.max, c[this.tipo].iniziali)));
+    return (this.ultimi = Math.max(c.min, Math.min(c.max, Math.floor(c[this.tipo].msPerSerie / this.msPerCampione))));
+  }
+  misura(ms: number, serie: number, campioni: number) {
+    if (serie <= 0 || campioni <= 0 || !(ms > 0)) return;
+    const v = ms / (serie * campioni);
+    this.msPerCampione = this.msPerCampione === null ? v : 0.7 * this.msPerCampione + 0.3 * v;
+  }
+  stato(): string {
+    return `${this.ultimi}${this.msPerCampione !== null ? ` (${(this.msPerCampione / 1000).toFixed(2)} s per campione e serie)` : ""}`;
+  }
+}
+export const CAMPIONI = { giorno: new Campionatore("giorno"), intraday: new Campionatore("intraday") };
+
 const modelliDi = (f: { modelli?: Record<string, unknown> }): Record<string, number[]> | undefined => {
   if (!f.modelli || typeof f.modelli !== "object") return undefined;
   const out: Record<string, number[]> = {};
@@ -146,14 +170,18 @@ export function pathForecaster(link: KronosLink): (symbols: string[], bars: Reco
       if (b && b.length >= 60) series[s] = b.slice(-AGENTS.kronos.lookback).map((x) => ({ t: x.date, o: x.open, h: x.high, l: x.low, c: x.close, v: x.volume }));
     }
     if (!Object.keys(series).length) return {};
+    const n = Object.keys(series).length;
+    const samples = CAMPIONI.giorno.quanti();
+    const t0 = Date.now();
     const res = await fetch(`${link.url}/forecast`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ series, horizon: AGENTS.kronos.horizon }),
+      body: JSON.stringify({ series, horizon: AGENTS.kronos.horizon, samples }),
       signal: AbortSignal.timeout(AGENTS.kronos.timeoutMs),
     });
     if (!res.ok) throw new Error(`Kronos ${res.status}: ${(await res.text()).slice(0, 200)}`);
     const data = (await res.json()) as { forecasts?: Record<string, { pred_ret: number; path?: number[]; last_close?: number; modelli?: Record<string, unknown> }> };
+    CAMPIONI.giorno.misura(Date.now() - t0, n, samples);
     const out: Record<string, KronosForecastPath> = {};
     for (const [s, f] of Object.entries(data.forecasts ?? {})) {
       const r = Number(f.pred_ret);
@@ -173,14 +201,18 @@ export function intradayForecaster(link: KronosLink): (series: Record<string, In
     const series: Record<string, { t: string; o: number; h: number; l: number; c: number; v: number }[]> = {};
     for (const [s, b] of Object.entries(bars)) if (b.length >= 60) series[s] = b.slice(-AGENTS.kronos.lookback).map((x) => ({ t: x.t, o: x.open, h: x.high, l: x.low, c: x.close, v: x.volume }));
     if (!Object.keys(series).length) return {};
+    const n = Object.keys(series).length;
+    const samples = CAMPIONI.intraday.quanti();
+    const t0 = Date.now();
     const res = await fetch(`${link.url}/forecast`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ series, horizon, step_minutes: stepMinutes }),
+      body: JSON.stringify({ series, horizon, step_minutes: stepMinutes, samples }),
       signal: AbortSignal.timeout(AGENTS.kronos.timeoutMs),
     });
     if (!res.ok) throw new Error(`Kronos ${res.status}: ${(await res.text()).slice(0, 200)}`);
     const data = (await res.json()) as { forecasts?: Record<string, { pred_ret: number; path?: number[]; last_close?: number; modelli?: Record<string, unknown> }> };
+    CAMPIONI.intraday.misura(Date.now() - t0, n, samples);
     const out: Record<string, KronosForecastPath> = {};
     for (const [s, f] of Object.entries(data.forecasts ?? {})) {
       const r = Number(f.pred_ret);

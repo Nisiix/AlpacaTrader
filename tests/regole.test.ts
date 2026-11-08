@@ -47,9 +47,9 @@ describe("regole del primo motore riviste", () => {
   test("trimestrali dal calendario automatico: solo i titoli seguiti, una lettura al giorno, poi nel calendario", async () => {
     const dir = mkdtempSync(join(tmpdir(), "trim-"));
     let chiamate = 0;
-    const fetcher = async (d: string) => (chiamate++, d === "2026-11-11" ? ["AMD", "ZZZZ"] : []);
+    const fetcher = async (d: string) => (chiamate++, d === "2026-11-11" ? [{ symbol: "AMD", quando: "dopo" as const }, { symbol: "ZZZZ", quando: "prima" as const }] : []);
     const r = await refreshEarnings(dir, "2026-11-09", ["AMD", "SPY", "BTC/USD"], fetcher, 3);
-    expect(r.file!.date).toEqual([{ date: "2026-11-11", symbol: "AMD" }]);
+    expect(r.file!.date).toEqual([{ date: "2026-11-11", symbol: "AMD", quando: "dopo" }]);
     await refreshEarnings(dir, "2026-11-09", ["AMD"], fetcher, 3);
     expect(chiamate).toBe(4); // la seconda volta nello stesso giorno legge il file
     addEarnings(r.file!.date);
@@ -64,5 +64,31 @@ describe("regole del primo motore riviste", () => {
     // Calo previsto del 3% già avvenuto in giornata: da qui niente più ribasso.
     expect(daAdesso(-0.03, 100, 97)).toBeCloseTo(0, 9);
     expect(riallinea({ SPY: 0.02, X: 0.01 }, { SPY: { rendimentoPrevisto: 0.02, percorso: [0.02], ultimaChiusura: 100 } } as any, { SPY: 101 })).toEqual({ SPY: (1.02 * 100) / 101 - 1, X: 0.01 });
+  });
+
+  test("trimestrale: nell'ultima seduta decide guadagno o perdita rispetto al salto atteso, Kronos sceglie solo tra metà e tutto", async () => {
+    const { uscitaTrimestrale } = await import("../src/agents/exits.ts");
+    const { addEarnings } = await import("../src/events.ts");
+    addEarnings([{ date: "2026-11-12", symbol: "CSCO", quando: "dopo" }, { date: "2026-11-13", symbol: "ORCL", quando: "prima" }]);
+    const closes = { CSCO: salita(80), ORCL: salita(200) };
+    // Giovedì 12/11, 21:00 a Roma (un'ora alla chiusura): ultima seduta per CSCO (conti dopo la chiusura).
+    const v = (gainOggi: string, extra: Partial<AgentView> = {}) => ({ today: gainOggi, now: new Date(`${gainOggi}T21:00:00+01:00`), mercatoAperto: true, chiusuraBorsa: `${gainOggi}T21:00:00Z`, closes, prices: {}, positions: [], account, journal: emptyJournal(), indicators: {}, ...extra }) as unknown as AgentView;
+    // Guadagno grande (oltre il salto atteso): metà.
+    expect(uscitaTrimestrale(v("2026-11-12"), "CSCO", 0.12, -0.01, false)!.frazione).toBe(0.5);
+    // ...e se la metà è già stata venduta, il resto resta.
+    expect(uscitaTrimestrale(v("2026-11-12"), "CSCO", 0.12, -0.01, true)!.frazione).toBe(0);
+    // Guadagno piccolo e Kronos senza rialzo: tutto. Con Kronos netto: metà.
+    expect(uscitaTrimestrale(v("2026-11-12"), "CSCO", 0.01, -0.005, false)!.frazione).toBe(1);
+    expect(uscitaTrimestrale(v("2026-11-12"), "CSCO", 0.01, 0.06, false)!.frazione).toBe(0.5);
+    // In perdita: tutto, anche con Kronos favorevole se la perdita non è piccola.
+    expect(uscitaTrimestrale(v("2026-11-12"), "CSCO", -0.04, 0.06, false)!.frazione).toBe(1);
+    // Il giorno prima (non è l'ultima seduta) non si fa nulla; a borsa chiusa nemmeno.
+    expect(uscitaTrimestrale(v("2026-11-11"), "CSCO", 0.12, 0, false)).toBeNull();
+    expect(uscitaTrimestrale(v("2026-11-12", { mercatoAperto: false }), "CSCO", 0.12, 0, false)).toBeNull();
+    // ORCL esce prima dell'apertura del 13: l'ultima seduta utile è il 12.
+    expect(uscitaTrimestrale(v("2026-11-12"), "ORCL", -0.02, 0, false)!.frazione).toBe(1);
+    // Motore spento nell'ultima seduta: il 13 (conti prima dell'apertura) è tardi, non si fa nulla; per CSCO (dopo la
+    // chiusura del 12) il 12 stesso a inizio seduta non è ancora l'ultima ora.
+    expect(uscitaTrimestrale(v("2026-11-13"), "ORCL", -0.02, 0, false)).toBeNull();
   });
 });

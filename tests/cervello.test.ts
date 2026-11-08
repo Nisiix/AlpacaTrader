@@ -109,3 +109,16 @@ describe("cervello delle previsioni", () => {
     expect(scadenzaIntraday(ultima.t, 15, 1).toISOString()).toBe("2026-11-02T15:00:00.000Z");
   });
 });
+
+describe("campioni di Kronos", () => {
+  test("si chiede il massimo che sta nel tempo concesso per titolo, misurato sul PC, tra il minimo e il massimo", async () => {
+    const { Campionatore } = await import("../src/kronos-sidecar.ts");
+    const c = new Campionatore("giorno");
+    expect(c.quanti()).toBe(AGENTS.kronos.campioni.giorno.iniziali); // prima misura: numero iniziale
+    c.misura(35 * 24 * 100, 35, 24); // 100 ms per campione e titolo
+    expect(c.quanti()).toBe(Math.min(AGENTS.kronos.campioni.max, Math.floor(AGENTS.kronos.campioni.giorno.msPerSerie / 100)));
+    const lento = new Campionatore("intraday");
+    lento.misura(10 * 8 * 5_000, 10, 8); // PC lentissimo: si scende fino al minimo, mai sotto
+    expect(lento.quanti()).toBe(AGENTS.kronos.campioni.min);
+  });
+});

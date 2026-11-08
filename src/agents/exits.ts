@@ -1,6 +1,8 @@
 import { AGENTS, LIMITS, isCrypto } from "../config.ts";
 import { dailyVol } from "../indicators.ts";
+import { prossimaTrimestrale } from "../events.ts";
 import { stopPctFor } from "../stops.ts";
+import { kronosProb } from "./fiducia.ts";
 import { soloIntraday } from "./posizioni.ts";
 import type { Agent, AgentReport, AgentView, Signal } from "./types.ts";
 
@@ -17,6 +19,33 @@ export interface ExitPolicy {
 
 // Le regole di uscita del conto, come agente con segnali vincolanti. La proiezione (Kronos, se c'è) decide solo
 // se oltre l'obiettivo si incassa o si lascia correre con lo stop che segue; con proiezione negativa si esce subito.
+// Uscita prima di una trimestrale (solo azioni): null se non è il momento; altrimenti cosa vendere (1 tutto, 0,5 metà,
+// 0 niente: la metà è già stata venduta) e perché. Il momento: l'ultima seduta prima dei conti, negli ultimi minuti; se
+// quella seduta è passata senza uscire (motore spento) e i conti non sono ancora usciti, appena la borsa è aperta.
+export function uscitaTrimestrale(v: AgentView, simbolo: string, gain: number, fc: number | undefined, giaAlleggerita: boolean): { frazione: number; perche: string } | null {
+  const t = AGENTS.trimestrali;
+  if (!t.uscita || isCrypto(simbolo) || v.mercatoAperto === false) return null;
+  const tri = prossimaTrimestrale(simbolo, v.today);
+  if (!tri) return null;
+  const minutiAllaChiusura = v.chiusuraBorsa ? (Date.parse(v.chiusuraBorsa) - v.now.getTime()) / 60_000 : null;
+  const ultimaSeduta = v.today === tri.ultimaSeduta && (minutiAllaChiusura === null || minutiAllaChiusura <= t.minutiPrimaChiusura);
+  const mancata = v.today > tri.ultimaSeduta && (v.today < tri.date || (v.today === tri.date && tri.quando === "dopo"));
+  if (!ultimaSeduta && !mancata) return null;
+  const vol = (v.closes[simbolo] ? dailyVol(v.closes[simbolo]!, LIMITS.volLookbackDays) : null) ?? LIMITS.fallbackDailyVol;
+  const salto = Math.max(t.movimentoMin, t.movimentoVol * vol);
+  const prob = kronosProb(v.closes[simbolo], fc);
+  const kronosSi = fc !== undefined && fc > 0 && prob !== null && prob >= t.fiduciaTenere;
+  const pct = (x: number) => `${x >= 0 ? "+" : ""}${(x * 100).toFixed(1)}%`;
+  const quando = tri.quando === "dopo" ? `il ${tri.date} dopo la chiusura` : tri.quando === "prima" ? `il ${tri.date} prima dell'apertura` : `il ${tri.date} (orario non comunicato)`;
+  const k = fc === undefined ? "Kronos n.d." : `Kronos ${pct(fc)}${prob !== null ? ` (${Math.round(prob * 100)}%)` : ""}`;
+  const base = `trimestrale ${quando}, salto atteso ±${(salto * 100).toFixed(1)}%, posizione ${pct(gain)}, ${k}`;
+  const meta = (perche: string) => (giaAlleggerita ? { frazione: 0, perche: `${base}: metà già venduta, il resto resta (${perche})` } : { frazione: 0.5, perche: `${base}: si vende metà (${perche})` });
+  if (gain >= salto) return meta("il guadagno copre anche un salto contrario: metà in tasca, metà resta per un salto favorevole");
+  if (gain >= 0) return kronosSi ? meta("guadagno più piccolo del salto atteso, ma Kronos vede ancora rialzo") : { frazione: 1, perche: `${base}: si vende tutto (il guadagno non copre il salto atteso e Kronos non vede altro rialzo)` };
+  if (-gain < salto / 4 && kronosSi) return meta("perdita piccola e Kronos favorevole: si riduce il rischio senza chiudere");
+  return { frazione: 1, perche: `${base}: si vende tutto (in perdita, i conti non devono poterla allargare)` };
+}
+
 export class ExitAgent implements Agent {
   readonly name = "uscite";
   constructor(private policy: ExitPolicy = AGENTS.exit) {}
@@ -32,7 +61,7 @@ export class ExitAgent implements Agent {
       const trade = v.journal.trade.find((t) => t.simbolo === p.symbol && t.stato === "aperto");
       const peak = Math.max(trade?.massimo ?? 0, price, p.avgEntryPrice);
       const forecast = v.previsioni?.[p.symbol];
-      const sell = (perche: string) => segnali.push({ agente: this.name, simbolo: p.symbol, lato: "sell", forza: 1, orizzonteSedute: 0, perche, vincolante: true });
+      const sell = (perche: string, frazione?: number) => segnali.push({ agente: this.name, simbolo: p.symbol, lato: "sell", forza: 1, orizzonteSedute: 0, perche, vincolante: true, ...(frazione ? { frazione } : {}) });
       // Il rientro ha le sue uscite brevi: qui restano solo lo stop e la proiezione.
       const soloRientro = trade?.contesto?.agenti?.length === 1 && trade.contesto.agenti[0] === "rientro";
       const stopPct = this.policy.stopMode === "fisso" ? this.policy.stopPct : stopPctFor(v.closes[p.symbol]);
@@ -42,12 +71,18 @@ export class ExitAgent implements Agent {
       }
       // Un'operazione intraday ha le sue uscite (obiettivo, stop e Kronos sulle candele brevi): qui resta solo lo stop di emergenza.
       if (soloIntraday(v.journal, p.symbol)) continue;
+      // Per uscire vale anche la proiezione che il contesto non considera affidabile per entrare (riduce il rischio).
+      const fcUscita = v.previsioniKronos?.[p.symbol] ?? forecast;
+      // Trimestrale in arrivo: decisione sull'ultima seduta utile, da guadagno o perdita, salto atteso e Kronos.
+      const conti = uscitaTrimestrale(v, p.symbol, gain, fcUscita, trade ? trade.quantita < trade.comprate - 1e-9 : false);
+      if (conti) {
+        if (conti.frazione !== 0) sell(conti.perche, conti.frazione);
+        continue;
+      }
       // Protezione del profitto: in guadagno (oltre i costi) e Kronos vede nel breve un calo che lo azzererebbe → si incassa
       // adesso un profitto minore invece di rischiare di tornare a pari o in perdita.
       const pp = AGENTS.protezioneProfitto;
       const margine = isCrypto(p.symbol) ? pp.margine.crypto : pp.margine.stocks;
-      // Per uscire vale anche la proiezione che il contesto non considera affidabile per entrare (riduce il rischio).
-      const fcUscita = v.previsioniKronos?.[p.symbol] ?? forecast;
       const path = v.percorsi?.[p.symbol]?.slice(0, pp.sedute) ?? (fcUscita !== undefined ? [fcUscita] : []);
       const dip = path.length ? Math.min(...path) : null;
       if (pp.enabled && gain > margine && dip !== null && dip < 0 && (1 + gain) * (1 + dip) - 1 <= margine) {

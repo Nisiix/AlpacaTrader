@@ -54,3 +54,10 @@ export function addTradingDays(date: string, n: number): string {
   }
   return d;
 }
+
+// Il giorno feriale prima di `date` (le festività non si conoscono: contano come giorni di borsa).
+export function sedutaPrima(date: string): string {
+  let d = addDays(date, -1);
+  while (!isTradingWeekday(d)) d = addDays(d, -1);
+  return d;
+}

@@ -271,6 +271,30 @@ sono ammessi; le quantità crypto si troncano al milionesimo (mai per eccesso) e
   non restano fermi su un titolo che la gabbia rifiuterebbe.
 - **Rientro (RSI a 2 giorni)**: le chiusure concluse più il prezzo di adesso (a borsa aperta; le crypto sempre).
 
+## Kronos: quanti più campioni possibile
+
+Ogni previsione di Kronos è la media di più percorsi generati («campioni»): più campioni, previsione più stabile (l'errore
+casuale scende con la radice del numero: da 3 a 48 si divide per 4). Il motore misura quanto impiega davvero il PC e chiede
+ogni volta il massimo che sta nel tempo concesso: **3 secondi per titolo** per le proiezioni giornaliere (si rifanno una
+volta per giornata conclusa) e **0,8 secondi per titolo e candela** per quelle intraday (che devono restare rapide), tra 4 e
+96 campioni. Se il PC è più carico i campioni scendono, se è libero salgono. Lo stato è nella riga di Kronos della dashboard.
+
+## Uscita intelligente prima delle trimestrali
+
+Nell'ultima seduta prima dei conti (lo stesso giorno se escono dopo la chiusura, il giorno prima se escono prima
+dell'apertura o l'orario non è noto; l'orario arriva da Nasdaq), negli ultimi 90 minuti, l'agente uscite decide per ogni
+azione in portafoglio. Salto atteso ai conti = 3 × volatilità giornaliera (almeno 3%).
+
+| Posizione | Decisione |
+|---|---|
+| in guadagno oltre il salto atteso | vende **metà**: il cuscinetto copre anche un salto contrario, l'altra metà resta per un salto favorevole |
+| in guadagno più piccolo del salto | **metà** se Kronos vede ancora rialzo con probabilità ≥ 60%, altrimenti **tutto** |
+| in perdita | **tutto**; solo una perdita piccola (sotto un quarto del salto atteso) con Kronos favorevole: **metà** |
+
+Kronos non conosce i conti, quindi decide solo tra metà e tutto, mai di tenere tutta la posizione. Se la metà è già stata
+venduta (anche dalla presa di profitto), il resto resta. Se il motore era spento nell'ultima seduta e i conti non sono ancora
+usciti, decide appena la borsa apre. Gli acquisti restano bloccati dai 2 giorni di borsa prima fino al giorno dei conti.
+
 ## Regole del primo motore riviste
 
 - **Rischio ammesso per classe**: il regime guarda lo SPY per le azioni e il BTC per le crypto (sotto la media a 200 o con

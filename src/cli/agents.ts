@@ -22,7 +22,7 @@ import type { Agent } from "../agents/types.ts";
 import { AGENTS, enableCrypto } from "../config.ts";
 import { startDashboard } from "../dashboard/server.ts";
 import { ROOT, buildDeps } from "../deps.ts";
-import { ensureKronos, intradayForecaster, pathForecaster, type KronosLink } from "../kronos-sidecar.ts";
+import { CAMPIONI, ensureKronos, intradayForecaster, pathForecaster, type KronosLink } from "../kronos-sidecar.ts";
 import { Cervello, previsioniCombinate, previsioniIntradayCombinate } from "../agents/cervello.ts";
 import { nasdaqEarnings } from "../earnings.ts";
 import { appendFileSync, existsSync, mkdirSync, unlinkSync } from "node:fs";
@@ -88,7 +88,7 @@ try {
     forecaster: kronos ? previsioniCombinate(pathForecaster(kronos), cervello, deps.now) : undefined,
     cervello: kronos ? cervello : undefined,
     trimestrali: args.fake ? undefined : nasdaqEarnings,
-    kronosStato: kronos ? () => kronos!.stato : undefined,
+    kronosStato: kronos ? () => `${kronos!.stato} · campioni per previsione: giornaliere ${CAMPIONI.giorno.stato()}, intraday ${CAMPIONI.intraday.stato()}` : undefined,
     // Nel finto niente rete: solo le coppie del broker finto.
     cryptoUniverse: args.noCrypto ? undefined : { fetchTop: args.fake ? null : coingeckoTop() },
     // Fear & Greed e funding: fonti gratuite senza chiavi, solo nel vero.

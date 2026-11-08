@@ -6,16 +6,23 @@ import { addDays } from "./slots.ts";
 // Le date delle trimestrali dal calendario pubblico di Nasdaq: una volta al giorno, per i prossimi giorni, solo per i titoli
 // che il motore segue (universo, radar, posizioni). Salvate in state/trimestrali.json: se la fonte non risponde restano
 // quelle già scaricate e il calendario scritto a mano.
+// quando: "prima" = prima dell'apertura, "dopo" = dopo la chiusura, "ignoto" = orario non comunicato.
+export type QuandoConti = "prima" | "dopo" | "ignoto";
+export interface Trimestrale {
+  date: string;
+  symbol: string;
+  quando?: QuandoConti;
+}
 export interface EarningsFile {
   versione: 1;
   giorno: string;
-  date: { date: string; symbol: string }[];
+  date: Trimestrale[];
 }
 
 export const earningsPath = (stateDir: string) => join(stateDir, "trimestrali.json");
 const valido = (v: unknown): v is EarningsFile => isObject(v) && v.versione === 1 && typeof v.giorno === "string" && Array.isArray(v.date);
 
-export type EarningsFetcher = (date: string) => Promise<string[]>;
+export type EarningsFetcher = (date: string) => Promise<{ symbol: string; quando: QuandoConti }[]>;
 
 // Una giornata del calendario: i simboli con i conti in quella data.
 export const nasdaqEarnings: EarningsFetcher = async (date) => {
@@ -24,8 +31,10 @@ export const nasdaqEarnings: EarningsFetcher = async (date) => {
     signal: AbortSignal.timeout(HTTP_TIMEOUT_MS),
   });
   if (!r.ok) throw new Error(`Nasdaq ${r.status}`);
-  const j = (await r.json()) as { data?: { rows?: { symbol?: string }[] | null } | null };
-  return (j.data?.rows ?? []).map((x) => String(x.symbol ?? "").trim().toUpperCase()).filter(Boolean);
+  const j = (await r.json()) as { data?: { rows?: { symbol?: string; time?: string }[] | null } | null };
+  return (j.data?.rows ?? [])
+    .map((x) => ({ symbol: String(x.symbol ?? "").trim().toUpperCase(), quando: (x.time === "time-pre-market" ? "prima" : x.time === "time-after-hours" ? "dopo" : "ignoto") as QuandoConti }))
+    .filter((x) => x.symbol);
 };
 
 // Scarica (al massimo una volta al giorno) i prossimi `giorni` giorni di calendario per i simboli dati.
@@ -34,12 +43,12 @@ export async function refreshEarnings(stateDir: string, today: string, simboli: 
   const prima = r.kind === "ok" ? r.value : null;
   if (prima?.giorno === today) return { file: prima, nuove: 0, problema: null };
   const voluti = new Set(simboli.filter((s) => !s.includes("/")));
-  const trovate: { date: string; symbol: string }[] = [];
+  const trovate: Trimestrale[] = [];
   const errori: string[] = [];
   for (let i = 0; i <= giorni; i++) {
     const d = addDays(today, i);
     try {
-      for (const s of await fetcher(d)) if (voluti.has(s)) trovate.push({ date: d, symbol: s });
+      for (const x of await fetcher(d)) if (voluti.has(x.symbol)) trovate.push({ date: d, symbol: x.symbol, quando: x.quando });
     } catch (e) {
       errori.push(`${d}: ${(e as Error).message}`);
     }

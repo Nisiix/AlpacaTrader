@@ -163,6 +163,12 @@ export const AGENTS = {
     // bravuraAttesa, tra 0 e 3: chi non supera il caso pesa zero. Conti separati per giornaliero e per ogni candela.
     // Kronos, se non risulta peggiore del caso, tiene almeno kronosMinimo.
     modelli: ["kronos", "chronos2", "timesfm"] as string[],
+    // Campioni di Kronos: quanti percorsi genera e media per ogni previsione. Più campioni = previsione più stabile
+    // (l'errore casuale scende con la radice del numero: da 3 a 48 si divide per 4), ma il tempo cresce in proporzione.
+    // Il motore misura quanto impiega davvero il PC e chiede ogni volta il massimo che sta nel tempo concesso per serie:
+    // giornaliere 3 s per titolo (una volta per giornata conclusa: 70 titoli ≈ 3,5 minuti, si possono aspettare) e
+    // intraday 0,8 s per titolo e candela (a ogni candela: devono restare rapide).
+    campioni: { min: 4, max: 96, giorno: { msPerSerie: 3_000, iniziali: 24 }, intraday: { msPerSerie: 800, iniziali: 8 } },
     cervello: { minCampione: 100, prudenza: 50, kronosMinimo: 0.5, maxAperte: 6000, bravuraAttesa: 0.03, affidabilita: { kronos: 1, chronos2: 0.13, timesfm: 0.05 } as Record<string, number>, affidabilitaIgnota: 0.05 } },
   // Riepilogo su Telegram una volta al giorno, alla prima passata dopo quest'ora di Roma.
   summaryAfter: "22:05",
@@ -188,6 +194,14 @@ export const AGENTS = {
   // Protezione del profitto: con una posizione in guadagno (oltre il margine dei costi), se Kronos nelle prossime
   // `sedute` vede un calo che lo azzererebbe, si vende subito con il profitto di adesso.
   protezioneProfitto: { enabled: true, sedute: 2, margine: { stocks: 0.002, crypto: 0.006 } },
+  // Uscita prima delle trimestrali (azioni): nell'ultima seduta prima dei conti (lo stesso giorno se escono dopo la
+  // chiusura, il giorno prima se escono prima dell'apertura o l'orario non è noto), negli ultimi minutiPrimaChiusura
+  // minuti. Salto atteso ai conti = max(movimentoMin, movimentoVol × volatilità giornaliera). In guadagno oltre il salto
+  // atteso: si incassa metà e si tiene metà (il cuscinetto copre anche un salto contrario). In guadagno più piccolo: metà se
+  // Kronos vede ancora rialzo con probabilità ≥ fiduciaTenere, altrimenti tutto. In perdita: tutto, salvo una perdita
+  // piccola (sotto un quarto del salto atteso) con Kronos favorevole: metà. Kronos non conosce i conti, quindi decide solo
+  // tra metà e tutto, mai di tenere tutto.
+  trimestrali: { uscita: true, minutiPrimaChiusura: 90, movimentoVol: 3, movimentoMin: 0.03, fiduciaTenere: 0.6 },
   exit: { enabled: true, mode: "trend" as "trend" | "obiettivo", stopMode: "volatilita" as "volatilita" | "fisso", stopPct: 0.03, trailAtr: 0, targetPct: 0.03, targetBySymbol: { GLD: 0.04, MSFT: 0.04, QQQ: 0.04 } as Record<string, number>, giveBackPct: 0.02, lockPct: 0.005 },
   // Contesto economico (agente "contesto"): prima di ogni trade. Regole sui dati di mercato e sul calendario eventi sempre;
   // in più, se c'è `claude -p`, una lettura della situazione economica con ricerca web ogni refreshHours (cache in state/macro.json).
