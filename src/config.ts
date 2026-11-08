@@ -198,7 +198,9 @@ export const AGENTS = {
   // in più, se c'è `claude -p`, una lettura della situazione economica con ricerca web ogni refreshHours (cache in state/macro.json).
   // Sfavorevole: esposizione × unfavorableScale, nessun ingresso nuovo e niente fiducia nella proiezione per quel settore
   // (si aspetta la candela successiva). Neutro: esposizione × neutralScale, si entra ma la proiezione non guida le uscite.
-  context: { enabled: true, useClaude: true, refreshHours: 6, unfavorableScale: 0.5, neutralScale: 0.75, waitDaysBeforeEvent: 2 },
+  // breadthUnfavorable/breadthNeutral: quota media (per settore a rischio) di titoli sopra la media a 50 sotto la quale il clima
+  // generale diventa sfavorevole / neutro. retryMinutes: dopo un errore di claude si riprova solo dopo tanti minuti.
+  context: { enabled: true, useClaude: true, refreshHours: 6, retryMinutes: 60, unfavorableScale: 0.5, neutralScale: 0.75, waitDaysBeforeEvent: 2, breadthUnfavorable: 0.3, breadthNeutral: 0.5 },
   dashboardPort: 8787,
   eventsKeepDays: 60,
   // Universo crypto: tutte le coppie USD negoziabili su Alpaca che stanno nella top N per capitalizzazione

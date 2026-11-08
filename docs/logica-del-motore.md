@@ -19,11 +19,17 @@ festivi: quello che cambia è cosa la gabbia lascia passare (i titoli azionari s
    giorni di borsa), registro degli errori (lezioni: dopo uno stop niente riacquisto per 5 giorni, due rifiuti uguali
    bloccano il titolo), diario dei trade.
 5. **Kronos.** Una volta al giorno chiede al sidecar le proiezioni a 5 sedute per tutto l'universo (percorso giorno per
-   giorno) e le salva in `state/previsioni.json`. Kronos è la fonte principale per **anticipare** la direzione.
+   giorno) e le salva in `state/previsioni.json`. Kronos è la fonte principale per **anticipare** la direzione. Le
+   proiezioni oltre ±25% sono rumore del modello: il motore le toglie a tutti (agenti, contesto, gabbia), non le usa né per
+   entrare né per aspettare; restano sul grafico con la nota «fuori misura».
 6. **Contesto economico** (agente `contesto`), prima di tutti gli altri. Regole sui dati: SPY sopra o sotto la media a
    200, volatilità, oro e obbligazioni che salgono con SPY che scende, settori con la maggioranza dei titoli sotto la
-   media a 50 (il settore crypto si misura su tutto l'universo crypto), Fed nei prossimi 2 giorni. Più, se c'è
-   `claude -p`, una lettura con ricerca web ogni 6 ore. Esito: favorevole / neutro / sfavorevole, generale e per settore.
+   media a 50 (il settore crypto si misura su tutto l'universo crypto), **ampiezza**: la quota media, settore per settore
+   con lo stesso peso, di titoli a rischio (indici, tecnologia, crypto; non oro e obbligazioni, che sono rifugi) sopra la
+   media a 50 — sotto il 50% il clima è al massimo neutro, sotto il 30% sfavorevole, anche con SPY sopra la 200 —, Fed
+   nei prossimi 2 giorni. Più, se c'è
+   `claude -p`, una lettura con ricerca web ogni 6 ore (se claude risponde con un errore, il motivo va nel registro e
+   si riprova dopo un'ora: intanto valgono le regole). Esito: favorevole / neutro / sfavorevole, generale e per settore.
    **Il contesto corrente non decide da solo**: se Kronos anticipa un rialzo (≥ +1% a 5 sedute) il settore debole non
    ferma l'ingresso; se anticipa un ribasso (≤ −1%) si aspetta anche con contesto buono. Gli eventi (Fed, trimestrali)
    bloccano comunque.
@@ -59,7 +65,7 @@ festivi: quello che cambia è cosa la gabbia lascia passare (i titoli azionari s
 | **orizzonte** | posizioni vecchie di 60 sedute | chiede di uscire se lo slancio è finito |
 | **uscite** | ogni posizione: stop sulla volatilità, massimo visto, proiezione di Kronos | **vincolante**: stop, presa di profitto, proiezione negativa → vende |
 | **profitto** | posizioni a +3% | vende metà e lascia correre il resto (walk-forward: più vinti, perdita massima minore) |
-| **contesto** | vedi sopra | niente ordini: esposizione × 0,75 (neutro) o × 0,5 (sfavorevole); chi aspetta |
+| **contesto** | vedi sopra | niente ordini: esposizione × 0,75 (neutro) o × 0,5 (sfavorevole), ma non sui titoli dove Kronos anticipa un rialzo (lì la taglia la decide la fiducia nella proiezione); chi aspetta (evento «in attesa», non un ordine rifiutato) |
 | **kronos** | proiezioni a 5 sedute; scarta quelle oltre ±25% (rumore), classifica rialzi e ribassi separatamente e tiene il 25% più netto di ciascuno | compra (0,5 → 1 con la proiezione) sopra la media a 200; vende (0,5) i titoli in portafoglio con ribasso anticipato |
 | **custodi** | **un investitore per ogni titolo o crypto in trend** (o in portafoglio): nessun numero fisso, tanti quanti sono i titoli che meritano attenzione, zero se il mercato non offre niente | vedi sotto |
 | **intraday** | candele a 5 min / 15 min / 4 ore, scelte dalla volatilità | operazioni che si chiudono in giornata, vedi sotto |

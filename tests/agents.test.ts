@@ -10,7 +10,7 @@ import { IntradayAgent, readBars, timeframeFor } from "../src/agents/intraday.ts
 import type { IntradayBar } from "../src/broker/types.ts";
 import { selectPairs } from "../src/agents/universe.ts";
 import { EventBus, readEvents } from "../src/agents/bus.ts";
-import { emptyCache, inEntryWindow, runTick, statusPath, summaryText, type AgentsStatus, type EngineDeps } from "../src/agents/engine.ts";
+import { emptyCache, inEntryWindow, runTick, statusPath, summaryText, usableForecasts, type AgentsStatus, type EngineDeps } from "../src/agents/engine.ts";
 import { HorizonAgent } from "../src/agents/horizon.ts";
 import { KronosAgent } from "../src/agents/kronos.ts";
 import { PullbackAgent } from "../src/agents/pullback.ts";
@@ -844,6 +844,57 @@ describe("contesto economico", () => {
     expect(c.generale).toBe("favorevole");
     expect(c.fonte).toBe("regole");
     expect(c.motivo).toContain("ricerca web non disponibile");
+  });
+
+  test("ampiezza: con SPY sopra la 200 ma indici e tecnologia sotto la 50 il clima non è favorevole; oro e obbligazioni non contano", async () => {
+    const v = view({ falling: ["QQQ", "AAPL", "MSFT", "NVDA"] });
+    // SPY e IWM tra la media a 200 e quella a 50: il trend lungo regge, il breve no.
+    for (const s of ["SPY", "IWM"]) {
+      const c = v.closes[s]!;
+      const avg = (n: number) => c.slice(-n).reduce((a, x) => a + x, 0) / n;
+      v.prices[s] = (avg(LIMITS.trendSmaDays) + avg(LIMITS.longSmaDays)) / 2;
+    }
+    const c = await new ContextAgent(null, []).assess(v);
+    expect(c.generale).toBe("sfavorevole");
+    expect(c.motivo).toContain("mercati a rischio sopra la media a 50: 0%");
+    // Solo i rifugi in calo: il clima resta favorevole.
+    expect((await new ContextAgent(null, []).assess(view({ falling: ["GLD", "TLT"] }))).generale).toBe("favorevole");
+  });
+
+  test("con Kronos al rialzo la riduzione del contesto non taglia la taglia; senza Kronos sì", () => {
+    const buy = { trend: { segnali: [{ agente: "trend", simbolo: "NVDA", lato: "buy" as const, forza: 1, orizzonteSedute: 20, perche: "" }] } };
+    const qty = (previsioni: Record<string, number> | undefined, rischioContesto: number | null) =>
+      allocate(view({ previsioni }), { ...buy, ...(rischioContesto !== null ? { contesto: { segnali: [], rischio: rischioContesto } } : {}) }, { trend: 1, contesto: 1 }).proposte.find((p) => p.symbol === "NVDA")?.qty ?? 0;
+    expect(qty({ NVDA: 0.03 }, 0.5)).toBe(qty({ NVDA: 0.03 }, null));
+    expect(qty(undefined, 0.5)).toBeLessThan(qty(undefined, null) * 0.6);
+  });
+
+  test("proiezioni fuori misura (oltre ±maxAbs) non arrivano agli agenti né al contesto", () => {
+    const r = usableForecasts({ "PEPE/USD": -0.459, NVDA: 0.03, BAD: Number.NaN });
+    expect(r.usabili).toEqual({ NVDA: 0.03 });
+    expect(r.scartate.sort()).toEqual(["BAD", "PEPE/USD"]);
+    expect(usableForecasts(undefined).usabili).toBeUndefined();
+  });
+
+  test("claude in errore: motivo leggibile e nessun nuovo tentativo per un'ora (valgono le regole)", async () => {
+    let calls = 0;
+    const runner = async () => {
+      calls++;
+      return { code: 1, stdout: JSON.stringify({ type: "result", subtype: "success", is_error: true, result: "Invalid API key · Please run /login" }), stderr: "" };
+    };
+    let now = day("2026-09-24", "15:41");
+    const env = makeEnv(now);
+    const agent = new ContextAgent(new ClaudeMacro(env.stateDir, runner, () => now), []);
+    const c1 = await agent.assess(view());
+    expect(c1.generale).toBe("favorevole");
+    expect(c1.motivo).toContain("Invalid API key");
+    now = new Date(now.getTime() + 5 * 60_000);
+    const c2 = await agent.assess(view());
+    expect(calls).toBe(1);
+    expect(c2.motivo).toContain("si riprova tra poco");
+    now = new Date(now.getTime() + 61 * 60_000);
+    await agent.assess(view());
+    expect(calls).toBe(2);
   });
 
   test("nel motore il contesto viene prima: filtra le proiezioni e finisce nello stato e negli eventi", async () => {

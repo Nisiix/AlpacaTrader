@@ -23,6 +23,9 @@ export interface MacroReading {
   motivo: string;
 }
 
+// Settori rifugio: non misurano la voglia di rischio del mercato.
+const RIPARO = new Set(["oro", "obbligazioni"]);
+
 const worst = (a: Outlook, b: Outlook): Outlook => (a === "sfavorevole" || b === "sfavorevole" ? "sfavorevole" : a === "neutro" || b === "neutro" ? "neutro" : "favorevole");
 
 export function marketRules(v: AgentView, events: MarketEvent[] = EVENTS): MacroReading {
@@ -52,6 +55,7 @@ export function marketRules(v: AgentView, events: MarketEvent[] = EVENTS): Macro
   // Settori: sfavorevole se la maggioranza dei suoi titoli è sotto la media a 50. Il settore crypto si misura su
   // tutto l'universo crypto del giorno (non solo BTC ed ETH), così il contesto segue lo stesso universo degli agenti.
   const settori: Partial<Record<string, Outlook>> = {};
+  const ampiezza: number[] = [];
   const bySector = new Map<string, string[]>();
   for (const s of new Set([...Object.keys(SECTORS), ...AGENTS.universe])) bySector.set(sectorOf(s), [...(bySector.get(sectorOf(s)) ?? []), s]);
   for (const [sec, syms] of bySector) {
@@ -68,6 +72,16 @@ export function marketRules(v: AgentView, events: MarketEvent[] = EVENTS): Macro
     const share = above / total;
     settori[sec] = share >= 0.5 ? (share === 1 ? "favorevole" : "neutro") : "sfavorevole";
     if (settori[sec] === "sfavorevole") reasons.push(`${sec}: ${above} su ${total} sopra la media a 50 giorni`);
+    if (!RIPARO.has(sec)) ampiezza.push(share);
+  }
+  // Il clima generale non può essere «favorevole» se i mercati a rischio sono quasi tutti sotto la media a 50, anche con
+  // SPY sopra la 200: si guarda l'ampiezza, settore per settore con lo stesso peso (le 20 crypto non pesano più degli indici).
+  // Oro e obbligazioni sono rifugi: salgono quando la paura sale, quindi non entrano nel conto.
+  if (ampiezza.length) {
+    const media = ampiezza.reduce((a, x) => a + x, 0) / ampiezza.length;
+    const giudizio: Outlook = media < AGENTS.context.breadthUnfavorable ? "sfavorevole" : media < AGENTS.context.breadthNeutral ? "neutro" : "favorevole";
+    if (giudizio !== "favorevole") reasons.unshift(`mercati a rischio sopra la media a 50: ${Math.round(media * 100)}% (media dei settori)`);
+    generale = worst(generale, giudizio);
   }
   // Fed nei prossimi giorni: tutto neutro; trimestrale vicina: quel titolo lo decide eventBlockFor nella gabbia.
   const fedSoon = events.some((e) => e.kind === "fed" && e.date >= v.today && e.date <= addDaysStr(v.today, AGENTS.context.waitDaysBeforeEvent));
@@ -199,9 +213,36 @@ export class ClaudeMacro implements MacroSource {
     return null;
   }
 
+  private get errorPath() {
+    return join(this.stateDir, "macro-errore.json");
+  }
+
+  // Dopo un errore claude non si richiama a ogni giro (ogni 5 minuti): si riprova dopo retryMinutes, e intanto valgono
+  // le regole sui dati con l'ultimo motivo noto.
+  private recentError(): string | null {
+    try {
+      const e = JSON.parse(readFileSync(this.errorPath, "utf8"));
+      if (isObject(e) && typeof e.quando === "string" && this.now().getTime() - Date.parse(e.quando) < AGENTS.context.retryMinutes * 60_000) return String(e.motivo ?? "errore");
+    } catch {}
+    return null;
+  }
+
+  private fail(motivo: string, c: MacroReading | null): MacroReading | null {
+    try {
+      writeJsonAtomic(this.errorPath, { quando: this.now().toISOString(), motivo });
+    } catch {}
+    if (c) return c; // meglio una lettura vecchia che niente
+    throw new Error(motivo);
+  }
+
   async read(_today: string): Promise<MacroReading | null> {
     const c = this.cached();
     if (c && this.now().getTime() - Date.parse(c.aggiornato) < AGENTS.context.refreshHours * 3600_000) return c;
+    const recent = this.recentError();
+    if (recent) {
+      if (c) return c;
+      throw new Error(`${recent} (si riprova tra poco, intanto valgono le regole)`);
+    }
     // --allowedTools pre-autorizza la ricerca: in modalità -p senza terminale i permessi non si possono chiedere.
     const args = ["claude", "-p", "--output-format", "json", "--json-schema", JSON.stringify(MACRO_SCHEMA), "--tools", "WebSearch", "--allowedTools", "WebSearch", "--strict-mcp-config", "--no-session-persistence", "--system-prompt", MACRO_PROMPT];
     const res = await this.runner(args, `Oggi è ${_today}. Valuta la situazione economica attuale per un investitore in azioni USA, oro, obbligazioni lunghe e crypto. Rispondi solo con il JSON.`, this.timeoutMs);
@@ -209,21 +250,29 @@ export class ClaudeMacro implements MacroSource {
     try {
       env = JSON.parse(res.stdout);
     } catch {
-      if (c) return c; // meglio una lettura vecchia che niente
-      throw new Error(`claude non ha risposto con JSON (codice ${res.code})`);
+      const err = (res.stderr || res.stdout || "").trim().split("\n").pop()?.slice(0, 160);
+      return this.fail(`claude non ha risposto con JSON (codice ${res.code}${err ? `: ${err}` : ""})`, c);
     }
-    const out = env?.structured_output ?? (typeof env?.result === "string" ? JSON.parse(env.result.match(/\{[\s\S]*\}/)?.[0] ?? "null") : null);
+    let out: any = env?.structured_output ?? null;
+    if (!out && typeof env?.result === "string") {
+      try {
+        out = JSON.parse(env.result.match(/\{[\s\S]*\}/)?.[0] ?? "null");
+      } catch {
+        out = null;
+      }
+    }
     if (!isObject(out) || !["favorevole", "neutro", "sfavorevole"].includes(String(out.generale))) {
-      if (c) return c;
-      throw new Error("risposta di claude non valida");
+      // Il motivo vero (accesso scaduto, limite raggiunto, schema rifiutato…) sta nel campo result della risposta.
+      const why = env?.is_error || env?.subtype !== "success" ? String(env?.result ?? env?.subtype ?? "").replace(/\s+/g, " ").slice(0, 160) : "";
+      return this.fail(`risposta di claude non valida${why ? `: ${why}` : ""}`, c);
     }
     // Senza notizie verificate il giudizio non vale: meglio le sole regole che un "neutro" per mancanza di dati.
-    if (out.datiVerificati === false) {
-      if (c) return c;
-      throw new Error(`ricerca web non disponibile (${String(out.motivo ?? "").slice(0, 120)})`);
-    }
+    if (out.datiVerificati === false) return this.fail(`ricerca web non disponibile (${String(out.motivo ?? "").slice(0, 120)})`, c);
     const reading: MacroReading = { aggiornato: this.now().toISOString(), generale: out.generale as Outlook, settori: (isObject(out.settori) ? out.settori : {}) as Partial<Record<string, Outlook>>, motivo: String(out.motivo ?? "") };
     writeJsonAtomic(this.path, reading);
+    try {
+      if (existsSync(this.errorPath)) writeJsonAtomic(this.errorPath, { quando: "1970-01-01T00:00:00Z", motivo: "" });
+    } catch {}
     return reading;
   }
 }

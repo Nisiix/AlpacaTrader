@@ -1129,7 +1129,7 @@ function liveBar(sym) {
   return { date: today, open: prev ?? ps[0], high: Math.max(prev ?? ps[0], ...ps), low: Math.min(prev ?? ps[0], ...ps), close: ps[ps.length - 1], live: true, letture: ps.length };
 }
 // Le scelte di oggi del motore su questo titolo: voti, ordini, rifiuti, stop, trade.
-const ACTION_KINDS = new Set(['segnale', 'ordine', 'rifiuto', 'trade', 'stop']);
+const ACTION_KINDS = new Set(['segnale', 'ordine', 'rifiuto', 'attesa', 'trade', 'stop']);
 function actionsFor(sym) {
   const today = todayRome();
   return allEvents.filter((e) => romeDate(e.t) === today && ACTION_KINDS.has(e.tipo) && (e.simbolo === sym || (e.tipo === 'stop' && String(e.dettaglio || '').startsWith(sym + ' '))));
@@ -1208,7 +1208,7 @@ function drawChart() {
       const buy = e.lato === 'buy' || e.stato === 'aperto'; const col = e.tipo === 'rifiuto' ? cssVar('--warn') : buy ? up : down;
       ctx.fillStyle = col; ctx.textAlign = 'center';
       if (e.tipo === 'ordine' || e.tipo === 'trade') { ctx.font = 'bold 15px Figtree, system-ui, sans-serif'; ctx.fillText(buy ? '▲' : '▼', xi, buy ? bBot + 16 + 14 * downK++ : bTop - 6 - 14 * upK++); }
-      else if (e.tipo === 'rifiuto') { ctx.font = 'bold 13px Figtree, system-ui, sans-serif'; ctx.fillText('×', xi, bTop - 6 - 14 * upK++); }
+      else if (e.tipo === 'rifiuto' && e.quantita) { ctx.font = 'bold 13px Figtree, system-ui, sans-serif'; ctx.fillText('×', xi, bTop - 6 - 14 * upK++); }
       else if (e.tipo === 'segnale') { ctx.beginPath(); ctx.arc(xi, buy ? bBot + 10 + 10 * downK++ : bTop - 10 - 10 * upK++, 3, 0, Math.PI * 2); ctx.fill(); }
     }
     ctx.font = '12px Figtree, system-ui, sans-serif';
@@ -1235,7 +1235,7 @@ function paintTitle() {
   $('#t-price').textContent = price !== null ? `${px(price)} $` : '–';
   drawChart();
   const fc = forecasts?.previsioni?.[selected];
-  $('#chart-note').textContent = fc ? `Kronos: ${pct(fc.rendimentoPrevisto)} in ${forecasts.orizzonte} sedute (proiezione del ${forecasts.giorno}).` : `Kronos: ${st?.kronos?.stato || 'nessuna proiezione'}.`;
+  $('#chart-note').textContent = fc ? `Kronos: ${pct(fc.rendimentoPrevisto)} in ${forecasts.orizzonte} sedute (proiezione del ${forecasts.giorno}).${(st?.kronos?.scartate || []).includes(selected) ? ' Fuori misura: il motore non la usa, è rumore del modello.' : ''}` : `Kronos: ${st?.kronos?.stato || 'nessuna proiezione'}.`;
   $('#live-note').textContent = lastTick ? `in diretta · giro ${hhmm(lastTick.t)}` : '';
   renderFeed();
   if (valutazione) return paintVerdict(valutazione);
@@ -1442,7 +1442,7 @@ async function currentSaved() {
 
 // ---------- cronologia ----------
 const evBox = $('#events');
-const IMPORTANT = new Set(['ordine', 'trade', 'allarme', 'rifiuto', 'stop', 'contesto', 'nota']);
+const IMPORTANT = new Set(['ordine', 'trade', 'allarme', 'rifiuto', 'attesa', 'stop', 'contesto', 'nota']);
 let filter = 'important';
 try { filter = localStorage.getItem('agenti.filtro') || 'important'; } catch {}
 const allEvents = [];
@@ -1458,7 +1458,8 @@ function describe(e) {
     case 'rischio': return `Rischio ammesso ${Math.round(e.rischio * 100)}%${(e.note || []).length ? `: ${e.note.map(esc).join(' ')}` : ''}`;
     case 'allocazione': return `Proposte: ${(e.proposte || []).map((p) => `${side(p.side)} ${qty(p.qty)} ${esc(p.symbol)}`).join(', ') || 'nessuna'}`;
     case 'ordine': return `<span class="pill ${e.lato === 'buy' ? 'up' : 'down'}">${e.lato === 'buy' ? 'Comprato' : 'Venduto'}</span> <b>${qty(e.quantita)} ${esc(e.simbolo)}</b> — ${esc(e.esito)}${e.stato ? ` (${esc(e.stato)})` : ''}${e.errore ? ` <span class="down">${esc(cleanErr(e.errore))}</span>` : ''}`;
-    case 'rifiuto': return `<span class="pill">Fermato dalle regole</span> ${side(e.lato)} ${qty(e.quantita)} <b>${esc(e.simbolo)}</b>: ${esc(e.motivo)}`;
+    case 'attesa': return `<span class="pill warn">In attesa</span> <b>${esc(e.simbolo)}</b>: ${esc(e.motivo)}`;
+    case 'rifiuto': if (e.origine === 'contesto' && !e.quantita) return describe({ ...e, tipo: 'attesa' }); return `<span class="pill">Fermato dalle regole</span> ${side(e.lato)} ${qty(e.quantita)} <b>${esc(e.simbolo)}</b>: ${esc(e.motivo)}`;
     case 'stop': return `Stop di protezione ${e.azione === 'piazzato' ? 'messo' : 'tolto'}: ${esc(cleanErr(e.dettaglio))}`;
     case 'trade': return e.stato === 'aperto'
       ? `<span class="pill up">Posizione aperta</span> <b>${esc(e.simbolo)}</b> ${qty(e.quantita)} a ${fmt(e.prezzo)}${(e.agenti || []).length ? ` su voto di ${e.agenti.map(agentName).join(', ')}` : ''}`
@@ -1470,7 +1471,7 @@ function describe(e) {
 }
 // Le azioni che si ripetono identiche a ogni giro (lo stesso voto, lo stesso rifiuto «mercato chiuso») stanno su una riga:
 // la più recente, con quante volte e da che ora. Ordini, trade, stop e allarmi restano sempre uno per uno.
-const REPEATABLE = new Set(['segnale', 'rifiuto', 'contesto', 'agente', 'rischio', 'allocazione', 'nota', 'capo']);
+const REPEATABLE = new Set(['segnale', 'rifiuto', 'attesa', 'contesto', 'agente', 'rischio', 'allocazione', 'nota', 'capo']);
 function grouped(list) {
   const out = [], seen = new Map();
   for (const e of list) {

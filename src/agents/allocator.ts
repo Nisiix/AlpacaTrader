@@ -107,6 +107,10 @@ export function portfolioVol(weights: Record<string, number>, closes: Record<str
 export function allocate(view: AgentView, reports: Record<string, AgentReport>, weights: Record<string, number>): Allocation {
   const signals = Object.values(reports).flatMap((r) => r.segnali);
   const rischio = Object.values(reports).reduce((a, r) => a * (r.rischio ?? 1), 1);
+  // Kronos è la fonte principale, il contesto fa da contorno: quando Kronos anticipa un rialzo sul titolo, la riduzione
+  // del contesto non si applica (la taglia la decide già la fiducia nella proiezione, sotto). Regime e altri restano.
+  const rischioSenzaContesto = Object.entries(reports).reduce((a, [n, r]) => (n === "contesto" ? a : a * (r.rischio ?? 1)), 1);
+  const kronosSu = (s: string) => (view.previsioni?.[s] ?? -1) >= AGENTS.kronos.anticipaSoglia;
   const punteggi = scoreSignals(signals, weights);
   const proposte: ProposedOrder[] = [];
   const inAttesa: { simbolo: string; motivo: string }[] = [];
@@ -154,7 +158,7 @@ export function allocate(view: AgentView, reports: Record<string, AgentReport>, 
     if (!price || price <= 0) continue;
     const p = held.get(sc.simbolo);
     if (!p && slots <= 0) continue;
-    let w = maxWeightFor(view.closes[sc.simbolo]).max * rischio * (AGENTS.scaleByScore ? Math.min(1, sc.punteggio) : 1);
+    let w = maxWeightFor(view.closes[sc.simbolo]).max * (kronosSu(sc.simbolo) ? rischioSenzaContesto : rischio) * (AGENTS.scaleByScore ? Math.min(1, sc.punteggio) : 1);
     if (sc.pesoMassimo !== undefined) w = Math.min(w, sc.pesoMassimo);
     // Taglia proporzionale alla fiducia nella proiezione di Kronos: più è probabile che il rialzo si avveri, più si investe.
     if (AGENTS.sizing.byKronos) {

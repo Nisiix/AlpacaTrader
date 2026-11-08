@@ -83,7 +83,7 @@ export interface AgentsStatus {
   custodi: CustodeStato[];
   intraday: IntradayStato[];
   universo: { titoli: string[]; crypto: string[]; fonteCrypto: string | null; aggiornatoCrypto: string | null };
-  kronos: { stato: string; proiezioniDel: string | null; simboli: number };
+  kronos: { stato: string; proiezioniDel: string | null; simboli: number; scartate?: string[] };
   giornata: { pnlPct: number; obiettivoPct: number; perditaMaxPct: number; obiettivoRaggiunto: boolean; perditaOltre: boolean };
   // Operazioni simulate di oggi (dopo il tetto del giorno), con l'esito virtuale ai prezzi correnti.
   simulazioni: Simulazione[];
@@ -114,11 +114,25 @@ export interface EngineCache {
   // Avviso Telegram dell'obiettivo/perdita del giorno: una volta sola al giorno.
   giornataAvvisata?: string;
   capoSintesi?: string;
+  scartateNota?: string;
 }
 
 export const emptyCache = (): EngineCache => ({ closes: {}, bars: {}, ultimoRiepilogo: null });
 export const barsPath = (stateDir: string) => join(stateDir, "bars.json");
 export const forecastsPath = (stateDir: string) => join(stateDir, "previsioni.json");
+
+// Le proiezioni oltre ±maxAbs sono rumore del modello (un −46% in 5 sedute non è una previsione): il motore le toglie
+// per tutti gli agenti, la gabbia e il contesto, non solo per l'agente Kronos. Restano nel file e sul grafico, segnate.
+export function usableForecasts(p: Record<string, number> | undefined): { usabili: Record<string, number> | undefined; scartate: string[] } {
+  if (!p) return { usabili: undefined, scartate: [] };
+  const usabili: Record<string, number> = {};
+  const scartate: string[] = [];
+  for (const [s, f] of Object.entries(p)) {
+    if (Number.isFinite(f) && Math.abs(f) <= AGENTS.kronos.maxAbs) usabili[s] = f;
+    else scartate.push(s);
+  }
+  return { usabili, scartate };
+}
 
 // Le posizioni come le vede il motore: niente briciole (resti frazionari sotto il minimo negoziabile, che Alpaca
 // rifiuterebbe con "qty must be > 0") e quantità crypto troncate a 6 decimali (mai arrotondate per eccesso: Alpaca
@@ -342,10 +356,19 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
       const price = snap.prices[t.simbolo];
       if (price) t.massimo = Math.max(t.massimo ?? 0, price);
     }
-    const previsioni = await loadForecasts(deps, cache, today, [...new Set([...AGENTS.universe, ...snap.positions.map((p) => p.symbol)])], (m) => {
+    const { usabili: previsioni, scartate } = usableForecasts(
+      await loadForecasts(deps, cache, today, [...new Set([...AGENTS.universe, ...snap.positions.map((p) => p.symbol)])], (m) => {
+        log.info(m);
+        bus.emit("nota", { testo: m });
+      }),
+    );
+    const scartateKey = `${today}:${scartate.join(",")}`;
+    if (scartate.length && cache.scartateNota !== scartateKey) {
+      cache.scartateNota = scartateKey;
+      const m = `Kronos: proiezioni oltre ±${(AGENTS.kronos.maxAbs * 100).toFixed(0)}% non usate (rumore del modello): ${scartate.join(", ")}`;
       log.info(m);
       bus.emit("nota", { testo: m });
-    });
+    }
     const view: AgentView = { today, now: startedAt, prices: snap.prices, closes, indicators, positions: snap.positions, account: snap.account, journal, previsioni, mercatoAperto: snap.clock.isOpen, finestraIngressi: inEntryWindow(startedAt) && snap.clock.isOpen, giornata };
     const reports: Record<string, AgentReport> = {};
     const agentStatus: AgentsStatus["agenti"] = {};
@@ -391,7 +414,8 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
     }
     const weights = agentWeights(journal, today, deps.agents.map((a) => a.name));
     const alloc = allocate(view, reports, weights);
-    for (const w of alloc.inAttesa) bus.emit("rifiuto", { simbolo: w.simbolo, lato: "buy", quantita: 0, origine: "contesto", motivo: w.motivo });
+    // Un titolo votato ma in attesa (contesto, Kronos al ribasso) non è un ordine rifiutato: nessuna quantità, evento a sé.
+    for (const w of alloc.inAttesa) bus.emit("attesa", { simbolo: w.simbolo, motivo: w.motivo });
     bus.emit("allocazione", { rischio: alloc.rischio, pesi: weights, punteggi: alloc.punteggi, proposte: alloc.proposte, inAttesa: alloc.inAttesa });
 
     // 5. Gabbia: gli acquisti solo nella finestra di ingresso, le vendite e gli stop sempre a mercato aperto.
@@ -525,7 +549,7 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
       custodi: Object.values(reports).flatMap((r) => r.custodi ?? []),
       intraday: Object.values(reports).flatMap((r) => r.intraday ?? []),
       universo: { titoli: AGENTS.universe.filter((s) => !isCrypto(s)), crypto: AGENTS.universe.filter(isCrypto), fonteCrypto: cache.universeInfo?.fonte ?? null, aggiornatoCrypto: cache.universeInfo?.aggiornato ?? null },
-      kronos: { stato: deps.kronosStato?.() ?? (deps.forecaster ? "attivo" : "non configurato"), proiezioniDel: cache.previsioni?.date ?? null, simboli: Object.keys(cache.previsioni?.data ?? {}).length },
+      kronos: { stato: deps.kronosStato?.() ?? (deps.forecaster ? "attivo" : "non configurato"), proiezioniDel: cache.previsioni?.date ?? null, simboli: Object.keys(cache.previsioni?.data ?? {}).length, scartate },
       giornata: { pnlPct, obiettivoPct: AGENTS.daily.targetPct, perditaMaxPct: AGENTS.daily.maxLossPct, obiettivoRaggiunto: giornata.obiettivoRaggiunto, perditaOltre: giornata.perditaOltre },
       simulazioni,
       capo,
@@ -589,7 +613,7 @@ export async function valutaTitolo(deps: EngineDeps, cache: EngineCache, symbol:
   const br = readBreaker(deps.stateDir);
   const buyBlock = !LIMITS.breakerEnabled ? null : br.kind === "corrupt" ? "interruttore illeggibile" : evaluateBreaker(br.file, account.equity, account.lastEquity, now.toISOString()).buyBlock;
   const journal = readJournal(deps.stateDir, now).file;
-  const previsioniNum = cache.previsioni?.date === today ? Object.fromEntries(Object.entries(cache.previsioni.data).map(([k, v]) => [k, v.rendimentoPrevisto])) : undefined;
+  const previsioniNum = usableForecasts(cache.previsioni?.date === today ? Object.fromEntries(Object.entries(cache.previsioni.data).map(([k, v]) => [k, v.rendimentoPrevisto])) : undefined).usabili;
   const view: AgentView = { today, now, prices, closes, indicators, positions, account, journal, previsioni: previsioniNum, mercatoAperto: clock.isOpen, finestraIngressi: inEntryWindow(now) && clock.isOpen };
   const ctxAgent = deps.agents.find((a): a is ContextAgent => a instanceof ContextAgent);
   let contesto: MarketContext | null = null;
