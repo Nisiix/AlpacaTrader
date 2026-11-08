@@ -187,12 +187,16 @@ export const AGENTS = {
   // (Φ del rendimento atteso sulla volatilità) almeno minFiducia; peso massimo ridotto a pesoFattore × 10%.
   kronos: { topShare: 1, horizon: 5, timeoutMs: 600_000, port: 8765, model: "small" as "mini" | "small" | "base", lookback: 400, samples: 3, anticipaSoglia: 0.01, maxAbs: 0.25, controTendenza: { enabled: true, minRendimento: 0.02, minFiducia: 0.6, pesoFattore: 0.5 },
     // Il cervello delle previsioni: il sidecar fa girare accanto a Kronos altri modelli gratuiti (Chronos-2 di Amazon e
-    // TimesFM 2.5 di Google, Apache 2.0; quelli non installati si saltano). Ogni previsione di ogni modello si confronta col
-    // prezzo vero alla scadenza; la previsione usata è la media pesata sulla quota di direzioni giuste di ognuno, per le
-    // giornaliere e per ogni candela. Un modello conta solo dopo minCampione previsioni valutate (prima si fa solo misurare);
-    // prudenza riduce la bravura dei campioni piccoli; Kronos, se non risulta peggiore del caso, tiene almeno kronosMinimo.
+    // TimesFM 2.5 di Google, Apache 2.0; quelli non installati si saltano). Peso di un modello = affidabilità × risultato
+    // misurato. Affidabilità (scala 0-1, metà dai dati finanziari dell'addestramento, metà dalle prove pubblicate sui
+    // rendimenti, RankIC nel confronto di KiT, 2026): Kronos 1 (12 miliardi di candele da 45 borse; RankIC 0,034),
+    // Chronos-2 0,13 (corpus generico e sintetico; RankIC 0,005), TimesFM 2.5 0,05 (generico; RankIC negativo). Risultato
+    // misurato: ogni previsione si confronta col prezzo vero alla scadenza; sotto minCampione vale 1 (decide l'affidabilità),
+    // poi è la bravura (direzioni giuste oltre il caso, ridotta dalla prudenza sui campioni piccoli) divisa per
+    // bravuraAttesa, tra 0 e 3: chi non supera il caso pesa zero. Conti separati per giornaliero e per ogni candela.
+    // Kronos, se non risulta peggiore del caso, tiene almeno kronosMinimo.
     modelli: ["kronos", "chronos2", "timesfm"] as string[],
-    cervello: { minCampione: 100, prudenza: 50, kronosMinimo: 0.5, maxAperte: 6000 } },
+    cervello: { minCampione: 100, prudenza: 50, kronosMinimo: 0.5, maxAperte: 6000, bravuraAttesa: 0.03, affidabilita: { kronos: 1, chronos2: 0.13, timesfm: 0.05 } as Record<string, number>, affidabilitaIgnota: 0.05 } },
   // Riepilogo su Telegram una volta al giorno, alla prima passata dopo quest'ora di Roma.
   summaryAfter: "22:05",
   // Presa di profitto parziale (agente "profitto"): a +3% vende metà e lascia correre il resto col trend. Scelta col

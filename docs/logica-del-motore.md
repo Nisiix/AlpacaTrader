@@ -222,11 +222,22 @@ poco la direzione dei rendimenti: per questo non si fa una media alla cieca, ma 
 
 - Ogni previsione di ogni modello (giornaliera a 5 sedute e su ogni candela intraday) si registra e, alla scadenza, si
   confronta con il prezzo vero: direzione giusta o sbagliata, e quanto avrebbe reso seguirla.
-- La previsione usata dal motore è la **media dei percorsi pesata sulla bravura** di ogni modello: quota di direzioni
-  giuste oltre il 50%, ridotta quando il campione è piccolo. Conti separati per previsione giornaliera e per candela
-  (5 min, 15 min, 1 ora, 4 ore): un modello può valere sulle candele brevi e non sul giornaliero.
-- Un modello conta solo dopo **100 previsioni valutate**; prima si fa solo misurare e decide Kronos. Chi non supera il
-  caso ha peso zero. Kronos, finché non risulta peggiore del caso, tiene **almeno metà del peso**.
+- **Scala di affidabilità a priori** (0-1), metà dai dati finanziari con cui il modello è stato addestrato, metà dalle
+  prove pubblicate sulla previsione dei rendimenti (RankIC nel confronto del lavoro su KiT, 2026):
+
+  | Modello | Addestramento | Prove sui rendimenti | Affidabilità |
+  |---|---|---|---|
+  | Kronos | 12 miliardi di candele da 45 borse | RankIC 0,034 (il migliore dei pubblici) | **1** |
+  | Chronos-2 | corpus generico e sintetico, nessun dato finanziario dichiarato | RankIC 0,005 | **0,13** |
+  | TimesFM 2.5 | corpus generico e sintetico | RankIC negativo | **0,05** |
+
+- **Peso = affidabilità × risultati misurati.** Fino a 100 previsioni valutate (per tipo) conta solo l'affidabilità:
+  Kronos pesa circa l'85%, Chronos-2 l'11%, TimesFM il 4%. Poi la bravura misurata (direzioni giuste oltre il caso,
+  ridotta sui campioni piccoli; una quota del 53% vale «come atteso») moltiplica l'affidabilità tra 0 e 3: chi non supera
+  il caso pesa zero, chi indovina molto di più guadagna peso, ma un modello meno allenato deve indovinare molto di più per
+  pesare quanto Kronos. Conti separati per previsione giornaliera e per candela (5 min, 15 min, 1 ora, 4 ore).
+- Kronos, finché non risulta peggiore del caso, tiene **almeno metà del peso**. La scala si può cambiare da Impostazioni
+  → Kronos.
 - Tutto il resto del motore resta com'è: probabilità, soglie, costi, taglie e uscite lavorano sulla previsione combinata.
 - Nella pagina Dashboard, «Cervello delle previsioni» mostra per ogni modello previsioni valutate, direzione giusta, resa e
   peso di adesso. Se Chronos-2 o TimesFM non sono installati (installa-kronos), si lavora con il solo Kronos.

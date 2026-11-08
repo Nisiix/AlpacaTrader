@@ -276,7 +276,7 @@
       <div class="kpis" id="dash-kpi"></div>
     </section>
     <section class="card" style="margin-top:16px">
-      <h2>Cervello delle previsioni <small>Kronos e gli altri modelli, misurati sui prezzi veri: pesa di più chi ha indovinato più spesso la direzione</small></h2>
+      <h2>Cervello delle previsioni <small>Kronos e gli altri modelli: pesa di più chi è più affidabile e indovina più spesso la direzione</small></h2>
       <div id="cervello"></div>
     </section>
   </div>
@@ -1748,9 +1748,9 @@ const NOMI_MODELLI = { kronos: 'Kronos', chronos2: 'Chronos-2', timesfm: 'TimesF
 const tipoTxt = (t) => t === 'giorno' ? 'a 5 sedute' : t.startsWith('intraday-') ? `candele ${(() => { const m = Number(t.slice(9, -1)); return m >= 60 ? `${m / 60} h` : `${m} min`; })()}` : t;
 function paintCervello(st) {
   const c = st.cervello;
-  if (!c || !c.righe.length) { $('#cervello').innerHTML = `<p class="empty">Nessuna previsione ancora valutata${c ? ` (${c.inAttesa} in attesa della scadenza)` : ''}. Ogni modello conta dopo ${100} previsioni con la direzione giusta oltre il caso; fino ad allora decide Kronos.</p>`; return; }
-  const rows = c.righe.map((r) => `<tr><td data-l="Previsione">${esc(tipoTxt(r.tipo))}</td><td data-l="Modello"><b>${esc(NOMI_MODELLI[r.modello] || r.modello)}</b></td><td data-l="Valutate" class="n">${r.campione}</td><td data-l="Direzione giusta" class="n">${r.inDirezione === null ? '–' : `${Math.round(r.inDirezione * 100)}%`}</td><td data-l="Resa seguendolo" class="n ${r.resaMedia === null ? '' : cls(r.resaMedia)}">${pct(r.resaMedia)}</td><td data-l="Peso adesso" class="n"><b>${Math.round(r.peso * 100)}%</b></td></tr>`).join('');
-  $('#cervello').innerHTML = `<table class="stack-sm"><thead><tr><th>Previsione</th><th>Modello</th><th class="n">Valutate</th><th class="n">Direzione giusta</th><th class="n">Resa seguendolo</th><th class="n">Peso adesso</th></tr></thead><tbody>${rows}</tbody></table><p class="why" style="margin-top:8px">${c.inAttesa} previsioni in attesa della scadenza. Un modello entra nella media solo dopo 100 previsioni valutate; Kronos tiene almeno metà del peso finché non risulta peggiore del caso.</p>`;
+  if (!c || !c.righe.length) { $('#cervello').innerHTML = `<p class="empty">Nessuna previsione ancora valutata${c ? ` (${c.inAttesa} in attesa della scadenza)` : ''}. Fino a 100 previsioni valutate i modelli pesano per la loro affidabilità (Kronos 100%, Chronos-2 13%, TimesFM 5%).</p>`; return; }
+  const rows = c.righe.map((r) => `<tr><td data-l="Previsione">${esc(tipoTxt(r.tipo))}</td><td data-l="Modello"><b>${esc(NOMI_MODELLI[r.modello] || r.modello)}</b></td><td data-l="Affidabilità" class="n">${Math.round((r.affidabilita ?? 0) * 100)}%</td><td data-l="Valutate" class="n">${r.campione}</td><td data-l="Direzione giusta" class="n">${r.inDirezione === null ? '–' : `${Math.round(r.inDirezione * 100)}%`}</td><td data-l="Resa seguendolo" class="n ${r.resaMedia === null ? '' : cls(r.resaMedia)}">${pct(r.resaMedia)}</td><td data-l="Peso adesso" class="n"><b>${Math.round(r.peso * 100)}%</b></td></tr>`).join('');
+  $('#cervello').innerHTML = `<table class="stack-sm"><thead><tr><th>Previsione</th><th>Modello</th><th class="n">Affidabilità</th><th class="n">Valutate</th><th class="n">Direzione giusta</th><th class="n">Resa seguendolo</th><th class="n">Peso adesso</th></tr></thead><tbody>${rows}</tbody></table><p class="why" style="margin-top:8px">${c.inAttesa} previsioni in attesa della scadenza. Peso = affidabilità (dati finanziari con cui il modello è stato addestrato e prove pubblicate) × risultati misurati qui: fino a 100 previsioni valutate conta solo l'affidabilità, poi i risultati la confermano, la alzano o la azzerano. Kronos tiene almeno metà del peso finché non risulta peggiore del caso.</p>`;
 }
 function paintCaffe(st) {
   const c = st.caffe;

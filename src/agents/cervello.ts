@@ -7,8 +7,9 @@ import type { KronosForecastPath } from "../kronos-sidecar.ts";
 // Il cervello delle previsioni: più modelli (Kronos, Chronos-2, TimesFM...) prevedono lo stesso titolo; qui si registra la
 // previsione di ognuno, la si confronta con il prezzo vero quando scade e si tiene il conto di quanto spesso ogni modello
 // ha preso la direzione giusta, separatamente per le previsioni giornaliere e per ogni candela intraday.
-// La previsione usata dal motore è la media dei percorsi pesata su questi risultati. Un modello nuovo parte con peso zero
-// (si limita a farsi misurare) e conta solo dopo `minCampione` previsioni con una direzione giusta oltre il caso.
+// La previsione usata dal motore è la media dei percorsi pesata: peso = affidabilità a priori (dati finanziari con cui il
+// modello è stato addestrato e prove pubblicate sui rendimenti) × risultato misurato qui. Finché un modello non ha
+// `minCampione` previsioni valutate conta solo l'affidabilità; poi la sua bravura la conferma, la alza o la azzera.
 // Kronos è il modello principale: finché non risulta peggiore del caso tiene almeno `kronosMinimo` del peso.
 
 export interface PrevisioneAperta {
@@ -39,9 +40,11 @@ export interface RigaCervello {
   campione: number;
   inDirezione: number | null; // quota di direzioni giuste
   resaMedia: number | null; // rendimento medio seguendo il segno della previsione
+  affidabilita: number; // scala a priori
   peso: number;
 }
 
+export const affidabilitaDi = (m: string) => AGENTS.kronos.cervello.affidabilita[m] ?? AGENTS.kronos.cervello.affidabilitaIgnota;
 export const cervelloPath = (stateDir: string) => join(stateDir, "cervello.json");
 const vuoto = (): CervelloFile => ({ versione: 1, aperte: [], stat: {} });
 // Movimenti più piccoli di così non dicono niente sulla direzione: non si contano.
@@ -109,16 +112,19 @@ export class Cervello {
     this.sporco = false;
   }
 
-  // Pesi per un tipo di previsione, tra i modelli dati. Bravura = (giusti - n/2) / (n + prudenza): oltre il caso e
-  // ridotta quando il campione è piccolo. Sotto minCampione un modello non conta; senza nessuno affidabile, solo Kronos.
+  // Pesi per un tipo di previsione, tra i modelli dati: affidabilità × fattore misurato. Bravura = (giusti - n/2) / (n +
+  // prudenza): oltre il caso e ridotta quando il campione è piccolo. Sotto minCampione il fattore è 1; poi bravura /
+  // bravuraAttesa tra 0 e 3. Se nessuno ha peso, decide Kronos.
   pesi(tipo: string, modelli: string[]): Record<string, number> {
     const c = AGENTS.kronos.cervello;
     const brav: Record<string, number> = {};
+    const w: Record<string, number> = {};
     for (const m of modelli) {
       const st = this.f.stat[`${tipo}|${m}`];
       brav[m] = st && st.n >= c.minCampione ? (st.giusti - st.n / 2) / (st.n + c.prudenza) : Number.NaN;
+      const fattore = Number.isFinite(brav[m]!) ? Math.max(0, Math.min(3, brav[m]! / c.bravuraAttesa)) : 1;
+      w[m] = affidabilitaDi(m) * fattore;
     }
-    const w: Record<string, number> = Object.fromEntries(modelli.map((m) => [m, Number.isFinite(brav[m]!) ? Math.max(0, brav[m]!) : 0]));
     const tot = Object.values(w).reduce((a, x) => a + x, 0);
     const hasK = modelli.includes("kronos");
     if (tot <= 0) return Object.fromEntries(modelli.map((m) => [m, hasK ? (m === "kronos" ? 1 : 0) : 1 / modelli.length]));
@@ -166,7 +172,7 @@ export class Cervello {
       const w = this.pesi(tipo, [...ms]);
       for (const m of [...ms].sort()) {
         const st = this.f.stat[`${tipo}|${m}`];
-        righe.push({ tipo, modello: m, campione: st?.n ?? 0, inDirezione: st?.n ? st.giusti / st.n : null, resaMedia: st?.n ? st.segno / st.n : null, peso: w[m] ?? 0 });
+        righe.push({ tipo, modello: m, campione: st?.n ?? 0, inDirezione: st?.n ? st.giusti / st.n : null, resaMedia: st?.n ? st.segno / st.n : null, affidabilita: affidabilitaDi(m), peso: w[m] ?? 0 });
       }
     }
     return { righe, inAttesa: this.f.aperte.length };
