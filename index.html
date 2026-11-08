@@ -2,7 +2,9 @@
 <html lang="it">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#eef1f6">
+<meta name="apple-mobile-web-app-capable" content="yes">
 <title>Agenti Alpaca</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap">
@@ -97,6 +99,25 @@
   .office-card .x { position:absolute; top:8px; right:8px; border:0; background:var(--card-2); border-radius:999px; width:28px; height:28px; cursor:pointer; color:var(--ink); }
   .office-card td { padding:4px 4px; font-size:13px; } .office-card .agent-c { color:var(--agent); font-weight:600; }
   @media (max-width: 700px) { .office-card { left:8px; right:8px; width:auto; } }
+  /* Telefono: menu a schede scorrevole, niente scorrimento orizzontale della pagina, tabelle scorrevoli dentro la card. */
+  main > *, .cols > *, .stack > *, .title-grid > * { min-width:0; }
+  @media (max-width: 700px) {
+    html, body { overflow-x:hidden; }
+    main { padding:12px 12px 40px; gap:12px; }
+    .top { display:grid; gap:8px; }
+    .nav { flex-wrap:nowrap; overflow-x:auto; -webkit-overflow-scrolling:touch; scrollbar-width:none; margin:0 -12px; padding:0 12px; }
+    .nav::-webkit-scrollbar { display:none; }
+    .nav a { flex:0 0 auto; }
+    .hero { padding:16px; } .hero .say { font-size:20px; max-width:none; }
+    .money { gap:14px 20px; } .money .big { font-size:30px; } .money .val { font-size:17px; }
+    .card { padding:14px; }
+    .card table { display:block; overflow-x:auto; white-space:nowrap; }
+    .card td.why, .card td .why { white-space:normal; min-width:180px; }
+    .chip-group .glab { min-width:0; width:100%; }
+    #chart { height:300px; }
+    .page[data-page="3d"] #scene { height:70vh; }
+    .schede { grid-template-columns:1fr; }
+  }
   .lbl.bubble { background:#fff; font-weight:700; font-size:12px; border:1px solid #d1d5db; box-shadow:0 2px 6px rgba(0,0,0,.15); }
   .legend { padding:10px 20px 14px; color:var(--ink-3); font-size:13px; }
 
@@ -376,6 +397,7 @@
   </div>
 </main>
 
+<script>window.__STATIC__ = true;</script>
 <script>
 // Modalità statica (GitHub Pages): la pagina legge l'istantanea che il motore pubblica in data/*.json. Sola lettura.
 window.STATIC_MODE = !!window.__STATIC__ || /github\.io$/.test(location.hostname);
