@@ -143,6 +143,17 @@ describe("profitto e perdita del giorno", () => {
     expect(ieri.acquisti.map((a) => a.simbolo).sort()).toEqual(["GLD", "NVDA"]);
   });
 
+  test("crypto: la moneta trattenuta come commissione entra nel conto di oggi (stesso numero del capo ufficio)", () => {
+    const j = emptyJournal();
+    // 10 AAVE comprate, Alpaca ne accredita 9,975 (0,25% di commissione in moneta): si vende tutto quello che c'è.
+    applyFills(j, [fill("1", "buy", "AAVE/USD", 10, 100, "2026-09-24T08:00:00Z"), fill("2", "sell", "AAVE/USD", 9.975, 100, "2026-09-24T12:00:00Z")]);
+    expect(j.trade[0]!.stato).toBe("chiuso");
+    const p = dailyPnl(j, "2026-09-24");
+    expect(p.vendite).toHaveLength(1);
+    expect(p.vendite[0]!.pnl).toBeCloseTo(-2.5, 6); // prezzo invariato: si perde solo la commissione
+    expect(p.realizzato).toBeCloseTo(j.trade[0]!.incassato - j.trade[0]!.costo, 6);
+  });
+
   test("un trade chiuso oggi da un diario vecchio, senza elenco vendite, conta col saldo incassato - costo", () => {
     const j = journalWith([0.05], "SPY", "2026-09-24");
     j.trade[0]!.chiusoIl = "2026-09-24T15:00:00Z";

@@ -144,7 +144,9 @@ troppe uscite dallo stop). Le vendite non si toccano. Il capo non fa ordini.
 
 ## 5. Dove vedere tutto
 
-Dashboard su `http://127.0.0.1:8787`: **Panoramica** (frase di stato, soldi, profitto e perdita di oggi, posizioni, ultimo
-giro, operazioni intraday), **Titoli** (candele con medie, carico, stop, candela di oggi in formazione, scelte del motore,
-scenario di Kronos; «Chiedi agli agenti adesso» per una valutazione a secco), **Agenti** (custodi con dossier, agenti, punteggi,
-voti), **Cronologia**, **Vista 3D**. Telegram riceve ordini, allarmi e il riepilogo serale.
+Dashboard su `http://127.0.0.1:8787`, quattro voci: **Oggi** (frase di stato, soldi, profitto e perdita di oggi,
+posizioni, ultimo giro, intraday quando c'è un'operazione aperta, simulazioni, registro della giornata con le azioni ripetute
+a ogni giro raggruppate), **Titoli** (candele con medie, carico, stop, candela di oggi in formazione, scelte del motore,
+scenario di Kronos, dossier del custode; «Chiedi agli agenti adesso» per una valutazione a secco), **Agenti** (Squadra: capo
+ufficio, custodi, punteggi e voti; Ufficio 3D), **Impostazioni** (schede degli agenti, chiavi e riavvio, guida). La stessa
+pagina, in sola lettura, può essere pubblicata su GitHub Pages. Telegram riceve ordini, allarmi e il riepilogo serale.

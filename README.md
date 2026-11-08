@@ -123,11 +123,13 @@ ordine parte dalla dashboard. Dati: `/api/bars`, `/api/previsioni`, `/api/journa
 
 ### Impostazioni, schede degli agenti, guida
 
-Nella dashboard: **Impostazioni** (chiavi Alpaca paper e Telegram con «Prova» — trova anche il chat id — e «Salva» in
-`secrets.ts`, mai rimandate in chiaro; il motore le legge al riavvio), **Agenti → Schede** (ogni agente ha una scheda con ruolo,
-come decide e i parametri regolabili: soglie, percentuali, finestre, candele; i valori salvati stanno in
-`state/impostazioni-agenti.json` e valgono dal giro successivo, «Di serie» li toglie), **Guida** (come mettere in moto e leggere
-le pagine). La finestra degli acquisti sui titoli è tutta la seduta (15:35–21:55 Roma); le crypto trattano sempre.
+Nella dashboard le voci sono quattro: **Oggi** (soldi, profitto e perdita, posizioni, ultimo giro e il registro della
+giornata), **Titoli** (grafico e verdetto per titolo), **Agenti** (Squadra: capo ufficio, custodi, voti; Ufficio 3D) e
+**Impostazioni**, con tre schede: **Agenti** (ogni agente ha ruolo, come decide e i parametri regolabili; i valori salvati
+stanno in `state/impostazioni-agenti.json` e valgono dal giro successivo, «Di serie» li toglie), **Chiavi e motore** (chiavi
+Alpaca paper, Telegram e X con «Prova» — trova anche il chat id — e «Salva» in `secrets.ts`, mai rimandate in chiaro; il
+motore le legge al riavvio) e **Guida**. I vecchi indirizzi (`#panoramica`, `#cronologia`, `#3d`, `#guida`) portano alla
+nuova sistemazione. La finestra degli acquisti sui titoli è tutta la seduta (15:35–21:55 Roma); le crypto trattano sempre.
 La logica completa è in `docs/logica-del-motore.md`.
 
 ### Limiti del giorno, interruttore, riavvio

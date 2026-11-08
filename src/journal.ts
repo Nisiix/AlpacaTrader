@@ -209,7 +209,16 @@ export function dailyPnl(file: JournalFile, today: string): DailyPnl {
     sales.forEach((v, i) => {
       if (romeDateOf(v.data) !== today) return;
       const last = i === sales.length - 1 && t.stato === "chiuso";
-      vendite.push({ simbolo: t.simbolo, quantita: v.quantita, carico: v.carico, prezzo: v.prezzo, pnl: (v.prezzo - v.carico) * v.quantita, risultato: v.carico ? v.prezzo / v.carico - 1 : 0, motivo: v.motivo, agenti, chiuso: last });
+      let pnl = (v.prezzo - v.carico) * v.quantita;
+      let risultato = v.carico ? v.prezzo / v.carico - 1 : 0;
+      // L'ultima vendita di un trade chiuso porta il saldo vero (incassato − costo): dentro ci sono le commissioni e la
+      // frazione di crypto trattenuta, così il conto di oggi e il giudizio del capo ufficio danno lo stesso numero.
+      if (last && Number.isFinite(t.incassato) && Number.isFinite(t.costo) && t.costo > 0) {
+        const before = sales.slice(0, i).reduce((a, x) => a + (x.prezzo - x.carico) * x.quantita, 0);
+        pnl = t.incassato - t.costo - before;
+        risultato = v.carico * v.quantita ? pnl / (v.carico * v.quantita) : risultato;
+      }
+      vendite.push({ simbolo: t.simbolo, quantita: v.quantita, carico: v.carico, prezzo: v.prezzo, pnl, risultato, motivo: v.motivo, agenti, chiuso: last });
     });
     // Trade chiusi oggi da una versione precedente del diario, senza l'elenco delle vendite: conta il saldo.
     if (!sales.length && t.stato === "chiuso" && t.chiusoIl && romeDateOf(t.chiusoIl) === today) {
