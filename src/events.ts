@@ -20,8 +20,6 @@ export const EVENTS: MarketEvent[] = [
   { date: "2026-11-18", kind: "trimestrale", symbol: "NVDA", confirmed: false },
 ];
 
-// I singoli titoli dell'universo: per gli ETF non ci sono trimestrali.
-export const SINGLE_STOCKS = ["AAPL", "MSFT", "NVDA"] as const satisfies readonly (typeof UNIVERSE)[number][];
 
 const describe = (e: MarketEvent) => (e.kind === "fed" ? "decisione della Fed" : `trimestrale ${e.symbol}`) + ` il ${e.date}${e.confirmed ? "" : " (data stimata)"}`;
 
@@ -37,19 +35,7 @@ export function eventBlockFor(symbol: string, today: string, events: MarketEvent
   return null;
 }
 
-// Gli eventi delle prossime settimane, da far vedere al modello.
-export function upcomingEvents(today: string, days = 21, events: MarketEvent[] = EVENTS): string[] {
-  const until = addDays(today, days);
-  return events.filter((e) => e.date >= today && e.date <= until).sort((a, b) => a.date.localeCompare(b.date)).map(describe);
-}
 
-// Cosa manca nel calendario: senza una data futura il blocco non può scattare.
-export function staleCalendar(today: string, events: MarketEvent[] = EVENTS): string[] {
-  const out: string[] = [];
-  if (!events.some((e) => e.kind === "fed" && e.date >= today)) out.push("nessuna decisione della Fed futura");
-  for (const s of SINGLE_STOCKS) if (!events.some((e) => e.kind === "trimestrale" && e.symbol === s && e.date >= today)) out.push(`nessuna trimestrale futura per ${s}`);
-  return out;
-}
 
 // Aggiunge (senza doppioni) le trimestrali arrivate dalla fonte automatica.
 export function addEarnings(list: { date: string; symbol: string }[]) {

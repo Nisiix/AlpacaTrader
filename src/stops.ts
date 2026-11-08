@@ -22,7 +22,7 @@ export function stopPctFor(closes: number[] | undefined): number {
 export const stopPriceFor = (p: Position, closes?: number[], fixedPct?: number) => Math.round(p.avgEntryPrice * (1 - (fixedPct ?? stopPctFor(closes))) * 100) / 100;
 
 // Ogni posizione ha uno e un solo stop su Alpaca, per tutta la quantità, alla distanza di stopPctFor.
-// Così la protezione vale anche tra una sveglia e l'altra e a macchina spenta.
+// Così la protezione vale anche tra un giro e l'altro e a macchina spenta.
 export async function manageStops(broker: Broker, runId: string, positions: Position[], openOrders: Order[], log: Logger, closes: Record<string, number[]> = {}, fixedPct?: number): Promise<StopsReport> {
   const r: StopsReport = { ok: [], placed: [], cancelled: [], errors: [] };
   const stops = openOrders.filter(isProtectiveStop);
@@ -74,7 +74,7 @@ export async function manageStops(broker: Broker, runId: string, positions: Posi
   return r;
 }
 
-// L'ID resta deterministico; se quello base è già usato (sveglia rifatta) si prova con un suffisso.
+// L'ID resta deterministico; se quello base è già usato (giro rifatto) si prova con un suffisso.
 async function placeStop(broker: Broker, runId: string, symbol: string, qty: number, stopPrice: number) {
   for (let n = 1; n <= 5; n++) {
     const id = `${runId}-${symbol.replace("/", "")}-stop${n > 1 ? `-${n}` : ""}`;
@@ -84,5 +84,5 @@ async function placeStop(broker: Broker, runId: string, symbol: string, qty: num
       if (!(e instanceof DuplicateOrderError)) throw e;
     }
   }
-  throw new Error("troppi stop con lo stesso ID in questa sveglia");
+  throw new Error("troppi stop con lo stesso ID in questo giro");
 }

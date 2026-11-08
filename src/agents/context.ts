@@ -8,7 +8,7 @@ import type { Agent, AgentReport, AgentView, MarketContext, Outlook } from "./ty
 
 // Il contesto economico, prima di ogni trade. Due fonti che si sommano:
 // 1. regole sui dati di mercato (SPY e media a 200, volatilità, trend dei settori, oro e obbligazioni come termometro
-//    della paura) e sul calendario di Fed e trimestrali (events.ts): sempre disponibili, anche nel backtest;
+//    della paura) e sul calendario di Fed e trimestrali (events.ts): sempre disponibili;
 // 2. una lettura della situazione economica da `claude -p` con ricerca web, ogni refreshHours, in cache su file.
 // Il risultato: esposizione ammessa, settori in cui oggi si aspetta la candela successiva, proiezioni di cui fidarsi.
 export interface MacroSource {
@@ -121,7 +121,7 @@ export class ContextAgent implements Agent {
     return this.assessWith(v, reading, problem);
   }
 
-  // La parte sincrona: regole sui dati più, se c'è, la lettura esterna già ottenuta. È quella che usa il backtest.
+  // La parte sincrona: regole sui dati più, se c'è, la lettura esterna già ottenuta.
   assessWith(v: AgentView, reading: MacroReading | null, problem: string | null = null): MarketContext {
     const rules = marketRules(v, this.events);
     let fonte = "regole";

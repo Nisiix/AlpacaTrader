@@ -6,7 +6,6 @@ import { syntheticCloses } from "../src/broker/fake.ts";
 import { applyCage, type CageInput } from "../src/cage.ts";
 import { assertPaperOnly, LiveEndpointError } from "../src/guard.ts";
 import { Logger, Redactor } from "../src/log.ts";
-import { dueSlot, latestSlotToday, missedSlots, nextSlotAfter } from "../src/slots.ts";
 import { at } from "./helpers.ts";
 
 const ROOT = join(import.meta.dir, "..");
@@ -54,21 +53,6 @@ describe("chiavi mai nei log", () => {
   });
 });
 
-describe("orari", () => {
-  test("ID della sveglia e sveglia più recente di oggi", () => {
-    expect(latestSlotToday(at("15:40"))!.runId).toBe("2026-09-24-15-40");
-    expect(latestSlotToday(at("08:59"))).toBeNull();
-    expect(latestSlotToday(new Date("2026-09-26T12:00:00+02:00"))).toBeNull(); // sabato
-  });
-  test("ora solare: dopo il cambio d'ora Roma resta Roma", () => {
-    expect(latestSlotToday(new Date("2026-10-26T14:41:00Z"))!.runId).toBe("2026-10-26-15-40"); // CET = UTC+1
-  });
-  test("sveglie saltate nel weekend e prossima sveglia di lunedì", () => {
-    expect(missedSlots("2026-09-25-21-40", "2026-09-28-15-40")).toEqual(["2026-09-28-09-00"]);
-    expect(nextSlotAfter("2026-09-25-21-40")).toBe("2026-09-28-09-00");
-    expect(dueSlot(at("15:45"), 20)!.runId).toBe("2026-09-24-15-40");
-  });
-});
 
 const PRICES: Record<string, number> = { SPY: 600, QQQ: 520, IWM: 230, AAPL: 250, MSFT: 480, NVDA: 180, GLD: 380, TLT: 90 };
 
@@ -76,9 +60,7 @@ describe("gabbia", () => {
   const base = (over: Partial<CageInput> = {}): CageInput => ({
     today: "2026-09-24",
     events: [],
-    slotKind: "open",
     marketOpen: true,
-    latenessMin: 1,
     account: { equity: 100_000, lastEquity: 100_000, cash: 100_000, status: "ACTIVE" },
     positions: [],
     prices: PRICES,
@@ -88,11 +70,6 @@ describe("gabbia", () => {
     buyBlock: null,
     proposals: [],
     ...over,
-  });
-  test("briefing e mercato chiuso: nessun ordine", () => {
-    const p = [{ symbol: "SPY", side: "buy", qty: 1, why: "" }];
-    expect(applyCage(base({ slotKind: "briefing", proposals: p })).orders).toHaveLength(0);
-    expect(applyCage(base({ marketOpen: false, proposals: p })).rejected[0]!.reason).toBe("mercato chiuso");
   });
   test("niente short, niente leva, massimo 5 titoli", () => {
     expect(applyCage(base({ proposals: [{ symbol: "SPY", side: "sell", qty: 1, why: "" }] })).rejected[0]!.reason).toContain("niente short");
@@ -107,15 +84,6 @@ describe("gabbia", () => {
   });
 });
 
-describe("sessioni cloud", () => {
-  test("partita 10 minuti prima: trova la sveglia e quanto aspettare; troppo presto o troppo tardi: niente", async () => {
-    const { nearbySlot } = await import("../src/slots.ts");
-    expect(nearbySlot(at("15:30"), 45, 20)).toMatchObject({ runId: "2026-09-24-15-40", waitMin: 10 });
-    expect(nearbySlot(at("21:55"), 45, 20)).toMatchObject({ runId: "2026-09-24-21-40", waitMin: -15 });
-    expect(nearbySlot(at("22:05"), 45, 20)).toBeNull();
-    expect(nearbySlot(at("12:00"), 45, 20)).toBeNull();
-  });
-});
 
 describe("impostazioni degli agenti e chiavi", () => {
   test("i parametri si validano, si salvano solo se diversi da quelli di serie, si applicano al motore e si tolgono", async () => {
@@ -187,5 +155,14 @@ describe("errori di Alpaca leggibili", () => {
     expect(humanizeBrokerError(403, '{"available":"0.000000937","balance":"0.000000937","code":40310000,"message":"insufficient balance for LTC (requested: 0.000001, available: 0.000000937)","symbol":"USD"}')).toBe("Alpaca 403: saldo insufficiente di LTC (chiesti 0.000001, disponibili 0.000000937) (codice 40310000)");
     expect(humanizeBrokerError(401, '{"message": "unauthorized."}')).toContain("chiavi rifiutate");
     expect(humanizeBrokerError(500, "errore interno")).toBe("Alpaca 500: errore interno");
+  });
+});
+
+describe("ora di Roma", () => {
+  test("dopo il cambio d'ora Roma resta Roma; i giorni di borsa saltano il fine settimana", async () => {
+    const { romeTime, addTradingDays } = await import("../src/slots.ts");
+    expect(romeTime(new Date("2026-10-26T14:41:00Z"))).toMatchObject({ date: "2026-10-26", minutes: 15 * 60 + 41 }); // CET = UTC+1
+    expect(romeTime(new Date("2026-09-24T13:41:00Z"))).toMatchObject({ date: "2026-09-24", minutes: 15 * 60 + 41 }); // CEST = UTC+2
+    expect(addTradingDays("2026-11-06", 1)).toBe("2026-11-09");
   });
 });

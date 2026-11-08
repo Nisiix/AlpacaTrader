@@ -23,7 +23,6 @@ export const RADAR_SECTORS: Record<string, string> = {
 export const sectorOf = (symbol: string) => SECTORS[symbol] ?? RADAR_SECTORS[symbol] ?? (isCrypto(symbol) ? "crypto" : "altro");
 // Stablecoin e token ancorati: mai in portafoglio, non hanno trend.
 export const STABLECOINS = new Set(["USDT", "USDC", "DAI", "USDE", "FDUSD", "TUSD", "PYUSD", "USDS", "USD1", "BUSD", "FRAX", "LUSD", "GUSD", "USDP", "WBTC", "WETH", "STETH", "WSTETH", "CBBTC", "WEETH", "RETH", "LBTC", "SUSDE", "SUSDS", "BSC-USD", "USDTB", "USDD", "RLUSD", "XAUT", "PAXG", "USDG", "USDY", "USD0", "EURC", "USDL", "BUIDL", "CUSD", "SUSD", "MUSD", "DOLA"]);
-export const CRYPTO_QTY_DECIMALS = 6;
 // Prezzo limite dello stop_limit crypto: mezzo punto sotto lo stop, così scatta e viene eseguito anche con un buco.
 export const CRYPTO_STOP_LIMIT_GAP = 0.005;
 
@@ -57,7 +56,7 @@ export const LIMITS = {
   maxDrawdownPct: 0.05,
   breakerRearmSessions: 5,
   // Spento per scelta dell'utente: nessun interruttore sul conto, decidono gli agenti (stop per posizione, uscite, gabbia).
-  // Dalle schede si può riaccendere. Le sveglie classiche (bun run schedule) lo usano sempre.
+  // Dalle schede si può riaccendere come freno d'emergenza.
   breakerEnabled: false,
   // Perdita in giornata oltre la quale l'interruttore classico ferma gli acquisti: vale solo con breakerEnabled (spento);
   // nel motore degli agenti il limite del giorno è AGENTS.daily.maxLossPct (0 = nessun limite).
@@ -71,61 +70,27 @@ export const LIMITS = {
 // Storico giornaliero da chiedere: media a 200 giorni più margine per festività.
 export const DAILY_BARS_DAYS = 320; // media a 200 + momentum a 12 mesi (252) con margine
 
-// Voto a maggioranza: il cervello risponde più volte in parallelo, passa solo l'ordine proposto da almeno quorum risposte.
-export const BRAIN_VOTES = { calls: 3, quorum: 2 };
-
 export const TIMEZONE = "Europe/Rome";
 
-export type SlotKind = "briefing" | "open" | "mid" | "close";
-
-export interface SlotDef {
-  time: string; // HH:MM ora di Roma
-  kind: SlotKind;
-  label: string;
-}
-
-// Sveglie dal lunedì al venerdì, ora di Roma.
-export const SLOTS: SlotDef[] = [
-  { time: "09:00", kind: "briefing", label: "Briefing" },
-  { time: "15:40", kind: "open", label: "Apertura" }, // 10 minuti dopo l'apertura USA: spread e prezzi più calmi
-  { time: "18:30", kind: "mid", label: "Metà seduta" },
-  { time: "21:40", kind: "close", label: "Chiusura" },
-];
-
-// Oltre questo ritardo una sveglia non manda ordini: il momento è passato.
-export const MAX_LATENESS_MIN = 20;
-// Lo scheduler lancia una sveglia solo entro questa finestra dal suo orario.
-export const SCHEDULE_GRACE_MIN = 20;
-export const SCHEDULE_TICK_MS = 30_000;
-// Differenza tra orologio della macchina e di Alpaca oltre la quale scatta l'allarme.
-export const CLOCK_SKEW_ALARM_MIN = 2;
 
 export const HTTP_TIMEOUT_MS = 15_000;
 export const TELEGRAM_TIMEOUT_MS = 10_000;
-export const BRAIN_TIMEOUT_MS = 180_000;
 
 // Un lock più vecchio di così è considerato morto anche se il PID esiste (PID riciclato).
 export const LOCK_MAX_AGE_MS = 15 * 60_000;
 
-// Una prenotazione di sveglia cloud scade questi minuti dopo l'orario della sveglia: chi l'ha presa è morto o bloccato,
-// perché una sveglia viva lavora pochi minuti.
-export const CLAIM_TTL_MIN = 20;
 
 // Quanti tentativi di verifica per un ordine con esito incerto (timeout, rete).
 export const SUBMIT_VERIFY_DELAYS_MS = [2_000, 5_000, 10_000, 20_000];
 
-// Diario dei trade. Per i primi mesi raccoglie e misura soltanto: le statistiche non arrivano al modello
-// e non creano blocchi finché non sono passati observeDays dal primo trade E ci sono minReliable trade chiusi.
+// Diario dei trade: soglie del campione per le statistiche, classi di ingresso (momentum, volatilità), giorni di memoria
+// degli ID degli ordini già visti.
 export const JOURNAL = {
-  observeDays: 90,
   minReliable: 30,
   minIndicative: 10,
-  minForLesson: 6,
-  lessonDays: 10,
   strongMomentum: 0.03,
   highVol: 0.015,
   keepIdsDays: 30,
-  recentForBrain: 10,
 };
 
 // Motore degli agenti (bun run agents): processo sempre acceso sul tuo PC, orizzonte a 20 sedute.
@@ -179,8 +144,6 @@ export const AGENTS = {
   // Rientro (mean reversion di Connors): RSI(2) sotto 10 con prezzo sopra la media a 200; uscita a RSI(2) sopra 70 o dopo
   // 5 sedute; taglia piccola (5% del conto): gli obiettivi brevi funzionano sulla mean reversion, non sul trend.
   pullback: { rsiDays: 2, rsiEntry: 10, rsiExit: 70, maxHoldSessions: 5, maxWeight: 0.05 },
-  // Pesi degli agenti dal diario: scendono se un agente perde con un campione almeno indicativo, salgono se vince con campione affidabile.
-  weights: { base: 1, losing: 0.5, winning: 1.2 },
   // Kronos (sidecar Python, opzionale): si considerano solo le previsioni più nette (quota) e solo se concordano col trend.
   // Kronos: il sidecar lo accende il motore (tools/kronos, venv da installa-kronos); porta e modello qui. Le proiezioni si
   // calcolano una volta al giorno sulle barre giornaliere e restano in state/previsioni.json (anche per la dashboard).
@@ -204,7 +167,7 @@ export const AGENTS = {
   // Riepilogo su Telegram una volta al giorno, alla prima passata dopo quest'ora di Roma.
   summaryAfter: "22:05",
   // Presa di profitto parziale (agente "profitto"): a +3% vende metà e lascia correre il resto col trend. Scelta col
-  // walk-forward (bun run sweep): in prova alza i vinti dal 32% al 37% con rendimento quasi uguale e perdita massima minore.
+  // walk-forward (allora con bun run sweep, ora tolto): in prova alza i vinti dal 32% al 37% con rendimento quasi uguale e perdita massima minore.
   // La presa di profitto totale a +5% arriva al 45% di vinti ma costa 5-9 punti di rendimento.
   // Se Kronos anticipa altro rialzo (≥ anticipaSoglia) la presa di profitto aspetta: si lascia correre.
   takeProfit: { enabled: true, pct: 0.03, fraction: 0.5 },
@@ -304,11 +267,8 @@ export function setCryptoUniverse(pairs: string[]) {
   AGENTS.universe.splice(0, AGENTS.universe.length, ...stocks, ...pairs);
 }
 
-// Aggiunge BTC/USD ed ETH/USD all'universo degli agenti (24 ore su 24). Nel motore (bun run agents) è di serie,
-// --no-crypto le toglie; nelle sveglie classiche e nei backtest resta una scelta esplicita (--crypto).
+// Aggiunge BTC/USD ed ETH/USD all'universo degli agenti (24 ore su 24): di serie nel motore, --no-crypto le toglie.
 export function enableCrypto() {
   for (const c of CRYPTO) if (!AGENTS.universe.includes(c)) AGENTS.universe.push(c);
 }
 
-// Backtest: costi per lato (spread + slippage sul feed IEX) in punti base, applicati a ogni esecuzione.
-export const BACKTEST = { costBps: 5 };

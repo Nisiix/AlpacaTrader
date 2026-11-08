@@ -110,7 +110,7 @@ export function contextFor(ind: Indicator | undefined, price: number | undefined
   return { setup: setupOf(ind), momentum20: ind?.momentum20 ?? null, volGiornaliera: ind?.volGiornaliera ?? null, distanzaMedia: dist, fiducia, attesa, perche };
 }
 
-// Le intenzioni si scrivono prima di inviare: se la sveglia muore dopo l'invio, il contesto del trade non si perde.
+// Le intenzioni si scrivono prima di inviare: se il processo muore dopo l'invio, il contesto del trade non si perde.
 export function recordIntent(file: JournalFile, intent: Intent) {
   if (!file.intenzioni.some((i) => i.id === intent.id)) file.intenzioni.push(intent);
 }
@@ -126,7 +126,7 @@ function exitReason(o: Order, intent: Intent | undefined): string {
   return "sconosciuto";
 }
 
-// Applica gli ordini eseguiti, ognuno una volta sola anche se la stessa finestra di ordini torna a ogni sveglia.
+// Applica gli ordini eseguiti, ognuno una volta sola anche se la stessa finestra di ordini torna a ogni giro.
 export function applyFills(file: JournalFile, orders: Order[]): { opened: Trade[]; closed: Trade[] } {
   const seen = new Set(file.ordiniVisti.map((x) => x.id));
   const fills = orders
@@ -135,7 +135,7 @@ export function applyFills(file: JournalFile, orders: Order[]): { opened: Trade[
   const opened: Trade[] = [];
   const closed: Trade[] = [];
   for (const o of fills) {
-    // Senza prezzo di esecuzione non si può misurare: si riprova alla prossima sveglia.
+    // Senza prezzo di esecuzione non si può misurare: si riprova al prossimo giro.
     if (!o.filledAvgPrice || o.filledAvgPrice <= 0) continue;
     const when = o.filledAt ?? o.submittedAt;
     file.ordiniVisti.push({ id: o.id, data: when.slice(0, 10) });
@@ -280,60 +280,6 @@ export function statsOf(trades: Trade[]): Stats {
   };
 }
 
-export function groupStats(trades: Trade[], key: (t: Trade) => string): Record<string, Stats> {
-  const groups: Record<string, Trade[]> = {};
-  for (const t of trades) if (t.stato === "chiuso") (groups[key(t)] ??= []).push(t);
-  return Object.fromEntries(Object.entries(groups).map(([k, v]) => [k, statsOf(v)]));
-}
-
-export const bySymbol = (t: Trade) => t.simbolo;
-export const bySetup = (t: Trade) => t.contesto?.setup ?? "sconosciuto";
-export const byConfidence = (t: Trade) => t.contesto?.fiducia ?? "non dichiarata";
-
-// Finché la raccolta non è finita i primi dati non toccano le scelte: niente diario al modello, niente blocchi.
-export function learningStatus(file: JournalFile, today: string): { attivo: boolean; motivo: string } {
-  const closed = file.trade.filter((t) => t.stato === "chiuso").length;
-  const first = file.trade.map((t) => t.apertoIl.slice(0, 10)).sort()[0];
-  const from = first ? addDays(first, JOURNAL.observeDays) : null;
-  if (from && today >= from && closed >= JOURNAL.minReliable) return { attivo: true, motivo: `apprendimento attivo: ${closed} trade chiusi dal ${first}` };
-  const parts = [from ? (today >= from ? "periodo di osservazione finito" : `osservazione fino al ${from}`) : "nessun trade ancora", `${closed}/${JOURNAL.minReliable} trade chiusi`];
-  return { attivo: false, motivo: `solo raccolta dati (${parts.join(", ")}): le statistiche non influenzano le scelte` };
-}
-
-// Impara dai risultati, ma solo stringendo: un titolo o un tipo di ingresso che perde con costanza
-// non si compra per un po'. Un nuovo blocco sullo stesso gruppo serve solo se ci sono trade nuovi da allora.
-export function learnFromJournal(lessons: LessonsFile, journal: JournalFile, today: string): Lesson[] {
-  const learned: Lesson[] = [];
-  if (!learningStatus(journal, today).attivo) return learned;
-  const active = activeLessons(lessons, today);
-  const consider = (kind: "titolo" | "setup", key: string, s: Stats) => {
-    if (key === "sconosciuto" || key === "dati insufficienti") return;
-    if (s.trade < JOURNAL.minForLesson || s.attesa === null || s.attesa >= 0 || (s.percVinti ?? 0) >= 0.5) return;
-    const simbolo = kind === "titolo" ? key : "*";
-    const setup = kind === "setup" ? key : undefined;
-    const same = (l: Lesson) => l.tipo === "statistica" && l.simbolo === simbolo && l.setup === setup;
-    if (active.some(same)) return;
-    const prior = lessons.lezioni.filter(same).reduce((m, l) => Math.max(m, l.campione ?? 0), 0);
-    if (prior >= s.trade) return;
-    const pct = (x: number) => `${x >= 0 ? "+" : ""}${(x * 100).toFixed(1)}%`;
-    const l: Lesson = {
-      id: `statistica-${kind}-${key}-${today}`,
-      tipo: "statistica",
-      simbolo,
-      setup,
-      lato: "buy",
-      dal: today,
-      finoAl: addTradingDays(today, JOURNAL.lessonDays),
-      campione: s.trade,
-      motivo: `${kind === "titolo" ? key : `ingressi con ${key}`}: ${s.trade} trade chiusi, ${s.vinti} vinti, risultato medio ${pct(s.attesa)}: niente acquisti per ${JOURNAL.lessonDays} giorni di borsa`,
-    };
-    lessons.lezioni.push(l);
-    learned.push(l);
-  };
-  for (const [k, s] of Object.entries(groupStats(journal.trade, bySymbol))) consider("titolo", k, s);
-  for (const [k, s] of Object.entries(groupStats(journal.trade, bySetup))) consider("setup", k, s);
-  return learned;
-}
 
 // Tiene il file piccolo: i trade restano tutti (sono la memoria), il resto solo finché serve.
 export function pruneJournal(file: JournalFile, today: string) {
@@ -342,15 +288,3 @@ export function pruneJournal(file: JournalFile, today: string) {
   file.intenzioni = file.intenzioni.filter((i) => i.data >= cut);
 }
 
-// Quello che il modello vede a ogni sveglia.
-export function journalForBrain(file: JournalFile) {
-  const closed = file.trade.filter((t) => t.stato === "chiuso");
-  return {
-    statistiche: statsOf(file.trade),
-    perTitolo: groupStats(file.trade, bySymbol),
-    perTipoDiIngresso: groupStats(file.trade, bySetup),
-    perFiducia: groupStats(file.trade, byConfidence),
-    ultimiChiusi: closed.slice(-JOURNAL.recentForBrain).map((t) => ({ simbolo: t.simbolo, apertoIl: t.apertoIl.slice(0, 10), chiusoIl: t.chiusoIl?.slice(0, 10), risultato: t.risultato, giorni: t.giorni, uscita: t.motivoUscita, contesto: t.contesto })),
-    aperti: file.trade.filter((t) => t.stato === "aperto").map((t) => ({ simbolo: t.simbolo, apertoIl: t.apertoIl.slice(0, 10), prezzoIngresso: t.costo / t.comprate, contesto: t.contesto })),
-  };
-}

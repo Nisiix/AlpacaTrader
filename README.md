@@ -40,14 +40,13 @@ Lo stop GTC su Alpaca è scalato sulla volatilità (5-10%); la politica di uscit
 Gli agenti comprano solo in `AGENTS.universe` (SPY QQQ AAPL MSFT NVDA GLD: niente IWM e TLT, che con obiettivo +3% e
 stop -3% hanno attesa nulla o negativa); una posizione vecchia resta sorvegliata e vendibile.
 
-**Crypto** (di serie nel motore degli agenti, `--crypto` nel backtest e nelle sveglie): l'universo è **tutte le coppie USD negoziabili su
+**Crypto** (di serie nel motore degli agenti, `--no-crypto` per toglierle): l'universo è **tutte le coppie USD negoziabili su
 Alpaca che stanno nella top 100 per capitalizzazione** (CoinGecko, rinnovato una volta al giorno in `state/crypto-universe.json`; senza
 CoinGecko restano le coppie di Alpaca; stablecoin e token ancorati esclusi; massimo 40 coppie, `AGENTS.cryptoUniverse`). La scelta di
 cosa comprare resta del motore: trend, momentum, custodi, allocatore, gabbia. 24 ore su 24, anche a borsa chiusa e fuori finestra, un ingresso al giorno per coppia,
 quantità frazionarie (6 decimali, minimo 10 $), stop su Alpaca come `stop_limit` (Alpaca non accetta lo `stop` a
 mercato sulle crypto) con limite mezzo punto sotto. Le posizioni crypto di Alpaca (`BTCUSD`) sono normalizzate a `BTC/USD`.
-L'interruttore a -5% dal massimo si **riarma da solo dopo 5 giorni di borsa** (nel backtest: da +4,3% a +17,7%).
-Il backtest applica 5 punti base di costi per lato e confronta con SPY, 60/40 e GTAA di Faber sullo stesso universo.
+L'interruttore a -5% dal massimo (spento di serie) si **riarma da solo dopo 5 giorni di borsa**.
 
 Ogni cosa che succede finisce nel **registro eventi** `state/events/AAAA-MM-GG.jsonl` (prezzi, segnali, rischio,
 allocazione, ordini, rifiuti, stop, trade, allarmi) e nello stato `state/agents-status.json`. La **dashboard**
@@ -74,30 +73,12 @@ irm https://raw.githubusercontent.com/Nisiix/AlpacaTrader/ccr-f218832d-solbom/in
 powershell -ExecutionPolicy Bypass -File installa-windows.ps1
 ```
 
-### Backtest del motore (dati Alpaca, esecuzione alla chiusura, costi 5 punti base per lato)
+### Da dove vengono i parametri di base
 
-Configurazione di serie: momentum assoluto a 12 mesi, rientro RSI(2) a taglia ridotta, regime, orizzonte 60 sedute, contesto
-economico (regole), volatilità di portafoglio 12%, stop sulla volatilità, uscita di trend della gabbia, presa di profitto
-parziale (metà a +3%, scelta con `bun run sweep`, walk-forward 2021-2023 → 2024-2026).
-
-| Periodo | Variante | Rendimento | Perdita max | Trade | Vinti | Attesa/trade | Giorni + | Mesi + |
-|---|---|---|---|---|---|---|---|---|
-| 2021-2026 (1327 sedute) | **di serie** | **+65,1%** | **-7,6%** | 162 | 43% | +1,35% | 53% | 55% |
-| | trend puro (senza presa di profitto) | +66,2% | -7,9% | 165 | 40% | +2,06% | 52% | 55% |
-| | presa di profitto totale +5% | +42,1% | -7,4% | 281 | 49% | +0,96% | 52% | 56% |
-| | vecchia politica: obiettivo +3%/+4%, stop fisso -3% | +44,5% | -7,4% | 431 | 51% | +0,69% | 53% | 53% |
-| | SPY / 60-40 / GTAA Faber | +79,8% / +34,3% / +84,7% | SPY -25% nel 2022 | | | | | |
-| 2024-2026 (497 sedute) | **di serie** | +12,8% | -6,1% | 70 | 36% | +0,18% | 54% | 65% |
-| | trend puro | +17,6% | -5,6% | 66 | 30% | +1,36% | 54% | 74% |
-| | SPY / 60-40 / GTAA Faber | +26,0% / +15,5% / +15,6% | | | | | | |
-
-Il complessivo è positivo in tutti i periodi (2021-2026: +69.500 $ dai trade chiusi su 100.000 $, vinti +104.300 $,
-persi -34.700 $). Giorno per giorno si chiude in positivo il 53-54% delle volte: nessuna strategia pubblicata fa meglio di
-così con costanza, il guadagno sta nel fatto che i giorni buoni valgono più dei cattivi. Qualunque vantaggio di backtest
-va tagliato del 25-50% (McLean-Pontiff). Nel backtest le crypto entrano solo con `--crypto`; nel motore reale sono di serie per scelta dell'utente (`--no-crypto` per toglierle).
-
-`bun run sweep [--days 2600]` ripete l'ottimizzazione prudente: 40 combinazioni (presa di profitto, trailing, stop,
-finestra del momentum), scelte sul primo 60% dello storico e verificate sul resto.
+I valori di serie della politica di uscita (stop sulla volatilità, presa di profitto parziale a +3%, nessun trailing) sono
+stati scelti con backtest e walk-forward 2021-2026 sul motore di allora, prima di Kronos, dell'intraday e del cervello delle
+previsioni: quegli strumenti (backtest, sweep) sono stati tolti perché non misuravano più il motore attuale. Oggi la
+misura è il diario dei trade veri e il cervello delle previsioni, che confronta ogni previsione con il prezzo reale.
 
 ### Kronos, il sidecar Python
 
@@ -158,7 +139,6 @@ bun run telegram-chat-id [--scrivi]   # dopo aver scritto /start al bot: stampa 
 bun run agents                     # il motore (su Windows: avvia-bot.cmd)
 bun run breaker-reset              # riarma l'interruttore sulla perdita (dopo che hai guardato cosa è successo)
 bun run chiudi-posizioni           # chiude tutte le posizioni paper per ripartire da zero (vedi «Ripartire da zero»)
-bun run backtest [--days 500] [--riarmo 5]   # rigioca sulle chiusure storiche la gabbia col metodo trend e poi il motore degli agenti (4 varianti)
 bun test                           # test con broker finto
 ```
 
@@ -189,26 +169,23 @@ bun test                           # test con broker finto
 |---|---|
 | `src/config.ts` | endpoint, universo, limiti, orari |
 | `src/guard.ts` | rifiuta di partire con endpoint o chiavi live |
-| `src/slots.ts` | ora di Roma, ID sveglia, sveglie dovute e saltate |
+| `src/slots.ts` | ora di Roma e giorni di borsa |
 | `src/broker/` | interfaccia, Alpaca REST v2, broker finto su file |
-| `src/brain/` | `claude -p` senza strumenti con schema JSON, validazione, cervello finto |
-| `src/cage.ts` | regole: universo, 5 titoli, 20% e volatilità, gruppo tech, medie 50/200, uscita di trend, stop, eventi, no short/leva, orari |
+| `src/claude-runner.ts` | lancia `claude -p` per la lettura macro del contesto |
+| `src/ordini.ts` | l'ordine proposto, prima della gabbia |
+| `src/cage.ts` | regole: universo, 10% per titolo e volatilità, 35% per settore, medie 50/200 e contro tendenza, uscita di trend, stop, eventi, contanti |
 | `src/indicators.ts` | media mobile, volatilità, momentum |
 | `src/lessons.ts` | registro degli errori |
-| `src/journal.ts` | diario dei trade: contesto, fiducia e previsione all'ingresso, risultato all'uscita, statistiche; per i primi 90 giorni e 30 trade chiusi solo raccolta, poi blocchi su titoli e tipi di ingresso perdenti (solo restrittivi) |
+| `src/journal.ts` | diario dei trade: contesto, agenti e previsione all'ingresso, risultato all'uscita, conto di oggi e statistiche |
 | `src/breaker.ts` | interruttore sulla perdita |
 | `src/stops.ts` | distanza dello stop dalla volatilità, uno stop GTC su Alpaca per ogni posizione |
-| `src/events.ts` | calendario di Fed e trimestrali, blocchi e promemoria |
-| `src/brain/vote.ts` | voto a maggioranza su più risposte del modello |
+| `src/events.ts`, `src/earnings.ts` | calendario di Fed (a mano) e trimestrali (Nasdaq, ogni giorno), blocchi degli acquisti |
 | `src/benchmark.ts` | confronto con SPY e con un 60/40 SPY/TLT comprati e tenuti |
-| `src/backtest.ts` | la gabbia rigiocata sullo storico |
 | `src/execute.ts` | invio con ID deterministico, verifica dopo timeout, mai doppioni |
-| `src/lock.ts`, `src/reconcile.ts` | lock con le intenzioni, riconciliazione dopo una morte |
-| `src/witness.ts` | testimone atomico in `state/witness.json` + copia in `state/history/` |
-| `src/telegram.ts`, `src/report.ts` | messaggi, allarmi ⚠️, resoconto |
-| `src/log.ts` | log in `logs/<sveglia>.log`, chiavi oscurate |
-| `src/wake.ts` | il giro di una sveglia |
-| `src/cli/` | `agents`, `dashboard`, `telegram-chat-id`, `breaker-reset`, `backtest`, `sweep`, `chiudi` |
+| `src/lock.ts` | un solo processo alla volta sullo stato, con le intenzioni d'ordine |
+| `src/telegram.ts` | messaggi, allarmi ⚠️, riepilogo del giorno |
+| `src/log.ts` | log in `logs/agenti-AAAA-MM-GG.log`, chiavi oscurate |
+| `src/cli/` | `agents`, `dashboard`, `telegram-chat-id`, `breaker-reset`, `chiudi` |
 | `src/agents/` | motore: `types`, `bus` (registro eventi), agenti `trend` `pullback` `regime` `horizon` `kronos`, `allocator`, `engine` (il giro) |
 | `src/dashboard/` | server Bun (HTTP + WebSocket + Three.js locale) e pagina `index.html` |
 | `tools/kronos/` | prova di Kronos sui dati Alpaca e sidecar `server.py` per l'agente |

@@ -109,5 +109,5 @@ export async function waitForFills(broker: Broker, ids: string[], sleep: (ms: nu
     pending = still;
     if (pending.length) await sleep(2_000);
   }
-  if (pending.length) log.warn(`ordini non ancora eseguiti: ${pending.join(", ")}; gli stop su questi titoli si sistemano alla prossima sveglia`);
+  if (pending.length) log.warn(`ordini non ancora eseguiti: ${pending.join(", ")}; gli stop su questi titoli si sistemano al prossimo giro`);
 }

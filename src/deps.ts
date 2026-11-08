@@ -7,7 +7,8 @@ import { assertPaperOnly } from "./guard.ts";
 import { Redactor } from "./log.ts";
 import type { Secrets } from "./secrets-types.ts";
 import { FileNotifier, TelegramNotifier } from "./telegram.ts";
-import type { WakeDeps } from "./wake.ts";
+import type { Broker } from "./broker/types.ts";
+import type { Notifier } from "./telegram.ts";
 
 export const ROOT = resolve(import.meta.dir, "..");
 
@@ -33,15 +34,24 @@ export async function loadSecrets(required: boolean): Promise<Secrets | null> {
 }
 
 export function dirs(args: CliArgs) {
-  // Il finto vive in cartelle sue: un testimone finto non deve mai confondere la sveglia vera.
+  // Il finto vive in cartelle sue: uno stato finto non deve mai confondersi con quello vero.
   const stateDir = resolve(args.state ?? join(ROOT, args.fake ? "state/fake" : "state"));
   const logsDir = resolve(args.logs ?? join(ROOT, args.fake ? "logs/fake" : "logs"));
   return { stateDir, logsDir };
 }
 
-// Le dipendenze del motore degli agenti (e degli strumenti accanto: chiusura posizioni, backtest). Niente cervello: le
-// sveglie classiche con il modello a voto sono state tolte; WakeDeps resta solo come banco di prova nei test.
-export async function buildDeps(args: CliArgs): Promise<Omit<WakeDeps, "brain"> & { warnings: string[] }> {
+// Le dipendenze di base del motore degli agenti e degli strumenti accanto (chiusura posizioni, riarmo dell'interruttore, chat id di Telegram).
+export interface BaseDeps {
+  broker: Broker;
+  notifier: Notifier;
+  stateDir: string;
+  logsDir: string;
+  redactor: Redactor;
+  now: () => Date;
+  sleep: (ms: number) => Promise<void>;
+  echo?: boolean;
+}
+export async function buildDeps(args: CliArgs): Promise<BaseDeps & { warnings: string[] }> {
   const secrets = await loadSecrets(!args.fake);
   assertPaperOnly(process.env, secrets ?? undefined);
   const { stateDir, logsDir } = dirs(args);

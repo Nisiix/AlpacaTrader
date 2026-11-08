@@ -4,7 +4,7 @@ import type { Agent, AgentReport, AgentView, Signal } from "./types.ts";
 
 // Presa di profitto: vincolante, una volta per trade. Con frazione 1 chiude la posizione al guadagno obiettivo;
 // con frazione 0,5 ne vende metà e lascia correre il resto con il trend (la tecnica classica per alzare la quota di
-// trade vinti senza rinunciare alle corse lunghe). Il backtest misura se conviene.
+// trade vinti senza rinunciare alle corse lunghe).
 export class TakeProfitAgent implements Agent {
   readonly name = "profitto";
   constructor(

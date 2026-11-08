@@ -12,7 +12,7 @@ export interface Notifier {
   send(text: string): Promise<SendResult>;
 }
 
-// Non lancia mai: se Telegram non risponde la sveglia va avanti e l'errore finisce nel log.
+// Non lancia mai: se Telegram non risponde il motore va avanti e l'errore finisce nel log.
 export class TelegramNotifier implements Notifier {
   readonly name = "telegram";
   constructor(

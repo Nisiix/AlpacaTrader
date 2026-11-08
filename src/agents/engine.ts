@@ -20,7 +20,7 @@ import type { Simulazione } from "../simulations.ts";
 import { clientOrderId, sendOne, waitForFills, type ExecOutcome } from "../execute.ts";
 import { isObject, readJson, writeJsonAtomic } from "../fsutil.ts";
 import { indicatorsFor } from "../indicators.ts";
-import { applyFills, closeDust, contextFor, dailyPnl, learningStatus, pruneJournal, readJournal, recordIntent, statsOf, writeJournal, type DailyPnl, type Stats } from "../journal.ts";
+import { applyFills, closeDust, contextFor, dailyPnl, pruneJournal, readJournal, recordIntent, statsOf, writeJournal, type DailyPnl, type Stats } from "../journal.ts";
 import { activeLessons, learnFromBrokerReject, learnFromStopLoss, pruneLessons, readLessons, writeLessons, type Lesson } from "../lessons.ts";
 import { acquireLock, inspectLock, releaseLock, type LockData } from "../lock.ts";
 import { Logger, type Redactor } from "../log.ts";
@@ -117,7 +117,7 @@ export interface AgentsStatus {
 // capo ufficio e la sala caffè, da subito e con limiti, e due sistemi insieme punirebbero due volte lo stesso errore.
 const lezioniDiSicurezza = (file: Parameters<typeof activeLessons>[0], today: string) => activeLessons(file, today).filter((l) => l.tipo !== "statistica");
 // Tutti gli agenti votano con lo stesso peso: chi va male lo richiama il capo ufficio (forza ridotta, soglia di Kronos).
-const pesiUguali = (agents: { name: string }[]) => Object.fromEntries(agents.map((a) => [a.name, AGENTS.weights.base]));
+const pesiUguali = (agents: { name: string }[]) => Object.fromEntries(agents.map((a) => [a.name, 1]));
 
 export const statusPath = (stateDir: string) => join(stateDir, "agents-status.json");
 
@@ -303,13 +303,13 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
     }
   };
 
-  // 1. Un solo attore alla volta: se una sveglia classica è in corso, questo giro aspetta il prossimo.
+  // 1. Un solo attore alla volta: se un altro processo ha il lock (es. una chiusura delle posizioni), questo giro aspetta il prossimo.
   const existing = inspectLock(deps.stateDir, startedAt);
   if (existing.kind === "alive") {
     bus.emit("nota", { testo: `giro saltato: lock di ${existing.data.runId} (pid ${existing.data.pid}) ancora vivo` });
     return { status: "occupato", message: `Un'altra esecuzione (${existing.data.runId}) ha il lock: giro saltato.` };
   }
-  if (existing.kind === "stale") log.warn(`lock morto di ${existing.data?.runId ?? "sconosciuto"} messo da parte: lo riconcilia la prossima sveglia classica`);
+  if (existing.kind === "stale") log.warn(`lock morto di ${existing.data?.runId ?? "sconosciuto"} messo da parte`);
   const lock: LockData = { runId: giro, pid: process.pid, startedAt: startedAt.toISOString(), intended: [] };
   if (!acquireLock(deps.stateDir, lock)) return { status: "occupato", message: "Lock preso da un altro processo nello stesso istante: giro saltato." };
 
@@ -420,7 +420,6 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
     const jr = readJournal(deps.stateDir, startedAt);
     const journal = jr.file;
     if (jr.problem) await alarm("Diario dei trade illeggibile", jr.problem);
-    const learning = learningStatus(journal, today);
 
     // 4. Il massimo visto da ogni trade aperto (per lo stop che segue il profitto), poi le proiezioni, poi gli agenti.
     for (const t of journal.trade) {
@@ -513,7 +512,7 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
 
     // 5. Gabbia: gli acquisti solo nella finestra di ingresso, le vendite e gli stop sempre a mercato aperto.
     const entry = stockEntryOpen(snap.clock, startedAt);
-    const cage = applyCage({ today, slotKind: entry ? "open" : "mid", marketOpen: snap.clock.isOpen, latenessMin: 0, account: snap.account, positions: snap.positions, prices: snap.prices, closes, recentOrders: snap.recentOrders, lessons: lessonsNow, buyBlock, proposals: alloc.proposte, previsioni: view.previsioni, apertiOggi: openedToday(view), intradayAperti: simboliIntraday(journal) });
+    const cage = applyCage({ today, marketOpen: snap.clock.isOpen, account: snap.account, positions: snap.positions, prices: snap.prices, closes, recentOrders: snap.recentOrders, lessons: lessonsNow, buyBlock, proposals: alloc.proposte, previsioni: view.previsioni, apertiOggi: openedToday(view), intradayAperti: simboliIntraday(journal) });
     for (const x of cage.rejected) {
       // Obiettivo del giorno raggiunto: l'acquisto che si sarebbe fatto diventa una simulazione (si segue e si misura).
       if (giornata.obiettivoRaggiunto && x.side === "buy" && /obiettivo giornaliero/.test(x.reason)) {
@@ -569,7 +568,7 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
     // 7. Stop su Alpaca, diario, lezioni.
     let stops: StopsReport | null = null;
     let positions = snap.positions;
-    const equitiesOpen = !tradingBlockReason({ slotKind: "mid", marketOpen: snap.clock.isOpen, latenessMin: 0, account: snap.account });
+    const equitiesOpen = !tradingBlockReason({ marketOpen: snap.clock.isOpen, account: snap.account });
     if (equitiesOpen || snap.positions.some((p) => isCrypto(p.symbol)) || outcomes.length) {
       await waitForFills(deps.broker, outcomes.filter((o) => o.kind === "inviato").map((o) => o.id), deps.sleep, log);
       try {
@@ -639,7 +638,7 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
       acquistiBloccati: buyBlock,
       lezioniAttive: lezioniDiSicurezza(lessonsFile, today),
       allarmi: alarms,
-      diario: { stato: learning.motivo, statistiche: statsOf(journal.trade) },
+      diario: { stato: `${journal.trade.filter((t) => t.stato === "chiuso").length} trade chiusi: da questi imparano il capo ufficio e la sala caffè`, statistiche: statsOf(journal.trade) },
       confronto: bm.cmp,
       ultimoRiepilogo: cache.ultimoRiepilogo,
       tradeChiusiOggi: fills.closed.map((t) => ({ simbolo: t.simbolo, risultato: t.risultato ?? 0, giorni: t.giorni ?? 0, uscita: t.motivoUscita ?? "sconosciuto" })),
@@ -762,7 +761,7 @@ export async function valutaTitolo(deps: EngineDeps, cache: EngineCache, symbol:
   const proposals = alloc.proposte.filter((p) => p.symbol === symbol);
   const entry = stockEntryOpen(clock, now);
   const recentOrders = open;
-  const cage = applyCage({ today, slotKind: entry ? "open" : "mid", marketOpen: clock.isOpen, latenessMin: 0, account, positions, prices, closes, recentOrders, lessons: lezioniDiSicurezza(lessonsFile, today), buyBlock, proposals, previsioni: view.previsioni, apertiOggi: openedToday(view), intradayAperti: simboliIntraday(journal) });
+  const cage = applyCage({ today, marketOpen: clock.isOpen, account, positions, prices, closes, recentOrders, lessons: lezioniDiSicurezza(lessonsFile, today), buyBlock, proposals, previsioni: view.previsioni, apertiOggi: openedToday(view), intradayAperti: simboliIntraday(journal) });
   const pos = positions.find((p) => p.symbol === symbol && p.qty > 0) ?? null;
   const price = prices[symbol] ?? closes[symbol]?.at(-1) ?? null;
   const c = closes[symbol];

@@ -1,7 +1,7 @@
-import type { ProposedOrder } from "./brain/types.ts";
+import type { ProposedOrder } from "./ordini.ts";
 import type { Account, Order, Position, Side } from "./broker/types.ts";
 import { isOpenOrder, isProtectiveStop } from "./broker/types.ts";
-import { AGENTS, CRYPTO, CRYPTO_MIN_NOTIONAL, LIMITS, MAX_LATENESS_MIN, UNIVERSE, isCrypto, sectorOf, type SlotKind } from "./config.ts";
+import { AGENTS, CRYPTO, CRYPTO_MIN_NOTIONAL, LIMITS, UNIVERSE, isCrypto, sectorOf } from "./config.ts";
 import { EVENTS, eventBlockFor, type MarketEvent } from "./events.ts";
 import { dailyVol, indicatorsFor, sma, trendOf } from "./indicators.ts";
 import { setupOf } from "./journal.ts";
@@ -36,9 +36,7 @@ export interface Rejection {
 export interface CageInput {
   today: string; // YYYY-MM-DD, per il calendario degli eventi
   events?: MarketEvent[]; // di serie il calendario di events.ts
-  slotKind: SlotKind;
   marketOpen: boolean;
-  latenessMin: number;
   account: Account;
   positions: Position[];
   prices: Record<string, number>;
@@ -67,13 +65,11 @@ export function lossPct(p: Position): number {
   return p.avgEntryPrice > 0 ? (p.currentPrice - p.avgEntryPrice) / p.avgEntryPrice : 0;
 }
 
-export function tradingBlockReason(i: Pick<CageInput, "slotKind" | "marketOpen" | "latenessMin" | "account">, symbol?: string): string | null {
-  if (i.slotKind === "briefing") return "briefing: nessun ordine";
+export function tradingBlockReason(i: Pick<CageInput, "marketOpen" | "account">, symbol?: string): string | null {
   if (i.account.equity <= 0) return "conto senza patrimonio";
   // Le crypto trattano 24 ore su 24: l'orario di borsa non conta.
   if (symbol && isCrypto(symbol)) return null;
   if (!i.marketOpen) return "mercato chiuso";
-  if (i.latenessMin > MAX_LATENESS_MIN) return `sveglia in ritardo di ${i.latenessMin} minuti: l'ordine non ha più senso`;
   return null;
 }
 
@@ -93,7 +89,7 @@ export function applyCage(i: CageInput): CageResult {
   const held = new Map(i.positions.filter((p) => p.qty > 0).map((p) => [p.symbol, p]));
   const stopLoss = i.positions.filter((p) => p.qty > 0 && lossPct(p) <= -stopPctFor(i.closes[p.symbol]));
 
-  // Il blocco di orario vale per i titoli; le crypto passano sempre (salvo conto vuoto o briefing).
+  // Il blocco di orario vale per i titoli; le crypto passano sempre (salvo conto vuoto).
   const blockFor = (symbol: string) => tradingBlockReason(i, symbol);
   // Gli stop di protezione su Alpaca sono ordini aperti per scelta nostra: non contano come doppioni.
   const openOrders = i.recentOrders.filter((o) => isOpenOrder(o) && !isProtectiveStop(o));
@@ -104,7 +100,7 @@ export function applyCage(i: CageInput): CageResult {
   for (const p of stopLoss) {
     const block = blockFor(p.symbol);
     if (block) {
-      rejected.push({ symbol: p.symbol, side: "sell", qty: p.qty, source: "stop-loss", reason: `stop loss scattato (${pct(lossPct(p))}) ma ${block}: vendo alla prossima sveglia utile` });
+      rejected.push({ symbol: p.symbol, side: "sell", qty: p.qty, source: "stop-loss", reason: `stop loss scattato (${pct(lossPct(p))}) ma ${block}: vendo al primo giro a borsa aperta` });
       continue;
     }
     if (sellInCorso(p.symbol)) {
@@ -123,7 +119,7 @@ export function applyCage(i: CageInput): CageResult {
     return { orders, rejected };
   }
 
-  // Uscita di trend: alla sveglia di apertura (per le crypto a ogni passata), chi ha chiuso ieri sotto la media a 50 giorni esce tutto.
+  // Uscita di trend: a ogni giro (titoli a borsa aperta, crypto sempre), chi ha chiuso ieri sotto la media a 50 giorni esce tutto.
   // È il codice a farla, come lo stop: il metodo non dipende dal modello che se ne ricordi.
   {
     for (const p of i.positions) {
@@ -160,8 +156,8 @@ export function applyCage(i: CageInput): CageResult {
       if (p.side === "buy" && p.qty * (i.prices[p.symbol] ?? 0) < CRYPTO_MIN_NOTIONAL) { reject(`ordine crypto sotto il minimo di ${CRYPTO_MIN_NOTIONAL} $`); continue; }
     } else if (!Number.isInteger(p.qty) || p.qty < 1) { reject("solo azioni intere e quantità positiva"); continue; }
     const key = `${p.symbol}-${p.side}`;
-    if (seen.has(key)) { reject(stopped.has(p.symbol) && p.side === "sell" ? "già venduto dal codice (stop o uscita di trend)" : "doppione nella stessa sveglia"); continue; }
-    if (p.side === "buy" && stopped.has(p.symbol)) { reject("in uscita in questa sveglia (stop o trend)"); continue; }
+    if (seen.has(key)) { reject(stopped.has(p.symbol) && p.side === "sell" ? "già venduto dal codice (stop o uscita di trend)" : "doppione nello stesso giro"); continue; }
+    if (p.side === "buy" && stopped.has(p.symbol)) { reject("in uscita in questo giro (stop o trend)"); continue; }
     const lesson = i.lessons.find((l) => l.lato === p.side && (l.simbolo === p.symbol || (l.simbolo === "*" && l.setup !== undefined && l.setup === setupOfSymbol(i, p.symbol))));
     if (lesson) { reject(`lezione dal registro degli errori: ${lesson.motivo} (fino al ${lesson.finoAl})`); continue; }
     if (openOrders.some((o) => o.symbol === p.symbol && o.side === p.side)) { reject("c'è già un ordine aperto uguale"); continue; }

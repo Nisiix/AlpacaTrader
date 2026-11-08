@@ -3,7 +3,6 @@ import { join } from "node:path";
 import { listEventDays, readEvents, type BusEvent, type EventBus } from "../agents/bus.ts";
 import { barsPath, forecastsPath, statusPath, type Valutazione } from "../agents/engine.ts";
 import { readJson, isObject } from "../fsutil.ts";
-import { readWitness } from "../witness.ts";
 import { ROOT } from "../deps.ts";
 import { maskedSettings, testSettings, writeSecretsFile } from "../settings.ts";
 import { agentCardsWithValues, saveAgentSettings } from "../agent-settings.ts";
@@ -48,9 +47,7 @@ export function startDashboard(o: DashboardOptions) {
       if (url.pathname === "/api/status") {
         const r = readJson(statusPath(o.stateDir), isObject);
         if (r.kind === "ok") return Response.json(r.value);
-        // Senza motore degli agenti, la dashboard mostra almeno l'ultimo testimone delle sveglie.
-        const w = readWitness(o.stateDir);
-        return Response.json({ versione: 0, testimone: w.kind === "ok" ? w.value : null, nota: "nessuno stato degli agenti: avvia bun run agents" });
+        return Response.json({ versione: 0, nota: "nessuno stato degli agenti: avvia bun run agents" });
       }
       if (url.pathname === "/api/events") {
         const days = listEventDays(o.stateDir);

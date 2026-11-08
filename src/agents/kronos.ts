@@ -11,42 +11,12 @@ export interface KronosForecast {
   rendimentoPrevisto: number; // a `horizon` sedute
 }
 
-export type Fetcher = (symbols: string[], horizon: number) => Promise<KronosForecast[]>;
-
-// Per il motore: le proiezioni come mappa simbolo → rendimento previsto, da passare alla vista degli agenti.
-export function forecasterFor(url: string): (symbols: string[]) => Promise<Record<string, number>> {
-  const f = httpFetcher(url);
-  return async (symbols) => Object.fromEntries((await f(symbols, AGENTS.kronos.horizon)).map((x) => [x.simbolo, x.rendimentoPrevisto]));
-}
-
-export function httpFetcher(url: string): Fetcher {
-  return async (symbols, horizon) => {
-    const res = await fetch(`${url.replace(/\/$/, "")}/forecast`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ symbols, horizon }),
-      signal: AbortSignal.timeout(AGENTS.kronos.timeoutMs),
-    });
-    if (!res.ok) throw new Error(`Kronos ${res.status}: ${(await res.text()).slice(0, 200)}`);
-    const data = (await res.json()) as { forecasts: Record<string, { pred_ret: number }> };
-    return Object.entries(data.forecasts ?? {}).map(([simbolo, f]) => ({ simbolo, rendimentoPrevisto: Number(f.pred_ret) }));
-  };
-}
-
 export class KronosAgent implements Agent {
   readonly name = "kronos";
-  constructor(private fetcher: Fetcher) {}
 
   async observe(v: AgentView): Promise<AgentReport> {
-    let fc: KronosForecast[];
-    if (v.previsioni) fc = Object.entries(v.previsioni).map(([simbolo, rendimentoPrevisto]) => ({ simbolo, rendimentoPrevisto }));
-    else {
-      try {
-        fc = await this.fetcher([...AGENTS.universe], AGENTS.kronos.horizon);
-      } catch (e) {
-        return { segnali: [], note: [`Kronos non disponibile: ${(e as Error).message}`] };
-      }
-    }
+    // Le proiezioni del giorno le calcola il motore (sidecar e cervello delle previsioni) e arrivano nella vista.
+    const fc: KronosForecast[] = Object.entries(v.previsioni ?? {}).map(([simbolo, rendimentoPrevisto]) => ({ simbolo, rendimentoPrevisto }));
     if (!fc.length) return { segnali: [], note: [v.previsioni ? "nessuna proiezione per i titoli di oggi" : "nessuna proiezione: Kronos in avvio o non installato"] };
     // Le proiezioni assurde (oltre maxAbs) sono rumore: fuori. Rialzi e ribassi si classificano separatamente, così i
     // ribassi enormi di qualche piccola non nascondono i rialzi credibili.

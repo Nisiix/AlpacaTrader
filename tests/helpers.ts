@@ -1,12 +1,10 @@
 import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { FakeBrain } from "../src/brain/fake.ts";
-import type { Brain, Decision } from "../src/brain/types.ts";
 import { FakeBroker, type FakeState } from "../src/broker/fake.ts";
 import { Redactor } from "../src/log.ts";
 import { FileNotifier } from "../src/telegram.ts";
-import type { WakeDeps } from "../src/wake.ts";
+import type { BaseDeps } from "../src/deps.ts";
 
 // Giovedì 24 settembre 2026, ora legale: Roma = UTC+2.
 export const at = (rome: string) => new Date(`2026-09-24T${rome}:00+02:00`);
@@ -17,12 +15,12 @@ export interface TestEnv {
   logsDir: string;
   broker: FakeBroker;
   clock: { t: number };
-  deps: (overrides?: Partial<WakeDeps>) => WakeDeps;
+  deps: (overrides?: Partial<BaseDeps>) => BaseDeps;
   outbox: () => string;
   setFake: (patch: (s: FakeState) => void) => void;
 }
 
-export function makeEnv(start: Date, brain: Brain = new FakeBrain()): TestEnv {
+export function makeEnv(start: Date): TestEnv {
   const dir = mkdtempSync(join(tmpdir(), "agent-test-"));
   const stateDir = join(dir, "state");
   const logsDir = join(dir, "logs");
@@ -38,13 +36,12 @@ export function makeEnv(start: Date, brain: Brain = new FakeBrain()): TestEnv {
     clock,
     deps: (o = {}) => ({
       broker,
-      brain,
       notifier,
       stateDir,
       logsDir,
       redactor: new Redactor([]),
       now,
-      // Il tempo passa solo quando la sveglia aspetta: test veloci, attese vere nel conto.
+      // Il tempo passa solo quando il motore aspetta: test veloci, attese vere nel conto.
       sleep: async (ms: number) => {
         clock.t += ms;
       },
@@ -65,8 +62,6 @@ export function makeEnv(start: Date, brain: Brain = new FakeBrain()): TestEnv {
     },
   };
 }
-
-export const brainSaying = (d: Decision): Brain => new FakeBrain(d);
 
 // Ordini di trading (a mercato). Gli stop di protezione su Alpaca si contano a parte.
 export const ordersFor = (env: TestEnv, symbol: string) => env.broker.load().orders.filter((o) => o.symbol === symbol && o.type !== "stop");

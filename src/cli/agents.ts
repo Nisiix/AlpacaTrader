@@ -71,7 +71,7 @@ try {
       } catch {}
     };
     kronos = url ? { url, ready: true, stato: `attivo su ${url} (indicato a mano)`, stop: () => {} } : await ensureKronos({ root: ROOT, log: kronosLog });
-    agents.push(new KronosAgent(async () => []));
+    agents.push(new KronosAgent());
   }
   // Intraday: operazioni che si chiudono in giornata, su candele scelte dall'agente (5 min / 15 min / 4 ore). Decide Kronos
   // sulle candele brevi (se il sidecar c'è) con le medie brevi; il grafico più lungo pesa solo sulla taglia.

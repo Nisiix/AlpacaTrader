@@ -7,10 +7,8 @@
     "test": "bun test",
     "typecheck": "tsc -p .",
     "breaker-reset": "bun src/cli/breaker-reset.ts",
-    "backtest": "bun src/cli/backtest.ts",
     "agents": "bun src/cli/agents.ts",
     "dashboard": "bun src/cli/dashboard.ts",
-    "sweep": "bun src/cli/sweep.ts",
     "chiudi-posizioni": "bun src/cli/chiudi.ts"
   },
   "devDependencies": {

@@ -1,5 +1,6 @@
-import { SLOTS, TIMEZONE, type SlotDef } from "./config.ts";
+import { TIMEZONE } from "./config.ts";
 
+// Ora di Roma e giorni di calendario/borsa: il motore ragiona in ora italiana (diario, riepilogo, limiti del giorno).
 export interface RomeTime {
   date: string; // YYYY-MM-DD
   minutes: number; // minuti dalla mezzanotte, ora di Roma
@@ -29,29 +30,6 @@ export function romeTime(d: Date): RomeTime {
   };
 }
 
-export function slotMinutes(s: SlotDef): number {
-  const [h, m] = s.time.split(":").map(Number);
-  return h! * 60 + m!;
-}
-
-export function runIdFor(date: string, slot: SlotDef): string {
-  return `${date}-${slot.time.replace(":", "-")}`;
-}
-
-export const RUN_ID_RE = /^\d{4}-\d{2}-\d{2}-\d{2}-\d{2}$/;
-
-export function parseRunId(runId: string): { date: string; slot: SlotDef } | null {
-  if (!RUN_ID_RE.test(runId)) return null;
-  const date = runId.slice(0, 10);
-  const time = runId.slice(11).replace("-", ":");
-  const slot = SLOTS.find((s) => s.time === time);
-  return slot ? { date, slot } : null;
-}
-
-export function findSlot(time: string): SlotDef | null {
-  return SLOTS.find((s) => s.time === time) ?? null;
-}
-
 function weekdayOf(date: string): number {
   return new Date(`${date}T12:00:00Z`).getUTCDay();
 }
@@ -67,63 +45,6 @@ export function addDays(date: string, n: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-// La sveglia più recente di oggi già arrivata (per `once`).
-export function latestSlotToday(now: Date): { runId: string; slot: SlotDef } | null {
-  const rt = romeTime(now);
-  if (!isTradingWeekday(rt.date)) return null;
-  const past = SLOTS.filter((s) => slotMinutes(s) <= rt.minutes);
-  const slot = past[past.length - 1];
-  return slot ? { runId: runIdFor(rt.date, slot), slot } : null;
-}
-
-// La sveglia dovuta adesso per lo scheduler: arrivata da non più di `graceMin` minuti.
-export function dueSlot(now: Date, graceMin: number): { runId: string; slot: SlotDef } | null {
-  const latest = latestSlotToday(now);
-  if (!latest) return null;
-  const late = romeTime(now).minutes - slotMinutes(latest.slot);
-  return late <= graceMin ? latest : null;
-}
-
-// Minuti trascorsi tra l'orario della sveglia e adesso (negativo se la sveglia è nel futuro).
-export function latenessMinutes(runId: string, now: Date): number {
-  const p = parseRunId(runId)!;
-  const rt = romeTime(now);
-  const dayDiff = Math.round((Date.parse(`${rt.date}T00:00:00Z`) - Date.parse(`${p.date}T00:00:00Z`)) / 86_400_000);
-  return dayDiff * 1440 + rt.minutes - slotMinutes(p.slot);
-}
-
-// Tutte le sveglie (giorni feriali) strettamente tra `prev` e `current`.
-export function missedSlots(prev: string, current: string, maxDays = 31): string[] {
-  const a = parseRunId(prev);
-  const b = parseRunId(current);
-  if (!a || !b || prev >= current) return [];
-  const out: string[] = [];
-  let date = a.date;
-  for (let i = 0; i <= maxDays && date <= b.date; i++, date = addDays(date, 1)) {
-    if (!isTradingWeekday(date)) continue;
-    for (const s of SLOTS) {
-      const id = runIdFor(date, s);
-      if (id > prev && id < current) out.push(id);
-    }
-  }
-  return out;
-}
-
-export function nextSlotAfter(runId: string): string {
-  const p = parseRunId(runId)!;
-  const idx = SLOTS.indexOf(p.slot);
-  if (idx < SLOTS.length - 1 && isTradingWeekday(p.date)) return runIdFor(p.date, SLOTS[idx + 1]!);
-  let date = addDays(p.date, 1);
-  while (!isTradingWeekday(date)) date = addDays(date, 1);
-  return runIdFor(date, SLOTS[0]!);
-}
-
-export function describeRunId(runId: string): string {
-  const p = parseRunId(runId);
-  if (!p) return runId;
-  return `${p.date} ${p.slot.time} (${p.slot.label})`;
-}
-
 // N giorni feriali dopo `date`. Le festività contano come giorni di borsa, quindi in quelle settimane il blocco dura un giorno di borsa in meno.
 export function addTradingDays(date: string, n: number): string {
   let d = date;
@@ -132,16 +53,4 @@ export function addTradingDays(date: string, n: number): string {
     if (isTradingWeekday(d)) i++;
   }
   return d;
-}
-
-// Per le sessioni cloud, che partono qualche minuto prima: la sveglia di oggi tra `earlyMin` minuti
-// prima e `graceMin` minuti dopo adesso, con quanti minuti mancano (negativo se è già passata).
-export function nearbySlot(now: Date, earlyMin: number, graceMin: number): { runId: string; slot: SlotDef; waitMin: number } | null {
-  const rt = romeTime(now);
-  if (!isTradingWeekday(rt.date)) return null;
-  for (const slot of SLOTS) {
-    const wait = slotMinutes(slot) - rt.minutes;
-    if (wait <= earlyMin && -wait <= graceMin) return { runId: runIdFor(rt.date, slot), slot, waitMin: wait };
-  }
-  return null;
 }

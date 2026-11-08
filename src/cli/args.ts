@@ -1,7 +1,5 @@
 export interface CliArgs {
   fake: boolean;
-  force: boolean;
-  slot?: string;
   now?: string;
   state?: string;
   logs?: string;
@@ -12,7 +10,6 @@ export interface CliArgs {
   noDashboard: boolean;
   kronos?: string;
   profitto: boolean;
-  crypto: boolean;
   // Motore degli agenti: le crypto sono di serie; --no-crypto le toglie.
   noCrypto: boolean;
   // Motore degli agenti: niente Kronos (né sidecar automatico né agente).
@@ -20,7 +17,7 @@ export interface CliArgs {
 }
 
 export function parseArgs(argv: string[]): CliArgs {
-  const a: CliArgs = { fake: false, force: false, once: false, noDashboard: false, profitto: false, crypto: false, noCrypto: false, noKronos: false };
+  const a: CliArgs = { fake: false, once: false, noDashboard: false, profitto: false, noCrypto: false, noKronos: false };
   for (let i = 0; i < argv.length; i++) {
     const k = argv[i]!;
     const val = () => {
@@ -29,8 +26,6 @@ export function parseArgs(argv: string[]): CliArgs {
       return v;
     };
     if (k === "--fake") a.fake = true;
-    else if (k === "--force") a.force = true;
-    else if (k === "--slot") a.slot = val();
     else if (k === "--now") a.now = val();
     else if (k === "--state") a.state = val();
     else if (k === "--logs") a.logs = val();
@@ -40,7 +35,6 @@ export function parseArgs(argv: string[]): CliArgs {
     else if (k === "--no-dashboard") a.noDashboard = true;
     else if (k === "--kronos") a.kronos = val();
     else if (k === "--profitto") a.profitto = true;
-    else if (k === "--crypto") a.crypto = true;
     else if (k === "--no-crypto") a.noCrypto = true;
     else if (k === "--no-kronos") a.noKronos = true;
     else throw new Error(`opzione sconosciuta: ${k}`);

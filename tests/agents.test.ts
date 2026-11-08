@@ -1,8 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { agentWeights, allocate, scoreSignals } from "../src/agents/allocator.ts";
-import { runAgentsBacktest } from "../src/agents/backtest.ts";
+import { allocate, scoreSignals } from "../src/agents/allocator.ts";
 import { ClaudeMacro, ContextAgent } from "../src/agents/context.ts";
 import { CustodiAgent, newsScore } from "../src/agents/custode.ts";
 import { ExitAgent } from "../src/agents/exits.ts";
@@ -141,15 +140,12 @@ describe("agenti", () => {
     expect(tired.segnali[0]!.forza).toBe(0.8);
   });
 
-  test("kronos: senza sidecar tace; con previsioni tiene solo le più nette e nel verso del trend", async () => {
-    const down = new KronosAgent(async () => {
-      throw new Error("connessione rifiutata");
-    });
-    const r0 = await down.observe(view());
+  test("kronos: senza proiezioni tace; con proiezioni tiene solo le più nette e nel verso del trend", async () => {
+    const r0 = await new KronosAgent().observe(view());
     expect(r0.segnali).toEqual([]);
-    expect(r0.note?.[0]).toContain("Kronos non disponibile");
-    const k = new KronosAgent(async () => UNIVERSE.map((s, i) => ({ simbolo: s, rendimentoPrevisto: s === "NVDA" ? 0.05 : s === "GLD" ? -0.04 : 0.001 * (i + 1) })));
-    const r = await k.observe(view({ positions: [{ symbol: "GLD", qty: 5, avgEntryPrice: 370, currentPrice: 380, marketValue: 1900 }] }));
+    expect(r0.note?.[0]).toContain("nessuna proiezione");
+    const previsioni = Object.fromEntries(UNIVERSE.map((s, i) => [s, s === "NVDA" ? 0.05 : s === "GLD" ? -0.04 : 0.001 * (i + 1)]));
+    const r = await new KronosAgent().observe(view({ previsioni, positions: [{ symbol: "GLD", qty: 5, avgEntryPrice: 370, currentPrice: 380, marketValue: 1900 }] }));
     expect(r.segnali.map((s) => `${s.lato} ${s.simbolo}`).sort()).toEqual(["buy NVDA", "sell GLD"]);
     // La forza del rialzo cresce con la proiezione (0,5 + 5 × rendimento), il ribasso resta 0,5.
     expect(r.segnali.find((s) => s.simbolo === "NVDA")!.forza).toBeCloseTo(0.75, 6);
@@ -219,16 +215,6 @@ describe("allocatore", () => {
     expect(full.proposte).toEqual([]);
   });
 
-  test("pesi dal diario: tutti 1 finché la raccolta non è finita; poi chi perde scende a 0,5 e chi vince con campione affidabile sale a 1,2", () => {
-    const j = emptyJournal();
-    const trade = (i: number, agenti: string[], risultato: number, opened = "2026-01-05") => ({ id: `t${i}`, simbolo: "SPY", stato: "chiuso" as const, apertoIl: `${opened}T14:00:00Z`, comprate: 1, costo: 100, vendute: 1, incassato: 100 * (1 + risultato), quantita: 0, contesto: { setup: "", momentum20: null, volGiornaliera: null, distanzaMedia: null, fiducia: null, attesa: "", perche: "", agenti }, chiusoIl: "2026-02-01T14:00:00Z", risultato, giorni: 20 });
-    for (let i = 0; i < 30; i++) j.trade.push(trade(i, ["trend"], 0.01));
-    for (let i = 30; i < 42; i++) j.trade.push(trade(i, ["rientro"], -0.02));
-    expect(agentWeights(j, "2026-02-01", ["trend", "rientro", "regime"])).toEqual({ trend: 1, rientro: 1, regime: 1 });
-    expect(agentWeights(j, "2026-09-24", ["trend", "rientro", "regime"])).toEqual({ trend: 1.2, rientro: 0.5, regime: 1 });
-    const sc = scoreSignals([{ agente: "rientro", simbolo: "SPY", lato: "buy", forza: 1, orizzonteSedute: 20, perche: "" }], { rientro: 0.5 });
-    expect(sc[0]!.punteggio).toBe(0.5);
-  });
 });
 
 function engineDeps(env: TestEnv, agents: Agent[] = [new TrendAgent(), new PullbackAgent(), new RegimeAgent(), new HorizonAgent()]): EngineDeps {
@@ -392,26 +378,6 @@ describe("dashboard", () => {
   });
 });
 
-describe("backtest del motore", () => {
-  test("su storico in salita compra, tiene e misura; i trade finiscono nel diario con gli agenti; nessun errore sul crollo", () => {
-    const closes: Record<string, number[]> = {};
-    for (const s of UNIVERSE) closes[s] = syntheticCloses(PRICES[s]!, 0.01, 320);
-    const r = runAgentsBacktest(closes, 100_000, "2026-01-05");
-    expect(r.days).toBe(320 - Math.max(LIMITS.longSmaDays, AGENTS.absMomentum.days + 1));
-    expect(r.buys).toBeGreaterThan(0);
-    expect(r.avgExposure).toBeGreaterThan(0.3);
-    expect(r.totalReturn).toBeGreaterThan(0);
-    // Crollo del 30% di tutto a metà: stop e uscite di trend, l'interruttore scatta, il diario registra trade chiusi dagli agenti.
-    const crash: Record<string, number[]> = {};
-    for (const s of UNIVERSE) crash[s] = closes[s]!.map((x, i) => (i >= 280 ? x * 0.7 : x));
-    const c = runAgentsBacktest(crash, 100_000, "2026-01-05");
-    expect(c.stopOuts + c.trendExits + c.agentSells).toBeGreaterThan(0);
-    expect(c.breakerTrips).toBeGreaterThanOrEqual(1);
-    expect(c.stats.trade).toBeGreaterThan(0);
-    expect(Object.keys(c.perAgent)).toContain("trend");
-    expect(c.maxDrawdown).toBeGreaterThan(0.1);
-  });
-});
 
 describe("uscite (regole vincolanti)", () => {
   const pos = (symbol: string, avg: number, price: number) => ({ symbol, qty: 10, avgEntryPrice: avg, currentPrice: price, marketValue: price * 10 });
@@ -518,7 +484,7 @@ describe("uscite (regole vincolanti)", () => {
 describe("crypto", () => {
   test("la gabbia accetta BTC/USD a mercato chiuso e fuori finestra, con quantità frazionaria sopra i 10 $; rifiuta sotto il minimo", () => {
     const closes: Record<string, number[]> = { "BTC/USD": syntheticCloses(76_000, 0.025, 260) };
-    const base = { today: "2026-09-24", slotKind: "mid" as const, marketOpen: false, latenessMin: 0, account: { equity: 100_000, lastEquity: 100_000, cash: 100_000, status: "ACTIVE" }, positions: [], prices: { "BTC/USD": 76_000 }, closes, recentOrders: [], lessons: [], buyBlock: null, events: [] };
+    const base = { today: "2026-09-24", marketOpen: false, account: { equity: 100_000, lastEquity: 100_000, cash: 100_000, status: "ACTIVE" }, positions: [], prices: { "BTC/USD": 76_000 }, closes, recentOrders: [], lessons: [], buyBlock: null, events: [] };
     const ok = applyCage({ ...base, proposals: [{ symbol: "BTC/USD", side: "buy", qty: 0.05, why: "trend" }] });
     expect(ok.orders.map((o) => `${o.side} ${o.qty} ${o.symbol}`)).toEqual(["buy 0.05 BTC/USD"]);
     const small = applyCage({ ...base, proposals: [{ symbol: "BTC/USD", side: "buy", qty: 0.0001, why: "trend" }] });
@@ -840,7 +806,7 @@ describe("intraday", () => {
     expect(alloc.proposte[0]!.intraday).toBe(true);
     expect(alloc.proposte[0]!.qty * PRICES.NVDA! / 100_000).toBeLessThanOrEqual(0.1 + 1e-9);
     const v = view({});
-    const base = { today: "2026-09-24", slotKind: "mid" as const, marketOpen: true, latenessMin: 0, account: v.account, positions: [], prices: v.prices, closes: v.closes, recentOrders: [], lessons: [], buyBlock: null };
+    const base = { today: "2026-09-24", marketOpen: true, account: v.account, positions: [], prices: v.prices, closes: v.closes, recentOrders: [], lessons: [], buyBlock: null };
     const ok = applyCage({ ...base, proposals: [{ symbol: "NVDA", side: "buy", qty: 10, why: "intraday", intraday: true }] });
     expect(ok.orders.map((o) => o.symbol)).toEqual(["NVDA"]);
     const closed = applyCage({ ...base, marketOpen: false, proposals: [{ symbol: "NVDA", side: "buy", qty: 10, why: "intraday", intraday: true }] });
@@ -889,7 +855,7 @@ describe("tenuta minima", () => {
     expect(today.proposte.filter((p) => p.side === "sell")).toEqual([]);
     const forced = allocate(view({ falling: ["NVDA"], positions: pos, journal: j }), { uscite: { segnali: [{ ...sell[0]!, agente: "uscite", vincolante: true, perche: "stop" }] } }, { uscite: 1 });
     expect(forced.proposte.map((p) => p.side)).toEqual(["sell"]);
-    const base = { today: "2026-09-24", slotKind: "open" as const, marketOpen: true, latenessMin: 0, account: v.account, positions: pos, prices: v.prices, closes: v.closes, recentOrders: [], lessons: [], buyBlock: null, proposals: [] };
+    const base = { today: "2026-09-24", marketOpen: true, account: v.account, positions: pos, prices: v.prices, closes: v.closes, recentOrders: [], lessons: [], buyBlock: null, proposals: [] };
     expect(applyCage(base).orders.filter((o) => o.source === "uscita-trend").map((o) => o.symbol)).toEqual(["NVDA"]);
     expect(applyCage({ ...base, apertiOggi: new Set(["NVDA"]) }).orders.filter((o) => o.source === "uscita-trend")).toEqual([]);
   });
@@ -1033,7 +999,7 @@ describe("ingressi contro tendenza guidati da Kronos", () => {
     expect(controTendenza(v.closes.NVDA, 0.04).ok).toBe(true);
     expect(controTendenza(v.closes.NVDA, 0.015).ok).toBe(false); // sotto il 2%
     expect(controTendenza(v.closes.NVDA, 0.3).ok).toBe(false); // fuori misura
-    const r = new KronosAgent(async () => []).observe(v);
+    const r = new KronosAgent().observe(v);
     return r.then((rep) => {
       const s = rep.segnali.find((x) => x.simbolo === "NVDA")!;
       expect(s.lato).toBe("buy");
@@ -1044,7 +1010,7 @@ describe("ingressi contro tendenza guidati da Kronos", () => {
       const p = a.proposte.find((x) => x.symbol === "NVDA")!;
       expect((p.qty * v.prices.NVDA!) / v.account.equity).toBeLessThanOrEqual(LIMITS.maxPositionPct * 0.5 + 1e-6);
       // La gabbia: con Kronos netto passa; senza no; oltre metà del peso no.
-      const base = { today: "2026-09-24", slotKind: "open" as const, marketOpen: true, latenessMin: 0, account: v.account, positions: [], prices: v.prices, closes: v.closes, recentOrders: [], lessons: [], buyBlock: null };
+      const base = { today: "2026-09-24", marketOpen: true, account: v.account, positions: [], prices: v.prices, closes: v.closes, recentOrders: [], lessons: [], buyBlock: null };
       const prop = (qty: number, kronos?: number) => ({ symbol: "NVDA", side: "buy" as const, qty, why: "x", confidence: "alta" as const, expect: "", ...(kronos !== undefined ? { kronos } : {}) });
       const small = Math.floor(((LIMITS.maxPositionPct * 0.5 - 0.01) * v.account.equity) / v.prices.NVDA!);
       expect(applyCage({ ...base, proposals: [prop(small, 0.04)] }).orders).toHaveLength(1);
@@ -1224,7 +1190,7 @@ describe("ottimizzazioni: intraday separato, soglie simmetriche, costi e contant
     const v = view();
     const p = pos("NVDA", 220, 180); // oltre lo stop
     const aperto = { id: "x", clientOrderId: "x", symbol: "NVDA", side: "sell", type: "market", qty: 10, filledQty: 0, status: "new", submittedAt: "2026-09-24T13:00:00Z" } as any;
-    const r = applyCage({ today: "2026-09-24", slotKind: "open", marketOpen: true, latenessMin: 0, account: v.account, positions: p, prices: { ...v.prices, NVDA: 180 }, closes: v.closes, recentOrders: [aperto], lessons: [], buyBlock: null, proposals: [] });
+    const r = applyCage({ today: "2026-09-24", marketOpen: true, account: v.account, positions: p, prices: { ...v.prices, NVDA: 180 }, closes: v.closes, recentOrders: [aperto], lessons: [], buyBlock: null, proposals: [] });
     expect(r.orders).toEqual([]);
     expect(r.rejected[0]!.reason).toContain("già in corso");
   });

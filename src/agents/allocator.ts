@@ -1,11 +1,10 @@
-import type { ProposedOrder } from "../brain/types.ts";
+import type { ProposedOrder } from "../ordini.ts";
 import { maxWeightFor } from "../cage.ts";
 import { pesoControTendenza, sotto200 } from "./fiducia.ts";
 import { AGENTS, CRYPTO_MIN_NOTIONAL, LIMITS, isCrypto } from "../config.ts";
 import { dailyVol } from "../indicators.ts";
 import { romeTime } from "../slots.ts";
 import { roundQty } from "../broker/types.ts";
-import { learningStatus, statsOf, type JournalFile } from "../journal.ts";
 import { soloIntraday } from "./posizioni.ts";
 import type { AgentReport, AgentView, Signal } from "./types.ts";
 
@@ -37,22 +36,6 @@ export interface Allocation {
   inAttesa: { simbolo: string; motivo: string }[];
 }
 
-// Peso di ogni agente dai risultati del diario: parte da 1; scende se l'agente ha votato ingressi che perdono
-// (campione almeno indicativo), sale se vince con campione affidabile. Finché la raccolta dati non è finita, tutti 1.
-export function agentWeights(journal: JournalFile, today: string, names: string[]): Record<string, number> {
-  const out: Record<string, number> = {};
-  const active = learningStatus(journal, today).attivo;
-  for (const n of names) {
-    out[n] = AGENTS.weights.base;
-    if (!active) continue;
-    const s = statsOf(journal.trade.filter((t) => t.contesto?.agenti?.includes(n)));
-    if (s.attesa === null) continue;
-    if (s.attesa < 0 && (s.campione === "indicativo" || s.campione === "affidabile")) out[n] = AGENTS.weights.losing;
-    else if (s.attesa > 0 && s.campione === "affidabile") out[n] = AGENTS.weights.winning;
-  }
-  return out;
-}
-
 // I titoli con un trade aperto oggi (ora di Roma) nel diario.
 export function openedToday(view: AgentView): Set<string> {
   const out = new Set<string>();
@@ -65,7 +48,7 @@ export function scoreSignals(signals: Signal[], weights: Record<string, number>)
   for (const s of signals) {
     if (s.vincolante) continue;
     const sc = by.get(s.simbolo) ?? { simbolo: s.simbolo, punteggio: 0, compra: 0, vende: 0, agenti: [], perche: [] };
-    const w = (weights[s.agente] ?? AGENTS.weights.base) * s.forza;
+    const w = (weights[s.agente] ?? 1) * s.forza;
     if (s.lato === "buy") {
       sc.compra += w;
       sc.intraday = sc.compra === w ? !!s.intraday : sc.intraday && !!s.intraday;

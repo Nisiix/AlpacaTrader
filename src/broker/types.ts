@@ -44,7 +44,7 @@ export interface OrderRequest {
   clientOrderId: string;
 }
 
-// Stop di protezione che vive su Alpaca: vende da solo anche tra una sveglia e l'altra.
+// Stop di protezione che vive su Alpaca: vende da solo anche tra un giro e l'altro e a motore spento.
 export interface StopOrderRequest {
   symbol: string;
   qty: number;
@@ -68,7 +68,7 @@ export interface Broker {
   cancelOrder(orderId: string): Promise<void>;
   // Chiusure giornaliere di sedute finite, dalla più vecchia alla più recente.
   getDailyCloses(symbols: string[], days: number): Promise<Record<string, number[]>>;
-  // Le stesse chiusure con la data (YYYY-MM-DD): serve al backtest per allineare titoli e crypto, che non hanno gli stessi giorni.
+  // Le stesse chiusure con la data (YYYY-MM-DD): servono ai grafici e a Kronos, che lavora sulle candele intere.
   getDailyClosesByDate(symbols: string[], days: number): Promise<Record<string, { date: string; close: number }[]>>;
   // Barre giornaliere complete (apertura, massimo, minimo, chiusura, volume) di sedute finite: per i grafici a candele.
   getDailyBars(symbols: string[], days: number): Promise<Record<string, Bar[]>>;

@@ -21,7 +21,7 @@ describe("regole del primo motore riviste", () => {
     const prices = { "BTC/USD": 10_000, "ETH/USD": 10_000, "SOL/USD": 10_000, "XRP/USD": 10_000 };
     const closes = Object.fromEntries(Object.keys(prices).map((s) => [s, salita(10_000)]));
     AGENTS.universe.push("XRP/USD");
-    const r = applyCage({ today: "2026-11-09", slotKind: "mid", marketOpen: true, latenessMin: 0, account, positions: pos, prices, closes, recentOrders: [], lessons: [], buyBlock: null, proposals: [{ symbol: "XRP/USD", side: "buy", qty: 0.8, why: "x", kronos: 0.05 }] });
+    const r = applyCage({ today: "2026-11-09", marketOpen: true, account, positions: pos, prices, closes, recentOrders: [], lessons: [], buyBlock: null, proposals: [{ symbol: "XRP/USD", side: "buy", qty: 0.8, why: "x", kronos: 0.05 }] });
     AGENTS.universe.splice(AGENTS.universe.indexOf("XRP/USD"), 1);
     expect(r.rejected[0]!.reason).toContain(`settore crypto al 38.0% del conto (massimo ${(LIMITS.groupMaxPct * 100).toFixed(1)}%)`);
   });

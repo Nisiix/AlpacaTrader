@@ -8,7 +8,7 @@ export interface BenchmarkFile {
   dal: string;
   patrimonio: number;
   spy: number;
-  // Aggiunti dopo: un file vecchio li riceve alla prima sveglia, e il 60/40 parte da quel giorno.
+  // Aggiunti dopo: un file vecchio li riceve al primo giro, e il 60/40 parte da quel giorno.
   dalMisto?: string;
   spyMisto?: number;
   tlt?: number;
