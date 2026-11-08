@@ -51,17 +51,22 @@ def to_df(bs):
     df["timestamps"] = pd.to_datetime(df["timestamps"])
     return df
 
-def forecast(symbols, horizon, series=None):
+def forecast(symbols, horizon, series=None, step_minutes=None):
     data = series if series is not None else bars(symbols, a.lookback)
     out = {}
     for s in symbols:
         bs = data.get(s, [])
-        today = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%d")
-        bs = [b for b in bs if str(b["t"])[:10] < today]  # solo sedute finite
+        if not step_minutes:
+            today = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%d")
+            bs = [b for b in bs if str(b["t"])[:10] < today]  # solo sedute finite
         if len(bs) < 60: continue
         df = to_df(bs[-a.lookback:])
         last_ts = df["timestamps"].iloc[-1]
-        y_ts = pd.Series(pd.bdate_range(last_ts + pd.Timedelta(days=1), periods=horizon))
+        # Candele intraday (step_minutes): le prossime `horizon` candele dello stesso passo; altrimenti giorni di borsa.
+        if step_minutes:
+            y_ts = pd.Series(pd.date_range(last_ts + pd.Timedelta(minutes=step_minutes), periods=horizon, freq=f"{int(step_minutes)}min"))
+        else:
+            y_ts = pd.Series(pd.bdate_range(last_ts + pd.Timedelta(days=1), periods=horizon))
         t0 = time.time()
         pred = predictor.predict(df=df[["open", "high", "low", "close", "volume", "amount"]], x_timestamp=df["timestamps"], y_timestamp=y_ts, pred_len=horizon, T=a.T, top_p=a.top_p, sample_count=a.samples, verbose=False)
         last = float(df["close"].iloc[-1])
@@ -81,7 +86,7 @@ class H(BaseHTTPRequestHandler):
             series = body.get("series")
             symbols = [str(x) for x in (body.get("symbols") or (list(series.keys()) if isinstance(series, dict) else []))][:60]
             horizon = max(1, min(20, int(body.get("horizon", 5))))
-            self._json(200, {"model": a.model, "horizon": horizon, "forecasts": forecast(symbols, horizon, series if isinstance(series, dict) else None)})
+            self._json(200, {"model": a.model, "horizon": horizon, "forecasts": forecast(symbols, horizon, series if isinstance(series, dict) else None, body.get("step_minutes"))})
         except Exception as e:
             self._json(500, {"error": str(e)})
     def log_message(self, fmt, *args): print(time.strftime("%H:%M:%S"), fmt % args)

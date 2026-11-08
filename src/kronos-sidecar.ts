@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { AGENTS } from "./config.ts";
-import type { Bar } from "./broker/types.ts";
+import type { Bar, IntradayBar } from "./broker/types.ts";
 
 // Il sidecar Kronos (tools/kronos/server.py) lo accende il motore: se risponde già sulla porta lo usa, altrimenti lo
 // avvia dal venv creato da installa-kronos (python + torch per CPU) e aspetta che i pesi siano caricati. Il motore non
@@ -148,6 +148,31 @@ export function pathForecaster(link: KronosLink): (symbols: string[], bars: Reco
       const r = Number(f.pred_ret);
       if (!Number.isFinite(r)) continue;
       out[s] = { rendimentoPrevisto: r, percorso: Array.isArray(f.path) ? f.path.map(Number) : [r], ultimaChiusura: typeof f.last_close === "number" ? f.last_close : null };
+    }
+    return out;
+  };
+}
+
+// Kronos sulle candele intraday (5 min, 15 min, 1 ora, 4 ore): le prossime `horizon` candele dello stesso passo.
+// Per la decisione intraday conta questa proiezione, non quella a 5 sedute.
+export function intradayForecaster(link: KronosLink): (series: Record<string, IntradayBar[]>, stepMinutes: number, horizon: number) => Promise<Record<string, KronosForecastPath>> {
+  return async (bars, stepMinutes, horizon) => {
+    if (!link.ready) throw new Error(`Kronos ${link.stato}`);
+    const series: Record<string, { t: string; o: number; h: number; l: number; c: number; v: number }[]> = {};
+    for (const [s, b] of Object.entries(bars)) if (b.length >= 60) series[s] = b.slice(-AGENTS.kronos.lookback).map((x) => ({ t: x.t, o: x.open, h: x.high, l: x.low, c: x.close, v: x.volume }));
+    if (!Object.keys(series).length) return {};
+    const res = await fetch(`${link.url}/forecast`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ series, horizon, step_minutes: stepMinutes }),
+      signal: AbortSignal.timeout(AGENTS.kronos.timeoutMs),
+    });
+    if (!res.ok) throw new Error(`Kronos ${res.status}: ${(await res.text()).slice(0, 200)}`);
+    const data = (await res.json()) as { forecasts?: Record<string, { pred_ret: number; path?: number[]; last_close?: number }> };
+    const out: Record<string, KronosForecastPath> = {};
+    for (const [s, f] of Object.entries(data.forecasts ?? {})) {
+      const r = Number(f.pred_ret);
+      if (Number.isFinite(r)) out[s] = { rendimentoPrevisto: r, percorso: Array.isArray(f.path) ? f.path.map(Number) : [r], ultimaChiusura: typeof f.last_close === "number" ? f.last_close : null };
     }
     return out;
   };

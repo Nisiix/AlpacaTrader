@@ -5,6 +5,7 @@ import { isObject, readJson, writeJsonAtomic } from "../fsutil.ts";
 import { momentum, sma } from "../indicators.ts";
 import type { Presenza } from "./caffe.ts";
 import { technicalRead } from "./custode.ts";
+import { controTendenza, pesoControTendenza } from "./fiducia.ts";
 import type { AgentReport, AgentView, Signal } from "./types.ts";
 
 // L'esplorazione: gli agenti in sala caffè non pensano solo al loro titolo. A turno passano in rassegna il radar (azioni e
@@ -67,12 +68,13 @@ export function radar(universe: string[], cryptoFuori: string[] = []): string[] 
 }
 
 // Il filtro tecnico, con le regole del motore: sopra la media a 200, momentum a 12 mesi positivo, lettura del grafico.
-export function technicalGate(closes: number[] | undefined): { ok: boolean; tecnica: { punteggio: number; pattern: string[] }; motivo: string } {
+export function technicalGate(closes: number[] | undefined): { ok: boolean; contro?: boolean; tecnica: { punteggio: number; pattern: string[] }; motivo: string } {
   const none = { punteggio: 0, pattern: [] as string[] };
   if (!closes || closes.length < LIMITS.longSmaDays + 1) return { ok: false, tecnica: none, motivo: "storico insufficiente" };
   const price = closes[closes.length - 1]!;
   const m200 = sma(closes, LIMITS.longSmaDays)!;
-  if (price <= m200) return { ok: false, tecnica: none, motivo: "sotto la media a 200" };
+  // Sotto la 200 si guarda lo stesso: entra solo se Kronos è netto con probabilità sufficiente (contro tendenza).
+  if (price <= m200) return { ok: false, contro: true, tecnica: technicalRead(closes, price), motivo: "sotto la media a 200" };
   const mom = momentum(closes, AGENTS.absMomentum.days);
   if (mom !== null && mom <= AGENTS.absMomentum.min) return { ok: false, tecnica: none, motivo: "momentum a 12 mesi negativo" };
   const t = technicalRead(closes, price);
@@ -130,7 +132,7 @@ export async function explore(input: {
   const passa: string[] = [];
   for (const s of batch) {
     const g = technicalGate(bars[s]?.map((b) => b.close));
-    if (g.ok) passa.push(s);
+    if (g.ok || (g.contro && AGENTS.kronos.controTendenza.enabled)) passa.push(s);
     else scartati.push({ simbolo: s, motivo: g.motivo });
   }
   let previsioni: Record<string, number> = {};
@@ -149,6 +151,7 @@ export async function explore(input: {
     if (fc === undefined || !Number.isFinite(fc)) scartati.push({ simbolo: s, motivo: "nessuna proiezione" });
     else if (Math.abs(fc) > AGENTS.kronos.maxAbs) scartati.push({ simbolo: s, motivo: `proiezione fuori misura (${pct(fc)})` });
     else if (fc < AGENTS.kronos.anticipaSoglia) scartati.push({ simbolo: s, motivo: `Kronos ${pct(fc)}: nessun rialzo oltre la soglia` });
+    else if (technicalGate(bars[s]!.map((b) => b.close)).contro && !controTendenza(bars[s]!.map((b) => b.close), fc).ok) scartati.push({ simbolo: s, motivo: `sotto la media a 200: ${controTendenza(bars[s]!.map((b) => b.close), fc).motivo}` });
     else {
       if (oggi + nuove.length >= c.maxScoperte) break;
       const who = scoutFor(s, input.presenti, busy);
@@ -157,7 +160,7 @@ export async function explore(input: {
       const g = technicalGate(bars[s]!.map((b) => b.close));
       nuove.push({
         simbolo: s, settore: sectorOf(s), scopritore: who.chiave, agente: agentOf(who), trovata: input.now.toISOString(), validaFino: addDays(input.today, c.giorniValida - 1), kronos: fc, tecnica: g.tecnica,
-        motivo: `sopra la media a 200, ${g.tecnica.pattern.slice(0, 2).join(", ") || "grafico in ordine"}; Kronos anticipa ${pct(fc)} a ${AGENTS.kronos.horizon} sedute`,
+        motivo: `${g.contro ? `contro tendenza (sotto la media a 200, ${controTendenza(bars[s]!.map((b) => b.close), fc).motivo.replace(/^Kronos [^ ]+ /, "")})` : `sopra la media a 200, ${g.tecnica.pattern.slice(0, 2).join(", ") || "grafico in ordine"}`}; Kronos anticipa ${pct(fc)} a ${AGENTS.kronos.horizon} sedute`,
         stato: "attiva",
       });
     }
@@ -197,14 +200,15 @@ export function scoutVotes(f: EsplorazioneFile, v: AgentView, reports: Record<st
       note.push(`esplorazione: ${s.simbolo} lasciato, Kronos ora vede ${pct(fc)}`);
       continue;
     }
-    if (m200 !== null && price !== undefined && price <= m200) {
+    const k = fc ?? s.kronos;
+    const contro = m200 !== null && price !== undefined && price <= m200;
+    if (contro && !controTendenza(c, k).ok) {
       s.stato = "svanita";
-      note.push(`esplorazione: ${s.simbolo} lasciato, sceso sotto la media a 200`);
+      note.push(`esplorazione: ${s.simbolo} lasciato, sotto la media a 200 senza Kronos abbastanza netto (${controTendenza(c, k).motivo})`);
       continue;
     }
-    const k = fc ?? s.kronos;
     const forza = Math.min(1, (0.5 + k * 5) * (0.75 + 0.25 * s.tecnica.punteggio));
-    const sig: Signal = { agente: s.agente, simbolo: s.simbolo, lato: "buy", forza, orizzonteSedute: AGENTS.kronos.horizon, kronos: k, perche: `esplorazione dalla sala caffè: ${s.simbolo} ${s.motivo.replace(/Kronos anticipa [^;]+/, `Kronos anticipa ${pct(k)} a ${AGENTS.kronos.horizon} sedute`)}` };
+    const sig: Signal = { agente: s.agente, simbolo: s.simbolo, lato: "buy", forza, orizzonteSedute: AGENTS.kronos.horizon, kronos: k, ...(contro ? { pesoMassimo: pesoControTendenza() } : {}), perche: `esplorazione dalla sala caffè: ${s.simbolo} ${s.motivo.replace(/Kronos anticipa [^;]+/, `Kronos anticipa ${pct(k)} a ${AGENTS.kronos.horizon} sedute`)}` };
     const home = s.scopritore.startsWith("c:") ? "custodi" : s.scopritore.startsWith("i:") ? "intraday" : s.scopritore.slice(2);
     (reports[home] ??= { segnali: [] }).segnali.push(sig);
     esploratori.set(s.scopritore, `opera su ${s.simbolo} (scoperto in sala caffè)`);

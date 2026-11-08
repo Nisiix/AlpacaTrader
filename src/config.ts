@@ -185,7 +185,9 @@ export const AGENTS = {
   // Kronos è la fonte principale per anticipare la direzione: una proiezione oltre anticipaSoglia (in valore assoluto)
   // vale come segnale di rialzo o ribasso in arrivo: sblocca l'attesa del contesto (rialzo) o ferma gli ingressi (ribasso).
   // maxAbs: proiezioni oltre questa misura (in valore assoluto) sono rumore del modello e non si usano.
-  kronos: { topShare: 0.25, horizon: 5, timeoutMs: 600_000, port: 8765, model: "small" as "mini" | "small" | "base", lookback: 400, samples: 3, anticipaSoglia: 0.01, maxAbs: 0.25 },
+  // controTendenza: sotto la media a 200 si entra solo se Kronos anticipa almeno minRendimento con probabilità di successo
+  // (Φ del rendimento atteso sulla volatilità) almeno minFiducia; peso massimo ridotto a pesoFattore × 10%.
+  kronos: { topShare: 0.25, horizon: 5, timeoutMs: 600_000, port: 8765, model: "small" as "mini" | "small" | "base", lookback: 400, samples: 3, anticipaSoglia: 0.01, maxAbs: 0.25, controTendenza: { enabled: true, minRendimento: 0.02, minFiducia: 0.6, pesoFattore: 0.5 } },
   // Riepilogo su Telegram una volta al giorno, alla prima passata dopo quest'ora di Roma.
   summaryAfter: "22:05",
   // Presa di profitto parziale (agente "profitto"): a +3% vende metà e lascia correre il resto col trend. Scelta col
@@ -235,6 +237,9 @@ export const AGENTS = {
     // Soglie di volatilità giornaliera (deviazione standard dei rendimenti a 20 giorni) per la scelta della candela.
     volFast: 0.03, volMid: 0.015,
     bars: 120, // candele di storia per medie, ATR e massimi
+    // Kronos sulle candele intraday: proiezione delle prossime `candele` candele per chi ha le medie brevi in ordine
+    // (al massimo perGiro titoli a giro, ricalcolata a ogni candela chiusa); si entra con probabilità ≥ minProb.
+    kronos: { candele: 6, perGiro: 8, minProb: 0.55 },
     target: { stocks: 0.01, crypto: 0.02 }, // obiettivo di profitto; se l'ATR dice di più, vale l'ATR × targetAtr
     targetAtr: 1.5, stopAtr: 1.2, minStopPct: 0.004,
     maxWeight: 0.1, // peso massimo di un'operazione intraday (comparto a taglia ridotta)

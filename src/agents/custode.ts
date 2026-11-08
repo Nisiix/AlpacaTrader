@@ -1,6 +1,7 @@
 import { AGENTS, LIMITS, isCrypto } from "../config.ts";
 import { dailyVol, momentum, rsi, sma, trendOf } from "../indicators.ts";
 import { stopPctFor } from "../stops.ts";
+import { controTendenza, pesoControTendenza } from "./fiducia.ts";
 import { clamp01, type Agent, type AgentReport, type AgentView, type Signal } from "./types.ts";
 
 // I custodi: un investitore per ogni crypto che il motore segue. Ognuno guarda un solo titolo e ragiona come un
@@ -236,8 +237,13 @@ export class CustodiAgent implements Agent {
     for (const s of AGENTS.universe) {
       const c = v.closes[s];
       const t = trendOf(c, LIMITS.trendSmaDays, LIMITS.longSmaDays);
-      if (!c || !t || t.close <= t.long) continue; // sotto la media a 200 mai
+      if (!c || !t) continue;
       const fc = v.previsioni?.[s];
+      // Sotto la media a 200 solo contro tendenza: Kronos netto e probabilità di successo sufficiente.
+      if (t.close <= t.long) {
+        if (controTendenza(c, fc).ok) out.push({ s, mom: fc! });
+        continue;
+      }
       const kronosUp = fc !== undefined && fc >= AGENTS.kronos.anticipaSoglia;
       const inTrend = t.close > t.sma && (momentum(c, AGENTS.absMomentum.days) ?? -1) > AGENTS.absMomentum.min && (!isCrypto(s) || (momentum(c, AGENTS.cryptoMomentumDays) ?? -1) > 0);
       // Candidata per trend, oppure perché Kronos anticipa un rialzo netto (sopra la 200): il custode nasce e studia.
@@ -327,6 +333,13 @@ export class CustodiAgent implements Agent {
     // Kronos prima del contesto: un ribasso anticipato ferma l'ingresso anche in trend; un rialzo anticipato lo rafforza.
     if (fc !== undefined && fc <= -AGENTS.kronos.anticipaSoglia) return { ...base, fase: "attende", piano: `Aspettare: Kronos anticipa un ribasso (${pct(fc)} a ${AGENTS.kronos.horizon} sedute). Si rientra quando la proiezione torna positiva.`, stato: "Trend intatto ma proiezione contraria: fermo." };
     if (v.contesto?.attendi[s]) return { ...base, fase: "attende", piano: `Aspettare: ${v.contesto.attendi[s]}.`, stato: "Pronto a entrare appena il contesto lo permette." };
+    // Contro tendenza (sotto la 200): si entra solo con Kronos netto e probabilità sufficiente, a taglia ridotta.
+    if (m200 !== null && price !== null && price <= m200) {
+      const ct = controTendenza(closes, fc);
+      if (!ct.ok) return { ...base, fase: "attende", piano: `Aspettare: sotto la media a ${LIMITS.longSmaDays} si entra solo contro tendenza con Kronos netto; ${ct.motivo}.`, stato: "Fuori dal trend di lungo periodo." };
+      segnali.push({ agente, simbolo: s, lato: "buy", forza: 0.55, orizzonteSedute: AGENTS.kronos.horizon, kronos: fc, pesoMassimo: pesoControTendenza(), perche: `${s} contro tendenza: sotto la media a ${LIMITS.longSmaDays} giorni ma ${ct.motivo}; taglia ridotta (${Math.round(pesoControTendenza() * 100)}% massimo), stop a ${num(stop)}, si tiene finché Kronos vede il rialzo` });
+      return { ...base, fase: "pronto", piano: `Entrare contro tendenza a taglia ridotta: ${ct.motivo}. Stop iniziale a ${num(stop)} (${pct(-stopPct)}); si esce con lo stop o quando Kronos non vede più il rialzo.`, stato: `Candidata contro tendenza dal ${c.dalle}, in attesa che allocatore e gabbia confermino.` };
+    }
     const spinta = fc !== undefined && fc >= AGENTS.kronos.anticipaSoglia ? 1.15 : 1;
     // Candidata: ingresso migliore vicino alla media a 20 giorni; troppo lontano dalla 50 si aspetta un rientro.
     if (dist50 !== null && dist50 > AGENTS.custodi.extendedPct) {

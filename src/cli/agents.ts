@@ -21,7 +21,7 @@ import type { Agent } from "../agents/types.ts";
 import { AGENTS, enableCrypto } from "../config.ts";
 import { startDashboard } from "../dashboard/server.ts";
 import { ROOT, buildDeps } from "../deps.ts";
-import { ensureKronos, pathForecaster, type KronosLink } from "../kronos-sidecar.ts";
+import { ensureKronos, intradayForecaster, pathForecaster, type KronosLink } from "../kronos-sidecar.ts";
 import { appendFileSync, existsSync, mkdirSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { parseArgs } from "./args.ts";
@@ -49,8 +49,6 @@ try {
     agents.push(new CustodiAgent(args.fake ? null : combinedNews([googleNews(), ...(xToken ? [xNews(xToken)] : [])])));
     if (!args.fake) console.log(`notizie: Google News${xToken ? " + X" : " (X: nessun token in secrets.ts)"}`);
   }
-  // Intraday: operazioni che si chiudono in giornata, su candele scelte dall'agente (5 min / 15 min / 4 ore).
-  if (AGENTS.intraday.enabled) agents.push(new IntradayAgent((s, tf, n) => deps.broker.getIntradayBars(s, tf, n)));
 
   // Kronos: un sidecar già acceso (--kronos url o KRONOS_URL), altrimenti lo avvia il motore dal venv di tools/kronos.
   let kronos: KronosLink | null = null;
@@ -67,6 +65,12 @@ try {
     };
     kronos = url ? { url, ready: true, stato: `attivo su ${url} (indicato a mano)`, stop: () => {} } : await ensureKronos({ root: ROOT, log: kronosLog });
     agents.push(new KronosAgent(async () => []));
+  }
+  // Intraday: operazioni che si chiudono in giornata, su candele scelte dall'agente (5 min / 15 min / 4 ore). Decide Kronos
+  // sulle candele brevi (se il sidecar c'è) con le medie brevi; il grafico più lungo pesa solo sulla taglia.
+  if (AGENTS.intraday.enabled) {
+    const kf = kronos ? intradayForecaster(kronos) : null;
+    agents.push(new IntradayAgent((s, tf, n) => deps.broker.getIntradayBars(s, tf, n), kf ? async (b, step, h) => Object.fromEntries(Object.entries(await kf(b, step, h)).map(([k, v]) => [k, v.rendimentoPrevisto])) : null));
   }
   const cache = emptyCache();
   const engine: EngineDeps = {

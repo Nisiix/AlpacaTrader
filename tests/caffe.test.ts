@@ -143,7 +143,8 @@ describe("esplorazione dalla sala caffè", () => {
     const amd = r!.nuove.find((n) => n.simbolo === "AMD")!;
     // AMD è tecnologia: la trova il custode di AAPL (stesso settore), che vota come "custode AAPL".
     expect(amd).toMatchObject({ scopritore: "c:AAPL", agente: "custode AAPL", stato: "attiva", settore: "tecnologia" });
-    expect(r!.scartati.find((x) => x.simbolo === "AVGO")!.motivo).toContain("sotto la media a 200");
+    // AVGO è sotto la 200: lo si guarda lo stesso (contro tendenza), ma Kronos non vede un rialzo.
+    expect(r!.scartati.find((x) => x.simbolo === "AVGO")!.motivo).toContain("nessun rialzo");
     expect(r!.scartati.find((x) => x.simbolo === "GOOGL")!.motivo).toContain("fuori misura");
     expect(r!.nuove.some((n) => n.simbolo === "GOOGL")).toBe(false);
     // Mezz'ora non è passata: niente secondo giro.

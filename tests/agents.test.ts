@@ -20,6 +20,7 @@ import { TrendAgent } from "../src/agents/trend.ts";
 import type { Agent, AgentView } from "../src/agents/types.ts";
 import { evaluateBreaker } from "../src/breaker.ts";
 import { applyCage } from "../src/cage.ts";
+import { controTendenza } from "../src/agents/fiducia.ts";
 import { FAKE_VOL, syntheticCloses } from "../src/broker/fake.ts";
 import { AGENTS, LIMITS, UNIVERSE, enableCrypto, setCryptoUniverse } from "../src/config.ts";
 import { stopPctFor } from "../src/stops.ts";
@@ -720,6 +721,37 @@ describe("intraday", () => {
     expect(r6.segnali.filter((x) => x.simbolo === "NVDA")).toEqual([]);
   });
 
+  test("con Kronos intraday decide la proiezione sulle candele brevi, non la media a 200; grafico più lungo e Kronos a 5 sedute pesano solo sulla taglia", async () => {
+    setCryptoUniverse(["BTC/USD", "ETH/USD"]);
+    const bars: Record<string, IntradayBar[]> = { NVDA: candles(180, 40, [180.2, 180.5, 180.9]), "BTC/USD": candles(76_000, 40, [76_100, 76_250, 76_450]) };
+    const closes: Record<string, number[]> = {};
+    // Tutto sotto la media a 200 giorni: per l'intraday non conta.
+    for (const sym of UNIVERSE) closes[sym] = syntheticCloses(PRICES[sym]!, 0.01, 260).reverse();
+    closes["BTC/USD"] = syntheticCloses(76_000, 0.035, 260).reverse();
+    closes["ETH/USD"] = syntheticCloses(2_100, 0.035, 260).reverse();
+    const prices = { ...PRICES, NVDA: 180.9, "BTC/USD": 76_450, "ETH/USD": 2_100 };
+    const now = day("2026-09-22", "16:30");
+    const asked: string[] = [];
+    let kint: Record<string, number> = { "BTC/USD": 0.01, NVDA: 0.006 };
+    const a = new IntradayAgent(async (syms) => Object.fromEntries(syms.filter((x) => bars[x]).map((x) => [x, bars[x]!])), async (b, step, h) => { asked.push(`${step}:${h}:${Object.keys(b).join(",")}`); return Object.fromEntries(Object.keys(b).map((x) => [x, kint[x] ?? -0.01])); });
+    const r = await a.observe(view({ closes, prices, now, today: "2026-09-22" }));
+    const btc = r.segnali.find((x) => x.lato === "buy" && x.simbolo === "BTC/USD")!;
+    expect(btc.perche).toContain("Kronos sulle prossime 6 candele");
+    expect(asked.some((q) => q.startsWith("5:6:") && q.includes("BTC/USD"))).toBe(true);
+    // Lo stesso ingresso con il Kronos a 5 sedute contrario: si entra lo stesso, ma a taglia ridotta.
+    const a2 = new IntradayAgent(async (syms) => Object.fromEntries(syms.filter((x) => bars[x]).map((x) => [x, bars[x]!])), async (b) => Object.fromEntries(Object.keys(b).map((x) => [x, kint[x] ?? -0.01])));
+    const rr = await a2.observe(view({ closes, prices, now, today: "2026-09-22", previsioni: { "BTC/USD": -0.03 } }));
+    const btc2 = rr.segnali.find((x) => x.lato === "buy" && x.simbolo === "BTC/USD")!;
+    expect(btc2.perche).toContain("taglia ridotta");
+    expect(btc2.pesoMassimo!).toBeCloseTo(btc.pesoMassimo! / 2, 9);
+    // Kronos intraday al ribasso: nessun ingresso, con il motivo.
+    kint = { "BTC/USD": -0.004 };
+    const b2 = new IntradayAgent(async (syms) => Object.fromEntries(syms.filter((x) => bars[x]).map((x) => [x, bars[x]!])), async (b) => Object.fromEntries(Object.keys(b).map((x) => [x, kint[x] ?? -0.01])));
+    const r2 = await b2.observe(view({ closes, prices, now, today: "2026-09-22" }));
+    expect(r2.segnali.filter((x) => x.lato === "buy")).toEqual([]);
+    expect(r2.intraday!.find((x) => x.simbolo === "BTC/USD")!.motivo).toContain("Kronos sulle prossime 6 candele");
+  });
+
   test("il flusso completo: il voto intraday diventa una proposta intraday e la gabbia la ammette a mercato aperto fuori dalla vecchia finestra", () => {
     const sig = [{ agente: "intraday", simbolo: "NVDA", lato: "buy" as const, forza: 1, orizzonteSedute: 1, intraday: true, pesoMassimo: 0.1, perche: "rottura" }];
     const sc = scoreSignals(sig, { intraday: 1 });
@@ -912,6 +944,34 @@ describe("contesto economico", () => {
     const keys = [...caffe.presenti.map((p) => p.chiave), ...caffe.operativi.map((o) => o.chiave)];
     expect(new Set(keys).size).toBe(keys.length);
     expect(keys).toContain("a:trend");
+  });
+});
+
+describe("ingressi contro tendenza guidati da Kronos", () => {
+  test("sotto la 200: con Kronos netto e probabilità sufficiente Kronos vota a taglia ridotta, la gabbia ammette fino a metà del peso", () => {
+    const v = view({ falling: ["NVDA"], previsioni: { NVDA: 0.04 } });
+    expect(controTendenza(v.closes.NVDA, 0.04).ok).toBe(true);
+    expect(controTendenza(v.closes.NVDA, 0.015).ok).toBe(false); // sotto il 2%
+    expect(controTendenza(v.closes.NVDA, 0.3).ok).toBe(false); // fuori misura
+    const r = new KronosAgent(async () => []).observe(v);
+    return r.then((rep) => {
+      const s = rep.segnali.find((x) => x.simbolo === "NVDA")!;
+      expect(s.lato).toBe("buy");
+      expect(s.perche).toContain("contro tendenza");
+      expect(s.pesoMassimo).toBeCloseTo(LIMITS.maxPositionPct * 0.5, 9);
+      // L'allocatore non va oltre metà del peso massimo.
+      const a = allocate(v, { kronos: rep, trend: { segnali: [{ agente: "trend", simbolo: "NVDA", lato: "buy", forza: 1, orizzonteSedute: 20, perche: "" }] } }, { kronos: 1, trend: 1 });
+      const p = a.proposte.find((x) => x.symbol === "NVDA")!;
+      expect((p.qty * v.prices.NVDA!) / v.account.equity).toBeLessThanOrEqual(LIMITS.maxPositionPct * 0.5 + 1e-6);
+      // La gabbia: con Kronos netto passa; senza no; oltre metà del peso no.
+      const base = { today: "2026-09-24", slotKind: "open" as const, marketOpen: true, latenessMin: 0, account: v.account, positions: [], prices: v.prices, closes: v.closes, recentOrders: [], lessons: [], buyBlock: null };
+      const prop = (qty: number, kronos?: number) => ({ symbol: "NVDA", side: "buy" as const, qty, why: "x", confidence: "alta" as const, expect: "", ...(kronos !== undefined ? { kronos } : {}) });
+      const small = Math.floor(((LIMITS.maxPositionPct * 0.5 - 0.01) * v.account.equity) / v.prices.NVDA!);
+      expect(applyCage({ ...base, proposals: [prop(small, 0.04)] }).orders).toHaveLength(1);
+      expect(applyCage({ ...base, proposals: [prop(small)] }).rejected[0]!.reason).toContain("contro tendenza");
+      const big = Math.floor(((LIMITS.maxPositionPct * 0.5 + 0.02) * v.account.equity) / v.prices.NVDA!);
+      expect(applyCage({ ...base, proposals: [prop(big, 0.04)] }).rejected[0]!.reason).toContain("contro tendenza il massimo");
+    });
   });
 });
 

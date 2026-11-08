@@ -1,5 +1,6 @@
 import type { ProposedOrder } from "../brain/types.ts";
 import { maxWeightFor } from "../cage.ts";
+import { pesoControTendenza, sotto200 } from "./fiducia.ts";
 import { AGENTS, CRYPTO_MIN_NOTIONAL, LIMITS, isCrypto } from "../config.ts";
 import { dailyVol } from "../indicators.ts";
 import { romeTime } from "../slots.ts";
@@ -160,6 +161,8 @@ export function allocate(view: AgentView, reports: Record<string, AgentReport>, 
     if (!p && slots <= 0) continue;
     let w = maxWeightFor(view.closes[sc.simbolo]).max * (kronosSu(sc.simbolo) ? rischioSenzaContesto : rischio) * (AGENTS.scaleByScore ? Math.min(1, sc.punteggio) : 1);
     if (sc.pesoMassimo !== undefined) w = Math.min(w, sc.pesoMassimo);
+    // Sotto la media a 200 (ingresso contro tendenza) mai più di metà del peso massimo, chiunque abbia votato.
+    if (!sc.intraday && sotto200(view.closes[sc.simbolo], price)) w = Math.min(w, pesoControTendenza());
     // Taglia proporzionale alla fiducia nella proiezione di Kronos: più è probabile che il rialzo si avveri, più si investe.
     if (AGENTS.sizing.byKronos) {
       const f = kronosConfidence(view, sc.simbolo);

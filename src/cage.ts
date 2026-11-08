@@ -7,6 +7,7 @@ import { dailyVol, indicatorsFor, sma, trendOf } from "./indicators.ts";
 import { setupOf } from "./journal.ts";
 import type { Lesson } from "./lessons.ts";
 import { stopPctFor } from "./stops.ts";
+import { controTendenza, pesoControTendenza } from "./agents/fiducia.ts";
 
 function setupOfSymbol(i: CageInput, symbol: string): string {
   const c = i.closes[symbol];
@@ -180,10 +181,15 @@ export function applyCage(i: CageInput): CageResult {
       const t = trendOf(closes, LIMITS.trendSmaDays, LIMITS.longSmaDays);
       if (!p.intraday) {
         if (t === null) { reject(`storico insufficiente per il metodo (servono ${LIMITS.longSmaDays} giorni di chiusure)`); continue; }
-        // Kronos può anticipare: con una proiezione netta si entra anche sotto la media a 50 (un solo pattern contrario),
-        // mai sotto la 200 (trend di lungo periodo negativo = secondo pattern contrario: prudenza).
+        // Kronos può anticipare: con una proiezione netta si entra anche sotto la media a 50; sotto la 200 solo contro
+        // tendenza (Kronos ≥ 2% con probabilità di successo ≥ 60%), a metà del peso massimo.
         const kronosForte = p.kronos !== undefined && p.kronos >= AGENTS.kronos.anticipaSoglia;
-        if (t.close <= t.long) { reject(`chiusura ${t.close.toFixed(2)} sotto la media a ${LIMITS.longSmaDays} giorni (${t.long.toFixed(2)}): trend di lungo periodo negativo`); continue; }
+        // Sotto la 200 solo contro tendenza: Kronos netto, probabilità di successo sufficiente, taglia ridotta.
+        if (t.close <= t.long) {
+          const ct = controTendenza(closes, p.kronos);
+          if (!ct.ok) { reject(`chiusura ${t.close.toFixed(2)} sotto la media a ${LIMITS.longSmaDays} giorni (${t.long.toFixed(2)}): trend di lungo periodo negativo e niente ingresso contro tendenza (${ct.motivo})`); continue; }
+          if (share > pesoControTendenza() + 1e-9) { reject(`contro tendenza il massimo è ${pct(pesoControTendenza())} del conto, qui si arriverebbe al ${pct(share)}`); continue; }
+        }
         if (!kronosForte) {
           if (t.close <= t.sma) { reject(`chiusura ${t.close.toFixed(2)} sotto la media a ${LIMITS.trendSmaDays} giorni (${t.sma.toFixed(2)}): il metodo compra solo in trend, salvo un rialzo netto anticipato da Kronos`); continue; }
           if (price <= t.sma) { reject(`prezzo ${price.toFixed(2)} sceso sotto la media a ${LIMITS.trendSmaDays} giorni (${t.sma.toFixed(2)}) in giornata`); continue; }

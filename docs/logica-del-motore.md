@@ -148,6 +148,27 @@ troppe uscite dallo stop). Le vendite non si toccano. Il capo non fa ordini.
 - Il contesto, le notizie e la memoria affinano; la gabbia protegge. Qualunque vantaggio di backtest va letto tagliato del
   25–50%.
 
+## Ingressi contro tendenza guidati da Kronos
+
+Sotto la media a 200 il motore non compra per trend, ma **Kronos può anticipare un'inversione**: se prevede almeno **+2% a
+5 sedute** (mai oltre ±25%) con **probabilità di successo almeno del 60%** (Φ del rendimento atteso sulla volatilità del
+titolo × √5), l'agente Kronos, il custode del titolo e lo scopritore della sala caffè possono votare l'acquisto. La taglia
+è al massimo **metà del peso massimo** (5% del conto) e scala con la fiducia; la gabbia rifiuta oltre. Le uscite restano
+quelle di sempre: stop sulla volatilità su Alpaca, si tiene finché Kronos vede il rialzo, si esce quando la proiezione gira
+(custode, agente uscite, uscita di trend della gabbia). Parametri nella scheda di Kronos.
+
+## Intraday: decide Kronos sulle candele brevi
+
+Per i trade che si chiudono in giornata non contano le medie giornaliere (50, 200) né il settimanale. Su ogni titolo nella
+finestra degli ingressi l'operatore intraday guarda la sua candela (5 min, 15 min, 4 ore dalla volatilità):
+1. **medie brevi**: EMA 9 sopra EMA 20 e prezzo sopra la 9, oppure una rottura dei massimi o un rientro sulla media a 20;
+2. **Kronos sulle prossime 6 candele** (il sidecar prevede la serie intraday): rialzo con probabilità ≥ 55% (rendimento
+   atteso sulla volatilità delle candele);
+3. **in parte** il grafico più lungo (1 ora per 5 e 15 minuti, il giornaliero per le 4 ore: prezzo sopra la sua media a
+   20) e il Kronos a 5 sedute: se contrari, ognuno **dimezza la taglia**, non blocca.
+La taglia parte dal peso massimo intraday e scala con la fiducia (55% → metà, 70% e oltre → piena). Obiettivo e stop
+dall'ATR, chiusura entro l'orario: come prima. Senza sidecar vale il Kronos a 5 sedute.
+
 ## Sala caffè: gli agenti imparano gli uni dagli altri
 
 A ogni giro, dopo i richiami del capo ufficio, il motore (`src/agents/caffe.ts`):
