@@ -7,7 +7,7 @@ import { AGENTS, DAILY_BARS_DAYS, LIMITS, UNIVERSE, isCrypto } from "../config.t
 import { clientOrderId, sendOne, waitForFills, type ExecOutcome } from "../execute.ts";
 import { writeJsonAtomic } from "../fsutil.ts";
 import { indicatorsFor } from "../indicators.ts";
-import { applyFills, contextFor, learnFromJournal, learningStatus, pruneJournal, readJournal, recordIntent, statsOf, writeJournal, type Stats } from "../journal.ts";
+import { applyFills, contextFor, dailyPnl, learnFromJournal, learningStatus, pruneJournal, readJournal, recordIntent, statsOf, writeJournal, type DailyPnl, type Stats } from "../journal.ts";
 import { activeLessons, learnFromBrokerReject, learnFromStopLoss, pruneLessons, readLessons, writeLessons, type Lesson } from "../lessons.ts";
 import { acquireLock, inspectLock, releaseLock, type LockData } from "../lock.ts";
 import { Logger, type Redactor } from "../log.ts";
@@ -60,6 +60,9 @@ export interface AgentsStatus {
   confronto: Comparison | null;
   ultimoRiepilogo: string | null;
   tradeChiusiOggi: { simbolo: string; risultato: number; giorni: number; uscita: string }[];
+  // Profitto e perdita della giornata: realizzato dalle vendite di oggi (per operazione e per agente) e
+  // non realizzato sulle posizioni ancora aperte.
+  pnlOggi: DailyPnl & { nonRealizzato: number };
 }
 
 export const statusPath = (stateDir: string) => join(stateDir, "agents-status.json");
@@ -319,7 +322,7 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
     }
     const fills = applyFills(journal, filled);
     for (const t of fills.opened) bus.emit("trade", { stato: "aperto", simbolo: t.simbolo, quantita: t.comprate, prezzo: t.costo / t.comprate, agenti: t.contesto?.agenti ?? [] });
-    for (const t of fills.closed) bus.emit("trade", { stato: "chiuso", simbolo: t.simbolo, risultato: t.risultato ?? 0, giorni: t.giorni ?? 0, uscita: t.motivoUscita ?? "sconosciuto", agenti: t.contesto?.agenti ?? [] });
+    for (const t of fills.closed) bus.emit("trade", { stato: "chiuso", simbolo: t.simbolo, risultato: t.risultato ?? 0, pnl: t.incassato - t.costo, giorni: t.giorni ?? 0, uscita: t.motivoUscita ?? "sconosciuto", agenti: t.contesto?.agenti ?? [] });
     learned.push(...learnFromJournal(lessonsFile, journal, today));
     pruneLessons(lessonsFile, today);
     writeLessons(deps.stateDir, lessonsFile);
@@ -364,12 +367,15 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
       confronto: bm.cmp,
       ultimoRiepilogo: cache.ultimoRiepilogo,
       tradeChiusiOggi: fills.closed.map((t) => ({ simbolo: t.simbolo, risultato: t.risultato ?? 0, giorni: t.giorni ?? 0, uscita: t.motivoUscita ?? "sconosciuto" })),
+      pnlOggi: { ...dailyPnl(journal, today), nonRealizzato: positions.reduce((s, p) => s + (p.currentPrice - p.avgEntryPrice) * p.qty, 0) },
     };
     writeJsonAtomic(statusPath(deps.stateDir), status);
     log.info(`giro ${giro}: ${status.segnali.length} segnali, ${alloc.proposte.length} proposte, ${outcomes.length} ordini, ${cage.rejected.length} rifiuti, rischio ${alloc.rischio}`);
 
-    // 9. Riepilogo del giorno su Telegram, una volta, dopo la chiusura.
-    if (rt.minutes >= minutesOf(AGENTS.summaryAfter) && cache.ultimoRiepilogo !== today && rt.weekday >= 1 && rt.weekday <= 5) {
+    // 9. Riepilogo del giorno su Telegram, una volta, dopo la chiusura. Nel fine settimana solo se c'è stato
+    // movimento (crypto): il conto di profitto e perdita del giorno non deve perdersi.
+    const operato = status.pnlOggi.vendite.length + status.pnlOggi.acquisti.length > 0;
+    if (rt.minutes >= minutesOf(AGENTS.summaryAfter) && cache.ultimoRiepilogo !== today && ((rt.weekday >= 1 && rt.weekday <= 5) || operato)) {
       cache.ultimoRiepilogo = today;
       status.ultimoRiepilogo = today;
       writeJsonAtomic(statusPath(deps.stateDir), status);
@@ -384,6 +390,25 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
 }
 
 const pct = (x: number) => `${x >= 0 ? "+" : ""}${(x * 100).toFixed(2)}%`;
+const usd = (x: number) => `${x >= 0 ? "+" : ""}${x.toFixed(2)} $`;
+const qty = (q: number) => (Number.isInteger(q) ? String(q) : q.toFixed(6).replace(/0+$/, "").replace(/\.$/, ""));
+
+// Il conto della giornata: ogni vendita con il suo guadagno o perdita in dollari, il totale, chi l'ha votata.
+export function pnlText(p: AgentsStatus["pnlOggi"]): string[] {
+  const lines = [`💰 Profitto e perdita del ${p.data}`];
+  if (!p.vendite.length && !p.acquisti.length) {
+    lines.push(`Nessuna operazione oggi · non realizzato sulle posizioni aperte ${usd(p.nonRealizzato)}`);
+    return lines;
+  }
+  const parziali = p.vendite.length - p.tradeChiusi;
+  lines.push(`Realizzato ${usd(p.realizzato)} su ${p.vendite.length} vendit${p.vendite.length === 1 ? "a" : "e"} (${p.tradeChiusi} trade chius${p.tradeChiusi === 1 ? "o" : "i"}${parziali ? `, ${parziali} parzial${parziali === 1 ? "e" : "i"}` : ""})`);
+  for (const v of p.vendite) lines.push(` • ${v.simbolo} ${qty(v.quantita)} × ${v.carico.toFixed(2)} → ${v.prezzo.toFixed(2)}: ${usd(v.pnl)} (${pct(v.risultato)})${v.chiuso ? "" : " parziale"} · ${v.motivo}${v.agenti.length ? ` · agenti ${v.agenti.join(", ")}` : ""}`);
+  const perAgente = Object.entries(p.perAgente).sort((a, b) => b[1].pnl - a[1].pnl);
+  if (perAgente.length) lines.push(`Per agente: ${perAgente.map(([a, g]) => `${a} ${usd(g.pnl)} (${g.operazioni} op.)`).join(", ")}`);
+  if (p.acquisti.length) lines.push(`Acquisti di oggi: ${p.acquisti.map((a) => `${a.simbolo} ${qty(a.quantita)} @ ${a.prezzo.toFixed(2)}${a.agenti.length ? ` (${a.agenti.join(", ")})` : ""}`).join("; ")}`);
+  lines.push(`Non realizzato sulle posizioni aperte ${usd(p.nonRealizzato)} · totale giornata ${usd(p.realizzato + p.nonRealizzato)}`);
+  return lines;
+}
 
 export function summaryText(s: AgentsStatus): string {
   const lines = [`📊 Agenti · riepilogo ${s.aggiornato.slice(0, 10)}`];
@@ -392,7 +417,7 @@ export function summaryText(s: AgentsStatus): string {
   lines.push(`Posizioni: ${s.posizioni.length ? s.posizioni.map((p) => `${p.simbolo} ${p.quantita} (${pct(p.variazione)})`).join(", ") : "nessuna"}`);
   lines.push(`Rischio ammesso ${(s.rischio * 100).toFixed(0)}% · pesi ${Object.entries(s.pesi).map(([k, v]) => `${k} ${v}`).join(", ")}`);
   if (s.contesto) lines.push(`Contesto ${s.contesto.generale} (${s.contesto.fonte}): ${s.contesto.motivo}${s.inAttesa.length ? ` · in attesa: ${s.inAttesa.map((w) => w.simbolo).join(", ")}` : ""}`);
-  if (s.tradeChiusiOggi.length) lines.push(`Trade chiusi oggi: ${s.tradeChiusiOggi.map((t) => `${t.simbolo} ${pct(t.risultato)} in ${t.giorni} g (${t.uscita})`).join("; ")}`);
+  lines.push("", ...pnlText(s.pnlOggi), "");
   lines.push(`Diario: ${s.diario.stato}`);
   if (s.acquistiBloccati) lines.push(`Acquisti bloccati: ${s.acquistiBloccati}`);
   if (s.allarmi.length) lines.push(`Allarmi: ${s.allarmi.join(" | ")}`);

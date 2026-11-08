@@ -49,6 +49,7 @@
   <section><h2>Punteggi e segnali</h2><table id="scores"><thead><tr><th>Titolo</th><th class="num">Punteggio</th><th>Agenti</th></tr></thead><tbody></tbody></table><div id="signals" class="muted" style="margin-top:6px"></div></section>
   <section><h2>Ordini dell'ultimo giro</h2><div id="orders" class="muted">nessuno</div></section>
   <section><h2>Rifiuti della gabbia</h2><div id="rejects" class="muted">nessuno</div></section>
+  <section><h2>Profitto e perdita di oggi</h2><div id="pnl" class="muted">nessuna operazione</div></section>
   <section><h2>Stop su Alpaca · Diario</h2><div id="stops" class="muted"></div><div id="journal" class="muted"></div></section>
   <section><h2>Eventi in diretta</h2><div id="events"></div></section>
 </aside>
@@ -61,6 +62,7 @@ const $ = (s) => document.querySelector(s);
 const fmt = (x, d = 2) => (x === null || x === undefined || Number.isNaN(x)) ? '–' : Number(x).toLocaleString('it-IT', { minimumFractionDigits: d, maximumFractionDigits: d });
 const pct = (x) => (x === null || x === undefined) ? '–' : `${x >= 0 ? '+' : ''}${(x * 100).toFixed(2)}%`;
 const cls = (x) => x > 0 ? 'up' : x < 0 ? 'down' : '';
+const usd = (x) => (x === null || x === undefined) ? '–' : `${x >= 0 ? '+' : ''}${fmt(x)} $`;
 const DEFAULT_SYMBOLS = ['SPY', 'QQQ', 'AAPL', 'MSFT', 'NVDA', 'GLD', 'BTC/USD', 'ETH/USD', 'IWM', 'TLT'];
 
 // ---------- scena 3D: il pavimento dei mercati, l'anello della gabbia, gli agenti in orbita ----------
@@ -185,6 +187,8 @@ function paint(st) {
   $('#rejects').innerHTML = (st.rifiuti || []).map((r) => `<div><span class="sell">${r.side} ${r.qty} ${r.symbol}</span> <span class="tag">${r.source}</span> ${r.reason}</div>`).join('') || 'nessuno';
   const sp = st.stopSuAlpaca;
   $('#stops').innerHTML = sp ? `Stop attivi: ${[...sp.ok, ...sp.placed].join(', ') || 'nessuno'}${sp.errors.length ? `<br><span class="down">${sp.errors.join('; ')}</span>` : ''}` : 'Stop: non verificati in questo giro (mercato chiuso)';
+  const pl = st.pnlOggi;
+  $('#pnl').innerHTML = pl ? `${pl.vendite.length || pl.acquisti.length ? `Realizzato <b class="${cls(pl.realizzato)}">${usd(pl.realizzato)}</b> su ${pl.vendite.length} vendite (${pl.tradeChiusi} trade chiusi)` : 'Nessuna operazione oggi'} · non realizzato <b class="${cls(pl.nonRealizzato)}">${usd(pl.nonRealizzato)}</b> · totale <b class="${cls(pl.realizzato + pl.nonRealizzato)}">${usd(pl.realizzato + pl.nonRealizzato)}</b>${pl.vendite.length ? `<table><thead><tr><th>Titolo</th><th class="num">Qta</th><th class="num">Carico</th><th class="num">Uscita</th><th class="num">P&amp;L</th><th>Uscita · agenti</th></tr></thead><tbody>${pl.vendite.map((v) => `<tr><td>${v.simbolo}${v.chiuso ? '' : ' <span class="tag">parziale</span>'}</td><td class="num">${v.quantita}</td><td class="num">${fmt(v.carico)}</td><td class="num">${fmt(v.prezzo)}</td><td class="num ${cls(v.pnl)}">${usd(v.pnl)} (${pct(v.risultato)})</td><td class="muted">${v.motivo}${v.agenti?.length ? ` · ${v.agenti.join(', ')}` : ''}</td></tr>`).join('')}</tbody></table>` : ''}${Object.keys(pl.perAgente || {}).length ? `<br>Per agente: ${Object.entries(pl.perAgente).map(([a, g]) => `<span class="tag">${a} <span class="${cls(g.pnl)}">${usd(g.pnl)}</span> · ${g.operazioni} op.</span>`).join(' ')}` : ''}${pl.acquisti?.length ? `<br><span class="muted">Acquisti di oggi: ${pl.acquisti.map((a) => `${a.simbolo} ${a.quantita} @ ${fmt(a.prezzo)}`).join('; ')}</span>` : ''}` : 'nessuna operazione';
   const d = st.diario?.statistiche;
   $('#journal').innerHTML = d ? `Diario: ${d.trade} trade chiusi, ${d.vinti} vinti, attesa ${d.attesa === null ? '–' : pct(d.attesa)} (${d.campione}).<br><span class="muted">${st.diario.stato}</span>${st.acquistiBloccati ? `<br><span class="down">Acquisti bloccati: ${st.acquistiBloccati}</span>` : ''}${st.allarmi?.length ? `<br><span class="down">Allarmi: ${st.allarmi.join(' | ')}</span>` : ''}` : '';
 }
@@ -205,7 +209,7 @@ function describe(e) {
     case 'ordine': return `<span class="${e.lato}">ORDINE ${e.lato === 'buy' ? 'COMPRA' : 'VENDE'} ${e.quantita} ${e.simbolo}</span> <span class="tag">${e.esito}${e.stato ? ` ${e.stato}` : ''}</span>${e.errore ? ` <span class="down">${e.errore}</span>` : ''}`;
     case 'rifiuto': return `<span class="sell">rifiutato ${e.lato} ${e.quantita} ${e.simbolo}</span> <span class="tag">${e.origine}</span> ${e.motivo}`;
     case 'stop': return `stop ${e.azione}: ${e.dettaglio}`;
-    case 'trade': return e.stato === 'aperto' ? `trade aperto ${e.simbolo} ${e.quantita} @ ${fmt(e.prezzo)} (${(e.agenti || []).join(', ')})` : `trade chiuso ${e.simbolo} <span class="${cls(e.risultato)}">${pct(e.risultato)}</span> in ${e.giorni} g · ${e.uscita}`;
+    case 'trade': return e.stato === 'aperto' ? `trade aperto ${e.simbolo} ${e.quantita} @ ${fmt(e.prezzo)} (${(e.agenti || []).join(', ')})` : `trade chiuso ${e.simbolo} <span class="${cls(e.risultato)}">${pct(e.risultato)}${e.pnl !== undefined ? ` (${usd(e.pnl)})` : ''}</span> in ${e.giorni} g · ${e.uscita}`;
     case 'allarme': return `<span class="down">⚠️ ${e.titolo}</span> ${e.dettaglio}`;
     default: return e.testo ?? JSON.stringify(e);
   }

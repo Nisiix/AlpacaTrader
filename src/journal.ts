@@ -5,7 +5,7 @@ import { JOURNAL } from "./config.ts";
 import { isObject, readJson, writeJsonAtomic } from "./fsutil.ts";
 import type { Indicator } from "./indicators.ts";
 import { activeLessons, type Lesson, type LessonsFile } from "./lessons.ts";
-import { addDays, addTradingDays } from "./slots.ts";
+import { addDays, addTradingDays, romeTime } from "./slots.ts";
 
 // Il diario dei trade: ogni acquisto eseguito apre un trade, la vendita che azzera la posizione lo chiude.
 // La verità sono gli ordini eseguiti su Alpaca; qui sopra c'è solo il contesto (perché, fiducia, indicatori).
@@ -51,6 +51,20 @@ export interface Trade {
   risultato?: number; // frazione, 0.021 = +2,1%
   giorni?: number;
   motivoUscita?: string;
+  // Ogni esecuzione con la sua data: serve al conto giornaliero di profitto e perdita (anche sulle uscite parziali).
+  acquisti?: Fill[];
+  vendite?: SaleFill[];
+}
+
+export interface Fill {
+  data: string; // ISO dell'esecuzione
+  quantita: number;
+  prezzo: number;
+}
+
+export interface SaleFill extends Fill {
+  carico: number; // prezzo medio di carico al momento della vendita
+  motivo: string;
 }
 
 export interface JournalFile {
@@ -131,9 +145,10 @@ export function applyFills(file: JournalFile, orders: Order[]): { opened: Trade[
         open.comprate += o.filledQty;
         open.costo += value;
         open.quantita += o.filledQty;
+        (open.acquisti ??= []).push({ data: when, quantita: o.filledQty, prezzo: o.filledAvgPrice });
         continue;
       }
-      const t: Trade = { id: o.clientOrderId, simbolo: o.symbol, stato: "aperto", apertoIl: when, comprate: o.filledQty, costo: value, vendute: 0, incassato: 0, quantita: o.filledQty, contesto: intent?.contesto ?? null };
+      const t: Trade = { id: o.clientOrderId, simbolo: o.symbol, stato: "aperto", apertoIl: when, comprate: o.filledQty, costo: value, vendute: 0, incassato: 0, quantita: o.filledQty, contesto: intent?.contesto ?? null, acquisti: [{ data: when, quantita: o.filledQty, prezzo: o.filledAvgPrice }] };
       file.trade.push(t);
       opened.push(t);
       continue;
@@ -141,6 +156,7 @@ export function applyFills(file: JournalFile, orders: Order[]): { opened: Trade[
     // Vendita di una posizione nata prima del diario: non c'è un ingresso da misurare.
     if (!open) continue;
     const qty = Math.min(o.filledQty, open.quantita);
+    (open.vendite ??= []).push({ data: when, quantita: qty, prezzo: o.filledAvgPrice, carico: open.costo / open.comprate, motivo: exitReason(o, intent) });
     open.vendute += qty;
     open.incassato += qty * o.filledAvgPrice;
     open.quantita -= qty;
@@ -151,6 +167,57 @@ export function applyFills(file: JournalFile, orders: Order[]): { opened: Trade[
     closed.push(open);
   }
   return { opened, closed };
+}
+
+// Profitto e perdita della giornata: ogni vendita eseguita oggi vale (prezzo - carico) × quantità, realizzato,
+// attribuito agli agenti che avevano votato l'ingresso. Gli acquisti di oggi si elencano ma non pesano.
+export interface DailySale {
+  simbolo: string;
+  quantita: number;
+  carico: number;
+  prezzo: number;
+  pnl: number; // dollari
+  risultato: number; // frazione
+  motivo: string;
+  agenti: string[];
+  chiuso: boolean; // la vendita ha azzerato il trade
+}
+
+export interface DailyPnl {
+  data: string;
+  vendite: DailySale[];
+  acquisti: { simbolo: string; quantita: number; prezzo: number; agenti: string[] }[];
+  realizzato: number;
+  tradeChiusi: number;
+  perAgente: Record<string, { pnl: number; operazioni: number }>;
+}
+
+const romeDateOf = (iso: string) => romeTime(new Date(iso)).date;
+
+export function dailyPnl(file: JournalFile, today: string): DailyPnl {
+  const vendite: DailySale[] = [];
+  const acquisti: DailyPnl["acquisti"] = [];
+  for (const t of file.trade) {
+    const agenti = t.contesto?.agenti ?? [];
+    for (const a of t.acquisti ?? []) if (romeDateOf(a.data) === today) acquisti.push({ simbolo: t.simbolo, quantita: a.quantita, prezzo: a.prezzo, agenti });
+    const sales = t.vendite ?? [];
+    sales.forEach((v, i) => {
+      if (romeDateOf(v.data) !== today) return;
+      const last = i === sales.length - 1 && t.stato === "chiuso";
+      vendite.push({ simbolo: t.simbolo, quantita: v.quantita, carico: v.carico, prezzo: v.prezzo, pnl: (v.prezzo - v.carico) * v.quantita, risultato: v.carico ? v.prezzo / v.carico - 1 : 0, motivo: v.motivo, agenti, chiuso: last });
+    });
+    // Trade chiusi oggi da una versione precedente del diario, senza l'elenco delle vendite: conta il saldo.
+    if (!sales.length && t.stato === "chiuso" && t.chiusoIl && romeDateOf(t.chiusoIl) === today) {
+      vendite.push({ simbolo: t.simbolo, quantita: t.vendute, carico: t.prezzoIngresso ?? t.costo / t.comprate, prezzo: t.prezzoUscita ?? t.incassato / t.vendute, pnl: t.incassato - t.costo, risultato: t.risultato ?? 0, motivo: t.motivoUscita ?? "sconosciuto", agenti, chiuso: true });
+    }
+  }
+  const perAgente: DailyPnl["perAgente"] = {};
+  for (const v of vendite) for (const a of v.agenti.length ? v.agenti : ["senza agente"]) {
+    const g = (perAgente[a] ??= { pnl: 0, operazioni: 0 });
+    g.pnl += v.pnl;
+    g.operazioni += 1;
+  }
+  return { data: today, vendite, acquisti, realizzato: vendite.reduce((s, v) => s + v.pnl, 0), tradeChiusi: vendite.filter((v) => v.chiuso).length, perAgente };
 }
 
 export interface Stats {

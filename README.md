@@ -51,7 +51,12 @@ allocazione, ordini, rifiuti, stop, trade, allarmi) e nello stato `state/agents-
 (`src/dashboard/`) li legge: pavimento 3D dei mercati (altezza = peso in portafoglio, colore = guadagno/perdita), agenti in
 orbita che lanciano i segnali verso i titoli, anello della gabbia, pannelli con posizioni, punteggi, ordini, rifiuti,
 stop, diario ed eventi in diretta via WebSocket. Three.js è servito dal pacchetto npm: funziona senza internet.
-Telegram riceve ogni ordine inviato, gli allarmi e un riepilogo dopo le 22:05.
+Telegram riceve ogni ordine inviato, gli allarmi e un riepilogo dopo le 22:05 con il **conto di profitto e perdita della
+giornata**: ogni vendita eseguita oggi con guadagno o perdita in dollari e in percentuale (carico → uscita, parziale o
+chiusura, motivo), il totale realizzato, il conto per agente (chi aveva votato l'ingresso), gli acquisti del giorno e il non
+realizzato sulle posizioni aperte. Lo stesso conto è nella dashboard ("Profitto e perdita di oggi") e in
+`state/agents-status.json` (`pnlOggi`); il diario conserva ogni esecuzione con la sua data (`acquisti`, `vendite`).
+Nel fine settimana il riepilogo parte solo se c'è stato movimento (crypto).
 
 ![dashboard](docs/dashboard.png)
 

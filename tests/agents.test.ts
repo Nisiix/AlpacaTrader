@@ -6,7 +6,7 @@ import { runAgentsBacktest } from "../src/agents/backtest.ts";
 import { ClaudeMacro, ContextAgent } from "../src/agents/context.ts";
 import { ExitAgent } from "../src/agents/exits.ts";
 import { EventBus, readEvents } from "../src/agents/bus.ts";
-import { emptyCache, inEntryWindow, runTick, statusPath, type AgentsStatus, type EngineDeps } from "../src/agents/engine.ts";
+import { emptyCache, inEntryWindow, runTick, statusPath, summaryText, type AgentsStatus, type EngineDeps } from "../src/agents/engine.ts";
 import { HorizonAgent } from "../src/agents/horizon.ts";
 import { KronosAgent } from "../src/agents/kronos.ts";
 import { PullbackAgent } from "../src/agents/pullback.ts";
@@ -302,9 +302,37 @@ describe("motore", () => {
     const cache = emptyCache();
     await runTick(deps, cache);
     expect(env.outbox()).toContain("riepilogo 2026-09-24");
+    expect(env.outbox()).toContain("Profitto e perdita del 2026-09-24");
+    expect(env.outbox()).toContain("Nessuna operazione oggi");
     env.clock.t = day("2026-09-24", "22:20").getTime();
     await runTick(deps, cache);
     expect(env.outbox().split("riepilogo 2026-09-24").length).toBe(2);
+  });
+
+  test("il riepilogo elenca il profitto e la perdita di ogni vendita del giorno, il totale e il conto per agente", () => {
+    const base = { versione: 1 as const, aggiornato: "2026-09-24T20:10:00.000Z", giro: "g", mercatoAperto: false, finestraIngressi: false, conto: null, posizioni: [], prezzi: {}, rischio: 1, pesi: {}, agenti: {}, segnali: [], punteggi: [], ordini: [], rifiuti: [], contesto: null, inAttesa: [], stopSuAlpaca: null, acquistiBloccati: null, lezioniAttive: [], allarmi: [], diario: { stato: "x", statistiche: { trade: 0, vinti: 0, percVinti: null, mediaVincita: null, mediaPerdita: null, attesa: null, campione: "nessuno" as const } }, confronto: null, ultimoRiepilogo: null, tradeChiusiOggi: [] };
+    const st: AgentsStatus = {
+      ...base,
+      pnlOggi: {
+        data: "2026-09-24",
+        vendite: [
+          { simbolo: "GLD", quantita: 5, carico: 105, prezzo: 120, pnl: 75, risultato: 120 / 105 - 1, motivo: "agenti: presa di profitto", agenti: ["trend", "profitto"], chiuso: false },
+          { simbolo: "NVDA", quantita: 2, carico: 180, prezzo: 171, pnl: -18, risultato: -0.05, motivo: "stop su Alpaca", agenti: ["trend"], chiuso: true },
+        ],
+        acquisti: [{ simbolo: "AAPL", quantita: 3, prezzo: 250, agenti: ["trend"] }],
+        realizzato: 57,
+        tradeChiusi: 1,
+        perAgente: { trend: { pnl: 57, operazioni: 2 }, profitto: { pnl: 75, operazioni: 1 } },
+        nonRealizzato: -12.5,
+      },
+    };
+    const text = summaryText(st);
+    expect(text).toContain("Realizzato +57.00 $ su 2 vendite (1 trade chiuso, 1 parziale)");
+    expect(text).toContain("GLD 5 × 105.00 → 120.00: +75.00 $ (+14.29%) parziale · agenti: presa di profitto · agenti trend, profitto");
+    expect(text).toContain("NVDA 2 × 180.00 → 171.00: -18.00 $ (-5.00%) · stop su Alpaca · agenti trend");
+    expect(text).toContain("Per agente: profitto +75.00 $ (1 op.), trend +57.00 $ (2 op.)");
+    expect(text).toContain("Acquisti di oggi: AAPL 3 @ 250.00 (trend)");
+    expect(text).toContain("Non realizzato sulle posizioni aperte -12.50 $ · totale giornata +44.50 $");
   });
 });
 

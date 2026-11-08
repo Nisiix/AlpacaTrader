@@ -5,7 +5,7 @@ import { join } from "node:path";
 import type { Brain, BrainInput, Decision } from "../src/brain/types.ts";
 import type { Order } from "../src/broker/types.ts";
 import { applyCage } from "../src/cage.ts";
-import { applyFills, emptyJournal, learnFromJournal, learningStatus, statsOf, type JournalFile, type Trade } from "../src/journal.ts";
+import { applyFills, dailyPnl, emptyJournal, learnFromJournal, learningStatus, statsOf, type JournalFile, type Trade } from "../src/journal.ts";
 import { emptyLessons } from "../src/lessons.ts";
 import { statsLine } from "../src/report.ts";
 import { addDays } from "../src/slots.ts";
@@ -114,6 +114,43 @@ describe("diario dei trade", () => {
     expect(r.closed).toHaveLength(1);
     expect(r.closed[0]!.risultato).toBeCloseTo(((5 * 120 + 15 * 100) / 20) / 105 - 1, 6);
     expect(r.closed[0]!.giorni).toBe(3);
+  });
+});
+
+describe("profitto e perdita del giorno", () => {
+  test("ogni vendita di oggi vale (prezzo - carico) × quantità; le parziali e le chiusure si distinguono; gli agenti ricevono il conto", () => {
+    const j = emptyJournal();
+    j.intenzioni.push({ id: "c-1", simbolo: "GLD", lato: "buy", origine: "agenti", data: "2026-09-21", contesto: { setup: "", momentum20: null, volGiornaliera: null, distanzaMedia: null, fiducia: null, attesa: "", perche: "trend", agenti: ["trend", "rientro"] } });
+    j.intenzioni.push({ id: "c-10", simbolo: "NVDA", lato: "buy", origine: "agenti", data: "2026-09-22", contesto: { setup: "", momentum20: null, volGiornaliera: null, distanzaMedia: null, fiducia: null, attesa: "", perche: "trend", agenti: ["trend"] } });
+    // GLD: 10 @ 100 e 10 @ 110 (carico medio 105), ieri; oggi vende 5 @ 120 (parziale) e poi 15 @ 100 (chiude).
+    applyFills(j, [fill("1", "buy", "GLD", 10, 100, "2026-09-21T14:00:00Z"), fill("2", "buy", "GLD", 10, 110, "2026-09-22T14:00:00Z"), fill("10", "buy", "NVDA", 2, 180, "2026-09-22T14:00:00Z")]);
+    applyFills(j, [fill("3", "sell", "GLD", 5, 120, "2026-09-24T14:00:00Z"), fill("4", "sell", "GLD", 15, 100, "2026-09-24T19:00:00Z"), fill("11", "buy", "NVDA", 1, 190, "2026-09-24T14:05:00Z")]);
+    const p = dailyPnl(j, "2026-09-24");
+    expect(p.vendite).toHaveLength(2);
+    expect(p.vendite[0]).toMatchObject({ simbolo: "GLD", quantita: 5, carico: 105, prezzo: 120, chiuso: false, agenti: ["trend", "rientro"] });
+    expect(p.vendite[0]!.pnl).toBeCloseTo(75, 6);
+    expect(p.vendite[1]).toMatchObject({ quantita: 15, chiuso: true });
+    expect(p.vendite[1]!.pnl).toBeCloseTo(-75, 6);
+    expect(p.realizzato).toBeCloseTo(0, 6);
+    expect(p.tradeChiusi).toBe(1);
+    expect(p.perAgente.trend).toEqual({ pnl: 0, operazioni: 2 });
+    expect(p.perAgente.rientro!.operazioni).toBe(2);
+    // L'aggiunta di oggi su NVDA si elenca tra gli acquisti; quella di ieri no.
+    expect(p.acquisti).toEqual([{ simbolo: "NVDA", quantita: 1, prezzo: 190, agenti: ["trend"] }]);
+    // Ieri: nessuna vendita, solo gli acquisti del 22 (ora di Roma).
+    const ieri = dailyPnl(j, "2026-09-22");
+    expect(ieri.vendite).toHaveLength(0);
+    expect(ieri.acquisti.map((a) => a.simbolo).sort()).toEqual(["GLD", "NVDA"]);
+  });
+
+  test("un trade chiuso oggi da un diario vecchio, senza elenco vendite, conta col saldo incassato - costo", () => {
+    const j = journalWith([0.05], "SPY", "2026-09-24");
+    j.trade[0]!.chiusoIl = "2026-09-24T15:00:00Z";
+    const p = dailyPnl(j, "2026-09-24");
+    expect(p.vendite).toHaveLength(1);
+    expect(p.vendite[0]!.pnl).toBeCloseTo(5, 6);
+    expect(p.vendite[0]!.chiuso).toBe(true);
+    expect(p.perAgente["senza agente"]!.pnl).toBeCloseTo(5, 6);
   });
 });
 
