@@ -49,10 +49,11 @@ export function marketRules(v: AgentView, events: MarketEvent[] = EVENTS): Macro
       reasons.push("oro e obbligazioni in salita con SPY in calo: mercato in cerca di riparo");
     }
   } else reasons.push("storico di SPY insufficiente");
-  // Settori: sfavorevole se la maggioranza dei suoi titoli è sotto la media a 50; crypto su BTC.
+  // Settori: sfavorevole se la maggioranza dei suoi titoli è sotto la media a 50. Il settore crypto si misura su
+  // tutto l'universo crypto del giorno (non solo BTC ed ETH), così il contesto segue lo stesso universo degli agenti.
   const settori: Partial<Record<string, Outlook>> = {};
   const bySector = new Map<string, string[]>();
-  for (const [s, sec] of Object.entries(SECTORS)) bySector.set(sec, [...(bySector.get(sec) ?? []), s]);
+  for (const s of new Set([...Object.keys(SECTORS), ...AGENTS.universe])) bySector.set(sectorOf(s), [...(bySector.get(sectorOf(s)) ?? []), s]);
   for (const [sec, syms] of bySector) {
     let above = 0, total = 0;
     for (const s of syms) {
