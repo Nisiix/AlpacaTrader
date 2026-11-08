@@ -66,6 +66,8 @@ export function learnFromStopLoss(file: LessonsFile, id: string, symbol: string,
 
 // Alpaca rifiuta due volte lo stesso titolo-lato: smettiamo di riprovarci per un po'.
 export function learnFromBrokerReject(file: LessonsFile, symbol: string, side: string, today: string, error: string): Lesson | null {
+  // Rifiuti per quantità (briciole, arrotondamenti, saldo frazionario) sono un nostro errore tecnico, non una lezione sul titolo.
+  if (/qty must be|insufficient balance|insufficient qty|fractional/i.test(error)) return null;
   file.rifiuti.push({ simbolo: symbol, lato: side, data: today, errore: error.slice(0, 200) });
   const since = addDays(today, -LIMITS.brokerRejectWindowDays * 2);
   const same = file.rifiuti.filter((e) => e.simbolo === symbol && e.lato === side && e.data >= since);

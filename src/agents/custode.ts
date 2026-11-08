@@ -304,12 +304,18 @@ export class CustodiAgent implements Agent {
     const base = { simbolo: s, agente, tesi, rischio, dalle: c.dalle, livelli: { prezzo: price, media20: m20, media50: m50, media200: m200, stop, carico }, numeri: { momentum3m: mom3, momentum12m: mom12, distanzaMedia50: dist50, volGiornaliera: vol, guadagno: gain } };
 
     if (pos) {
+      const fcPos = v.previsioni?.[s];
+      const kronosTiene = fcPos !== undefined && fcPos >= AGENTS.kronos.anticipaSoglia;
       // In posizione: il trend regge finché il prezzo sta sopra la media a 50; sotto la 20 si stringe l'attenzione.
+      // Se Kronos anticipa ancora un rialzo, la perdita della media a 50 non fa uscire: si tiene con lo stop.
+      if (m50 !== null && price !== null && price < m50 && kronosTiene) {
+        return { ...base, fase: "in posizione", piano: `Tenere nonostante la media a ${LIMITS.trendSmaDays} persa: Kronos anticipa ${pct(fcPos!)} a ${AGENTS.kronos.horizon} sedute. Si esce con lo stop (${num(stop)}) o quando la proiezione gira.`, stato: `In posizione da ${c.dalle}, ${pct(gain, 2)} dal carico ${num(carico)}; stop a ${num(stop)}.` };
+      }
       if (m50 !== null && price !== null && price < m50) {
         segnali.push({ agente, simbolo: s, lato: "sell", forza: 0.9, orizzonteSedute: horizon, perche: `${s} sotto la media a ${LIMITS.trendSmaDays} giorni (${num(m50)}): il trend che giustificava la posizione è finito` });
         return { ...base, fase: "in uscita", piano: `Uscire: il prezzo ${num(price)} ha perso la media a ${LIMITS.trendSmaDays} giorni. Si vende e si torna a osservare.`, stato: `In posizione da ${c.dalle}, ${pct(gain, 2)} dal carico ${num(carico)}; stop su Alpaca a ${num(stop)}.` };
       }
-      if (mom3 !== null && mom3 <= 0) {
+      if (mom3 !== null && mom3 <= 0 && !kronosTiene) {
         segnali.push({ agente, simbolo: s, lato: "sell", forza: 0.6, orizzonteSedute: horizon, perche: `${s} con rendimento a 3 mesi tornato negativo (${pct(mom3)}): lo slancio è finito` });
         return { ...base, fase: "in uscita", piano: `Ridurre: lo slancio a 3 mesi è negativo, il trend di fondo regge ancora sopra la media a ${LIMITS.trendSmaDays}.`, stato: `In posizione da ${c.dalle}, ${pct(gain, 2)} dal carico ${num(carico)}; stop a ${num(stop)}.` };
       }

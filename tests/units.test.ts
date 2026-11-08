@@ -157,3 +157,25 @@ describe("impostazioni degli agenti e chiavi", () => {
     expect(m.telegramChatId).toBe("43");
   });
 });
+
+describe("briciole e arrotondamenti", () => {
+  test("le posizioni crypto microscopiche si ignorano, le quantità si troncano a 6 decimali, i titoli restano interi", async () => {
+    const { cleanPositions } = await import("../src/agents/engine.ts");
+    const out = cleanPositions([
+      { symbol: "AAVE/USD", qty: 2.27e-7, avgEntryPrice: 130, currentPrice: 130, marketValue: 0.00003 },
+      { symbol: "LTC/USD", qty: 80.874531937, avgEntryPrice: 100, currentPrice: 100, marketValue: 8087.45 },
+      { symbol: "AAPL", qty: 40, avgEntryPrice: 350, currentPrice: 342, marketValue: 13680 },
+      { symbol: "ETH/USD", qty: 0.002, avgEntryPrice: 2100, currentPrice: 2100, marketValue: 4.2 }, // 4,2 $: sotto il minimo di 10 $
+    ]);
+    expect(out.map((p) => p.symbol)).toEqual(["LTC/USD", "AAPL"]);
+    expect(out[0]!.qty).toBe(80.874531);
+  });
+
+  test("un rifiuto di Alpaca per quantità non diventa una lezione", async () => {
+    const { emptyLessons, learnFromBrokerReject } = await import("../src/lessons.ts");
+    const f = emptyLessons();
+    expect(learnFromBrokerReject(f, "LTC/USD", "sell", "2026-11-08", 'Alpaca 403: {"message":"insufficient balance for LTC"}')).toBeNull();
+    expect(learnFromBrokerReject(f, "LTC/USD", "sell", "2026-11-08", 'Alpaca 422: {"message":"qty must be > 0"}')).toBeNull();
+    expect(f.rifiuti).toHaveLength(0);
+  });
+});

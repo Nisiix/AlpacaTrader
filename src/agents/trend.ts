@@ -31,7 +31,12 @@ export class TrendAgent implements Agent {
         }
         candidates.push({ s, mom: momentum(c, LIMITS.rankMomentumDays) ?? 0 });
       }
-      else if (held.has(s) && t.close < t.sma) segnali.push({ agente: this.name, simbolo: s, lato: "sell", forza: 1, orizzonteSedute: AGENTS.horizonSessions, perche: `chiusura ${t.close.toFixed(2)} sotto la media a ${LIMITS.trendSmaDays} giorni (${t.sma.toFixed(2)}): il trend è finito` });
+      else if (held.has(s) && t.close < t.sma) {
+        // Kronos anticipa ancora un rialzo: la posizione si tiene (lo stop resta), il trend aspetta.
+        const fc = v.previsioni?.[s];
+        if (fc !== undefined && fc >= AGENTS.kronos.anticipaSoglia) continue;
+        segnali.push({ agente: this.name, simbolo: s, lato: "sell", forza: 1, orizzonteSedute: AGENTS.horizonSessions, perche: `chiusura ${t.close.toFixed(2)} sotto la media a ${LIMITS.trendSmaDays} giorni (${t.sma.toFixed(2)}): il trend è finito` });
+      }
     }
     candidates.sort((a, b) => b.mom - a.mom);
     const top = candidates.slice(0, LIMITS.maxPositions);

@@ -3,7 +3,8 @@ import { isProtectiveStop, type Account, type Bar, type Broker, type MarketClock
 import { compareWithBenchmarks, type Comparison } from "../benchmark.ts";
 import { evaluateBreaker, readBreaker, writeBreaker } from "../breaker.ts";
 import { applyCage, lossPct, tradingBlockReason, type Rejection } from "../cage.ts";
-import { AGENTS, DAILY_BARS_DAYS, LIMITS, UNIVERSE, isCrypto, setCryptoUniverse } from "../config.ts";
+import { AGENTS, CRYPTO_MIN_NOTIONAL, DAILY_BARS_DAYS, LIMITS, UNIVERSE, isCrypto, setCryptoUniverse } from "../config.ts";
+import { roundQty } from "../broker/types.ts";
 import type { KronosForecastPath } from "../kronos-sidecar.ts";
 import { stopPctFor } from "../stops.ts";
 import type { CustodeStato } from "./custode.ts";
@@ -113,6 +114,23 @@ export interface EngineCache {
 export const emptyCache = (): EngineCache => ({ closes: {}, bars: {}, ultimoRiepilogo: null });
 export const barsPath = (stateDir: string) => join(stateDir, "bars.json");
 export const forecastsPath = (stateDir: string) => join(stateDir, "previsioni.json");
+
+// Le posizioni come le vede il motore: niente briciole (resti frazionari sotto il minimo negoziabile, che Alpaca
+// rifiuterebbe con "qty must be > 0") e quantità crypto troncate a 6 decimali (mai arrotondate per eccesso: Alpaca
+// risponderebbe "insufficient balance").
+export function cleanPositions(positions: Position[]): Position[] {
+  const out: Position[] = [];
+  for (const p of positions) {
+    if (!isCrypto(p.symbol)) {
+      if (p.qty > 0) out.push(p);
+      continue;
+    }
+    const qty = roundQty(p.symbol, p.qty);
+    if (qty <= 0 || qty * p.currentPrice < CRYPTO_MIN_NOTIONAL) continue; // briciola: si ignora
+    out.push({ ...p, qty, marketValue: qty * p.currentPrice });
+  }
+  return out;
+}
 
 const normalizeForecast = (v: number | KronosForecastPath): KronosForecastPath => (typeof v === "number" ? { rendimentoPrevisto: v, percorso: [v], ultimaChiusura: null } : v);
 
@@ -245,7 +263,7 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
         const symbols = [...new Set([...UNIVERSE, ...AGENTS.universe, ...positions.map((p) => p.symbol)])];
         const prices = await deps.broker.getLatestPrices(symbols);
         for (const p of positions) if (!prices[p.symbol] && p.currentPrice > 0) prices[p.symbol] = p.currentPrice;
-        return { account, positions, recentOrders, clock, prices };
+        return { account, positions: cleanPositions(positions), recentOrders, clock, prices };
       }, deps.sleep);
     } catch (e) {
       await alarm("Errore del broker", `Alpaca non risponde: ${(e as Error).message}. Nessun ordine in questo giro.`, false);
@@ -355,7 +373,7 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
 
     // 5. Gabbia: gli acquisti solo nella finestra di ingresso, le vendite e gli stop sempre a mercato aperto.
     const entry = inEntryWindow(startedAt);
-    const cage = applyCage({ today, slotKind: entry ? "open" : "mid", marketOpen: snap.clock.isOpen, latenessMin: 0, account: snap.account, positions: snap.positions, prices: snap.prices, closes, recentOrders: snap.recentOrders, lessons: lessonsNow, buyBlock, proposals: alloc.proposte });
+    const cage = applyCage({ today, slotKind: entry ? "open" : "mid", marketOpen: snap.clock.isOpen, latenessMin: 0, account: snap.account, positions: snap.positions, prices: snap.prices, closes, recentOrders: snap.recentOrders, lessons: lessonsNow, buyBlock, proposals: alloc.proposte, previsioni: view.previsioni });
     for (const x of cage.rejected) {
       // Obiettivo del giorno raggiunto: l'acquisto che si sarebbe fatto diventa una simulazione (si segue e si misura).
       if (giornata.obiettivoRaggiunto && x.side === "buy" && /obiettivo giornaliero/.test(x.reason)) {
@@ -413,7 +431,7 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
       await waitForFills(deps.broker, outcomes.filter((o) => o.kind === "inviato").map((o) => o.id), deps.sleep, log);
       try {
         const [pos, open] = await Promise.all([deps.broker.getPositions(), deps.broker.getOpenOrders()]);
-        positions = pos;
+        positions = cleanPositions(pos);
         // A borsa chiusa si toccano solo gli stop delle crypto; quelli dei titoli restano com'erano.
         const manageable = equitiesOpen ? pos : pos.filter((p) => isCrypto(p.symbol));
         const relevantOpen = equitiesOpen ? open : open.filter((o) => isCrypto(o.symbol));
@@ -533,7 +551,8 @@ export async function valutaTitolo(deps: EngineDeps, cache: EngineCache, symbol:
   const rt = romeTime(now);
   const today = rt.date;
   const note: string[] = [];
-  const [account, positions, clock, open] = await Promise.all([deps.broker.getAccount(), deps.broker.getPositions(), deps.broker.getClock(), deps.broker.getOpenOrders()]);
+  const [account, rawPositions, clock, open] = await Promise.all([deps.broker.getAccount(), deps.broker.getPositions(), deps.broker.getClock(), deps.broker.getOpenOrders()]);
+  const positions = cleanPositions(rawPositions);
   const symbols = [...new Set([...UNIVERSE, ...AGENTS.universe, symbol, ...positions.map((p) => p.symbol)])];
   const prices = await deps.broker.getLatestPrices(symbols);
   for (const p of positions) if (!prices[p.symbol] && p.currentPrice > 0) prices[p.symbol] = p.currentPrice;
@@ -574,7 +593,7 @@ export async function valutaTitolo(deps: EngineDeps, cache: EngineCache, symbol:
   const proposals = alloc.proposte.filter((p) => p.symbol === symbol);
   const entry = inEntryWindow(now);
   const recentOrders = open;
-  const cage = applyCage({ today, slotKind: entry ? "open" : "mid", marketOpen: clock.isOpen, latenessMin: 0, account, positions, prices, closes, recentOrders, lessons: activeLessons(lessonsFile, today), buyBlock, proposals });
+  const cage = applyCage({ today, slotKind: entry ? "open" : "mid", marketOpen: clock.isOpen, latenessMin: 0, account, positions, prices, closes, recentOrders, lessons: activeLessons(lessonsFile, today), buyBlock, proposals, previsioni: view.previsioni });
   const pos = positions.find((p) => p.symbol === symbol && p.qty > 0) ?? null;
   const price = prices[symbol] ?? closes[symbol]?.at(-1) ?? null;
   const c = closes[symbol];
