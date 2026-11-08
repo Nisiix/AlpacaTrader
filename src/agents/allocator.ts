@@ -201,15 +201,38 @@ export function allocate(view: AgentView, reports: Record<string, AgentReport>, 
     const room = Math.max(0, AGENTS.volTarget.annual - volHeld);
     if (volNew > room) scale = volNew > 0 ? room / volNew : 0;
   }
-  for (const { sc, w, p } of wanted) {
-    const price = view.prices[sc.simbolo]!;
-    const target = w * scale * equity;
-    const have = p ? p.qty * price : 0;
+  // Riparto del capitale: nessun numero fisso di titoli o di agenti. Se i contanti non bastano per tutto quello che gli
+  // agenti chiedono, si dividono in proporzione alla qualità di ogni occasione (fiducia in Kronos × evidenza del dossier ×
+  // punteggio dei voti), senza dare a nessuno più di quanto ha chiesto; quello che avanza va agli altri.
+  const asks = wanted.map((x) => {
+    const price = view.prices[x.sc.simbolo]!;
+    const have = x.p ? x.p.qty * price : 0;
+    const q = Math.max(0.05, (x.sc.fiducia ?? 0.6) * (x.sc.evidenza ?? 0.6) * Math.min(2, Math.max(0.1, x.sc.punteggio)));
+    return { ...x, price, have, chiesto: Math.max(0, x.w * scale * equity - have), q, dato: 0 };
+  });
+  const avail = Math.max(0, view.account.cash - equity * AGENTS.riservaContanti);
+  const totale = asks.reduce((a, x) => a + x.chiesto, 0);
+  let riparto = false;
+  if (totale > avail && totale > 0) {
+    riparto = true;
+    let left = avail;
+    let open = asks.filter((x) => x.chiesto > 0);
+    for (let round = 0; round < 6 && left > 1 && open.length; round++) {
+      const qs = open.reduce((a, x) => a + x.q * x.chiesto, 0);
+      for (const x of open) x.dato += Math.min(x.chiesto - x.dato, (left * x.q * x.chiesto) / qs);
+      left = avail - asks.reduce((a, x) => a + x.dato, 0);
+      open = open.filter((x) => x.chiesto - x.dato > 1);
+    }
+  } else for (const x of asks) x.dato = x.chiesto;
+  for (const { sc, w, p, price, have, chiesto, dato } of asks) {
+    const target = have + dato;
     const delta = target - have;
-    if (delta / equity < AGENTS.minAddPct) continue;
+    // Aggiunte a una posizione già aperta solo se valgono la pena (minAddPct); una posizione nuova anche piccola, se il
+    // riparto del capitale l'ha resa tale, purché sopra lo 0,2% del conto.
+    if (delta / equity < (p ? AGENTS.minAddPct : 0.002)) continue;
     const qty = roundQty(sc.simbolo, delta / price);
     if (qty <= 0 || (isCrypto(sc.simbolo) && qty * price < CRYPTO_MIN_NOTIONAL)) continue;
-    proposte.push({ symbol: sc.simbolo, side: "buy", qty, why: sc.perche.join(" · "), confidence: conf(sc.punteggio), expect: `${sc.intraday ? "intraday: " : ""}peso obiettivo ${(w * scale * 100).toFixed(1)}% del conto${sc.fiducia !== undefined ? ` (fiducia nella proiezione ${sc.fiducia === null ? "n.d." : `${(sc.fiducia * 100).toFixed(0)}%`})` : ""}${scale < 1 ? ` (ridotto per la volatilità di portafoglio, obiettivo ${(AGENTS.volTarget.annual * 100).toFixed(0)}% annuo)` : ""}`, intraday: sc.intraday || undefined, kronos: sc.kronos });
+    proposte.push({ symbol: sc.simbolo, side: "buy", qty, why: sc.perche.join(" · "), confidence: conf(sc.punteggio), expect: `${sc.intraday ? "intraday: " : ""}peso obiettivo ${((target / equity) * 100).toFixed(1)}% del conto${riparto && chiesto > 0 ? ` (riparto del capitale: ${Math.round((dato / chiesto) * 100)}% di quanto chiesto, ${(w * scale * 100).toFixed(1)}%)` : ""}${sc.fiducia !== undefined ? ` (fiducia nella proiezione ${sc.fiducia === null ? "n.d." : `${(sc.fiducia * 100).toFixed(0)}%`})` : ""}${scale < 1 ? ` (ridotto per la volatilità di portafoglio, obiettivo ${(AGENTS.volTarget.annual * 100).toFixed(0)}% annuo)` : ""}`, intraday: sc.intraday || undefined, kronos: sc.kronos });
   }
   return { proposte, punteggi, rischio, pesi: weights, inAttesa };
 }

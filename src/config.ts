@@ -31,7 +31,7 @@ export const LIMITS = {
   // Scelta dell'utente: al massimo il 10% del patrimonio per titolo, e meno se la proiezione di Kronos è incerta
   // (vedi AGENTS.sizing). Nessun numero fisso di titoli: tanti quante sono le occasioni (il tetto qui è solo una sicurezza;
   // il limite vero è la liquidità, con il 10% per titolo).
-  maxPositions: 100,
+  maxPositions: 1000,
   maxPositionPct: 0.1,
   // Stop di protezione: non è più l'uscita normale (quella è il trend), serve solo contro i crolli.
   // Distanza = multiplo × volatilità giornaliera × √giorni, arrotondata al mezzo punto e tenuta tra min e max.
@@ -187,7 +187,7 @@ export const AGENTS = {
   // maxAbs: proiezioni oltre questa misura (in valore assoluto) sono rumore del modello e non si usano.
   // controTendenza: sotto la media a 200 si entra solo se Kronos anticipa almeno minRendimento con probabilità di successo
   // (Φ del rendimento atteso sulla volatilità) almeno minFiducia; peso massimo ridotto a pesoFattore × 10%.
-  kronos: { topShare: 0.25, horizon: 5, timeoutMs: 600_000, port: 8765, model: "small" as "mini" | "small" | "base", lookback: 400, samples: 3, anticipaSoglia: 0.01, maxAbs: 0.25, controTendenza: { enabled: true, minRendimento: 0.02, minFiducia: 0.6, pesoFattore: 0.5 } },
+  kronos: { topShare: 1, horizon: 5, timeoutMs: 600_000, port: 8765, model: "small" as "mini" | "small" | "base", lookback: 400, samples: 3, anticipaSoglia: 0.01, maxAbs: 0.25, controTendenza: { enabled: true, minRendimento: 0.02, minFiducia: 0.6, pesoFattore: 0.5 } },
   // Riepilogo su Telegram una volta al giorno, alla prima passata dopo quest'ora di Roma.
   summaryAfter: "22:05",
   // Presa di profitto parziale (agente "profitto"): a +3% vende metà e lascia correre il resto col trend. Scelta col
@@ -228,12 +228,14 @@ export const AGENTS = {
   // Evidenza combinata del dossier (Kronos, grafico, notizie, contesto) minima per un ingresso nuovo di più giorni:
   // sopra la media a 200 e, più alta, sotto la 200 (contro tendenza).
   evidenza: { min: 0.5, minContro: 0.6 },
+  // Contanti che restano sempre liberi (quota del patrimonio): il riparto del capitale divide il resto.
+  riservaContanti: 0.01,
   // Esplorazione: gli agenti in sala caffè passano in rassegna il radar (RADAR_SECTORS e le crypto rimaste fuori dal
   // tetto di coppie) ogni everyMinutes (di serie ogni minuto, anche tra un giro e l'altro), perGiro titoli alla volta;
   // finito il radar si ricomincia da capo (i prezzi cambiano, Kronos si chiede una volta al giorno per titolo). Un titolo che supera i criteri del motore (sopra la
   // media a 200, grafico in ordine, Kronos al rialzo oltre la soglia) entra nell'universo per giorniValida giorni; chi
   // l'ha trovato torna alla scrivania e lo vota. maxScoperte: quante scoperte nuove al giorno, al massimo.
-  esplorazione: { enabled: true, everyMinutes: 1, perGiro: 6, maxScoperte: 6, giorniValida: 3, minTecnica: 0.5 },
+  esplorazione: { enabled: true, everyMinutes: 1, perGiro: 6, maxScoperte: 100, giorniValida: 3, minTecnica: 0.5 },
   // Intraday (agente "intraday"): operazioni che si aprono e chiudono nella stessa giornata, solo nel verso del trend
   // giornaliero. L'agente sceglie da solo la candela (5 min / 15 min / 4 ore) dalla volatilità del titolo: più è nervoso,
   // più la candela è corta. Entra su rottura dei massimi delle ultime 20 candele o su rientro sulla media a 20 candele;
@@ -246,11 +248,12 @@ export const AGENTS = {
     bars: 120, // candele di storia per medie, ATR e massimi
     // Kronos sulle candele intraday: proiezione delle prossime `candele` candele per chi ha le medie brevi in ordine
     // (al massimo perGiro titoli a giro, ricalcolata a ogni candela chiusa); si entra con probabilità ≥ minProb.
-    kronos: { candele: 6, perGiro: 8, minProb: 0.55 },
+    kronos: { candele: 6, perGiro: 24, minProb: 0.55 },
+    // Le candele su cui si cerca l'ingresso: con Kronos si sceglie quella con la probabilità di successo più alta.
+    candele: ["5Min", "15Min", "1Hour", "4Hour"] as string[],
     target: { stocks: 0.01, crypto: 0.02 }, // obiettivo di profitto; se l'ATR dice di più, vale l'ATR × targetAtr
     targetAtr: 1.5, stopAtr: 1.2, minStopPct: 0.004,
     maxWeight: 0.1, // peso massimo di un'operazione intraday (comparto a taglia ridotta)
-    maxOpen: 3, // operazioni intraday aperte contemporaneamente
     // Finestre, ora di Roma: ingressi solo se resta tempo per chiudere in giornata; poi chiusura forzata.
     entry: { stocks: { from: "15:45", to: "20:30" }, crypto: { from: "00:10", to: "20:00" } },
     closeBy: { stocks: "21:45", crypto: "23:30" },

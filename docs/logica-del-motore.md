@@ -168,6 +168,26 @@ Un ingresso nuovo di più giorni (non intraday) passa da tre filtri, chiunque ab
    dall'80% piena). **Sotto la media a 200** la taglia si moltiplica ancora per 0,5 e non supera mai il 5% del conto:
    a parità di tutto, contro tendenza si investe sempre la metà.
 
+## Niente numeri fissi: riparto del capitale
+
+Non c'è un numero massimo di agenti, titoli o operazioni (le posizioni hanno solo una sicurezza tecnica a 1000; Kronos
+vota ogni rialzo oltre la soglia; l'intraday non ha più il tetto di 3 operazioni; l'esplorazione non ha un tetto di
+scoperte). Quello che limita è il **capitale**: se i contanti (meno l'1% di riserva) non bastano per tutto quello che gli
+agenti chiedono, l'allocatore li **divide in proporzione alla qualità** di ogni occasione, cioè fiducia in Kronos ×
+evidenza del dossier × punteggio dei voti, senza dare a nessuno più di quanto ha chiesto; quello che avanza va agli altri.
+Una posizione nuova vale la pena sopra lo 0,2% del conto; le aggiunte a una posizione aperta sopra il 2%.
+
+## Intraday: la candela con la probabilità più alta, il controllo su quella più breve
+
+Con Kronos intraday ogni candidato si guarda su candele da **5 e 15 minuti, 1 ora e 4 ore**: su ognuna servono medie brevi
+in ordine (o rottura/rientro), obiettivo raggiungibile entro la chiusura e rapporto obiettivo/stop ≥ 1,2; poi Kronos sulle
+prossime 6 candele e la sua probabilità. Si entra sulla candela con la **probabilità di successo più alta** (almeno 55%).
+La posizione si segue sulla candela **più breve** (5 min → 1 min, 15 min → 5 min, 1 ora → 15 min, 4 ore → 1 ora):
+- Kronos lì vede ancora salire con almeno il 60% → oltre l'obiettivo **si lascia correre**, lo stop sale sopra il carico;
+- vede un calo che azzererebbe il guadagno → **si incassa** (protezione del profitto);
+- in perdita, vede un calo che porta a metà strada dallo stop con rialzo al 35% o meno → **si taglia prima**;
+- restano stop, obiettivo (se Kronos non vede altro), media a 20 persa e chiusura di giornata.
+
 ## Protezione del profitto
 
 Con una posizione in guadagno oltre i costi (0,2% azioni, 0,6% crypto), se Kronos vede nelle **prossime 2 sedute** (dal

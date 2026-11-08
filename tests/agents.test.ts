@@ -763,6 +763,44 @@ describe("intraday", () => {
     expect(r2.intraday!.find((x) => x.simbolo === "BTC/USD")!.motivo).toContain("Kronos sulle prossime 6 candele");
   });
 
+  test("con Kronos si sceglie la candela con la probabilità di successo più alta; la posizione si segue sulla candela più breve", async () => {
+    setCryptoUniverse(["BTC/USD", "ETH/USD"]);
+    const bars: Record<string, IntradayBar[]> = { "BTC/USD": candles(76_000, 40, [76_100, 76_250, 76_450]) };
+    const closes: Record<string, number[]> = {};
+    for (const sym of UNIVERSE) closes[sym] = syntheticCloses(PRICES[sym]!, 0.01, 260);
+    closes["BTC/USD"] = syntheticCloses(76_000, 0.035, 260);
+    closes["ETH/USD"] = syntheticCloses(2_100, 0.035, 260);
+    const prices = { ...PRICES, "BTC/USD": 76_450, "ETH/USD": 2_100 };
+    const byStep: Record<number, number> = { 1: 0.004, 5: 0.002, 15: 0.012, 60: 0.004, 240: 0.003 };
+    const steps: number[] = [];
+    // Candele più lunghe = movimenti più ampi (√ dei minuti): così obiettivo e raggiungibilità sono realistici per ogni candela.
+    const mins = (tf: string) => (tf.endsWith("Min") ? Number(tf.replace("Min", "")) : Number(tf.replace("Hour", "")) * 60);
+    const scaled = (b: IntradayBar[], tf: string) => { const f = Math.sqrt(mins(tf) / 5); const base = 76_000; const m = (x: number) => base + (x - base) * f; return b.map((x) => ({ ...x, open: m(x.open), high: m(x.high), low: m(x.low), close: m(x.close) })); };
+    const a = new IntradayAgent(async (syms, tf) => Object.fromEntries(syms.filter((x) => bars[x]).map((x) => [x, scaled(bars[x]!, tf)])), async (b, step) => { steps.push(step); return Object.fromEntries(Object.keys(b).map((x) => [x, byStep[step] ?? 0])); });
+    const r = await a.observe(view({ closes, prices, now: day("2026-09-22", "16:30"), today: "2026-09-22" }));
+    const buy = r.segnali.find((x) => x.lato === "buy" && x.simbolo === "BTC/USD")!;
+    expect(buy.perche).toContain("su candele 15Min");
+    expect(buy.perche).toContain("scelta per probabilità");
+    expect(buy.perche).toContain("controllo su candele 5Min");
+    // In posizione oltre l'obiettivo: sulla candela più breve (5 min) Kronos vede ancora salire → si lascia correre.
+    const st = r.intraday!.find((x) => x.simbolo === "BTC/USD")!;
+    const lastB = bars["BTC/USD"]!.at(-1)!; bars["BTC/USD"]!.push({ ...lastB, t: new Date(Date.parse(lastB.t) + 5 * 60_000).toISOString() });
+    byStep[5] = 0.02;
+    const pos = [{ symbol: "BTC/USD", qty: 0.05, avgEntryPrice: 76_450, currentPrice: st.obiettivo! + 50, marketValue: 3_900 }];
+    const r2 = await a.observe(view({ closes, prices: { ...prices, "BTC/USD": st.obiettivo! + 50 }, now: day("2026-09-22", "16:40"), today: "2026-09-22", positions: pos }));
+    expect(r2.segnali.filter((x) => x.lato === "sell" && x.simbolo === "BTC/USD")).toEqual([]);
+    const st2 = r2.intraday!.find((x) => x.simbolo === "BTC/USD")!;
+    expect(st2.motivo).toContain("si lascia correre");
+    expect(st2.stop!).toBeGreaterThan(76_450); // lo stop è salito sopra il carico
+    expect(st2.controllo).toContain("candele 5Min");
+    // Ora sulla candela breve Kronos gira al ribasso: oltre l'obiettivo si incassa.
+    bars["BTC/USD"]!.push({ ...lastB, t: new Date(Date.parse(lastB.t) + 10 * 60_000).toISOString() });
+    byStep[5] = -0.01;
+    const r3 = await a.observe(view({ closes, prices: { ...prices, "BTC/USD": st.obiettivo! + 50 }, now: day("2026-09-22", "16:45"), today: "2026-09-22", positions: pos }));
+    expect(r3.segnali.find((x) => x.lato === "sell" && x.simbolo === "BTC/USD")!.perche).toMatch(/obiettivo raggiunto|protezione del profitto/);
+    bars["BTC/USD"]!.splice(-2);
+  });
+
   test("il flusso completo: il voto intraday diventa una proposta intraday e la gabbia la ammette a mercato aperto fuori dalla vecchia finestra", () => {
     const sig = [{ agente: "intraday", simbolo: "NVDA", lato: "buy" as const, forza: 1, orizzonteSedute: 1, intraday: true, pesoMassimo: 0.1, perche: "rottura" }];
     const sc = scoreSignals(sig, { intraday: 1 });
@@ -1002,6 +1040,23 @@ describe("protezione del profitto", () => {
     // In perdita la regola non c'entra (decidono stop e proiezione).
     v.prices.NVDA = 168; v.percorsi = { NVDA: [-0.025, -0.01, 0.01, 0.02, 0.03] };
     expect(new ExitAgent().observe(v).segnali.filter((x) => x.simbolo === "NVDA" && x.perche.includes("protezione"))).toEqual([]);
+  });
+});
+
+describe("riparto del capitale", () => {
+  test("senza un numero fisso di titoli: se i contanti non bastano si dividono per qualità, senza superare i contanti", () => {
+    const v = view({ previsioni: { NVDA: 0.03, AAPL: 0.01, MSFT: 0.02 } });
+    v.account = { ...v.account, cash: 5_000 };
+    const votes = { trend: { segnali: ["NVDA", "AAPL", "MSFT"].map((s, i) => ({ agente: "trend", simbolo: s, lato: "buy" as const, forza: 1 - i * 0.2, orizzonteSedute: 20, perche: "" })) } };
+    const a = allocate(v, votes, { trend: 1 });
+    const buys = a.proposte.filter((p) => p.side === "buy");
+    expect(buys.map((p) => p.symbol).sort()).toEqual(["AAPL", "MSFT", "NVDA"]);
+    const spent = buys.reduce((t, p) => t + p.qty * v.prices[p.symbol]!, 0);
+    expect(spent).toBeLessThanOrEqual(5_000);
+    expect(buys.every((p) => (p.expect ?? "").includes("riparto del capitale"))).toBe(true);
+    // NVDA (voto più forte, Kronos più netto) riceve più di AAPL.
+    const val = (s: string) => buys.find((p) => p.symbol === s)!.qty * v.prices[s]!;
+    expect(val("NVDA")).toBeGreaterThan(val("AAPL"));
   });
 });
 
