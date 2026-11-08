@@ -122,7 +122,8 @@ export const AGENTS = {
   // Volatilità di portafoglio obiettivo (annua): oltre, le taglie nuove si riducono in proporzione.
   volTarget: { enabled: true, annual: 0.12, corr: 0.8 },
   // Titoli che gli agenti possono comprare: senza IWM e TLT (attesa nulla o negativa con obiettivo +3% / stop -3%).
-  // Le crypto si aggiungono con --crypto (enableCrypto): nel backtest ago 2025 - nov 2026 hanno tolto 5-6 punti.
+  // Le crypto entrano con enableCrypto (di serie nel motore degli agenti, --no-crypto per toglierle; --crypto altrove):
+  // nel backtest ago 2025 - nov 2026 hanno tolto 5-6 punti.
   // La gabbia accetta comunque vendite su tutto UNIVERSE ∪ CRYPTO.
   universe: ["SPY", "QQQ", "AAPL", "MSFT", "NVDA", "GLD"] as string[],
   // Finestra degli ingressi, ora di Roma: dopo i primi 10 minuti di seduta, fino a metà pomeriggio USA.
@@ -171,7 +172,8 @@ export const AGENTS = {
   eventsKeepDays: 60,
 };
 
-// Aggiunge BTC/USD ed ETH/USD all'universo degli agenti (24 ore su 24). Scelta esplicita, non di serie.
+// Aggiunge BTC/USD ed ETH/USD all'universo degli agenti (24 ore su 24). Nel motore (bun run agents) è di serie,
+// --no-crypto le toglie; nelle sveglie classiche e nei backtest resta una scelta esplicita (--crypto).
 export function enableCrypto() {
   for (const c of CRYPTO) if (!AGENTS.universe.includes(c)) AGENTS.universe.push(c);
 }

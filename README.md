@@ -15,7 +15,7 @@ bun run agents --kronos http://127.0.0.1:8765   # aggiunge l'agente Kronos (side
 bun run dashboard                    # solo la dashboard, in lettura, sullo stato esistente
 ```
 
-Opzioni: `--tick 5` (minuti tra un giro e l'altro), `--port 8787`, `--no-dashboard`, `--fake`, `--once`, `--crypto` (aggiunge BTC/USD ed ETH/USD), `--profitto`, `--kronos url`.
+Opzioni: `--tick 5` (minuti tra un giro e l'altro), `--port 8787`, `--no-dashboard`, `--fake`, `--once`, `--no-crypto` (toglie BTC/USD ed ETH/USD, che nel motore sono di serie e lavorano 24 ore su 24 con la stessa logica dei titoli), `--profitto`, `--kronos url`.
 Da tenere acceso il PC (o un altro processo con lo stesso `state/`): il motore riparte da `state/` dopo un riavvio,
 il lock e gli ID deterministici evitano doppioni anche con le sveglie classiche.
 
@@ -40,7 +40,7 @@ Lo stop GTC su Alpaca è scalato sulla volatilità (5-10%); la politica di uscit
 Gli agenti comprano solo in `AGENTS.universe` (SPY QQQ AAPL MSFT NVDA GLD: niente IWM e TLT, che con obiettivo +3% e
 stop -3% hanno attesa nulla o negativa); una posizione vecchia resta sorvegliata e vendibile.
 
-**Crypto** (BTC/USD, ETH/USD, con `--crypto`, anche nel backtest): 24 ore su 24, anche a borsa chiusa e fuori finestra, un ingresso al giorno per coppia,
+**Crypto** (BTC/USD, ETH/USD: di serie nel motore degli agenti, `--crypto` nel backtest e nelle sveglie): 24 ore su 24, anche a borsa chiusa e fuori finestra, un ingresso al giorno per coppia,
 quantità frazionarie (6 decimali, minimo 10 $), stop su Alpaca come `stop_limit` (Alpaca non accetta lo `stop` a
 mercato sulle crypto) con limite mezzo punto sotto. Le posizioni crypto di Alpaca (`BTCUSD`) sono normalizzate a `BTC/USD`.
 L'interruttore a -5% dal massimo si **riarma da solo dopo 5 giorni di borsa** (nel backtest: da +4,3% a +17,7%).
@@ -91,7 +91,7 @@ parziale (metà a +3%, scelta con `bun run sweep`, walk-forward 2021-2023 → 20
 Il complessivo è positivo in tutti i periodi (2021-2026: +69.500 $ dai trade chiusi su 100.000 $, vinti +104.300 $,
 persi -34.700 $). Giorno per giorno si chiude in positivo il 53-54% delle volte: nessuna strategia pubblicata fa meglio di
 così con costanza, il guadagno sta nel fatto che i giorni buoni valgono più dei cattivi. Qualunque vantaggio di backtest
-va tagliato del 25-50% (McLean-Pontiff). Le crypto (`--crypto`) restano fuori di serie.
+va tagliato del 25-50% (McLean-Pontiff). Nel backtest le crypto entrano solo con `--crypto`; nel motore reale sono di serie per scelta dell'utente (`--no-crypto` per toglierle).
 
 `bun run sweep [--days 2600]` ripete l'ottimizzazione prudente: 40 combinazioni (presa di profitto, trailing, stop,
 finestra del momentum), scelte sul primo 60% dello storico e verificate sul resto.

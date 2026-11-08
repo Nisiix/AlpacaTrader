@@ -20,7 +20,8 @@ import { parseArgs } from "./args.ts";
 
 try {
   const args = parseArgs(process.argv.slice(2));
-  if (args.crypto) enableCrypto();
+  // Le crypto (BTC/USD, ETH/USD) lavorano con la stessa logica dei titoli, 24 ore su 24, anche a borsa chiusa.
+  if (!args.noCrypto) enableCrypto();
   const deps = await buildDeps(args);
   for (const w of deps.warnings) console.warn(w);
   const bus = new EventBus(deps.stateDir, deps.now);
