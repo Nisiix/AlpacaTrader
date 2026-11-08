@@ -5,7 +5,7 @@ import { addDays } from "../slots.ts";
 
 // Registro degli eventi: un file JSONL al giorno, una riga per ogni cosa che succede (prezzi, segnali, ordini,
 // rifiuti, allarmi). È l'unica sorgente della dashboard e il modo di rivedere una giornata dopo.
-export type EventKind = "tick" | "conto" | "prezzi" | "agente" | "contesto" | "segnale" | "rischio" | "allocazione" | "ordine" | "rifiuto" | "stop" | "trade" | "allarme" | "nota" | "simulazione" | "capo" | "attesa";
+export type EventKind = "tick" | "conto" | "prezzi" | "agente" | "contesto" | "segnale" | "rischio" | "allocazione" | "ordine" | "rifiuto" | "stop" | "trade" | "allarme" | "nota" | "simulazione" | "capo" | "attesa" | "caffe";
 
 export interface BusEvent {
   t: string; // ISO

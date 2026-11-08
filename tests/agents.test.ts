@@ -907,6 +907,11 @@ describe("contesto economico", () => {
     // Proiezioni negative su tutto, ma senza fiducia (Fed vicina) non fanno uscire: nessuna vendita vincolante.
     expect(r.status_file!.ordini.filter((o) => o.lato === "sell")).toEqual([]);
     expect(readEvents(env.stateDir, "2026-09-24").some((e) => e.tipo === "contesto")).toBe(true);
+    // La sala caffè è nello stato: ogni agente è o alla scrivania o in pausa, mai in tutte e due.
+    const caffe = r.status_file!.caffe!;
+    const keys = [...caffe.presenti.map((p) => p.chiave), ...caffe.operativi.map((o) => o.chiave)];
+    expect(new Set(keys).size).toBe(keys.length);
+    expect(keys).toContain("a:trend");
   });
 });
 

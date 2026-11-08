@@ -148,6 +148,27 @@ troppe uscite dallo stop). Le vendite non si toccano. Il capo non fa ordini.
 - Il contesto, le notizie e la memoria affinano; la gabbia protegge. Qualunque vantaggio di backtest va letto tagliato del
   25–50%.
 
+## Sala caffè: gli agenti imparano gli uni dagli altri
+
+A ogni giro, dopo i richiami del capo ufficio, il motore (`src/agents/caffe.ts`):
+
+1. **Lezioni di squadra.** Dai trade chiusi del diario (esclusi quelli chiusi dalla vecchia uscita in giornata) raggruppa
+   per tipo d'ingresso, settore, forza di Kronos all'ingresso e ingresso + settore. Con almeno 3 trade nel gruppo: vinti
+   sotto il 40% e media negativa → **prudenza**; vinti dal 60% e media positiva → **fiducia**.
+2. **Apprendimento.** Ogni voto d'acquisto non vincolante che ricade in una lezione cambia forza: ×0,85 per lezione di
+   prudenza, ×1,1 per lezione di fiducia, in totale mai sotto ×0,7 né sopra ×1,15, e mai oltre 1. Vendite e regole non si
+   toccano. Il voto porta scritto da quale lezione viene.
+3. **Chi va in pausa.** Alla scrivania: chi vota, chi frena il rischio (regime, contesto sotto 100%), i custodi con una
+   posizione, un'uscita, un ingresso pronto o un voto, gli operatori intraday in posizione o con un ingresso votato. Tutti
+   gli altri vanno in sala caffè. Chi ha di nuovo un trade da aprire torna alla scrivania nello stesso giro.
+4. **Cosa si dicono.** Solo dati veri: il dossier dei custodi (probabilità, Kronos, grafico, notizie, memoria) a un
+   collega dello stesso settore, la lettura degli agenti generali, le candele degli operatori intraday, le proiezioni più
+   nette di Kronos e quelle scartate, le lezioni di squadra raccontate da chi ne ha più esperienza, la lezione comune del
+   capo ufficio.
+
+Il capo ufficio giudica anche la **squadra dei custodi** insieme: un custode segue un titolo solo e raramente arriva a 3
+trade; il richiamo della squadra vale per ogni custode che non ha ancora un giudizio proprio.
+
 ## 5. Dove vedere tutto
 
 Dashboard su `http://127.0.0.1:8787`, quattro voci: **Oggi** (frase di stato, soldi, profitto e perdita di oggi,

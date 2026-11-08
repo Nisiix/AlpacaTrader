@@ -1,4 +1,5 @@
 import { AGENTS } from "../config.ts";
+import { romeTime } from "../slots.ts";
 import type { JournalFile, Trade } from "../journal.ts";
 import type { AgentReport, Signal } from "./types.ts";
 
@@ -36,13 +37,27 @@ export interface CapoReport {
   // Lezione comune dai trade vincenti di tutti: da quale proiezione di Kronos in su si è vinto più spesso.
   sogliaKronos: number | null;
   ingressoMigliore: string | null;
+  // Trade chiusi da una regola che non esiste più (venduti il giorno stesso dall'uscita di trend): non giudicano nessuno.
+  esclusi?: number;
 }
+
+// Nome della squadra dei custodi nei giudizi: un custode segue un titolo solo e raramente arriva a 3 trade, la squadra sì.
+export const SQUADRA_CUSTODI = "custodi (squadra)";
 
 const mean = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
 const pct = (x: number | null, d = 1) => (x === null ? "n.d." : `${x >= 0 ? "+" : ""}${(x * 100).toFixed(d)}%`);
 const pnlOf = (t: Trade) => (t.incassato ?? 0) - (t.costo ?? 0);
-const kronosOf = (t: Trade) => (typeof t.contesto?.kronos === "number" ? t.contesto.kronos : null);
-const entryKind = (t: Trade) => (/rientro|vicino alla media/i.test(t.contesto?.perche ?? "") ? "rientro sulla media a 20" : /rottura/i.test(t.contesto?.perche ?? "") ? "rottura dei massimi" : /Kronos anticipa/i.test(t.contesto?.perche ?? "") ? "rialzo anticipato da Kronos" : "trend");
+// La proiezione all'ingresso: dal campo kronos del diario o, per i trade registrati prima che esistesse, dal motivo
+// dell'ingresso ("Kronos anticipa 12.9%", "rialzo anticipato da Kronos (+4.0% …)").
+export function kronosOf(t: Pick<Trade, "contesto">): number | null {
+  if (typeof t.contesto?.kronos === "number") return t.contesto.kronos;
+  const m = (t.contesto?.perche ?? "").match(/Kronos[^%\d+-]{0,40}([+-]?\d+(?:[.,]\d+)?)%/i);
+  return m ? Number(m[1]!.replace(",", ".")) / 100 : null;
+}
+// Venduto lo stesso giorno dall'uscita di trend: oggi la regola non lo permette più (il giorno d'acquisto si tiene).
+export const regolaSuperata = (t: Trade) =>
+  !!t.chiusoIl && romeTime(new Date(t.apertoIl)).date === romeTime(new Date(t.chiusoIl)).date && /uscita di trend/i.test(t.motivoUscita ?? "");
+export const entryKind = (t: Pick<Trade, "contesto">) => (/rientro|vicino alla media/i.test(t.contesto?.perche ?? "") ? "rientro sulla media a 20" : /rottura/i.test(t.contesto?.perche ?? "") ? "rottura dei massimi" : /Kronos anticipa/i.test(t.contesto?.perche ?? "") ? "rialzo anticipato da Kronos" : "trend");
 
 // La soglia di Kronos che separa meglio vinti e persi tra tutti i trade chiusi (almeno 6 con proiezione).
 export function bestKronosThreshold(trades: Trade[]): number | null {
@@ -61,9 +76,16 @@ export function bestKronosThreshold(trades: Trade[]): number | null {
 }
 
 export function review(journal: JournalFile, now: Date): CapoReport {
-  const closed = journal.trade.filter((t) => t.stato === "chiuso" && t.risultato !== undefined);
+  const all = journal.trade.filter((t) => t.stato === "chiuso" && t.risultato !== undefined);
+  const closed = all.filter((t) => !regolaSuperata(t));
+  const esclusi = all.length - closed.length;
   const byAgent = new Map<string, Trade[]>();
-  for (const t of closed) for (const a of t.contesto?.agenti?.length ? t.contesto.agenti : []) byAgent.set(a, [...(byAgent.get(a) ?? []), t]);
+  for (const t of closed) {
+    const ag = t.contesto?.agenti?.length ? t.contesto.agenti : [];
+    for (const a of ag) byAgent.set(a, [...(byAgent.get(a) ?? []), t]);
+    // La squadra dei custodi si giudica anche insieme: le regole del richiamo valgono per tutti i custodi.
+    if (ag.some((a) => a.startsWith("custode "))) byAgent.set(SQUADRA_CUSTODI, [...(byAgent.get(SQUADRA_CUSTODI) ?? []), t]);
+  }
   const winners = closed.filter((t) => (t.risultato ?? 0) > 0);
   const sogliaKronos = bestKronosThreshold(closed);
   const kinds = new Map<string, number[]>();
@@ -111,10 +133,11 @@ export function review(journal: JournalFile, now: Date): CapoReport {
   const migliori = valutazioni.filter((v) => v.giudizio === "ottimo" || v.giudizio === "bene").slice(0, 3).map((v) => v.agente);
   const richiamati = valutazioni.filter((v) => v.giudizio === "richiamato");
   const totWin = winners.length;
+  const nota = esclusi ? ` (${esclusi} ${esclusi === 1 ? "trade chiuso" : "trade chiusi"} dalla vecchia uscita in giornata non ${esclusi === 1 ? "conta" : "contano"})` : "";
   const sintesi = !closed.length
-    ? "Nessun trade chiuso ancora: osservo, i giudizi arrivano con i primi risultati."
-    : `${closed.length} trade chiusi, ${totWin} vinti (${Math.round((totWin / closed.length) * 100)}%).${migliori.length ? ` Migliori: ${migliori.join(", ")}.` : ""}${richiamati.length ? ` Richiamati: ${richiamati.map((v) => v.agente).join(", ")}.` : " Nessun richiamo."}${sogliaKronos !== null ? ` Lezione per tutti: con Kronos ≥ ${pct(sogliaKronos)} si è vinto di più.` : ""}`;
-  return { aggiornato: now.toISOString(), sintesi, migliori, valutazioni, sogliaKronos, ingressoMigliore };
+    ? `Nessun trade chiuso da giudicare${nota}: osservo, i giudizi arrivano con i primi risultati.`
+    : `${closed.length} trade chiusi${nota}, ${totWin} vinti (${Math.round((totWin / closed.length) * 100)}%).${migliori.length ? ` Migliori: ${migliori.join(", ")}.` : ""}${richiamati.length ? ` Richiamati: ${richiamati.map((v) => v.agente).join(", ")}.` : " Nessun richiamo."}${sogliaKronos !== null ? ` Lezione per tutti: con Kronos ≥ ${pct(sogliaKronos)} si è vinto di più.` : ""}`;
+  return { aggiornato: now.toISOString(), sintesi, migliori, valutazioni, sogliaKronos, ingressoMigliore, esclusi };
 }
 
 // Applica i richiami ai voti: per gli agenti richiamati i voti d'acquisto sotto la soglia di Kronos non valgono e gli altri
@@ -126,7 +149,9 @@ export function applyGuidance(reports: Record<string, AgentReport>, capo: CapoRe
   for (const r of Object.values(reports)) {
     const kept: Signal[] = [];
     for (const s of r.segnali) {
-      const rule = rules.get(s.agente);
+      // Un custode senza giudizio proprio segue il richiamo della squadra dei custodi, se c'è.
+      const own = rules.get(s.agente);
+      const rule = own ?? (s.agente.startsWith("custode ") ? rules.get(SQUADRA_CUSTODI) : undefined);
       if (!rule || s.lato !== "buy" || s.vincolante) {
         kept.push(s);
         continue;

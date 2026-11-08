@@ -126,6 +126,8 @@
     .schede { grid-template-columns:1fr; }
   }
   .lbl.bubble { background:#fff; font-weight:700; font-size:12px; border:1px solid #d1d5db; box-shadow:0 2px 6px rgba(0,0,0,.15); }
+  .lbl.bubble.chat { white-space:normal; width:max-content; max-width:240px; font-weight:500; color:#1f2937 !important; line-height:1.3; border-color:#e7c9a0; background:#fffaf2; }
+  .lbl.bubble.chat b { color:#92400e; }
   .legend { padding:10px 20px 14px; color:var(--ink-3); font-size:13px; }
 
   .filters { display:flex; gap:6px; }
@@ -305,6 +307,10 @@
             <div id="scores"></div>
             <details style="margin-top:10px"><summary class="why" style="cursor:pointer">Tutti i voti con il motivo</summary><div id="votes" style="margin-top:8px"></div></details>
           </section>
+          <section class="card">
+            <h2>Sala caffè <small>chi non ha niente da fare si scambia dati e lezioni; chi ha un trade da aprire torna alla scrivania</small></h2>
+            <div id="caffe"></div>
+          </section>
         </div>
       </div>
     </div>
@@ -312,7 +318,7 @@
       <details class="scene" id="scene-box" open>
       <summary>Ufficio degli agenti <span class="hint">trascina per girare, rotella per avvicinarti</span></summary>
       <div id="scene"></div>
-      <p class="legend">In fondo la <b>Direzione</b> (gli agenti generali) davanti alla <b>lavagna dei risultati</b>; poi i <b>Custodi</b>, una scrivania per titolo seguito, con la camicia del colore della fase (blu pronto, verde in posizione, rosso in uscita, grigio in attesa) e lo schermo con prezzo e andamento; infine la <b>Sala intraday</b> (arancione). Chi vota alza la mano, chi compra o vende si alza e lo schermo lampeggia. Mouse sopra per leggere, clic per aprire.</p>
+      <p class="legend">In fondo la <b>Direzione</b> (gli agenti generali) davanti alla <b>lavagna dei risultati</b>; poi i <b>Custodi</b>, una scrivania per titolo seguito, con la camicia del colore della fase (blu pronto, verde in posizione, rosso in uscita, grigio in attesa) e lo schermo con prezzo e andamento; infine la <b>Sala intraday</b> (arancione). A destra, oltre la porta, la <b>Sala caffè</b>: chi in questo giro non ha niente da fare si siede ai tavolini e scambia con i colleghi dati veri (dossier, candele, proiezioni di Kronos, lezioni dei trade chiusi); appena ha un trade da aprire o una posizione da seguire torna alla scrivania. Chi vota alza la mano, chi compra o vende si alza e lo schermo lampeggia. Mouse sopra per leggere, clic per aprire.</p>
     </details>
     </div>
   </div>
@@ -372,7 +378,7 @@
         <li><b>Oggi</b>: la frase di stato (motore, Alpaca, borsa, Kronos), patrimonio e giornata, profitto e perdita di oggi (per vendita e per agente), posizioni aperte, cosa ha deciso l'ultimo giro, le operazioni intraday quando ce ne sono, le simulazioni dopo il limite del giorno e, in fondo, il <b>registro</b> della giornata («Importanti» mostra ordini, posizioni, rifiuti, stop e avvisi; le azioni ripetute a ogni giro compaiono una volta sola, con quante volte e da che ora).</li>
         <li><b>Titoli</b>: i titoli in tre gruppi (in portafoglio, sotto osservazione, nel radar). Per ciascuno: candele, medie 20/50/200, carico e stop, la candela di oggi in formazione, le scelte del motore di oggi (puntini voti, frecce ordini, × rifiuti), lo scenario di Kronos con il cono d'incertezza e il dossier del custode. «Chiedi agli agenti adesso» fa una valutazione a secco: nessun ordine parte dalla pagina.</li>
         <li><b>Agenti → Squadra</b>: il capo ufficio con il giudizio su ogni agente (vinti, risultato, richiami, consigli), i custodi con la probabilità favorevole e la prossima azione, chi ha votato nell'ultimo giro con i punteggi per titolo e, aprendo la tendina, tutti i voti con il motivo.</li>
-        <li><b>Agenti → Ufficio 3D</b>: la stessa squadra come impiegati alle loro postazioni. In fondo la Direzione e la lavagna con successi e insuccessi di ogni agente, il capo nella stanza di vetro; poi i Custodi (la camicia dice la fase: blu pronto, verde in posizione, rosso in uscita, grigio in attesa) e la Sala intraday (arancione). Chi vota alza la mano, chi compra o vende si alza e lo schermo lampeggia. Mouse sopra per leggere, clic per la scheda.</li>
+        <li><b>Agenti → Ufficio 3D</b>: la stessa squadra come impiegati alle loro postazioni. In fondo la Direzione e la lavagna con successi e insuccessi di ogni agente, il capo nella stanza di vetro; poi i Custodi (la camicia dice la fase: blu pronto, verde in posizione, rosso in uscita, grigio in attesa) e la Sala intraday (arancione). Chi vota alza la mano, chi compra o vende si alza e lo schermo lampeggia. Oltre la porta, la <b>Sala caffè</b>: chi non ha niente da fare ci va e parla con i colleghi; appena ha un trade da aprire torna alla scrivania. Mouse sopra per leggere, clic per la scheda.</li>
         <li><b>Impostazioni</b>: le <b>schede degli agenti</b> per regolare i parametri (valgono dal giro successivo), le <b>chiavi</b> di Alpaca, Telegram e X con il riavvio del motore, e questa guida.</li>
         <li><b>Pagina pubblica</b>: con «Pagina pubblica su GitHub Pages» nella scheda Motore e gabbia, il PC pubblica ogni N minuti un'istantanea in sola lettura, da aprire anche dal telefono. È visibile a chiunque abbia il link; chiavi e modifiche restano solo sulla dashboard del PC.</li>
       </ul>
@@ -381,7 +387,8 @@
         <li><b>Trend</b> compra chi chiude sopra le medie a 50 e 200 con rendimento a 12 mesi positivo; vende sotto la 50. <b>Rientro</b> compra gli ipervenduti di breve dentro un trend lungo. <b>Regime</b> riduce le taglie se il mercato è brutto. <b>Uscite</b> e <b>Presa di profitto</b> sono regole vincolanti: stop sulla volatilità, metà della posizione a +3%.</li>
         <li><b>Contesto</b> legge il clima; non decide da solo: se <b>Kronos</b> anticipa un rialzo il settore debole non ferma l'ingresso, se anticipa un ribasso si aspetta.</li>
         <li><b>Custodi</b>: un investitore per ogni titolo seguito (in trend o con Kronos al rialzo), senza numero fisso; leggono Kronos, grafico, notizie (Google News e X) e contesto, e ricordano i trade passati su quel titolo. </li>
-        <li><b>Capo ufficio</b>: rivede i trade chiusi di ogni agente, loda chi vince e richiama chi perde, imponendogli una soglia minima di Kronos e voti più deboli finché i risultati non tornano buoni.</li>
+        <li><b>Capo ufficio</b>: rivede i trade chiusi di ogni agente e della squadra dei custodi (un custode da solo arriva di rado a 3 trade), loda chi vince e richiama chi perde, imponendogli una soglia minima di Kronos e voti più deboli finché i risultati non tornano buoni. Non giudica i trade chiusi dalla vecchia uscita in giornata, che la regola oggi non permette più.</li>
+        <li><b>Sala caffè</b>: gli agenti senza niente da fare si scambiano quello che sanno (dossier, candele, Kronos) e le lezioni di squadra dai trade chiusi, per tipo d'ingresso, settore e forza di Kronos (almeno 3 trade). Un voto d'acquisto simile a ciò che alla squadra è andato male perde forza (fino a ×0,7); simile a ciò che ha reso ne guadagna un poco (fino a ×1,15). Kronos e le regole restano i padroni.</li>
         <li><b>Intraday</b>: candele a 5 min / 15 min / 4 ore scelte dalla volatilità; obiettivo e stop dall'ATR; chiusura entro la giornata.</li>
       </ul>
       <h3>5. Se qualcosa non va</h3>
@@ -659,6 +666,7 @@ function layout(groups) {
   placed.set('capo', new THREE.Vector3(w / 2 - 1.2, 0, -2.7));
   glass.position.set(w / 2 - 1.2, 1.1, -2.7);
   deptLabel('Capo ufficio', w / 2 - 1.2, -2.0);
+  caffeBox = buildCaffe(Math.max(4, placed.size - 1), w, d);
   return placed;
 }
 const glass = new THREE.Group(); scene.add(glass);
@@ -667,11 +675,68 @@ const glass = new THREE.Group(); scene.add(glass);
   const front = new THREE.Mesh(new THREE.BoxGeometry(2.8, 2.2, 0.04), gm); front.position.set(0, 0, 1.45); glass.add(front);
   const side = new THREE.Mesh(new THREE.BoxGeometry(0.04, 2.2, 2.9), gm); side.position.set(-1.4, 0, 0); glass.add(side);
   const rail = box(2.8, 0.05, 0.06, fr); rail.position.set(0, 1.1, 1.45); glass.add(rail); }
+// La sala caffè: a destra dell'ufficio, oltre una parete con la porta. Bancone con macchina del caffè e tavolini rotondi
+// con quattro sgabelli: chi non ha niente da fare in questo giro viene qui e scambia pareri con i colleghi.
+const caffe = new THREE.Group(); scene.add(caffe);
+let seats = []; // posti a sedere: { pos: Vector3, rot, table: Vector3 }
+const MC = { floor: mat(0xd9c2a3), tile: mat(0xb08968), wall: mat(0xf6efe4), counter: mat(0x6b4f3a), top: mat(0xe7e5e4), machine: mat(0x27272a), steel: mat(0xa1a1aa, { metalness: 0.6, roughness: 0.3 }), table: mat(0xfafaf9), stool: mat(0x92400e), cup: mat(0xffffff), sofa: mat(0x0f766e) };
+function buildCaffe(n, officeW, officeD) {
+  caffe.clear();
+  const cols = 2, tables = Math.max(2, Math.ceil(n / 4)), rows = Math.ceil(tables / cols);
+  const cw = 7.4, cd = Math.max(9, rows * 2.7 + 5.2);
+  const x0 = officeW / 2 + 2; // la parete divisoria
+  const cx = x0 + cw / 2, z0 = -4.2;
+  const fl = new THREE.Mesh(new THREE.PlaneGeometry(cw, cd), MC.floor); fl.rotation.x = -Math.PI / 2; fl.position.set(cx, 0.005, z0 + cd / 2); fl.receiveShadow = true; caffe.add(fl);
+  // pareti: divisoria con la porta, fondo, lato
+  const door = 2.0, wallH = 3.2, zMid = z0 + cd / 2;
+  const half = (cd - door) / 2;
+  const segA = box(0.15, wallH, half, MC.wall); segA.position.set(x0, wallH / 2, z0 + half / 2); caffe.add(segA);
+  const segB = box(0.15, wallH, half, MC.wall); segB.position.set(x0, wallH / 2, zMid + door / 2 + half / 2); caffe.add(segB);
+  caffeDoor = new THREE.Vector3(x0, 0, zMid);
+  const back = box(cw, wallH, 0.15, MC.wall); back.position.set(cx, wallH / 2, z0); caffe.add(back);
+  const side = box(0.15, wallH, cd, MC.wall); side.position.set(x0 + cw, wallH / 2, z0 + cd / 2); caffe.add(side);
+  // bancone con la macchina del caffè e le tazzine
+  const counter = box(4.2, 0.95, 0.7, MC.counter); counter.position.set(cx, 0.475, z0 + 0.55); caffe.add(counter);
+  const top = box(4.3, 0.05, 0.75, MC.top); top.position.set(cx, 0.97, z0 + 0.55); caffe.add(top);
+  const machine = box(0.8, 0.7, 0.5, MC.machine); machine.position.set(cx - 1.2, 1.35, z0 + 0.5); caffe.add(machine);
+  const spout = box(0.3, 0.08, 0.2, MC.steel); spout.position.set(cx - 1.2, 1.15, z0 + 0.8); caffe.add(spout);
+  const led = new THREE.Mesh(new THREE.SphereGeometry(0.035, 8, 8), new THREE.MeshBasicMaterial({ color: 0xef4444 })); led.position.set(cx - 0.95, 1.55, z0 + 0.76); caffe.add(led);
+  for (let i = 0; i < 6; i++) { const cup = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.035, 0.08, 12), MC.cup); cup.position.set(cx - 0.2 + i * 0.22, 1.04, z0 + 0.6); caffe.add(cup); }
+  const grinder = box(0.25, 0.45, 0.25, MC.steel); grinder.position.set(cx + 1.5, 1.22, z0 + 0.5); caffe.add(grinder);
+  // un divano sul lato e due piante
+  const sofa = box(0.8, 0.45, 2.2, MC.sofa); sofa.position.set(x0 + cw - 0.6, 0.25, z0 + cd - 1.6); caffe.add(sofa);
+  const sback = box(0.2, 0.55, 2.2, MC.sofa); sback.position.set(x0 + cw - 0.15, 0.7, z0 + cd - 1.6); caffe.add(sback);
+  for (const [px_, pz_] of [[x0 + 0.5, z0 + 0.5], [x0 + cw - 0.5, z0 + 0.5]]) { const pot = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.15, 0.4, 12), M.pot); pot.position.set(px_, 0.2, pz_); caffe.add(pot); const leaf = new THREE.Mesh(new THREE.SphereGeometry(0.38, 12, 10), M.plant); leaf.position.set(px_, 0.75, pz_); caffe.add(leaf); }
+  // tavolini rotondi con quattro sgabelli
+  seats = [];
+  for (let t = 0; t < tables; t++) {
+    const c = t % cols, r = Math.floor(t / cols);
+    const tx = cx + (c - 0.5) * 3.0, tz = z0 + 2.6 + r * 2.7;
+    const tp = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 0.05, 24), MC.table); tp.position.set(tx, 0.76, tz); tp.castShadow = true; caffe.add(tp);
+    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.74, 10), M.leg); leg.position.set(tx, 0.37, tz); caffe.add(leg);
+    for (let k = 0; k < 2; k++) { const cup = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.035, 0.08, 12), MC.cup); cup.position.set(tx + (k ? 0.18 : -0.15), 0.83, tz + (k ? -0.1 : 0.12)); caffe.add(cup); }
+    for (let k = 0; k < 4; k++) {
+      const a = (k / 4) * Math.PI * 2 + Math.PI / 4;
+      const sx = tx + Math.sin(a) * 0.95, sz = tz + Math.cos(a) * 0.95;
+      const st = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.06, 16), MC.stool); st.position.set(sx, 0.55, sz); st.castShadow = true; caffe.add(st);
+      const sl = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.52, 8), M.leg); sl.position.set(sx, 0.27, sz); caffe.add(sl);
+      // l'impiegato sta seduto un po' più indietro dello sgabello e guarda il centro del tavolo
+      const back_ = 0.22;
+      seats.push({ pos: new THREE.Vector3(tx + Math.sin(a) * (0.95 + back_), 0, tz + Math.cos(a) * (0.95 + back_)), rot: Math.atan2(tx - sx, tz - sz), table: new THREE.Vector3(tx, 1.2, tz) });
+    }
+  }
+  deptLabel('Sala caffè', cx, z0 + cd - 0.4);
+  return { x0, cw, cd };
+}
+let caffeBox = { x0: 0, cw: 0, cd: 0 };
+let caffeDoor = new THREE.Vector3();
+
 let lastLayoutKey = '';
 function fitCamera() {
   const { w, d } = roomSize;
-  controls.target.set(0, 1, d / 2 - 2);
-  camera.position.set(w * 0.25, Math.max(7, Math.max(w, d) * 0.6), d + Math.max(4, w * 0.3));
+  const extra = caffeBox.cw ? caffeBox.cw + 2 : 0;
+  controls.target.set(extra / 2, 1, d / 2 - 2);
+  camera.position.set(extra / 2 + (w + extra) * 0.25, Math.max(7, Math.max(w + extra, d) * 0.6), d + Math.max(4, (w + extra) * 0.3));
 }
 
 const histOf = (sym) => (window.__bars?.[sym] || []).slice(-30);
@@ -691,7 +756,7 @@ function paintScene(st) {
   let pos = null;
   if (keys !== lastLayoutKey) {
     pos = layout(groups);
-    for (const [k, d] of desks) if (!pos.has(k)) { scene.remove(d.group); desks.delete(k); }
+    for (const [k, d] of desks) if (!pos.has(k)) { scene.remove(d.group); if (d.away || d.walk) scene.remove(d.group.userData.emp); desks.delete(k); }
     for (const [k, p] of pos) { let d = desks.get(k); if (!d) { d = { group: makeDesk(k, k === 'capo') }; scene.add(d.group); desks.set(k, d); } d.group.position.copy(p); }
     if (!lastLayoutKey) fitCamera();
     lastLayoutKey = keys;
@@ -723,8 +788,65 @@ function paintScene(st) {
     drawScreen(u.scr, 'Capo ufficio', rich.length ? `${rich.length} richiami` : 'tutti in regola', null, null);
     u.el.innerHTML = `<b>Capo ufficio</b><br><span>${rich.length ? `richiama ${esc(rich.map((v) => v.agente).join(', ')).slice(0, 40)}` : 'controlla il lavoro'}</span>`;
   }
+  moveToCaffe(st);
   drawBoard(st, journal);
   if (cardKey) renderCard();
+}
+
+// In sala caffè si parla: ogni 4 secondi uno scambio vero dallo stato del motore (dossier, candele, Kronos, lezioni, capo).
+const keyName = (k) => k === 'capo' ? 'Capo ufficio' : k.startsWith('a:') ? agentName(k.slice(2)) : k.startsWith('c:') ? `custode ${k.slice(2)}` : k.startsWith('i:') ? `intraday ${k.slice(2)}` : k;
+let chatAt = 0, chatIdx = 0;
+function chatTick(now) {
+  if (now - chatAt < 4200) return; chatAt = now;
+  const sc = status?.caffe?.scambi || []; if (!sc.length) return;
+  for (let tries = 0; tries < sc.length; tries++) {
+    const x = sc[chatIdx++ % sc.length];
+    const d = desks.get(x.da); if (!d) continue;
+    const to = x.a ? desks.get(x.a) : null;
+    bubble(d, `<b>${esc(keyName(x.da))}${to ? ` → ${esc(keyName(x.a))}` : ''}</b><br>${esc(x.testo.length > 170 ? x.testo.slice(0, 167) + '…' : x.testo)}`, '#1f2937', 6500, true);
+    d.group.userData.emp.userData.raise = 0.5;
+    if (to && to.away && !to.walk) { // chi ascolta gira la testa verso chi parla e alla fine annuisce
+      const a = d.group.userData.emp.getWorldPosition(new THREE.Vector3()), b = to.group.userData.emp.getWorldPosition(new THREE.Vector3());
+      let rel = Math.atan2(a.x - b.x, a.z - b.z) - to.group.userData.emp.rotation.y; rel = Math.atan2(Math.sin(rel), Math.cos(rel));
+      to.lookAt = Math.max(-1.1, Math.min(1.1, rel));
+      setTimeout(() => { to.lookAt = null; to.group.userData.emp.userData.bow = 0.5; }, 3500);
+    }
+    break;
+  }
+}
+
+// Chi è in pausa (stato del motore: caffe.presenti) lascia la scrivania e cammina fino a uno sgabello passando dalla porta;
+// chi ha di nuovo un trade da aprire o una posizione da seguire torna a sedersi alla sua scrivania.
+function deskSeat(d) { const g = d.group; return { pos: new THREE.Vector3(g.position.x, 0, g.position.z - 0.85), rot: 0 }; }
+function walkTo(d, to, rot, viaDoor) {
+  const emp = d.group.userData.emp;
+  const from = emp.getWorldPosition(new THREE.Vector3()); from.y = 0;
+  const path = viaDoor ? [from, new THREE.Vector3(caffeDoor.x - 0.8, 0, caffeDoor.z), new THREE.Vector3(caffeDoor.x + 0.8, 0, caffeDoor.z), to] : [from, to];
+  if (viaDoor && from.x > caffeDoor.x) path.splice(1, 2, new THREE.Vector3(caffeDoor.x + 0.8, 0, caffeDoor.z), new THREE.Vector3(caffeDoor.x - 0.8, 0, caffeDoor.z));
+  let len = 0; for (let i = 1; i < path.length; i++) len += path[i].distanceTo(path[i - 1]);
+  d.walk = { path, len, t0: performance.now(), dur: Math.min(9000, 1200 + len * 380), rot };
+}
+function moveToCaffe(st) {
+  const away = (st.caffe?.presenti || []).map((p) => p.chiave).filter((k) => desks.has(k)).sort();
+  const want = new Set(away);
+  away.forEach((k, i) => { const d = desks.get(k); d.seatIdx = i; });
+  for (const [k, d] of desks) {
+    if (k === 'capo') continue;
+    const emp = d.group.userData.emp;
+    const go = want.has(k) && seats[d.seatIdx];
+    if (go && !d.away) {
+      scene.attach(emp); d.away = true;
+      const s_ = seats[d.seatIdx]; walkTo(d, s_.pos, s_.rot, true);
+      d.chair = s_;
+    } else if (go && d.away && d.chair !== seats[d.seatIdx]) {
+      const s_ = seats[d.seatIdx]; d.chair = s_; walkTo(d, s_.pos, s_.rot, false);
+    } else if (!go && d.away) {
+      const ds = deskSeat(d); d.away = false; d.returning = true;
+      walkTo(d, ds.pos, 0, true);
+      const why = (st.caffe?.operativi || []).find((o) => o.chiave === k)?.perche;
+      bubble(d, why ? `torno alla scrivania: ${why}` : 'torno alla scrivania', '#1d4ed8', 4000);
+    }
+  }
 }
 
 // Mouse: sopra una postazione si legge cosa fa; clic → scheda del titolo o pagina Agenti.
@@ -734,8 +856,8 @@ function pickDesk(ev) {
   const r = renderer.domElement.getBoundingClientRect();
   mouse.set(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1);
   ray.setFromCamera(mouse, camera);
-  const hits = ray.intersectObjects([...[...desks.values()].map((d) => d.group), board], true);
-  for (const h of hits) { let o = h.object; while (o) { if (o === board) return { board: true }; for (const d of desks.values()) if (d.group === o) return d; o = o.parent; } }
+  const hits = ray.intersectObjects([...[...desks.values()].map((d) => d.group), ...[...desks.values()].filter((d) => d.away || d.walk).map((d) => d.group.userData.emp), board], true);
+  for (const h of hits) { let o = h.object; while (o) { if (o === board) return { board: true }; for (const d of desks.values()) if (d.group === o || d.group.userData.emp === o) return d; o = o.parent; } }
   return null;
 }
 let hoveredDesk = null;
@@ -765,10 +887,11 @@ function deskFor(e) {
   if (e.agente === 'intraday') return desks.get(`i:${e.simbolo}`);
   return desks.get(`c:${e.simbolo}`) || desks.get(`i:${e.simbolo}`);
 }
-function bubble(d, text, color) {
-  const el = document.createElement('div'); el.className = 'lbl bubble'; el.textContent = text; el.style.color = color;
-  const o = new CSS2DObject(el); o.position.set(0, 2.3, 0); d.group.add(o);
-  bubbles.push({ o, d, born: performance.now() });
+function bubble(d, text, color, life = 2500, html = false) {
+  const el = document.createElement('div'); el.className = `lbl bubble${html ? ' chat' : ''}`; if (html) el.innerHTML = text; else el.textContent = text; el.style.color = color;
+  const host = d.away || d.walk ? d.group.userData.emp : d.group;
+  const o = new CSS2DObject(el); o.position.set(0, 2.3, 0); host.add(o);
+  bubbles.push({ o, host, born: performance.now(), life });
 }
 const bubbles = [];
 function sceneEvent(e) {
@@ -808,18 +931,38 @@ function animate() {
   if (!officeOn() || !sceneBox.open) return;
   const dt = Math.min(0.05, clock.getDelta()); const now = performance.now();
   for (const d of desks.values()) {
-    const e = d.group.userData.emp.userData; e.t += dt;
+    const empO = d.group.userData.emp;
+    if (d.walk) {
+      const k = Math.min(1, (now - d.walk.t0) / d.walk.dur); const ease = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
+      let dist = ease * d.walk.len, i = 1; const P = d.walk.path;
+      while (i < P.length - 1 && dist > P[i].distanceTo(P[i - 1])) { dist -= P[i].distanceTo(P[i - 1]); i++; }
+      const seg = P[i].clone().sub(P[i - 1]); const L = seg.length() || 1;
+      const at = P[i - 1].clone().addScaledVector(seg, Math.min(1, dist / L));
+      empO.position.set(at.x, Math.abs(Math.sin(now / 120)) * 0.05, at.z);
+      empO.rotation.y = k < 1 ? Math.atan2(seg.x, seg.z) : d.walk.rot;
+      if (k >= 1) {
+        empO.position.y = 0; empO.rotation.y = d.walk.rot; d.walk = null;
+        if (d.returning) { d.group.attach(empO); empO.position.set(0, 0, -0.85); empO.rotation.set(0, 0, 0); d.returning = false; }
+      }
+    }
+    const e = empO.userData; e.t += dt;
     // digitare: gli avambracci si alzano e abbassano a turno; la testa guarda lo schermo e ogni tanto si gira
-    e.arms[0].position.y = 0.84 + Math.max(0, Math.sin(e.t * 9)) * 0.03;
-    e.arms[1].position.y = 0.84 + Math.max(0, Math.sin(e.t * 9 + 1.6)) * 0.03;
-    e.head.rotation.y = Math.sin(e.t * 0.4) * 0.25;
+    if (d.away || d.walk) { // in pausa: niente tastiera, la tazzina in mano e lo sguardo ai colleghi
+      e.arms[0].position.y = 0.84; e.arms[1].position.y = 0.9 + Math.sin(e.t * 0.7) * 0.04;
+      e.head.rotation.y = d.lookAt ? d.lookAt : Math.sin(e.t * 0.3) * 0.5;
+    } else {
+      e.arms[0].position.y = 0.84 + Math.max(0, Math.sin(e.t * 9)) * 0.03;
+      e.arms[1].position.y = 0.84 + Math.max(0, Math.sin(e.t * 9 + 1.6)) * 0.03;
+      e.head.rotation.y = Math.sin(e.t * 0.4) * 0.25;
+    }
     if (e.raise > 0) { e.arms[1].position.y = 0.84 + e.raise * 0.55; e.arms[1].position.z = 0.3 - e.raise * 0.2; e.raise = Math.max(0, e.raise - dt * 0.6); }
     if (e.bow > 0) { e.head.rotation.x = e.bow * 0.5; e.bow = Math.max(0, e.bow - dt * 0.4); } else e.head.rotation.x = 0;
-    if (e.stand > 0) { d.group.userData.emp.position.y = e.stand * 0.35; e.stand = Math.max(0, e.stand - dt * 0.5); } else d.group.userData.emp.position.y = 0;
+    if (!d.walk) { if (e.stand > 0) { empO.position.y = e.stand * 0.35; e.stand = Math.max(0, e.stand - dt * 0.5); } else empO.position.y = 0; }
     e.torso.material.emissive?.setHex(d === hoveredDesk ? 0x333333 : 0x000000);
     const s = d.group.userData.scr; if (s.userData.flash > 0) { s.userData.flash = Math.max(0, s.userData.flash - dt * 0.5); if (s.userData.flash === 0 && status) paintScene(status); }
   }
-  for (let i = bubbles.length - 1; i >= 0; i--) { const b = bubbles[i]; const k = (now - b.born) / 2500; if (k >= 1) { b.d.group.remove(b.o); b.o.element.remove(); bubbles.splice(i, 1); continue; } b.o.position.y = 2.3 + k * 0.6; b.o.element.style.opacity = String(1 - k); }
+  for (let i = bubbles.length - 1; i >= 0; i--) { const b = bubbles[i]; const k = (now - b.born) / b.life; if (k >= 1) { b.host.remove(b.o); b.o.element.remove(); bubbles.splice(i, 1); continue; } b.o.position.y = 2.3 + k * (b.life > 3000 ? 0.15 : 0.6); b.o.element.style.opacity = String(b.life > 3000 ? Math.min(1, (1 - k) * 4) : 1 - k); }
+  chatTick(now);
   if (fly) { const k = Math.min(1, (now - fly.t0) / 900); const ease = k * (2 - k); controls.target.lerpVectors(fly.fromT, fly.toT, ease); camera.position.lerpVectors(fly.fromP, fly.toP, ease); if (k >= 1) fly = null; }
   if (portrait.on) { portrait.model.rotation.y += dt * 0.8; portrait.renderer.render(portrait.scene, portrait.camera); }
   controls.update(); renderer.render(scene, camera); labels.render(scene, camera);
@@ -1032,7 +1175,7 @@ function paint(st) {
   sayState();
   if (!status) { $('#when').textContent = lastTick ? `ultimo giro iniziato ${hhmm(lastTick.t)}` : 'nessuno stato'; return; }
   $('#when').textContent = `ultimo giro ${hhmm(status.aggiornato)} (${ago(status.aggiornato)})`;
-  paintMoney(status); paintPositions(status); paintPnl(status); paintDecisions(status); paintScores(status); paintAgents(status); paintScene(status); paintCustodi(status); paintChips(status); paintIntraday(status); paintVotes(status); paintSimulazioni(status); paintCapo(status);
+  paintMoney(status); paintPositions(status); paintPnl(status); paintDecisions(status); paintScores(status); paintAgents(status); paintScene(status); paintCustodi(status); paintChips(status); paintIntraday(status); paintVotes(status); paintSimulazioni(status); paintCapo(status); paintCaffe(status);
 }
 async function loadStatus() {
   try { paint(await (await fetch('/api/status')).json()); } catch (e) { $('#say').textContent = 'La dashboard non riesce a leggere lo stato.'; $('#fix').hidden = false; $('#fix').textContent = e.message; }
@@ -1358,6 +1501,20 @@ function paintCapo(st) {
   const pill = (v) => `<span class="pill ${v.giudizio === 'richiamato' ? 'down' : v.giudizio === 'ottimo' || v.giudizio === 'bene' ? 'up' : ''}">${esc(v.giudizio)}</span>`;
   $('#capo').innerHTML = `<p>${esc(c.sintesi)}</p>${giudicati.map((v) => `<div class="vote"><b>${esc(agentName(v.agente))}</b> ${pill(v)} <span class="why">${v.vinti}/${v.trade} vinti · ${usd(v.risultato)}</span><br><span class="why">${esc(v.messaggio)}</span>${v.consigli.length ? `<ul style="margin:4px 0; padding-left:18px">${v.consigli.map((x) => `<li class="why">${esc(x)}</li>`).join('')}</ul>` : ''}</div>`).join('')}${nuovi.length ? `<div class="vote"><span class="why">Ancora da giudicare (meno di 3 trade chiusi):</span><div class="row" style="margin-top:6px">${nuovi.map((v) => `<span class="pill ${cls(v.risultato)}">${esc(agentName(v.agente))} ${v.vinti}/${v.trade} · ${usd(v.risultato)}</span>`).join('')}</div></div>` : ''}`;
 }
+function paintCaffe(st) {
+  const c = st.caffe;
+  if (!c) { $('#caffe').innerHTML = '<p class="empty">Nessun dato: la sala caffè arriva con il prossimo giro.</p>'; return; }
+  const chip = (p, k) => `<span class="pill ${k}" title="${esc(p.perche)}">${esc(keyName(p.chiave))}</span>`;
+  const lez = (c.lezioni || []).filter((l) => l.effetto);
+  $('#caffe').innerHTML = `
+    <div class="why" style="margin-bottom:4px">In pausa (${c.presenti.length})</div><div class="row">${c.presenti.map((p) => chip(p, '')).join('') || '<span class="why">nessuno: tutti alla scrivania</span>'}</div>
+    <div class="why" style="margin:10px 0 4px">Alla scrivania (${c.operativi.length})</div><div class="row">${c.operativi.map((p) => chip(p, 'agent')).join('')}</div>
+    <div class="why" style="margin:12px 0 4px">Cosa si dicono</div>
+    ${(c.scambi || []).map((x) => `<div class="vote"><b>${esc(keyName(x.da))}</b>${x.a ? ` → ${esc(keyName(x.a))}` : ''} <span class="pill">${esc(x.tema)}</span><br><span class="why">${esc(x.testo)}</span></div>`).join('') || '<p class="empty">Nessuno scambio in questo giro.</p>'}
+    <div class="why" style="margin:12px 0 4px">Lezioni di squadra (dai trade chiusi, almeno 3 per lezione)</div>
+    ${lez.length ? lez.map((l) => `<div class="vote"><span class="pill ${l.effetto === 'prudenza' ? 'down' : 'up'}">${esc(l.effetto)}</span> <span class="why">${esc(l.testo)}</span></div>`).join('') : '<p class="empty">Ancora nessuna lezione: servono almeno 3 trade chiusi simili (per ingresso, settore o forza di Kronos).</p>'}
+    ${(c.applicati || []).length ? `<div class="why" style="margin:12px 0 4px">Applicate in questo giro</div>${c.applicati.map((n) => `<div class="why">• ${esc(n.replace(/^sala caffè: /, ''))}</div>`).join('')}` : ''}`;
+}
 function paintVotes(st) {
   const sig = st.segnali || [];
   $('#votes').innerHTML = sig.length ? sig.map((s) => `<div class="vote"><span class="pill agent">${agentName(s.agente)}</span> <span class="${s.lato === 'buy' ? 'up' : 'down'}"><b>${s.lato === 'buy' ? 'compra' : 'vendi'} ${esc(s.simbolo)}</b></span> forza ${s.forza.toFixed(2).replace('.', ',')}${s.vincolante ? ' <span class="pill warn">regola</span>' : ''}${s.intraday ? ' <span class="pill">intraday</span>' : ''}<br><span class="why">${esc(s.perche)}</span></div>`).join('') : '<p class="empty">Nessun voto nell\u2019ultimo giro.</p>';
@@ -1458,6 +1615,7 @@ function describe(e) {
     case 'rischio': return `Rischio ammesso ${Math.round(e.rischio * 100)}%${(e.note || []).length ? `: ${e.note.map(esc).join(' ')}` : ''}`;
     case 'allocazione': return `Proposte: ${(e.proposte || []).map((p) => `${side(p.side)} ${qty(p.qty)} ${esc(p.symbol)}`).join(', ') || 'nessuna'}`;
     case 'ordine': return `<span class="pill ${e.lato === 'buy' ? 'up' : 'down'}">${e.lato === 'buy' ? 'Comprato' : 'Venduto'}</span> <b>${qty(e.quantita)} ${esc(e.simbolo)}</b> — ${esc(e.esito)}${e.stato ? ` (${esc(e.stato)})` : ''}${e.errore ? ` <span class="down">${esc(cleanErr(e.errore))}</span>` : ''}`;
+    case 'caffe': return `<span class="pill">Sala caffè</span> ${(e.entrati || []).length ? `in pausa: ${e.entrati.map((k) => esc(keyName(k))).join(', ')}` : ''}${(e.entrati || []).length && (e.usciti || []).length ? ' · ' : ''}${(e.usciti || []).length ? `tornano alla scrivania: ${e.usciti.map((u) => `${esc(keyName(u.chiave))} (${esc(u.perche)})`).join(', ')}` : ''}`;
     case 'attesa': return `<span class="pill warn">In attesa</span> <b>${esc(e.simbolo)}</b>: ${esc(e.motivo)}`;
     case 'rifiuto': if (e.origine === 'contesto' && !e.quantita) return describe({ ...e, tipo: 'attesa' }); return `<span class="pill">Fermato dalle regole</span> ${side(e.lato)} ${qty(e.quantita)} <b>${esc(e.simbolo)}</b>: ${esc(e.motivo)}`;
     case 'stop': return `Stop di protezione ${e.azione === 'piazzato' ? 'messo' : 'tolto'}: ${esc(cleanErr(e.dettaglio))}`;

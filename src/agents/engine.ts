@@ -10,6 +10,7 @@ import type { KronosForecastPath } from "../kronos-sidecar.ts";
 import { stopPctFor } from "../stops.ts";
 import type { CustodeStato } from "./custode.ts";
 import type { IntradayStato } from "./intraday.ts";
+import { applyLessons, coffeeBreak, teamLessons, type CaffeReport } from "./caffe.ts";
 import { refreshCryptoUniverse, type TopFetcher } from "./universe.ts";
 import { applyAgentSettings } from "../agent-settings.ts";
 import * as simulations from "../simulations.ts";
@@ -89,6 +90,8 @@ export interface AgentsStatus {
   simulazioni: Simulazione[];
   // Il capo ufficio: sintesi, migliori, giudizio e consigli per ogni agente.
   capo: CapoReport;
+  // Sala caffè: chi è in pausa e chi alla scrivania, cosa si dicono, le lezioni di squadra.
+  caffe?: CaffeReport;
 }
 
 export const statusPath = (stateDir: string) => join(stateDir, "agents-status.json");
@@ -114,6 +117,8 @@ export interface EngineCache {
   // Avviso Telegram dell'obiettivo/perdita del giorno: una volta sola al giorno.
   giornataAvvisata?: string;
   capoSintesi?: string;
+  giriCaffe?: number;
+  caffePresenti?: string;
   scartateNota?: string;
 }
 
@@ -408,6 +413,14 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
       log.info(n);
       bus.emit("nota", { testo: n });
     }
+    // Sala caffè: le lezioni di squadra dal diario correggono, con limiti, i voti d'acquisto che somigliano a quello che
+    // alla squadra è andato male (o bene).
+    const lezioni = teamLessons(journal);
+    const applicatiCaffe = applyLessons(reports, lezioni, view.previsioni);
+    for (const n of applicatiCaffe) {
+      log.info(n);
+      bus.emit("nota", { testo: n });
+    }
     if (cache.capoSintesi !== capo.sintesi) {
       cache.capoSintesi = capo.sintesi;
       bus.emit("capo", { sintesi: capo.sintesi, richiamati: capo.valutazioni.filter((v) => v.giudizio === "richiamato").map((v) => ({ agente: v.agente, messaggio: v.messaggio, consigli: v.consigli })) });
@@ -553,7 +566,18 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
       giornata: { pnlPct, obiettivoPct: AGENTS.daily.targetPct, perditaMaxPct: AGENTS.daily.maxLossPct, obiettivoRaggiunto: giornata.obiettivoRaggiunto, perditaOltre: giornata.perditaOltre },
       simulazioni,
       capo,
+      caffe: coffeeBreak({ now: deps.now(), reports, held: new Set([...positions.map((p) => p.symbol), ...cage.orders.filter((o) => o.side === "buy").map((o) => o.symbol)]), previsioni: view.previsioni, scartate, lezioni, capo, applicati: applicatiCaffe, giro: (cache.giriCaffe = (cache.giriCaffe ?? 0) + 1), primaInPausa: new Set((cache.caffePresenti ?? "").split(",").filter(Boolean)) }),
     };
+    // Chi entra e chi esce dalla sala caffè: un evento solo quando cambia qualcosa.
+    const presentiKey = status.caffe!.presenti.map((p) => p.chiave).join(",");
+    if (cache.caffePresenti !== undefined && cache.caffePresenti !== presentiKey) {
+      const prima = new Set(cache.caffePresenti.split(",").filter(Boolean));
+      const ora = new Set(status.caffe!.presenti.map((p) => p.chiave));
+      const entrati = [...ora].filter((k) => !prima.has(k));
+      const usciti = status.caffe!.operativi.filter((o) => prima.has(o.chiave));
+      bus.emit("caffe", { entrati, usciti: usciti.map((o) => ({ chiave: o.chiave, perche: o.perche })) });
+    }
+    cache.caffePresenti = presentiKey;
     writeJsonAtomic(statusPath(deps.stateDir), status);
     log.info(`giro ${giro}: ${status.segnali.length} segnali, ${alloc.proposte.length} proposte, ${outcomes.length} ordini, ${cage.rejected.length} rifiuti, rischio ${alloc.rischio}`);
 
@@ -636,6 +660,8 @@ export async function valutaTitolo(deps: EngineDeps, cache: EngineCache, symbol:
       }
     }),
   );
+  // Come nel giro vero: i richiami del capo ufficio e le lezioni della sala caffè cambiano i voti prima dei punteggi.
+  for (const n of [...applyGuidance(reports, review(journal, now), view.previsioni), ...applyLessons(reports, teamLessons(journal), view.previsioni)]) if (n.includes(` ${symbol} `)) note.push(n);
   const weights = agentWeights(journal, today, deps.agents.map((a) => a.name));
   const alloc = allocate(view, reports, weights);
   const voti = Object.values(reports).flatMap((r) => r.segnali).filter((s) => s.simbolo === symbol);
