@@ -166,6 +166,25 @@ A ogni giro, dopo i richiami del capo ufficio, il motore (`src/agents/caffe.ts`)
    nette di Kronos e quelle scartate, le lezioni di squadra raccontate da chi ne ha più esperienza, la lezione comune del
    capo ufficio.
 
+### Esplorazione: chi è in pausa cerca nuove occasioni
+
+Gli agenti in sala caffè non restano fissi sul loro titolo (`src/agents/esplorazione.ts`). Ogni 30 minuti, se qualcuno è
+in pausa, prendono i prossimi 8 titoli del **radar** (azioni ed ETF liquidi fuori dall'universo, in `RADAR_SECTORS` con il
+loro settore: tecnologia, finanza, salute, energia, consumi, indici; le crypto della top 100 negoziabili su Alpaca sono
+già tutte nell'universo) e li passano con i criteri del motore:
+
+1. storico sufficiente, **sopra la media a 200**, momentum a 12 mesi positivo, lettura del grafico almeno al 50%;
+2. **Kronos** al rialzo oltre la soglia (+1% a 5 sedute) e non fuori misura (oltre ±25% è rumore).
+
+Chi trova un'opportunità (di preferenza un custode dello stesso settore, poi un custode o un operatore della stessa classe,
+crypto o azioni, poi chiunque sia in pausa) **torna alla scrivania** e lo annuncia ai colleghi. Il titolo **entra
+nell'universo per 3 giorni**: da lì prezzi, contesto, custode, gabbia, stop e uscite lo trattano come ogni altro titolo. Lo
+scopritore lo **vota a ogni giro** (forza da Kronos e dal grafico) finché l'opportunità regge; il voto passa da punteggi,
+richiami del capo, lezioni della sala caffè, allocatore e gabbia. La scoperta si chiude quando il titolo è comprato (lo
+segue il suo custode), quando Kronos non vede più il rialzo o il prezzo scende sotto la 200 (svanita), o dopo 3 giorni
+(scaduta); un titolo del radar in portafoglio resta nell'universo finché lo si tiene. Al massimo 6 scoperte al giorno;
+i settori nuovi non pesano sull'ampiezza del contesto.
+
 Il capo ufficio giudica anche la **squadra dei custodi** insieme: un custode segue un titolo solo e raramente arriva a 3
 trade; il richiamo della squadra vale per ogni custode che non ha ancora un giudizio proprio.
 

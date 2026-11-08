@@ -4,13 +4,14 @@ import { isProtectiveStop, type Account, type Bar, type Broker, type MarketClock
 import { compareWithBenchmarks, type Comparison } from "../benchmark.ts";
 import { evaluateBreaker, readBreaker, writeBreaker } from "../breaker.ts";
 import { applyCage, lossPct, tradingBlockReason, type Rejection } from "../cage.ts";
-import { AGENTS, CRYPTO_MIN_NOTIONAL, DAILY_BARS_DAYS, LIMITS, UNIVERSE, isCrypto, setCryptoUniverse } from "../config.ts";
+import { AGENTS, CRYPTO_MIN_NOTIONAL, DAILY_BARS_DAYS, LIMITS, RADAR_SECTORS, UNIVERSE, isCrypto, setCryptoUniverse } from "../config.ts";
 import { roundQty } from "../broker/types.ts";
 import type { KronosForecastPath } from "../kronos-sidecar.ts";
 import { stopPctFor } from "../stops.ts";
 import type { CustodeStato } from "./custode.ts";
 import type { IntradayStato } from "./intraday.ts";
 import { applyLessons, coffeeBreak, teamLessons, type CaffeReport } from "./caffe.ts";
+import { attive, explore, radar, readEsplorazione, scoutVotes, writeEsplorazione, type Scoperta } from "./esplorazione.ts";
 import { refreshCryptoUniverse, type TopFetcher } from "./universe.ts";
 import { applyAgentSettings } from "../agent-settings.ts";
 import * as simulations from "../simulations.ts";
@@ -92,6 +93,8 @@ export interface AgentsStatus {
   capo: CapoReport;
   // Sala caffè: chi è in pausa e chi alla scrivania, cosa si dicono, le lezioni di squadra.
   caffe?: CaffeReport;
+  // Esplorazione del radar da parte degli agenti in pausa.
+  esplorazione?: { ultimoGiro: string | null; esito: string | null; daEsaminareOggi: number; attive: Scoperta[]; recenti: Scoperta[] };
 }
 
 export const statusPath = (stateDir: string) => join(stateDir, "agents-status.json");
@@ -287,6 +290,9 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
       log.info(m);
       bus.emit("nota", { testo: m });
     });
+    // Le scoperte dell'esplorazione ancora attive stanno nell'universo (prezzi, contesto, custodi, gabbia le vedono).
+    const espl = readEsplorazione(deps.stateDir, today);
+    for (const sc of attive(espl, today)) if (!AGENTS.universe.includes(sc.simbolo)) AGENTS.universe.push(sc.simbolo);
     let snap: Snapshot;
     try {
       snap = await retry(async () => {
@@ -300,6 +306,12 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
     } catch (e) {
       await alarm("Errore del broker", `Alpaca non risponde: ${(e as Error).message}. Nessun ordine in questo giro.`, false);
       return { status: "broker-giu", message: `Alpaca non risponde: ${(e as Error).message}` };
+    }
+    // I titoli del radar escono dall'universo quando la scoperta è chiusa e non sono in portafoglio; quelli in portafoglio restano.
+    {
+      const keep = new Set([...attive(espl, today).map((x) => x.simbolo), ...snap.positions.map((p) => p.symbol)]);
+      for (let i = AGENTS.universe.length - 1; i >= 0; i--) { const u = AGENTS.universe[i]!; if (RADAR_SECTORS[u] && !keep.has(u)) AGENTS.universe.splice(i, 1); }
+      for (const p of snap.positions) if (RADAR_SECTORS[p.symbol] && !AGENTS.universe.includes(p.symbol)) AGENTS.universe.push(p.symbol);
     }
     bus.emit("conto", { patrimonio: snap.account.equity, contanti: snap.account.cash, pnlGiorno: snap.account.equity - snap.account.lastEquity, mercatoAperto: snap.clock.isOpen });
     bus.emit("prezzi", { prezzi: snap.prices });
@@ -407,6 +419,13 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
         }
       }),
     );
+    // Esplorazione: chi ha trovato un titolo in sala caffè lo vota finché l'opportunità regge (poi capo, lezioni, gabbia).
+    const scout = scoutVotes(espl, view, reports);
+    for (const n of scout.note) {
+      log.info(n);
+      bus.emit("nota", { testo: n });
+    }
+    for (const r of Object.values(reports)) for (const sg of r.segnali) if (sg.perche.startsWith("esplorazione dalla sala caffè")) bus.emit("segnale", { ...sg });
     // Il capo ufficio: rivede i risultati di ciascun agente sul diario e applica i suoi richiami ai voti di oggi.
     const capo = review(journal, startedAt);
     for (const n of applyGuidance(reports, capo, view.previsioni)) {
@@ -566,7 +585,54 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
       giornata: { pnlPct, obiettivoPct: AGENTS.daily.targetPct, perditaMaxPct: AGENTS.daily.maxLossPct, obiettivoRaggiunto: giornata.obiettivoRaggiunto, perditaOltre: giornata.perditaOltre },
       simulazioni,
       capo,
-      caffe: coffeeBreak({ now: deps.now(), reports, held: new Set([...positions.map((p) => p.symbol), ...cage.orders.filter((o) => o.side === "buy").map((o) => o.symbol)]), previsioni: view.previsioni, scartate, lezioni, capo, applicati: applicatiCaffe, giro: (cache.giriCaffe = (cache.giriCaffe ?? 0) + 1), primaInPausa: new Set((cache.caffePresenti ?? "").split(",").filter(Boolean)) }),
+      caffe: coffeeBreak({ now: deps.now(), reports, held: new Set([...positions.map((p) => p.symbol), ...cage.orders.filter((o) => o.side === "buy").map((o) => o.symbol)]), previsioni: view.previsioni, scartate, lezioni, capo, applicati: applicatiCaffe, giro: (cache.giriCaffe = (cache.giriCaffe ?? 0) + 1), primaInPausa: new Set((cache.caffePresenti ?? "").split(",").filter(Boolean)), esploratori: scout.esploratori }),
+    };
+    // Esplorazione: con qualcuno in pausa, ogni mezz'ora si passa in rassegna un pezzo del radar.
+    try {
+      const giroEspl = await explore({
+        now: deps.now(), today, file: espl, presenti: status.caffe!.presenti, universe: AGENTS.universe, cryptoFuori: [],
+        getBars: (syms) => retry(() => deps.broker.getDailyBars(syms, DAILY_BARS_DAYS), deps.sleep),
+        forecast: deps.forecaster
+          ? async (syms, bars) => {
+              const raw = await deps.forecaster!(syms, bars);
+              const out: Record<string, number> = {};
+              for (const [k, v] of Object.entries(raw)) {
+                const fp = normalizeForecast(v);
+                out[k] = fp.rendimentoPrevisto;
+                if (cache.previsioni?.date === today) cache.previsioni.data[k] = fp;
+              }
+              if (cache.previsioni?.date === today) writeJsonAtomic(forecastsPath(deps.stateDir), { versione: 1, aggiornato: deps.now().toISOString(), giorno: today, orizzonte: AGENTS.kronos.horizon, previsioni: cache.previsioni.data });
+              return out;
+            }
+          : null,
+      });
+      if (giroEspl) {
+        for (const [k, b] of Object.entries(giroEspl.bars)) {
+          cache.bars[k] = b;
+          cache.closes[k] = b.map((x) => x.close);
+        }
+        for (const n of giroEspl.nuove) {
+          if (!AGENTS.universe.includes(n.simbolo)) AGENTS.universe.push(n.simbolo);
+          // Lo scopritore lascia la sala caffè e torna alla scrivania: lo dice ai colleghi.
+          const c = status.caffe!;
+          const i = c.presenti.findIndex((p) => p.chiave === n.scopritore);
+          if (i >= 0) c.presenti.splice(i, 1);
+          c.operativi.push({ chiave: n.scopritore, nome: n.agente, perche: `ha trovato ${n.simbolo}` });
+          c.scambi.unshift({ da: n.scopritore, a: null, tema: "esplorazione", testo: `Ho trovato ${n.simbolo} (${n.settore}): ${n.motivo}. Torno alla scrivania, lo porto al motore.` });
+        }
+        log.info(`esplorazione: ${giroEspl.messaggio}`);
+        bus.emit("esplorazione", { esaminati: giroEspl.esaminati, nuove: giroEspl.nuove.map((n) => ({ simbolo: n.simbolo, agente: n.agente, kronos: n.kronos, motivo: n.motivo })), scartati: giroEspl.scartati });
+      }
+      writeEsplorazione(deps.stateDir, espl);
+    } catch (e) {
+      log.warn(`esplorazione non riuscita: ${(e as Error).message}`);
+    }
+    status.esplorazione = {
+      ultimoGiro: espl.ultimoGiro,
+      esito: espl.ultimoEsito,
+      daEsaminareOggi: radar(AGENTS.universe).filter((x) => !espl.esaminati.includes(x)).length,
+      attive: attive(espl, today),
+      recenti: espl.scoperte.filter((x) => x.stato !== "attiva").slice(-6),
     };
     // Chi entra e chi esce dalla sala caffè: un evento solo quando cambia qualcosa.
     const presentiKey = status.caffe!.presenti.map((p) => p.chiave).join(",");

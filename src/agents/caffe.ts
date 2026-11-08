@@ -31,7 +31,7 @@ export interface Lezione {
 export interface Scambio {
   da: string; // chiave della postazione: a:trend, c:SOL/USD, i:DOT/USD, capo
   a: string | null; // a chi lo dice (null: al tavolo)
-  tema: "parere" | "lezione" | "kronos" | "capo" | "rientro";
+  tema: "parere" | "lezione" | "kronos" | "capo" | "rientro" | "esplorazione";
   testo: string;
 }
 
@@ -149,16 +149,20 @@ export function coffeeBreak(input: {
   applicati: string[];
   giro: number; // per far girare gli argomenti da un giro all'altro
   primaInPausa?: Set<string>; // chi era in sala caffè al giro prima: solo loro "tornano" alla scrivania
+  esploratori?: Map<string, string>; // chi sta lavorando su un titolo trovato con l'esplorazione: alla scrivania
 }): CaffeReport {
   const { reports, held } = input;
   const presenti: Presenza[] = [];
   const operativi: CaffeReport["operativi"] = [];
   const signals = Object.values(reports).flatMap((r) => r.segnali);
   const voted = (pred: (s: Signal) => boolean) => signals.find(pred);
+  const esploratori = input.esploratori ?? new Map<string, string>();
+  for (const [k, why] of esploratori) operativi.push({ chiave: k, nome: k, perche: why });
+  const taken = (k: string) => esploratori.has(k);
 
   // Agenti generali: alla scrivania se votano o se stanno frenando il rischio (regime, contesto); altrimenti in pausa.
   for (const [n, r] of Object.entries(reports)) {
-    if (n === "custodi" || n === "intraday") continue;
+    if (n === "custodi" || n === "intraday" || taken(`a:${n}`)) continue;
     const v = r.segnali[0];
     if (v) operativi.push({ chiave: `a:${n}`, nome: n, perche: `vota ${v.lato === "buy" ? "acquisto" : "vendita"} ${v.simbolo}` });
     else if (r.rischio !== undefined && r.rischio < 1) operativi.push({ chiave: `a:${n}`, nome: n, perche: `tiene il rischio a ${Math.round(r.rischio * 100)}%` });
@@ -168,6 +172,7 @@ export function coffeeBreak(input: {
   const custodi: CustodeStato[] = Object.values(reports).flatMap((r) => r.custodi ?? []);
   for (const c of custodi) {
     const key = `c:${c.simbolo}`;
+    if (taken(key)) continue;
     const v = voted((s) => s.agente === c.agente);
     if (held.has(c.simbolo) || c.fase === "in posizione" || c.fase === "in uscita") operativi.push({ chiave: key, nome: c.agente, perche: "segue la posizione" });
     else if (v) operativi.push({ chiave: key, nome: c.agente, perche: `trade da ${v.lato === "buy" ? "aprire" : "chiudere"} su ${c.simbolo}` });
@@ -178,6 +183,7 @@ export function coffeeBreak(input: {
   const intraday: IntradayStato[] = Object.values(reports).flatMap((r) => r.intraday ?? []);
   for (const x of intraday) {
     const key = `i:${x.simbolo}`;
+    if (taken(key)) continue;
     const v = voted((s) => s.agente === "intraday" && s.simbolo === x.simbolo);
     if (x.fase === "in posizione") operativi.push({ chiave: key, nome: `intraday ${x.simbolo}`, perche: "operazione aperta" });
     else if (v) operativi.push({ chiave: key, nome: `intraday ${x.simbolo}`, perche: `ingresso su ${x.simbolo}, candele ${x.candela}` });

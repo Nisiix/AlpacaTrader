@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { applyLessons, coffeeBreak, teamLessons } from "../src/agents/caffe.ts";
+import { explore, readEsplorazione, scoutVotes, technicalGate } from "../src/agents/esplorazione.ts";
+import { AGENTS } from "../src/config.ts";
 import { SQUADRA_CUSTODI, applyGuidance, kronosOf, regolaSuperata, review } from "../src/agents/capo.ts";
 import type { CustodeStato } from "../src/agents/custode.ts";
 import type { AgentReport } from "../src/agents/types.ts";
@@ -114,5 +116,57 @@ describe("sala caffè", () => {
     expect(c2.scambi.find((s) => s.tema === "rientro")).toMatchObject({ da: "c:ETH/USD", testo: "Torno alla scrivania: trade da aprire su ETH/USD." });
     // I pareri dei custodi vanno a un collega in sala (preferibilmente dello stesso settore), mai a se stessi.
     for (const s of c.scambi.filter((s) => s.tema === "parere")) expect(s.a).not.toBe(s.da);
+  });
+});
+
+describe("esplorazione dalla sala caffè", () => {
+  const rising = (base: number, n = 300) => Array.from({ length: n }, (_, i) => base * (1 + 0.003 * i + 0.01 * Math.sin(i / 7)));
+  const barsOf = (closes: number[]) => closes.map((c, i) => ({ date: `d${i}`, open: c, high: c * 1.01, low: c * 0.99, close: c, volume: 1 }));
+  const presenti = [{ chiave: "c:BTC/USD", nome: "custode BTC/USD", perche: "aspetta" }, { chiave: "c:AAPL", nome: "custode AAPL", perche: "aspetta" }, { chiave: "a:orizzonte", nome: "orizzonte", perche: "nessun voto" }];
+
+  test("filtro tecnico del motore: sopra la 200 e in ordine passa; in calo no", () => {
+    expect(technicalGate(rising(100)).ok).toBe(true);
+    const g = technicalGate(rising(100).reverse());
+    expect(g.ok).toBe(false);
+    expect(g.motivo).toContain("sotto la media a 200");
+  });
+
+  test("un giro: titoli del radar, filtro, Kronos; chi trova torna alla scrivania; al massimo un giro ogni mezz'ora", async () => {
+    const f = readEsplorazione("/nonexistent-dir", "2026-11-09");
+    const now = new Date("2026-11-09T15:00:00Z");
+    const r = await explore({
+      now, today: "2026-11-09", file: f, presenti, universe: ["SPY", "AAPL"], cryptoFuori: [],
+      getBars: async (syms) => Object.fromEntries(syms.map((s) => [s, barsOf(s === "AVGO" ? rising(100).reverse() : rising(100))])),
+      forecast: async (syms) => Object.fromEntries(syms.map((s) => [s, s === "AMD" ? 0.03 : s === "GOOGL" ? 0.4 : -0.01])),
+    });
+    expect(r!.esaminati).toHaveLength(AGENTS.esplorazione.perGiro);
+    const amd = r!.nuove.find((n) => n.simbolo === "AMD")!;
+    // AMD è tecnologia: la trova il custode di AAPL (stesso settore), che vota come "custode AAPL".
+    expect(amd).toMatchObject({ scopritore: "c:AAPL", agente: "custode AAPL", stato: "attiva", settore: "tecnologia" });
+    expect(r!.scartati.find((x) => x.simbolo === "AVGO")!.motivo).toContain("sotto la media a 200");
+    expect(r!.scartati.find((x) => x.simbolo === "GOOGL")!.motivo).toContain("fuori misura");
+    expect(r!.nuove.some((n) => n.simbolo === "GOOGL")).toBe(false);
+    // Mezz'ora non è passata: niente secondo giro.
+    expect(await explore({ now: new Date(now.getTime() + 10 * 60_000), today: "2026-11-09", file: f, presenti, universe: [], cryptoFuori: [], getBars: async () => ({}), forecast: null })).toBeNull();
+    // Senza nessuno in pausa nessuno esplora.
+    expect(await explore({ now: new Date(now.getTime() + 60 * 60_000), today: "2026-11-09", file: f, presenti: [], universe: [], cryptoFuori: [], getBars: async () => ({}), forecast: null })).toBeNull();
+  });
+
+  test("lo scopritore vota la scoperta finché regge; comprata, svanita o scaduta non si vota più", () => {
+    const sc = (simbolo: string, validaFino = "2026-11-11") => ({ simbolo, settore: "tecnologia", scopritore: "c:AAPL", agente: "custode AAPL", trovata: "2026-11-09T15:00:00Z", validaFino, kronos: 0.03, tecnica: { punteggio: 0.8, pattern: [] }, motivo: "sopra la media a 200; Kronos anticipa +3.0% a 5 sedute", stato: "attiva" as const });
+    const f = { versione: 1 as const, giorno: "2026-11-10", ultimoGiro: null, esaminati: [], ultimoEsito: null, scoperte: [sc("AMD"), sc("META"), sc("ORCL"), sc("CRM", "2026-11-09")] };
+    const closes = Object.fromEntries(["AMD", "META", "ORCL", "CRM"].map((s) => [s, rising(100)]));
+    const prices = Object.fromEntries(Object.entries(closes).map(([s, c]) => [s, c.at(-1)!]));
+    const v = { today: "2026-11-10", now: new Date("2026-11-10T15:00:00Z"), prices, closes, indicators: {}, positions: [{ symbol: "META", qty: 3, avgEntryPrice: 1, currentPrice: 1, marketValue: 3 }], account: { equity: 1, lastEquity: 1, cash: 1, status: "ACTIVE" }, journal: emptyJournal(), previsioni: { AMD: 0.025, ORCL: 0.001 } } as any;
+    const reports: Record<string, AgentReport> = { custodi: { segnali: [] } };
+    const r = scoutVotes(f, v, reports);
+    expect(reports.custodi!.segnali).toHaveLength(1);
+    expect(reports.custodi!.segnali[0]).toMatchObject({ agente: "custode AAPL", simbolo: "AMD", lato: "buy", kronos: 0.025 });
+    expect(reports.custodi!.segnali[0]!.perche).toContain("esplorazione dalla sala caffè");
+    expect(f.scoperte.map((x) => [x.simbolo, x.stato])).toEqual([["AMD", "attiva"], ["META", "comprata"], ["ORCL", "svanita"], ["CRM", "scaduta"]]);
+    expect(r.esploratori.get("c:AAPL")).toContain("AMD");
+    // Nella sala caffè il custode di AAPL risulta alla scrivania, al lavoro su AMD.
+    const c = coffeeBreak({ now: v.now, reports: { custodi: { segnali: reports.custodi!.segnali, custodi: [] } }, held: new Set(), previsioni: undefined, scartate: [], lezioni: [], capo: null, applicati: [], giro: 1, esploratori: r.esploratori });
+    expect(c.operativi.find((o) => o.chiave === "c:AAPL")!.perche).toContain("opera su AMD");
   });
 });

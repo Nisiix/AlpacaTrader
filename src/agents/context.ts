@@ -25,6 +25,7 @@ export interface MacroReading {
 
 // Settori rifugio: non misurano la voglia di rischio del mercato.
 const RIPARO = new Set(["oro", "obbligazioni"]);
+const BASE_SECTORS = new Set([...Object.values(SECTORS), "crypto"]);
 
 const worst = (a: Outlook, b: Outlook): Outlook => (a === "sfavorevole" || b === "sfavorevole" ? "sfavorevole" : a === "neutro" || b === "neutro" ? "neutro" : "favorevole");
 
@@ -72,7 +73,9 @@ export function marketRules(v: AgentView, events: MarketEvent[] = EVENTS): Macro
     const share = above / total;
     settori[sec] = share >= 0.5 ? (share === 1 ? "favorevole" : "neutro") : "sfavorevole";
     if (settori[sec] === "sfavorevole") reasons.push(`${sec}: ${above} su ${total} sopra la media a 50 giorni`);
-    if (!RIPARO.has(sec)) ampiezza.push(share);
+    // Nell'ampiezza contano solo i settori di base (indici, tecnologia, crypto): un titolo portato dall'esplorazione in un
+    // settore nuovo (finanza, salute…) non deve pesare quanto un intero settore.
+    if (!RIPARO.has(sec) && BASE_SECTORS.has(sec)) ampiezza.push(share);
   }
   // Il clima generale non può essere «favorevole» se i mercati a rischio sono quasi tutti sotto la media a 50, anche con
   // SPY sopra la 200: si guarda l'ampiezza, settore per settore con lo stesso peso (le 20 crypto non pesano più degli indici).

@@ -10,7 +10,17 @@ export const isCrypto = (symbol: string) => symbol.includes("/");
 export const CRYPTO_MIN_NOTIONAL = 10;
 // Settori: servono al contesto economico per dire "in questo settore oggi si aspetta".
 export const SECTORS: Record<string, string> = { SPY: "indici", IWM: "indici", QQQ: "tecnologia", AAPL: "tecnologia", MSFT: "tecnologia", NVDA: "tecnologia", GLD: "oro", TLT: "obbligazioni", "BTC/USD": "crypto", "ETH/USD": "crypto" };
-export const sectorOf = (symbol: string) => SECTORS[symbol] ?? (isCrypto(symbol) ? "crypto" : "altro");
+// Il radar dell'esplorazione: azioni e ETF liquidi fuori dall'universo fisso, con il loro settore. Gli agenti in pausa li
+// passano in rassegna; quelli che superano i criteri del motore entrano nell'universo per qualche giorno.
+export const RADAR_SECTORS: Record<string, string> = {
+  AMD: "tecnologia", AVGO: "tecnologia", GOOGL: "tecnologia", META: "tecnologia", AMZN: "tecnologia", TSLA: "tecnologia", NFLX: "tecnologia", ORCL: "tecnologia", CRM: "tecnologia", ADBE: "tecnologia", PLTR: "tecnologia", MU: "tecnologia", QCOM: "tecnologia", CSCO: "tecnologia", IBM: "tecnologia", NOW: "tecnologia", UBER: "tecnologia", SMH: "tecnologia", XLK: "tecnologia",
+  JPM: "finanza", BAC: "finanza", GS: "finanza", MS: "finanza", V: "finanza", MA: "finanza", XLF: "finanza",
+  LLY: "salute", UNH: "salute", JNJ: "salute", ABBV: "salute", MRK: "salute", XLV: "salute",
+  XOM: "energia", CVX: "energia", XLE: "energia",
+  COST: "consumi", WMT: "consumi", HD: "consumi", MCD: "consumi", KO: "consumi", PEP: "consumi", NKE: "consumi", DIS: "consumi", XLY: "consumi",
+  DIA: "indici", EFA: "indici", EEM: "indici",
+};
+export const sectorOf = (symbol: string) => SECTORS[symbol] ?? RADAR_SECTORS[symbol] ?? (isCrypto(symbol) ? "crypto" : "altro");
 // Stablecoin e token ancorati: mai in portafoglio, non hanno trend.
 export const STABLECOINS = new Set(["USDT", "USDC", "DAI", "USDE", "FDUSD", "TUSD", "PYUSD", "USDS", "USD1", "BUSD", "FRAX", "LUSD", "GUSD", "USDP", "WBTC", "WETH", "STETH", "WSTETH", "CBBTC", "WEETH", "RETH", "LBTC", "SUSDE", "SUSDS", "BSC-USD", "USDTB", "USDD", "RLUSD", "XAUT", "PAXG", "USDG", "USDY", "USD0", "EURC", "USDL", "BUIDL", "CUSD", "SUSD", "MUSD", "DOLA"]);
 export const CRYPTO_QTY_DECIMALS = 6;
@@ -210,6 +220,11 @@ export const AGENTS = {
   // con tesi, piano e rischio dichiarati, dentro le stesse regole del motore.
   // Custodi senza numero fisso: uno per ogni titolo o crypto in trend (maxCandidates è solo una sicurezza).
   custodi: { enabled: true, maxCandidates: 100, pullbackSmaDays: 20, extendedPct: 0.15, keepIdleTicks: 12 },
+  // Esplorazione: gli agenti in sala caffè passano in rassegna il radar (RADAR_SECTORS e le crypto rimaste fuori dal
+  // tetto di coppie) ogni everyMinutes, perGiro titoli alla volta. Un titolo che supera i criteri del motore (sopra la
+  // media a 200, grafico in ordine, Kronos al rialzo oltre la soglia) entra nell'universo per giorniValida giorni; chi
+  // l'ha trovato torna alla scrivania e lo vota. maxScoperte: quante scoperte nuove al giorno, al massimo.
+  esplorazione: { enabled: true, everyMinutes: 30, perGiro: 8, maxScoperte: 6, giorniValida: 3, minTecnica: 0.5 },
   // Intraday (agente "intraday"): operazioni che si aprono e chiudono nella stessa giornata, solo nel verso del trend
   // giornaliero. L'agente sceglie da solo la candela (5 min / 15 min / 4 ore) dalla volatilità del titolo: più è nervoso,
   // più la candela è corta. Entra su rottura dei massimi delle ultime 20 candele o su rientro sulla media a 20 candele;

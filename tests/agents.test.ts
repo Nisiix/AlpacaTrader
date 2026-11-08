@@ -915,6 +915,31 @@ describe("contesto economico", () => {
   });
 });
 
+describe("esplorazione nel motore", () => {
+  test("con un agente in pausa il motore esplora il radar: TSLA passa i criteri, entra nell'universo e al giro dopo lo scopritore la vota", async () => {
+    const env = makeEnv(day("2026-09-24", "15:41"));
+    const deps = engineDeps(env, [new HorizonAgent()]);
+    deps.forecaster = async (symbols) => Object.fromEntries(symbols.map((s) => [s, s === "TSLA" ? 0.03 : -0.01]));
+    const before = [...AGENTS.universe];
+    try {
+      const r1 = await runTick(deps);
+      expect(r1.status_file!.caffe!.presenti.map((p) => p.chiave)).toEqual([]); // l'orizzonte è tornato alla scrivania: ha trovato TSLA
+      const espl = r1.status_file!.esplorazione!;
+      expect(espl.attive.map((x) => x.simbolo)).toEqual(["TSLA"]);
+      expect(espl.attive[0]!.scopritore).toBe("a:orizzonte");
+      expect(AGENTS.universe).toContain("TSLA");
+      expect(readEvents(env.stateDir, "2026-09-24").some((e) => e.tipo === "esplorazione")).toBe(true);
+      env.clock.t += 5 * 60_000;
+      const r2 = await runTick(deps, emptyCache());
+      const vote = r2.status_file!.segnali.find((s) => s.simbolo === "TSLA")!;
+      expect(vote).toMatchObject({ agente: "orizzonte", lato: "buy" });
+      expect(r2.status_file!.caffe!.operativi.find((o) => o.chiave === "a:orizzonte")!.perche).toContain("opera su TSLA");
+    } finally {
+      AGENTS.universe.splice(0, AGENTS.universe.length, ...before);
+    }
+  });
+});
+
 describe("presa di profitto parziale", () => {
   test("a +5% vende metà una volta sola (vincolante); il resto resta col trend", () => {
     const j = emptyJournal();
