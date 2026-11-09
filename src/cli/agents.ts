@@ -25,7 +25,7 @@ import { ROOT, buildDeps } from "../deps.ts";
 import { CAMPIONI, ensureKronos, intradayForecaster, pathForecaster, type KronosLink } from "../kronos-sidecar.ts";
 import { Cervello, previsioniCombinate, previsioniIntradayCombinate, tipoIntraday } from "../agents/cervello.ts";
 import { nasdaqEarnings } from "../earnings.ts";
-import { appendFileSync, existsSync, mkdirSync, unlinkSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { parseArgs } from "./args.ts";
 import { publishPages } from "../pages.ts";
@@ -157,6 +157,24 @@ try {
     quit(RESTART_CODE);
   }, 5_000);
   watcher.unref();
+  // Prova sullo storico (src/cli/backtest-intraday.ts raccolta): il file state/backtest.richiesta (con le opzioni nel
+  // testo, es. «--giorni 3 --campioni 8») la avvia in un processo a parte, con un sidecar Kronos suo; il motore continua.
+  const backtestFile = join(deps.stateDir, "backtest.richiesta");
+  const btWatcher = setInterval(() => {
+    if (!existsSync(backtestFile)) return;
+    let opzioni: string[] = [];
+    try { opzioni = readFileSync(backtestFile, "utf8").split(/\s+/).filter(Boolean); unlinkSync(backtestFile); } catch {}
+    const log = join(deps.logsDir, `backtest-${new Date().toISOString().slice(0, 10)}.log`);
+    try {
+      mkdirSync(deps.logsDir, { recursive: true });
+      const child = Bun.spawn([process.execPath, join(ROOT, "src", "cli", "backtest-intraday.ts"), "raccolta", ...opzioni], { cwd: ROOT, stdout: Bun.file(log), stderr: Bun.file(log.replace(".log", "-errori.log")) });
+      child.unref();
+      console.log(`prova sullo storico avviata (pid ${child.pid}): ${log}`);
+    } catch (e) {
+      console.warn(`prova sullo storico non avviata: ${(e as Error).message}`);
+    }
+  }, 5_000);
+  btWatcher.unref();
   // Sala caffè: ogni minuto gli agenti in pausa passano un pezzo del radar, anche tra un giro e l'altro.
   const exploreTimer = setInterval(() => {
     if (!stop) exploreNow(engine, cache).catch((e) => console.warn(`esplorazione: ${(e as Error).message}`));
