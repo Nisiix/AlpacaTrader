@@ -319,16 +319,15 @@ export function allocate(view: AgentView, reports: Record<string, AgentReport>, 
   const cryptoAperto = valoreAperto(isCrypto) + inCorso, intradayAperto = valoreAperto(() => true) + inCorso;
   ripartisci(nuoviIntraday.filter((x) => isCrypto(x.sc.simbolo)), bud.maxCrypto * equity - cryptoAperto, `crypto intraday già al ${((cryptoAperto / Math.max(1, equity)) * 100).toFixed(0)}% del conto (massimo ${Math.round(bud.maxCrypto * 100)}%: si muovono insieme)`);
   ripartisci(nuoviIntraday, bud.quota * equity - intradayAperto, `budget intraday: ${((intradayAperto / Math.max(1, equity)) * 100).toFixed(0)}% del conto già investito in operazioni intraday (massimo ${Math.round(bud.quota * 100)}%), il resto diviso tra le occasioni per qualità`);
-  // Tetto per settore (lo stesso della gabbia): si riempie in ordine di punteggio, così i contanti non vanno a un titolo
-  // che la gabbia poi rifiuterebbe per settore pieno, lasciando fermi soldi che altri avrebbero usato.
+  // Tetto per settore (lo stesso della gabbia): se le occasioni di un settore chiedono più dello spazio rimasto, si divide
+  // in proporzione alla qualità (come il budget), così i contanti non vanno a un titolo che la gabbia poi rifiuterebbe.
+  // Prima si riempiva in ordine di punteggio: con il budget al 50% il terzo titolo dello stesso settore restava a zero.
   const usato = new Map<string, number>();
   for (const p of held.values()) usato.set(sectorOf(p.symbol), (usato.get(sectorOf(p.symbol)) ?? 0) + p.qty * (view.prices[p.symbol] ?? p.currentPrice));
-  for (const x of asks) {
-    const sec = sectorOf(x.sc.simbolo);
+  for (const sec of new Set(asks.map((x) => sectorOf(x.sc.simbolo)))) {
     if (sec === "altro") continue;
-    const spazio = Math.max(0, (LIMITS.groupMaxBySector[sec] ?? LIMITS.groupMaxPct) * equity * 0.999 - (usato.get(sec) ?? 0));
-    x.chiesto = Math.min(x.chiesto, spazio);
-    usato.set(sec, (usato.get(sec) ?? 0) + x.chiesto);
+    const tetto = LIMITS.groupMaxBySector[sec] ?? LIMITS.groupMaxPct;
+    ripartisci(asks.filter((x) => sectorOf(x.sc.simbolo) === sec), tetto * equity * 0.999 - (usato.get(sec) ?? 0), `settore ${sec} al tetto del ${Math.round(tetto * 100)}% del conto: lo spazio rimasto diviso per qualità`);
   }
   const avail = Math.max(0, view.account.cash - (view.cashImpegnato ?? 0) - equity * AGENTS.riservaContanti);
   const totale = asks.reduce((a, x) => a + x.chiesto, 0);

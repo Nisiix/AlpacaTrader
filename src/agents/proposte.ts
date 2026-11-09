@@ -100,11 +100,6 @@ export function aggiornaProposte(stateDir: string, journal: JournalFile, now: Da
     const rischio = Number(getPath("AGENTS.intraday.budget.rischioTrade"));
     if (tot.trade >= cfg.minTrade && tot.media < 0 && (tot.pf ?? 0) < 0.9) proponi("AGENTS.intraday.budget.rischioTrade", arrot(rischio * 0.8, 0.0001), `Nel complesso le operazioni perdono (${descr(tot)}): finché i risultati non tornano positivi conviene rischiare meno su ciascuna (perdita massima allo stop dal ${(rischio * 100).toFixed(2).replace(".", ",")}% al ${(rischio * 80).toFixed(2).replace(".", ",")}% del conto).`, tot);
     else if (tot.trade >= cfg.minTrade && tot.media > 0 && (tot.pf ?? 0) >= 1.4 && tot.quota >= 0.55 && rischio < 0.005) proponi("AGENTS.intraday.budget.rischioTrade", arrot(Math.min(0.005, rischio * 1.1), 0.0001), `Le operazioni rendono con costanza (${descr(tot)}): si può rischiare un po' di più su ciascuna, restando entro il budget e i limiti del motore.`, tot);
-    // 2b. Budget dell'intraday (investito insieme): dal 25% al 50% solo con almeno minTrade operazioni chiuse, resa media
-    //     positiva dopo i costi e almeno il 51% vinte; se poi le operazioni perdono, si torna al 25%.
-    const quota = Number(getPath("AGENTS.intraday.budget.quota")), piena = AGENTS.intraday.budget.quotaPiena;
-    if (quota < piena && tot.trade >= cfg.minTrade && tot.media > 0 && tot.quota >= 0.51) proponi("AGENTS.intraday.budget.quota", piena, `Le operazioni intraday rendono dopo i costi (${descr(tot)}): si può investire insieme fino al ${Math.round(piena * 100)}% del conto invece del ${Math.round(quota * 100)}%. Ogni operazione resta limitata dal rischio allo stop (${(AGENTS.intraday.budget.rischioTrade * 100).toFixed(2).replace(".", ",")}% del conto) e le crypto al ${Math.round(AGENTS.intraday.budget.maxCrypto * 100)}%.`, tot);
-    else if (quota > 0.25 && tot.trade >= cfg.minTrade && tot.media < 0) proponi("AGENTS.intraday.budget.quota", 0.25, `Con il budget al ${Math.round(quota * 100)}% le operazioni intraday perdono (${descr(tot)}): meglio tornare al 25% finché i risultati non migliorano.`, tot);
     // 3. Scaletta delle medie: un livello che perde → più prudenza; uno che rende molto → un po' meno.
     for (const [i, liv] of LIVELLI.entries()) {
       const g = gruppo(ts.filter((t) => t.contesto?.misure?.medie === i));

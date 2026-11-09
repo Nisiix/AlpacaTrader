@@ -15,25 +15,31 @@ import { emptyJournal, type JournalFile } from "../src/journal.ts";
 AGENTS.intraday.riporto.enabled = false;
 const intra = (simbolo: string, peso: number): Signal => ({ agente: "intraday", simbolo, lato: "buy", forza: 1, orizzonteSedute: 1, intraday: true, pesoMassimo: peso, perche: "prova" });
 const view = (extra: Record<string, unknown> = {}) => {
-  const simboli = ["NVDA", "AAPL", "MSFT", "BTC/USD", "ETH/USD", "SOL/USD"];
+  const simboli = ["NVDA", "AAPL", "MSFT", "SPY", "GLD", "IWM", "BTC/USD", "ETH/USD", "SOL/USD"];
   return { today: "2026-09-24", now: new Date("2026-09-24T15:00:00Z"), prices: Object.fromEntries(simboli.map((s) => [s, 100])), closes: Object.fromEntries(simboli.map((s) => [s, syntheticCloses(100, 0.015, 260)])), indicators: {}, positions: [], account: { equity: 100_000, lastEquity: 100_000, cash: 100_000, status: "ACTIVE" }, journal: emptyJournal(), mercatoAperto: true, ...extra } as unknown as AgentView;
 };
 const valore = (a: ReturnType<typeof allocate>, s: string) => (a.proposte.find((x) => x.symbol === s)?.qty ?? 0) * 100;
 
 describe("budget dell'intraday", () => {
-  test("le occasioni intraday insieme non superano il budget (25%); si divide, non si scarta", () => {
+  test("le occasioni intraday insieme non superano il budget (50%); si divide, non si scarta", () => {
     setCryptoUniverse(["BTC/USD", "ETH/USD", "SOL/USD"]);
-    const a = allocate(view(), { intraday: { segnali: [intra("NVDA", 0.2), intra("AAPL", 0.2), intra("MSFT", 0.2)] } }, { intraday: 1 });
-    const tot = valore(a, "NVDA") + valore(a, "AAPL") + valore(a, "MSFT");
-    expect(tot).toBeLessThanOrEqual(25_000 + 1);
-    expect(tot).toBeGreaterThan(24_000);
-    for (const s of ["NVDA", "AAPL", "MSFT"]) expect(valore(a, s)).toBeGreaterThan(7_000);
+    const a = allocate(view(), { intraday: { segnali: [intra("NVDA", 0.2), intra("SPY", 0.2), intra("GLD", 0.2)] } }, { intraday: 1 });
+    const tot = valore(a, "NVDA") + valore(a, "SPY") + valore(a, "GLD");
+    expect(AGENTS.intraday.budget.quota).toBe(0.5);
+    expect(tot).toBeLessThanOrEqual(50_000 + 1);
+    expect(tot).toBeGreaterThan(48_000);
+    for (const s of ["NVDA", "SPY", "GLD"]) expect(valore(a, s)).toBeGreaterThan(15_000);
+    // Tre titoli dello stesso settore: il budget si divide prima, poi il tetto per settore (35%) taglia il resto.
+    const t = allocate(view(), { intraday: { segnali: [intra("NVDA", 0.2), intra("AAPL", 0.2), intra("MSFT", 0.2)] } }, { intraday: 1 });
+    const tech = valore(t, "NVDA") + valore(t, "AAPL") + valore(t, "MSFT");
+    expect(tech).toBeLessThanOrEqual(35_000 + 1);
+    for (const s of ["NVDA", "AAPL", "MSFT"]) expect(valore(t, s)).toBeGreaterThan(10_000);
   });
 
-  test("con il 20% già investito in intraday resta il 5%; le crypto al massimo il 20%", () => {
+  test("con il 45% già investito in intraday resta il 5%; le crypto al massimo il 20%", () => {
     setCryptoUniverse(["BTC/USD", "ETH/USD", "SOL/USD"]);
-    const aperto: JournalFile = { ...emptyJournal(), trade: [{ id: "t", simbolo: "NVDA", stato: "aperto", apertoIl: "2026-09-24T14:00:00Z", comprate: 200, costo: 20_000, vendute: 0, incassato: 0, quantita: 200, contesto: { agenti: ["intraday"], livelli: { candela: "1Hour", obiettivo: 101, stop: 99 } } } as any] };
-    const a = allocate(view({ journal: aperto, positions: [{ symbol: "NVDA", qty: 200, avgEntryPrice: 100, currentPrice: 100, marketValue: 20_000 }], account: { equity: 100_000, lastEquity: 100_000, cash: 80_000, status: "ACTIVE" } }), { intraday: { segnali: [intra("AAPL", 0.2)] } }, { intraday: 1 });
+    const aperto: JournalFile = { ...emptyJournal(), trade: [{ id: "t", simbolo: "IWM", stato: "aperto", apertoIl: "2026-09-24T14:00:00Z", comprate: 450, costo: 45_000, vendute: 0, incassato: 0, quantita: 450, contesto: { agenti: ["intraday"], livelli: { candela: "1Hour", obiettivo: 101, stop: 99 } } } as any] };
+    const a = allocate(view({ journal: aperto, positions: [{ symbol: "IWM", qty: 450, avgEntryPrice: 100, currentPrice: 100, marketValue: 45_000 }], account: { equity: 100_000, lastEquity: 100_000, cash: 55_000, status: "ACTIVE" } }), { intraday: { segnali: [intra("AAPL", 0.2)] } }, { intraday: 1 });
     expect(valore(a, "AAPL")).toBeLessThanOrEqual(5_000 + 1);
     expect(valore(a, "AAPL")).toBeGreaterThan(4_900);
     const c = allocate(view(), { intraday: { segnali: [intra("BTC/USD", 0.15), intra("ETH/USD", 0.15), intra("SOL/USD", 0.15)] } }, { intraday: 1 });
@@ -47,22 +53,17 @@ describe("budget dell'intraday", () => {
     expect(applyCage({ ...base, proposals: [{ symbol: "NVDA", side: "buy", qty: 200, why: "" }] }).rejected).toHaveLength(1);
   });
 
-  test("il capo propone il 50% solo con almeno 30 operazioni chiuse in guadagno medio e almeno il 51% vinte", () => {
+  test("il 50% è la regola di serie: il capo non propone più il budget, né in su né in giù", () => {
     const diario = (n: number, r: (i: number) => number): JournalFile => {
       const j = emptyJournal();
       const t0 = Date.parse("2026-10-01T10:00:00Z");
       for (let i = 0; i < n; i++) j.trade.push({ id: `t${i}`, simbolo: "NVDA", stato: "chiuso", apertoIl: new Date(t0 + i * 3_600_000).toISOString(), chiusoIl: new Date(t0 + i * 3_600_000 + 1_800_000).toISOString(), comprate: 1, costo: 1000, vendute: 1, incassato: 1000 * (1 + r(i)), quantita: 0, contesto: { setup: "", momentum20: null, volGiornaliera: null, distanzaMedia: null, fiducia: null, attesa: "", perche: "", agenti: ["intraday"], tipo: "intraday", misure: { probabilita: 0.62 }, livelli: { candela: "1Hour", obiettivo: 1010, stop: 996 } } } as any);
       return j;
     };
-    const buono = (i: number) => (i % 5 < 3 ? 0.006 : -0.004); // 60% vinte, resa media +0,2%
-    const poche = aggiornaProposte(mkdtempSync(join(tmpdir(), "bud-")), diario(20, buono), new Date("2026-11-01T10:00:00Z"));
-    expect(poche.nuove.some((x) => x.chiave === "AGENTS.intraday.budget.quota")).toBe(false);
-    const r = aggiornaProposte(mkdtempSync(join(tmpdir(), "bud-")), diario(40, buono), new Date("2026-11-01T10:00:00Z"));
-    const p = r.nuove.find((x) => x.chiave === "AGENTS.intraday.budget.quota")!;
-    expect(p.proposto).toBe(0.5);
-    expect(p.motivo).toContain("rendono dopo i costi");
-    const male = aggiornaProposte(mkdtempSync(join(tmpdir(), "bud-")), diario(40, (i) => (i % 5 < 2 ? 0.004 : -0.005)), new Date("2026-11-01T10:00:00Z"));
-    expect(male.nuove.some((x) => x.chiave === "AGENTS.intraday.budget.quota")).toBe(false);
+    for (const r of [(i: number) => (i % 5 < 3 ? 0.006 : -0.004), (i: number) => (i % 5 < 2 ? 0.004 : -0.005)]) {
+      const p = aggiornaProposte(mkdtempSync(join(tmpdir(), "bud-")), diario(40, r), new Date("2026-11-01T10:00:00Z"));
+      expect(p.nuove.some((x) => x.chiave === "AGENTS.intraday.budget.quota")).toBe(false);
+    }
   });
 });
 

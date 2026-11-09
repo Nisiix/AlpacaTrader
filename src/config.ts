@@ -441,10 +441,9 @@ export const AGENTS = {
     // Budget dell'intraday. Taglia di un trade: perdita allo stop (stop + costi + scivolamento) ≤ rischioTrade del conto,
     // al massimo maxWeight; un trade con lo stop largo (crypto, 4 ore, trend) è da solo più piccolo, uno con lo stop
     // stretto (azioni su 1 ora, −0,4%) può arrivare al 25%. Investito in intraday nello stesso momento: al massimo
-    // `quota` del conto (25%; il capo propone il 50%, quotaPiena, quando ci sono almeno 30 trade chiusi con resa media
-    // positiva dopo i costi e almeno il 51% vinti); le crypto, che si muovono insieme, al massimo maxCrypto. Se le
-    // occasioni chiedono più del budget, si divide in proporzione alla qualità.
-    budget: { quota: 0.25, quotaPiena: 0.5, rischioTrade: 0.0025, scivolamento: 0.002, maxCrypto: 0.2, maxQuotaTrade: 0.5 },
+    // `quota` del conto (50%, regola di serie); le crypto, che si muovono insieme, al massimo maxCrypto; un trade da solo
+    // al massimo maxQuotaTrade del budget. Se le occasioni chiedono più del budget, si divide in proporzione alla qualità.
+    budget: { quota: 0.5, rischioTrade: 0.0025, scivolamento: 0.002, maxCrypto: 0.2, maxQuotaTrade: 0.5 },
     // Finestre, ora di Roma: ingressi solo se resta tempo per chiudere in giornata; poi chiusura forzata.
     // Crypto: sempre aperte, un'operazione intraday dura al massimo cryptoOreMax ore. Azioni: tutta la seduta vera
     // (orologio di Alpaca): ingressi fino a minutiPrimaChiusura.ingresso dalla chiusura, uscita a minutiPrimaChiusura.uscita.
