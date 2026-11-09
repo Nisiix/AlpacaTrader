@@ -224,7 +224,7 @@ export function scoutVotes(f: EsplorazioneFile, v: AgentView, reports: Record<st
     }
     if (held.has(s.simbolo)) {
       s.stato = "comprata";
-      note.push(`esplorazione: ${s.simbolo} comprato; da ora lo segue il suo custode`);
+      note.push(`esplorazione: ${s.simbolo} comprato; da ora lo segue ${AGENTS.puntaIntraday ? "l'intraday agent che l'ha preso" : "il suo custode"}`);
       continue;
     }
     const fc = v.previsioni?.[s.simbolo];
