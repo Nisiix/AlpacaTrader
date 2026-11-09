@@ -78,6 +78,8 @@ export interface Broker {
   getIntradayBars(symbols: string[], timeframe: string, count: number): Promise<Record<string, IntradayBar[]>>;
   // Storico del patrimonio del conto (per il rendimento per periodo in dashboard): un punto per candela di `timeframe`.
   getPortfolioHistory?(start: string, end: string, timeframe: string): Promise<{ t: string; equity: number; pnl: number }[]>;
+  // Nome del titolo o della crypto (es. «Apple Inc.», «Bitcoin»), per mostrarlo accanto al codice.
+  getAssetName?(symbol: string): Promise<string | null>;
 }
 
 export interface IntradayBar {

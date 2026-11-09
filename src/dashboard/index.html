@@ -100,12 +100,26 @@
   .lbl.desk-lbl { background:rgba(255,255,255,.88); color:#1f2937; font-size:11px; line-height:1.2; text-align:center; border:1px solid #d1d5db; }
   .lbl.desk-lbl span { color:#6b7280; }
   .lbl.dept-lbl { background:#1f2937; color:#fff; font-size:13px; font-weight:600; padding:4px 10px; }
-  .office-card { position:absolute; top:54px; right:12px; width:340px; max-height:calc(100% - 66px); overflow:auto; background:var(--card); color:var(--ink); border:1px solid var(--line); border-radius:14px; padding:14px 16px; box-shadow:0 8px 30px rgba(0,0,0,.18); z-index:5; font-size:14px; }
+  .office-card { position:absolute; top:54px; right:12px; width:360px; max-height:calc(100% - 66px); overflow:hidden; display:flex; flex-direction:column; background:var(--card); color:var(--ink); border:1px solid var(--line); border-radius:14px; padding:0; box-shadow:0 8px 30px rgba(0,0,0,.18); z-index:5; font-size:14px; }
+  .office-card[hidden] { display:none; }
+  .office-card .corpo { flex:1 1 auto; min-height:0; overflow-y:auto; overscroll-behavior:contain; padding:14px 10px 14px 16px; margin:4px 4px 4px 0; scrollbar-width:thin; scrollbar-color:var(--line) transparent; scrollbar-gutter:stable; }
+  .office-card .corpo::-webkit-scrollbar { width:8px; }
+  .office-card .corpo::-webkit-scrollbar-track { background:transparent; }
+  .office-card .corpo::-webkit-scrollbar-thumb { background:var(--line); border-radius:8px; }
+  .office-card .corpo:hover { scrollbar-color:var(--ink-3) transparent; }
+  .office-card .corpo:hover::-webkit-scrollbar-thumb { background:var(--ink-3); }
+  /* Schermi grandi: la scheda si allarga su due colonne (chi è | impostazioni), così di solito non serve scorrere. */
+  @media (min-width: 1400px) and (min-height: 760px) {
+    .office-card.largo { width:min(760px, calc(100% - 24px)); }
+    .office-card.largo .corpo { display:grid; grid-template-columns:minmax(0, 1fr) minmax(0, 1.1fr); gap:0 22px; align-items:start; }
+    .office-card.largo .agent-form { padding-top:22px; }
+    .office-card.largo .agent-form > h4:first-child { margin-top:0; }
+  }
   .office-card h3 { margin:4px 0 2px; font-size:17px; } .office-card p { margin:8px 0; } .office-card ul { margin:4px 0; padding-left:18px; }
   .office-card .portrait { width:150px; height:170px; margin:0 auto; background:linear-gradient(#eef2f7,#dfe5ec); border-radius:12px; overflow:hidden; }
   .office-card .x { position:absolute; top:8px; right:8px; border:0; background:var(--card-2); border-radius:999px; width:28px; height:28px; cursor:pointer; color:var(--ink); }
   .office-card td { padding:4px 4px; font-size:13px; } .office-card .agent-c { color:var(--agent); font-weight:600; }
-  @media (max-width: 700px) { .office-card { left:8px; right:8px; width:auto; top:auto; bottom:8px; max-height:58%; } .office-card .portrait { width:110px; height:120px; } }
+  @media (max-width: 700px) { .office-card, .office-card.largo { left:8px; right:8px; width:auto; top:auto; bottom:8px; max-height:58%; } .office-card .portrait { width:110px; height:120px; } }
   .scene-nav { position:absolute; top:10px; left:10px; right:10px; display:flex; gap:6px; z-index:4; overflow-x:auto; scrollbar-width:none; pointer-events:auto; }
   .scene-nav::-webkit-scrollbar { display:none; }
   .scene-nav button { flex:0 0 auto; font:inherit; font-size:13px; padding:6px 12px; border-radius:999px; border:1px solid rgba(0,0,0,.08); background:rgba(255,255,255,.92); color:#1f2937; cursor:pointer; box-shadow:0 2px 6px rgba(0,0,0,.08); }
@@ -165,6 +179,11 @@
   .section-title { margin:22px 2px 10px; font-size:18px; }
   .feed-box { margin-top:10px; } .feed-box summary { cursor:pointer; color:var(--ink-2); font-size:14px; }
   dialog.sheet { border:1px solid var(--line); border-radius:16px; padding:18px 20px; width:min(680px, 94vw); max-height:86vh; overflow:auto; background:var(--card); color:var(--ink); box-shadow:0 20px 60px rgba(0,0,0,.25); }
+  dialog.sheet.largo { width:min(900px, 94vw); }
+  .lav-kpi { display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:10px; margin:6px 0 14px; }
+  .lav-kpi > div { background:var(--card-2); border:1px solid var(--line); border-radius:10px; padding:8px 10px; }
+  .lav-kpi .lab { font-size:12px; color:var(--ink-3); } .lav-kpi .val { font-size:18px; font-weight:700; }
+  .barra-vp { display:inline-block; width:70px; height:8px; border-radius:4px; background:#dc2626; overflow:hidden; vertical-align:middle; } .barra-vp i { display:block; height:100%; background:#16a34a; }
   dialog.sheet::backdrop { background:rgba(10,15,25,.45); }
   .sheet-head { display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:6px; }
   .sheet-head h2 { margin:0; font-size:18px; }
@@ -320,6 +339,12 @@
   details.fold > summary { cursor:pointer; list-style:none; }
   details.fold > summary::-webkit-details-marker { display:none; }
   .office-card dl.kv { font-size:13px; margin:8px 0; }
+  .tnome { color:var(--ink-3); font-weight:400; font-size:.86em; margin-left:6px; }
+  .tnome.blk { display:block; margin:1px 0 0; font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%; }
+  .inv-card .s { min-width:0; }
+  .persona { color:var(--agent); font-weight:600; }
+  .office-card .scheda.compatta { padding:0; border:0; background:transparent; }
+  .office-card .scheda .prm { grid-template-columns:1fr 92px; }
   .office-card h4 { margin:12px 0 4px; font-size:13px; text-transform:uppercase; letter-spacing:.04em; color:var(--ink-3); }
   .tabs { display:flex; gap:4px; flex-wrap:wrap; margin:16px 0 0; border-bottom:1px solid var(--line); }
   .tabs button { font:inherit; font-size:14px; font-weight:500; padding:9px 14px; border:0; border-bottom:2px solid transparent; background:transparent; color:var(--ink-2); cursor:pointer; margin-bottom:-1px; }
@@ -397,11 +422,11 @@
 
   <!-- Ufficio: la mappa 3D con gli agenti e, sotto, la squadra in forma schematica. -->
   <div class="page" data-page="ufficio">
-    <div class="title-row"><h1 class="page-title">Ufficio</h1><button type="button" class="btn ghost" id="modifica-agenti">Modifica comportamento agenti</button></div>
+    <div class="title-row"><h1 class="page-title">Ufficio</h1><div class="row" style="gap:8px"><button type="button" class="btn ghost" id="apri-lavagna">Lavagna dei risultati</button><button type="button" class="btn ghost" id="modifica-agenti">Modifica comportamento agenti</button></div></div>
       <details class="scene" id="scene-box" open>
       <summary>Ufficio degli agenti <span class="hint">trading agents: <b style="color:#16a34a">verde</b> in posizione (rosso se in uscita) · <b style="color:#2563eb">blu</b> pronto a entrare, luce che pulsa · <b style="color:#94a3b8">grigio</b> in osservazione o in attesa · arancione intraday</span></summary>
       <div class="scene-wrap"><div id="scene"></div><aside class="agent-list" id="agent-list" aria-label="agenti dell'ufficio"></aside></div>
-      <p class="legend" hidden>In fondo la <b>Direzione</b> (gli agenti generali) davanti alla <b>lavagna dei risultati</b>; poi i <b>Custodi</b>, una scrivania per titolo seguito, con la camicia del colore della fase (blu pronto, verde in posizione, rosso in uscita, grigio in attesa) e lo schermo con prezzo e andamento; infine la <b>Sala intraday</b> (arancione). A destra, oltre la porta, la <b>Sala caffè</b>: chi in questo giro non ha niente da fare si siede ai tavolini e scambia con i colleghi dati veri (dossier, candele, proiezioni di Kronos, lezioni dei trade chiusi); appena ha un trade da aprire o una posizione da seguire torna alla scrivania. Chi vota alza la mano, chi compra o vende si alza e lo schermo lampeggia. Mouse sopra per leggere, clic per aprire. A destra l'elenco degli agenti: passando sopra un nome il suo avatar si alza in piedi e la postazione si illumina; il clic apre la scheda.</p>
+      <p class="legend" hidden>In fondo la <b>lavagna dei risultati</b> (clic per aprirla) e gli agenti generali che hanno votato almeno un trade; poi i <b>Custodi</b>, una scrivania per titolo seguito, con la camicia del colore della fase (blu pronto, verde in posizione, rosso in uscita, grigio in attesa) e lo schermo con prezzo e andamento; infine la <b>Sala intraday</b> (arancione). A destra, oltre la porta, la <b>Sala caffè</b>: chi in questo giro non ha niente da fare si siede ai tavolini e scambia con i colleghi dati veri (dossier, candele, proiezioni di Kronos, lezioni dei trade chiusi); appena ha un trade da aprire o una posizione da seguire torna alla scrivania. Chi vota alza la mano, chi compra o vende si alza e lo schermo lampeggia. Mouse sopra per leggere, clic per aprire. A destra l'elenco degli agenti: passando sopra un nome il suo avatar si alza in piedi e la postazione si illumina; il clic apre la scheda.</p>
     </details>
     <nav class="tabs" id="uff-tabs" role="tablist" aria-label="sezioni dell'ufficio">
       <button type="button" role="tab" data-tab="agents">Trading agents</button>
@@ -469,6 +494,10 @@
         </details>
   </div>
 
+  <dialog id="lavagna" class="sheet largo" aria-labelledby="lavagna-title">
+    <div class="sheet-head"><h2 id="lavagna-title">Lavagna dei risultati</h2><button type="button" class="x" id="lavagna-x" aria-label="chiudi">✕</button></div>
+    <div id="lavagna-body"></div>
+  </dialog>
   <dialog id="sheet" class="sheet" aria-labelledby="sheet-title">
     <div class="sheet-head"><h2 id="sheet-title">Analisi investimento</h2><button type="button" class="x" id="sheet-x" aria-label="chiudi">✕</button></div>
     <div class="row" style="justify-content:space-between; margin-bottom:10px"><span class="why" id="sheet-sub"></span><button class="btn" id="ask">Chiedi agli agenti adesso</button></div>
@@ -493,10 +522,10 @@
   <!-- Impostazioni: come si regolano gli agenti, le chiavi e il motore. -->
   <div class="page" data-page="impostazioni">
     <h1 class="page-title">Impostazioni</h1>
-    <nav class="subnav" aria-label="impostazioni"><a href="#impostazioni/agenti" data-sub="agenti">Agenti</a><a href="#impostazioni/chiavi" data-sub="chiavi">Chiavi e motore</a></nav>
-    <div class="sub" data-sub="agenti">
+    <nav class="subnav" aria-label="impostazioni"><a href="#impostazioni/generali" data-sub="generali">Generali</a><a href="#impostazioni/chiavi" data-sub="chiavi">Chiavi e motore</a></nav>
+    <div class="sub" data-sub="generali">
       <section class="card">
-        <h2>Schede degli agenti <small>cosa fanno e come si regolano; le modifiche valgono dal giro successivo</small></h2>
+        <h2>Generali <small>le regole comuni del profilo di investimento; le impostazioni di ogni agente si aprono cliccandolo nell'Ufficio</small></h2>
         <div id="schede" class="schede"></div>
       </section>
     </div>
@@ -549,10 +578,11 @@
       <p>Il menu è a sinistra (sul telefono si apre con ☰).</p>
       <ul>
         <li><b>Dashboard</b>: la frase di stato e il capitale (patrimonio totale, investito, liquidità, risultato sulle posizioni aperte, oggi, rischio ammesso, confronto con SPY); il <b>rendimento per periodo</b> con i filtri Oggi, 7 giorni, 30 giorni, Mese, Anno, Tutto o date a scelta (variazione del patrimonio dallo storico di Alpaca, risultato realizzato, operazioni chiuse e vinte, migliore e peggiore, ribasso massimo, grafico del patrimonio e risultato giorno per giorno); poi profitto e perdita di oggi e la situazione in breve.</li>
-        <li><b>Ufficio</b>: la mappa 3D con gli agenti alle loro postazioni (Direzione con la lavagna dei risultati e il capo nella stanza di vetro, Trading agents, Sala intraday, Sala caffè); la camicia dice la fase: blu pronto, verde in posizione, rosso in uscita, grigio in attesa, arancione intraday. A destra l'elenco degli agenti: passando sopra un nome l'avatar si alza e la postazione si illumina; il clic apre la scheda (situazione, ragionamento, giudizio del capo, impostazioni). Sotto, a schede: <b>Decisioni</b> (punteggio per titolo e voti), <b>Trading agents</b>, <b>Esplorazione</b> e <b>Sala caffè</b> (lezioni di squadra).</li>
+        <li><b>Ufficio</b>: la mappa 3D con gli agenti alle loro postazioni (la lavagna dei risultati, che si apre con un clic o col pulsante «Lavagna dei risultati», il capo nella stanza di vetro, gli agenti generali solo se hanno votato almeno un trade, Trading agents, Sala intraday, Sala caffè); la camicia dice la fase: blu pronto, verde in posizione, rosso in uscita, grigio in attesa, arancione intraday. A destra l'elenco degli agenti: passando sopra un nome l'avatar si alza e la postazione si illumina; il clic apre la scheda (situazione, ragionamento, giudizio del capo, impostazioni). Sotto, a schede: <b>Decisioni</b> (punteggio per titolo e voti), <b>Trading agents</b>, <b>Esplorazione</b> e <b>Sala caffè</b> (lezioni di squadra).</li>
         <li><b>Investimenti</b>: le card dei titoli e delle crypto in portafoglio (valore, guadagno, carico e prezzo, peso, da quanto è aperta, obiettivo e stop dell'intraday) e quelle in osservazione (custodi, voti, attese); più in basso il radar. Il clic su una card apre il <b>grafico</b> (TradingView Lightweight Charts: rotella per lo zoom, trascina per scorrere, mirino con apertura, massimo, minimo e chiusura) con la proiezione dei modelli e il cono di probabilità (fasce 50% e 80%, probabilità di finire sopra o sotto il prezzo di adesso), medie, carico, stop, obiettivo e frecce delle operazioni. Il time frame si sceglie sopra il grafico: 1m, 5m, 15m, 1h, 4h, 1G; le candele brevi si aggiornano da sole (1 e 5 minuti ogni 15 secondi). «Analisi investimento» apre verdetto, voti e dossier del custode; «Chiedi agli agenti adesso» fa una valutazione a secco: nessun ordine parte dalla pagina. Sotto: operazioni intraday, simulazioni e la tabella delle posizioni.</li>
         <li><b>Log operazioni</b>: gli acquisti e le vendite eseguiti negli ultimi 7 giorni, giorno per giorno, con ricerca per titolo, agente o motivo e filtri per tipo e periodo; per ogni vendita il risultato e quanto è stata tenuta la posizione. Clic su una riga per il grafico.</li>
-        <li><b>Impostazioni</b>: le <b>schede degli agenti</b> per regolare i parametri (valgono dal giro successivo), le <b>chiavi</b> di Alpaca, Telegram e X con il riavvio del motore.</li>
+        <li><b>Gli agenti sono persone</b>: ognuno ha un nome (Marco il trend, Giulia il rientro, Chiara Kronos, Andrea la sala intraday, Roberto il capo ufficio…) e ogni trading agent e operatore intraday ne riceve uno suo, che tiene. Il clic su una persona nell'Ufficio apre la sua scheda con <b>le sue impostazioni</b>, modificabili (valgono dal giro successivo). Quando un agente vince meno del 51% dei trade chiusi (almeno 5), il <b>capo ufficio lo ricalibra</b>: il suo parametro d'ingresso diventa più selettivo di un passo (mai oltre i limiti e mai sotto il valore di base); quando torna a vincere almeno il 60% si riavvicina alla base. Ogni trading agent ha anche una soglia personale.</li>
+        <li><b>Impostazioni</b>: <b>Generali</b> (le regole comuni del profilo di investimento e della piattaforma, come peso massimo per titolo, obiettivo del giorno, stop, pagina pubblica su GitHub) e le <b>chiavi</b> di Alpaca, Telegram e X con il riavvio del motore.</li>
         <li><b>Guida</b>: questa pagina.</li>
         <li><b>Pagina pubblica</b>: con «Pagina pubblica su GitHub Pages» nella scheda Motore e gabbia, il PC pubblica ogni N minuti un'istantanea in sola lettura, da aprire anche dal telefono. È visibile a chiunque abbia il link; chiavi e modifiche restano solo sulla dashboard del PC.</li>
       </ul>
@@ -638,7 +668,18 @@ const qty = (q) => Number.isInteger(q) ? String(q) : String(Number(q)).replace('
 const hhmm = (iso) => new Date(iso).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
 const DEFAULT_SYMBOLS = ['SPY', 'QQQ', 'AAPL', 'MSFT', 'NVDA', 'GLD', 'BTC/USD', 'ETH/USD', 'IWM', 'TLT'];
 const AGENT_NAMES = { trend: 'Trend', rientro: 'Rientro', regime: 'Regime', orizzonte: 'Orizzonte', uscite: 'Uscite', contesto: 'Contesto', profitto: 'Presa di profitto', kronos: 'Kronos', custodi: 'Trading agents', intraday: 'Intraday' };
-const agentName = (n) => AGENT_NAMES[n] ?? (String(n).startsWith('custode ') ? `Trading agent ${String(n).slice(8)}` : n);
+// Gli agenti sono persone: il nome viene dallo stato del motore (status.persone), con il ruolo accanto.
+const personaDi = (k) => status?.persone?.[k] || null;
+// Il nome del titolo o della crypto accanto al codice («AAPL Apple Inc.»), dai nomi che il motore chiede ad Alpaca.
+const nomeTitolo = (sym) => status?.nomi?.[sym] || '';
+const tn = (sym, blocco = false) => { const n = nomeTitolo(sym); return n ? `<span class="tnome${blocco ? ' blk' : ''}">${esc(n)}</span>` : ''; };
+const conNome = (sym) => nomeTitolo(sym) ? `${sym} · ${nomeTitolo(sym)}` : sym;
+const agentName = (n) => {
+  const s = String(n);
+  if (s.startsWith('custode ')) { const p = personaDi(`c:${s.slice(8)}`); return p ? `${p.nome} · ${s.slice(8)}` : `Trading agent ${s.slice(8)}`; }
+  if (s === 'custodi (squadra)') return 'Trading agents (squadra)';
+  const p = personaDi(`a:${s}`); return p ? `${p.nome} · ${AGENT_NAMES[s] ?? s}` : (AGENT_NAMES[s] ?? s);
+};
 
 // ---------- ufficio 3D: gli agenti come impiegati alle loro postazioni ----------
 // Tre reparti: la Direzione (gli agenti generali, vicino alla lavagna), i Custodi (una scrivania per titolo seguito, lo
@@ -690,6 +731,39 @@ boardFace.position.z = 0.045; board.add(box(7.3, 4.1, 0.06, M.boardFrame)); boar
 board.userData.kind = 'lavagna'; boardFace.userData.kind = 'lavagna';
 room.add(board);
 
+// La lavagna nel dialogo: per agente e per giorno, trade vinti e persi, la parte del capitale investito finita nei
+// trade vincenti (l'obiettivo: almeno 51% dei trade vinti e più capitale sui vincenti che sui perdenti) e il risultato.
+function riassunto(trade) {
+  const g = { n: 0, v: 0, capV: 0, capP: 0, pnl: 0 };
+  for (const t of trade) { const pnl = (t.incassato ?? 0) - (t.costo ?? 0); g.n++; g.pnl += pnl; if (pnl > 0) { g.v++; g.capV += t.costo ?? 0; } else g.capP += t.costo ?? 0; }
+  return g;
+}
+const percCap = (g) => g.capV + g.capP > 0 ? g.capV / (g.capV + g.capP) : null;
+function lavagnaHtml() {
+  const chiusi = (journal?.trade || []).filter((t) => t.stato === 'chiuso');
+  const giorno = (t) => new Date(t.chiusoIl || t.apertoIl || Date.now()).toLocaleDateString('sv-SE', { timeZone: 'Europe/Rome' });
+  const oggi = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Rome' });
+  const tot = riassunto(chiusi); const og = riassunto(chiusi.filter((t) => giorno(t) === oggi));
+  const q = (g) => g.n ? `<span class="${g.v / g.n >= 0.51 ? 'up' : 'down'}">${Math.round((g.v / g.n) * 100)}%</span>` : '–';
+  const qc = (g) => percCap(g) === null ? '–' : `<span class="${percCap(g) > 0.5 ? 'up' : 'down'}">${Math.round(percCap(g) * 100)}%</span>`;
+  const barra = (g) => g.n ? `<span class="barra-vp" title="${g.v} vinti, ${g.n - g.v} persi"><i style="width:${Math.round((g.v / g.n) * 100)}%"></i></span>` : '';
+  const kpi = (lab, val, sub = '') => `<div><div class="lab">${lab}</div><div class="val">${val}</div>${sub ? `<div class="why">${sub}</div>` : ''}</div>`;
+  let h = `<div class="lav-kpi">${kpi('Oggi', `<span class="${cls(og.pnl)}">${usd(og.pnl)}</span>`, `${og.n} chiusi · ${og.v} vinti`)}${kpi('Trade vinti oggi', q(og), 'obiettivo 51%')}${kpi('Capitale sui vincenti oggi', qc(og), 'più del 50%: si è investito di più dove si è vinto')}${kpi('Dall\'inizio', `<span class="${cls(tot.pnl)}">${usd(tot.pnl)}</span>`, `${tot.n} chiusi · ${q(tot)} vinti · ${qc(tot)} del capitale sui vincenti`)}</div>`;
+  if (!chiusi.length) return h + '<p class="empty">Nessun trade chiuso ancora: la lavagna si riempie man mano che gli agenti chiudono le operazioni.</p>';
+  const per = new Map();
+  for (const t of chiusi) for (const a of (t.contesto?.agenti?.length ? t.contesto.agenti : ['senza agente'])) per.set(a, [...(per.get(a) || []), t]);
+  const righe = [...per.entries()].map(([a, ts]) => [a, riassunto(ts)]).sort((x, y) => y[1].pnl - x[1].pnl);
+  h += `<h3 style="margin:8px 0">Per agente</h3><table class="stack-sm"><thead><tr><th>Agente</th><th class="n">Vinti / persi</th><th class="n">% vinti</th><th class="n">Capitale sui vincenti</th><th class="n">Risultato</th></tr></thead><tbody>${righe.map(([a, g]) => `<tr><td>${esc(agentName(a))}${a.startsWith('custode ') ? tn(a.slice(8)) : ''}</td><td class="n" data-l="Vinti / persi">${barra(g)} <span class="up">${g.v}</span> / <span class="down">${g.n - g.v}</span></td><td class="n" data-l="% vinti">${q(g)}</td><td class="n" data-l="Capitale sui vincenti">${qc(g)}</td><td class="n ${cls(g.pnl)}" data-l="Risultato">${usd(g.pnl)}</td></tr>`).join('')}</tbody></table>`;
+  const giorni = [...new Set(chiusi.map(giorno))].sort().reverse().slice(0, 14);
+  h += `<h3 style="margin:16px 0 8px">Per giorno</h3><table class="stack-sm"><thead><tr><th>Giorno</th><th class="n">Vinti / persi</th><th class="n">% vinti</th><th class="n">Capitale sui vincenti</th><th class="n">Risultato</th></tr></thead><tbody>${giorni.map((d) => { const g = riassunto(chiusi.filter((t) => giorno(t) === d)); return `<tr><td>${esc(new Date(`${d}T12:00:00`).toLocaleDateString('it-IT', { weekday: 'short', day: 'numeric', month: 'short' }))}</td><td class="n" data-l="Vinti / persi">${barra(g)} <span class="up">${g.v}</span> / <span class="down">${g.n - g.v}</span></td><td class="n" data-l="% vinti">${q(g)}</td><td class="n" data-l="Capitale sui vincenti">${qc(g)}</td><td class="n ${cls(g.pnl)}" data-l="Risultato">${usd(g.pnl)}</td></tr>`; }).join('')}</tbody></table>`;
+  return h + '<p class="why" style="margin-top:10px">Un trade conta per ogni agente che ha votato il suo ingresso. «Capitale sui vincenti» è la parte del capitale investito nei trade chiusi finita in quelli in guadagno.</p>';
+}
+async function apriLavagna() {
+  const dlg = $('#lavagna');
+  if (!journal) { try { journal = await (await fetch('/api/journal')).json(); } catch { journal = { trade: [] }; } }
+  $('#lavagna-body').innerHTML = lavagnaHtml();
+  if (!dlg.open) dlg.showModal();
+}
 function drawBoard(st, journal) {
   const c = boardCanvas.getContext('2d'); const W = boardCanvas.width, H = boardCanvas.height;
   c.fillStyle = '#fbfbf8'; c.fillRect(0, 0, W, H);
@@ -716,7 +790,7 @@ function drawBoard(st, journal) {
   rows.forEach(([a, g], i) => {
     const y = 192 + i * 50; const n = g.v + g.p;
     c.fillStyle = '#0f172a'; c.font = '32px "Segoe Print", Figtree, sans-serif';
-    c.fillText(a.replace(/^custode /, '◆ '), cols[0], y);
+    c.fillText(agentName(a), cols[0], y);
     c.fillStyle = '#15803d'; c.fillText(String(g.v), cols[1], y);
     c.fillStyle = '#b91c1c'; c.fillText(String(g.p), cols[2], y);
     c.fillStyle = '#0f172a'; c.fillText(n ? `${Math.round((g.v / n) * 100)}%` : '–', cols[3], y);
@@ -846,17 +920,21 @@ const listHoverDesk = () => (listHoverKey ? desks.get(listHoverKey) || null : nu
 const hiRing = new THREE.Mesh(new THREE.RingGeometry(0.55, 0.75, 40), new THREE.MeshBasicMaterial({ color: 0x3b82f6, transparent: true, opacity: 0.85, side: THREE.DoubleSide }));
 hiRing.rotation.x = -Math.PI / 2; hiRing.visible = false; scene.add(hiRing);
 const hexCss = (h) => `#${h.toString(16).padStart(6, '0')}`;
+// Gli agenti generali (trend, rientro, Kronos...) hanno una scrivania nell'ufficio solo se sono effettivi: hanno votato
+// l'ingresso di almeno un trade del diario. Gli altri lavorano come strumenti comuni dei trading agents (le loro regole
+// sono in Impostazioni → Generali) e nella mappa sarebbero solo rumore.
+const generaliEffettivi = (st) => { const usati = new Set((journal?.trade || []).flatMap((t) => t.contesto?.agenti || [])); return Object.keys(st.agenti || {}).filter((n) => n !== 'custodi' && n !== 'intraday' && usati.has(n)); };
 function paintAgentList(st) {
   const box = $('#agent-list'); if (!box) return;
   const pausa = new Set((st.caffe?.presenti || []).map((p) => p.chiave));
-  const row = (key, nome, stato) => { const d = desks.get(key); if (!d) return ''; const col = hexCss(d.group.userData.emp.userData.shirtM.color.getHex()); return `<button type="button" data-key="${esc(key)}" class="${cardKey === key || listHoverKey === key ? 'on' : ''}"><span class="sw" style="background:${col}"></span><span class="nm">${esc(nome)}${pausa.has(key) ? ' <span class="caffe">☕</span>' : ''}</span><span class="st">${esc(stato)}</span></button>`; };
-  const general = Object.keys(st.agenti || {}).filter((n) => n !== 'custodi' && n !== 'intraday');
+  const row = (key, nome, stato) => { const d = desks.get(key); if (!d) return ''; const per = personaDi(key); if (per && !String(nome).startsWith(`${per.nome} ·`)) nome = key === 'capo' ? `${per.nome} · capo ufficio` : `${per.nome} · ${nome}`; const col = hexCss(d.group.userData.emp.userData.shirtM.color.getHex()); return `<button type="button" data-key="${esc(key)}" class="${cardKey === key || listHoverKey === key ? 'on' : ''}"><span class="sw" style="background:${col}"></span><span class="nm">${esc(nome)}${pausa.has(key) ? ' <span class="caffe">☕</span>' : ''}</span><span class="st">${esc(stato)}</span></button>`; };
+  const general = generaliEffettivi(st);
   const cust = st.custodi || [];
   const intra = [...desks.keys()].filter((k) => k.startsWith('i:'));
   const capo = st.capo; const rich = (capo?.valutazioni || []).filter((v) => v.giudizio === 'richiamato').length;
-  const html = `<h4>Direzione <span>${general.length + 1}</span></h4>${row('capo', 'Capo ufficio', rich ? `${rich} richiami` : 'in regola')}${general.map((n) => { const a = st.agenti[n]; return row(`a:${n}`, agentName(n), a.errore ? 'errore' : `${a.segnali} segnali`); }).join('')}
-    ${['posizione', 'pronto', 'osserva'].map((k) => { const g = cust.filter((c) => CATEGORIA(c) === k); return g.length ? `<h4>Trading agents · ${CAT_INFO[k].nome.toLowerCase()} <span>${g.length}</span></h4>${g.map((c) => row(`c:${c.simbolo}`, c.simbolo, `${c.dossier ? `${Math.round(c.dossier.probabilita * 100)}%` : ''}${c.fase === 'in uscita' ? ' · in uscita' : c.fase === 'attende' ? ' · in attesa' : ''}`)).join('')}` : ''; }).join('') || '<h4>Trading agents</h4><p class="empty" style="padding:4px 8px">nessuno</p>'}
-    <h4>Sala intraday <span>${intra.length}</span></h4>${intra.map((k) => { const x = desks.get(k)?.info?.x; return x ? row(k, x.simbolo, `${x.candela} · ${x.fase === 'in posizione' ? 'in posizione' : x.ingresso !== null ? 'ingresso votato' : 'cerca'}`) : ''; }).join('') || '<p class="empty" style="padding:4px 8px">nessuno</p>'}
+  const html = `<h4>Capo ufficio</h4>${row('capo', 'Capo ufficio', rich ? `${rich} richiami` : 'in regola')}${general.length ? `<h4>Agenti generali <span>${general.length}</span></h4>` : ''}${general.map((n) => { const a = st.agenti[n]; return row(`a:${n}`, AGENT_NAMES[n] ?? n, a.errore ? 'errore' : `${a.segnali} segnali`); }).join('')}
+    ${['posizione', 'pronto', 'osserva'].map((k) => { const g = cust.filter((c) => CATEGORIA(c) === k); return g.length ? `<h4>Trading agents · ${CAT_INFO[k].nome.toLowerCase()} <span>${g.length}</span></h4>${g.map((c) => row(`c:${c.simbolo}`, conNome(c.simbolo), `${c.dossier ? `${Math.round(c.dossier.probabilita * 100)}%` : ''}${c.fase === 'in uscita' ? ' · in uscita' : c.fase === 'attende' ? ' · in attesa' : ''}`)).join('')}` : ''; }).join('') || '<h4>Trading agents</h4><p class="empty" style="padding:4px 8px">nessuno</p>'}
+    <h4>Sala intraday <span>${intra.length}</span></h4>${intra.map((k) => { const x = desks.get(k)?.info?.x; return x ? row(k, conNome(x.simbolo), `${x.candela} · ${x.fase === 'in posizione' ? 'in posizione' : x.ingresso !== null ? 'ingresso votato' : 'cerca'}`) : ''; }).join('') || '<p class="empty" style="padding:4px 8px">nessuno</p>'}
     ${pausa.size ? `<p class="why" style="padding:8px">☕ ${pausa.size} in pausa in sala caffè</p>` : ''}`;
   // Si riscrive solo se cambia qualcosa: il nome sotto il mouse resta lo stesso elemento.
   if (box.dataset.html !== html) { box.innerHTML = html; box.dataset.html = html; }
@@ -908,7 +986,7 @@ function layout(groups) {
   return placed;
 }
 const zones = new Map(); // nome della zona -> { center, size }: i pulsanti di navigazione ci volano sopra
-const RUG = { Direzione: 0x334155, Custodi: 0x1e3a5f, 'Sala intraday': 0x7c4a12 };
+const RUG = { 'Agenti generali': 0x334155, Custodi: 0x1e3a5f, 'Sala intraday': 0x7c4a12 };
 function buildDecor(groups, cols, w, d) {
   decor.clear();
   // tappeti sotto ogni reparto
@@ -1023,11 +1101,11 @@ const CAT_INFO = { posizione: { nome: 'In posizione', colore: 0x16a34a }, pronto
 const ROLE = { trend: 'trend', rientro: 'rientro', regime: 'clima di mercato', orizzonte: 'orizzonte', uscite: 'uscite e stop', contesto: 'contesto economico', profitto: 'presa di profitto', kronos: 'previsioni Kronos' };
 
 function paintScene(st) {
-  const general = Object.keys(st.agenti || {}).filter((n) => n !== 'custodi' && n !== 'intraday');
+  const general = generaliEffettivi(st);
   const cust = st.custodi || [];
   const intra = (st.intraday || []).filter((x) => x.fase === 'in posizione' || x.fase === 'cerca ingresso').slice(0, 20);
   const groups = [
-    { name: 'Direzione', items: general.map((n) => ({ key: `a:${n}`, kind: 'agente', n })) },
+    { name: 'Agenti generali', items: general.map((n) => ({ key: `a:${n}`, kind: 'agente', n })) },
     { name: 'Custodi', items: cust.map((c) => ({ key: `c:${c.simbolo}`, kind: 'custode', c })) },
     { name: 'Sala intraday', items: intra.map((x) => ({ key: `i:${x.simbolo}`, kind: 'intraday', x })) },
   ];
@@ -1047,7 +1125,7 @@ function paintScene(st) {
       const a = st.agenti[it.n]; const err = !!a.errore;
       u.emp.userData.shirtM.color.set(err ? 0xdc2626 : a.segnali ? 0x1d4ed8 : 0x64748b);
       drawScreen(u.scr, agentName(it.n), err ? 'errore' : `${a.segnali} segnali`, null, null);
-      u.el.innerHTML = `<b>${esc(agentName(it.n))}</b>`;
+      u.el.innerHTML = `<b>${esc(agentName(it.n))}</b>`; // nome e ruolo
     } else if (it.kind === 'custode') {
       const c = it.c; const p = held.get(c.simbolo); const prob = c.dossier ? Math.round(c.dossier.probabilita * 100) : null;
       const cat = CATEGORIA(c); const col = c.fase === 'in uscita' ? 0xdc2626 : CAT_INFO[cat].colore;
@@ -1055,12 +1133,12 @@ function paintScene(st) {
       u.plate.visible = true; u.plate.material.color.setHex(col); u.plate.material.opacity = cat === 'osserva' ? 0.18 : 0.42;
       u.lamp.visible = cat !== 'osserva'; u.lamp.material.color.setHex(col); u.lamp.material.emissive.setHex(col); u.lamp.userData.pulsa = cat === 'pronto';
       drawScreen(u.scr, c.simbolo, `${px(st.prezzi?.[c.simbolo])}${prob !== null ? ` · ${prob}%` : ''}`, p ? p.variazione : null, histOf(c.simbolo).map((b) => b.close));
-      u.el.innerHTML = `<b>${esc(c.simbolo)}</b>${prob !== null ? ` <span>${prob}%</span>` : ''}`;
+      u.el.innerHTML = `<b>${esc(personaDi(it.key)?.nome ?? '')} · ${esc(c.simbolo)}</b>${tn(c.simbolo)}${prob !== null ? ` <span>${prob}%</span>` : ''}`;
     } else {
       const x = it.x;
       u.emp.userData.shirtM.color.set(0xf59e0b);
       drawScreen(u.scr, x.simbolo, `${x.candela} · ${x.fase}`, x.ingresso && x.prezzo ? x.prezzo / x.ingresso - 1 : null, histOf(x.simbolo).map((b) => b.close), '#fbbf24');
-      u.el.innerHTML = `<b>${esc(x.simbolo)}</b> <span>${esc(x.candela)}</span>`;
+      u.el.innerHTML = `<b>${esc(personaDi(it.key)?.nome ?? '')} · ${esc(x.simbolo)}</b>${tn(x.simbolo)} <span>${esc(x.candela)}</span>`;
     }
   }
   // Chi lavora su un titolo trovato con l'esplorazione mostra quel titolo sullo schermo.
@@ -1082,7 +1160,7 @@ function paintScene(st) {
 }
 
 // In sala caffè si parla: ogni 4 secondi uno scambio vero dallo stato del motore (dossier, candele, Kronos, lezioni, capo).
-const keyName = (k) => k === 'capo' ? 'Capo ufficio' : k.startsWith('a:') ? agentName(k.slice(2)) : k.startsWith('c:') ? `Trading agent ${k.slice(2)}` : k.startsWith('i:') ? `intraday ${k.slice(2)}` : k;
+const keyName = (k) => k === 'capo' ? `${personaDi('capo')?.nome ?? 'Roberto'} · capo ufficio` : k.startsWith('a:') ? agentName(k.slice(2)) : k.startsWith('c:') ? `${personaDi(k)?.nome ?? 'Trading agent'} · ${conNome(k.slice(2))}` : k.startsWith('i:') && personaDi(k) ? `${personaDi(k).nome} · intraday ${k.slice(2)}` : k.startsWith('i:') ? `intraday ${k.slice(2)}` : k;
 let chatAt = 0, chatIdx = 0;
 function chatTick(now) {
   if (now - chatAt < 4200) return; chatAt = now;
@@ -1154,18 +1232,19 @@ renderer.domElement.addEventListener('mousemove', (ev) => {
   { let k0 = null; for (const [k, x] of desks) if (x === hoveredDesk) k0 = k; for (const b of document.querySelectorAll('#agent-list button[data-key]')) b.classList.toggle('on', b.dataset.key === k0 || b.dataset.key === cardKey); }
   if (!d) { hoverEl.style.display = 'none'; return; }
   let html;
-  if (d.board) html = '<b>Lavagna dei risultati</b><br>trade chiusi vinti e persi per agente, dal diario; in alto il risultato di oggi';
+  if (d.board) html = '<b>Lavagna dei risultati</b><br>trade chiusi vinti e persi per agente, dal diario; in alto il risultato di oggi<br><span style="opacity:.7">clic: apri la lavagna</span>';
   else if (d.info?.kind === 'capo') html = `<b>Capo ufficio</b><br>${esc(status?.capo?.sintesi || 'controlla il lavoro degli agenti')}<br><span style="opacity:.7">clic: apri la scheda</span>`;
   else if (d.info.kind === 'agente') { const a = status?.agenti?.[d.info.n] || {}; html = `<b>${esc(agentName(d.info.n))}</b> · ${esc(ROLE[d.info.n] || '')}<br>${a.errore ? `<span class="down">${esc(a.errore)}</span>` : `${a.segnali} segnali nell'ultimo giro`}${a.note?.length ? `<br><span style="opacity:.8">${esc(a.note.join(' · ')).slice(0, 220)}</span>` : ''}<br><span style="opacity:.7">clic: pagina Agenti</span>`; }
-  else if (d.info.kind === 'custode') { const c = d.info.c; html = `<b>Custode di ${esc(c.simbolo)}</b> · ${esc(FASI[c.fase] || c.fase)}${c.dossier ? ` · ${Math.round(c.dossier.probabilita * 100)}% favorevole` : ''}<br>${esc(c.dossier?.prossimaAzione || c.piano).slice(0, 220)}<br><span style="opacity:.7">clic: apri il titolo</span>`; }
-  else { const x = d.info.x; html = `<b>Operatore intraday ${esc(x.simbolo)}</b> · candele ${esc(x.candela)}<br>${esc(x.fase)}: ${esc(x.motivo).slice(0, 200)}<br><span style="opacity:.7">clic: apri il titolo</span>`; }
+  else if (d.info.kind === 'custode') { const c = d.info.c; html = `<b>${esc(personaDi(`c:${c.simbolo}`)?.nome ?? 'Trading agent')} · ${esc(c.simbolo)}</b>${tn(c.simbolo)} · ${esc(FASI[c.fase] || c.fase)}${c.dossier ? ` · ${Math.round(c.dossier.probabilita * 100)}% favorevole` : ''}<br>${esc(c.dossier?.prossimaAzione || c.piano).slice(0, 220)}<br><span style="opacity:.7">clic: apri il titolo</span>`; }
+  else { const x = d.info.x; html = `<b>${esc(personaDi(`i:${x.simbolo}`)?.nome ?? 'Operatore intraday')} · ${esc(x.simbolo)}</b>${tn(x.simbolo)} · candele ${esc(x.candela)}<br>${esc(x.fase)}: ${esc(x.motivo).slice(0, 200)}<br><span style="opacity:.7">clic: apri il titolo</span>`; }
   hoverEl.innerHTML = html;
   const r = host.getBoundingClientRect();
   hoverEl.style.left = `${Math.min(ev.clientX - r.left + 14, r.width - 320)}px`; hoverEl.style.top = `${ev.clientY - r.top + 14}px`; hoverEl.style.display = 'block';
 });
 renderer.domElement.addEventListener('mouseleave', () => { hoverEl.style.display = 'none'; hoveredDesk = null; });
 renderer.domElement.addEventListener('click', (ev) => {
-  const d = pickDesk(ev); if (!d || d.board) return;
+  const d = pickDesk(ev); if (!d) return;
+  if (d.board) { apriLavagna(); return; }
   for (const [k, x] of desks) if (x === d) openCard(k);
 });
 
@@ -1277,7 +1356,7 @@ function zoomBy(k) {
 }
 {
   const bar = document.createElement('div'); bar.className = 'scene-nav'; bar.setAttribute('role', 'toolbar'); bar.setAttribute('aria-label', 'vai a');
-  bar.innerHTML = ['Tutto', 'Direzione', 'Custodi', 'Sala intraday', 'Sala caffè', 'Capo'].map((n) => `<button type="button" data-zone="${n}">${n === 'Sala intraday' ? 'Intraday' : n}</button>`).join('') + '<button type="button" data-zoom="0.75" aria-label="avvicina">＋</button><button type="button" data-zoom="1.33" aria-label="allontana">−</button>';
+  bar.innerHTML = ['Tutto', 'Custodi', 'Sala intraday', 'Sala caffè', 'Capo'].map((n) => `<button type="button" data-zone="${n}">${n === 'Sala intraday' ? 'Intraday' : n}</button>`).join('') + '<button type="button" data-zoom="0.75" aria-label="avvicina">＋</button><button type="button" data-zoom="1.33" aria-label="allontana">−</button>';
   host.appendChild(bar);
   for (const b of bar.querySelectorAll('button')) b.addEventListener('click', () => { if (b.dataset.zone) { closeCard(); flyToZone(b.dataset.zone); } else zoomBy(Number(b.dataset.zoom)); });
   const help = document.createElement('div'); help.className = 'scene-help';
@@ -1297,13 +1376,18 @@ function flyTo(group) {
 
 // La scheda dell'agente nell'ufficio: un ritratto 3D che gira, ruolo, come decide, parametri, risultati e giudizio del capo.
 const card = document.createElement('aside'); card.className = 'office-card'; card.hidden = true; host.appendChild(card);
+// La scheda della persona: in alto chi è e cosa fa (si aggiorna a ogni giro), sotto le sue impostazioni (si costruiscono
+// solo all'apertura, così un valore che stai scrivendo non viene cancellato dall'aggiornamento).
+const cardInfo = document.createElement('div'); const cardForm = document.createElement('div'); cardForm.className = 'agent-form';
+// Il contenuto scorre dentro un corpo con margini propri: la barra resta sottile e non tocca gli angoli arrotondati.
+const cardBody = document.createElement('div'); cardBody.className = 'corpo'; cardBody.append(cardInfo, cardForm); card.append(cardBody);
 const portrait = { on: false, renderer: new THREE.WebGLRenderer({ antialias: true, alpha: true }), scene: new THREE.Scene(), camera: new THREE.PerspectiveCamera(30, 1, 0.1, 20), model: null };
 portrait.renderer.setPixelRatio(Math.min(2, window.devicePixelRatio)); portrait.renderer.setSize(150, 170);
 portrait.scene.add(new THREE.HemisphereLight(0xffffff, 0xb8a990, 1.6)); { const l = new THREE.DirectionalLight(0xffffff, 1.4); l.position.set(2, 3, 4); portrait.scene.add(l); }
 portrait.camera.position.set(0, 1.25, 2.6); portrait.camera.lookAt(0, 1.05, 0);
 let cardKey = null; let cards = null; let cardAgente = null;
-// «Modifica comportamento agenti», sopra la mappa: porta alle schede degli agenti (a quella dell'agente aperto, se c'è).
-$('#modifica-agenti').addEventListener('click', () => { const nome = cardKey ? cardAgente : null; location.hash = 'impostazioni/agenti'; if (nome) setTimeout(() => document.querySelector(`#schede form[data-agente="${nome}"]`)?.scrollIntoView({ behavior: 'smooth' }), 400); });
+// «Modifica comportamento agenti», sopra la mappa: con una persona aperta porta alle sue impostazioni, altrimenti alle Generali.
+$('#modifica-agenti').addEventListener('click', () => { if (cardKey && cardForm.firstChild) { cardForm.scrollIntoView({ behavior: 'smooth', block: 'start' }); return; } location.hash = 'impostazioni/generali'; });
 async function openCard(key) {
   cardKey = key; const d = desks.get(key); if (d) flyTo(d.group);
   if (!cards) { try { cards = (await (await fetch('/api/agenti/schede')).json()).schede; } catch { cards = []; } }
@@ -1312,8 +1396,24 @@ async function openCard(key) {
   portrait.model = makeEmployee(u ? u.emp.userData.shirtM.color.getHex() : 0x2a55c7, hashOf(key), key === 'capo');
   portrait.scene.add(portrait.model); portrait.on = true;
   card.hidden = false; renderCard();
+  await renderAgentForm(key);
 }
-function closeCard() { cardKey = null; card.hidden = true; portrait.on = false; }
+// La scheda delle impostazioni di chi è stato aperto: gli agenti generali hanno la loro; i trading agents quella della
+// squadra (con la loro soglia personale calibrata dal capo); gli operatori intraday quella di Andrea.
+const schedaDi = (key) => key.startsWith('a:') ? key.slice(2) : key.startsWith('c:') ? 'custodi' : key.startsWith('i:') ? 'intraday' : null;
+async function renderAgentForm(key) {
+  const nome = schedaDi(key);
+  try { cards = (await (await fetch('/api/agenti/schede')).json()).schede; } catch {}
+  const sc = (cards || []).find((c) => c.agente === nome);
+  if (key !== cardKey) return;
+  if (!sc) { cardForm.innerHTML = key === 'capo' ? '<h4>Impostazioni</h4><p class="why">Il capo ufficio non ha parametri suoi: giudica i risultati e ricalibra gli agenti. Le regole comuni sono in Impostazioni → Generali.</p>' : '<h4>Impostazioni</h4><p class="why">Questo agente non ha parametri propri.</p>'; return; }
+  const nota = key.startsWith('c:') ? 'Valgono per tutti i trading agents; la soglia personale di questo agente la calibra il capo ufficio dai suoi risultati.' : key.startsWith('i:') ? 'Sono quelle della sala intraday di Andrea, valgono per tutti i suoi operatori.' : '';
+  cardForm.innerHTML = `<h4 id="impostazioni-agente">Impostazioni${personaDi(key) ? ` di ${esc(personaDi(key).nome)}` : ''}</h4>${nota ? `<p class="why">${esc(nota)}</p>` : ''}<div class="schede-agente"></div>`;
+  renderSchede(cardForm.querySelector('.schede-agente'), [sc], () => renderAgentForm(key), true);
+  card.classList.add('largo'); // su schermi grandi: chi è a sinistra, impostazioni a destra
+}
+function closeCard() { cardKey = null; card.hidden = true; portrait.on = false; cardForm.innerHTML = ''; card.classList.remove('largo'); }
+const fmtCal = (r) => { const f = (x) => (r.etichetta.includes('RSI') ? String(x) : `${Math.round(x * 1000) / 10}%`); return r.passi ? `<b>${f(r.attuale)}</b> invece di ${f(r.base)} (${r.passi} ${r.passi === 1 ? 'passo' : 'passi'}): ${esc(r.motivo)}` : `${f(r.attuale)}, nessuna correzione`; };
 function renderCard() {
   const d = desks.get(cardKey); if (!d) return closeCard();
   const st = status || {}; const it = d.info || {}; const capo = st.capo;
@@ -1322,24 +1422,28 @@ function renderCard() {
   const fmtP = (p) => (p.tipo === 'percento' ? `${(p.attuale * 100).toFixed(2).replace(/\.?0+$/, '')}%` : p.tipo === 'bool' ? (p.attuale ? 'sì' : 'no') : String(p.attuale));
   let title, sub, body = '', name;
   if (it.kind === 'capo') {
-    title = 'Capo ufficio'; sub = 'controlla il lavoro degli agenti';
+    title = `${personaDi('capo')?.nome ?? 'Roberto'}`; sub = 'Capo ufficio: giudica i risultati e ricalibra chi sbaglia';
+    const cal = (st.calibrazione || []).filter((r) => r.passi);
     body = `<p>${esc(capo?.sintesi || '')}</p>${capo?.sogliaKronos !== null && capo?.sogliaKronos !== undefined ? `<p class="why">Lezione per tutti: Kronos ≥ ${pct(capo.sogliaKronos)}${capo.ingressoMigliore ? ` · ingresso migliore: ${esc(capo.ingressoMigliore)}` : ''}</p>` : ''}
-      ${(capo?.valutazioni || []).map((v) => `<div class="vote"><b>${esc(v.agente)}</b> <span class="pill ${v.giudizio === 'richiamato' ? 'down' : v.giudizio === 'ottimo' || v.giudizio === 'bene' ? 'up' : ''}">${esc(v.giudizio)}</span> <span class="why">${v.vinti}/${v.trade} vinti · ${usd(v.risultato)}</span><br><span class="why">${esc(v.messaggio)}</span>${v.consigli.length ? `<ul>${v.consigli.map((c) => `<li class="why">${esc(c)}</li>`).join('')}</ul>` : ''}</div>`).join('') || '<p class="why">Nessun trade chiuso ancora.</p>'}`;
+      ${cal.length ? `<h4>Calibrazioni in corso</h4>${cal.map((r) => `<div class="why">• <b>${esc(agentName(r.agente))}</b>: ${esc(r.etichetta)} ${fmtCal(r)}</div>`).join('')}` : ''}
+      ${(capo?.valutazioni || []).map((v) => `<div class="vote"><b>${esc(agentName(v.agente))}</b> <span class="pill ${v.giudizio === 'richiamato' ? 'down' : v.giudizio === 'ottimo' || v.giudizio === 'bene' ? 'up' : ''}">${esc(v.giudizio)}</span> <span class="why">${v.vinti}/${v.trade} vinti · ${usd(v.risultato)}</span><br><span class="why">${esc(v.messaggio)}</span>${v.consigli.length ? `<ul>${v.consigli.map((c) => `<li class="why">${esc(c)}</li>`).join('')}</ul>` : ''}</div>`).join('') || '<p class="why">Nessun trade chiuso ancora.</p>'}`;
   } else {
     let who;
-    if (it.kind === 'agente') { name = it.n; who = it.n; const a = st.agenti?.[it.n] || {}; title = agentName(it.n); sub = ROLE[it.n] || ''; body = `<h4>Ultimo giro</h4><dl class="kv"><dt>Segnali</dt><dd>${a.errore ? `<span class="down">${esc(a.errore)}</span>` : a.segnali ?? 0}</dd></dl>${a.note?.length ? `<ul>${a.note.slice(0, 6).map((n) => `<li class="why">${esc(String(n).slice(0, 220))}</li>`).join('')}</ul>` : ''}`; }
-    else if (it.kind === 'custode') { name = 'custodi'; who = `custode ${it.c.simbolo}`; const c = it.c; title = `Custode di ${c.simbolo}`; sub = FASI[c.fase] || c.fase; body = `<h4>Situazione</h4><dl class="kv">${c.dossier ? `<dt>Favorevole</dt><dd><b class="${c.dossier.probabilita >= 0.6 ? 'up' : c.dossier.probabilita < 0.45 ? 'down' : ''}">${Math.round(c.dossier.probabilita * 100)}%</b></dd><dt>Prossima azione</dt><dd>${esc(c.dossier.prossimaAzione)}</dd>` : ''}<dt>Fase</dt><dd>${esc(FASI[c.fase] || c.fase)}</dd></dl><h4>Ragionamento</h4><dl class="kv"><dt>Tesi</dt><dd>${esc(c.tesi)}</dd><dt>Piano</dt><dd>${esc(c.piano)}</dd><dt>Rischio</dt><dd>${esc(c.rischio)}</dd>${c.dossier?.memoria?.trade ? `<dt>Memoria</dt><dd>${esc(c.dossier.memoria.lezione)}</dd>` : ''}</dl>`; }
-    else { name = 'intraday'; who = 'intraday'; const x = it.x; title = `Operatore intraday ${x.simbolo}`; sub = `candele ${x.candela} · ${x.fase}`; body = `<h4>Operazione</h4><dl class="kv"><dt>Candela</dt><dd>${esc(x.candela)}${x.orizzonte ? ` · orizzonte ${esc(x.orizzonte)}` : ''}</dd><dt>Fase</dt><dd>${esc(x.fase)}</dd>${x.obiettivo ? `<dt>Ingresso</dt><dd>${px(x.ingresso)}</dd><dt>Obiettivo</dt><dd class="up">${px(x.obiettivo)}</dd><dt>Stop</dt><dd class="down">${px(x.stop)}</dd>` : ''}${x.controllo ? `<dt>Controllo</dt><dd>${esc(x.controllo)}</dd>` : ''}</dl><h4>Perché</h4><p class="why">${esc(x.motivo)}</p>`; }
+    if (it.kind === 'agente') { name = it.n; who = it.n; const a = st.agenti?.[it.n] || {}; title = personaDi(`a:${it.n}`)?.nome ?? agentName(it.n); sub = personaDi(`a:${it.n}`)?.ruolo ?? (ROLE[it.n] || ''); body = `<h4>Ultimo giro</h4><dl class="kv"><dt>Segnali</dt><dd>${a.errore ? `<span class="down">${esc(a.errore)}</span>` : a.segnali ?? 0}</dd></dl>${a.note?.length ? `<ul>${a.note.slice(0, 6).map((n) => `<li class="why">${esc(String(n).slice(0, 220))}</li>`).join('')}</ul>` : ''}`; }
+    else if (it.kind === 'custode') { name = 'custodi'; who = `custode ${it.c.simbolo}`; const c = it.c; title = personaDi(`c:${c.simbolo}`)?.nome ?? `Trading agent di ${c.simbolo}`; sub = `Trading agent di ${conNome(c.simbolo)} · ${FASI[c.fase] || c.fase}`; body = `<h4>Situazione</h4><dl class="kv">${c.dossier ? `<dt>Favorevole</dt><dd><b class="${c.dossier.probabilita >= 0.6 ? 'up' : c.dossier.probabilita < 0.45 ? 'down' : ''}">${Math.round(c.dossier.probabilita * 100)}%</b></dd><dt>Prossima azione</dt><dd>${esc(c.dossier.prossimaAzione)}</dd>` : ''}<dt>Fase</dt><dd>${esc(FASI[c.fase] || c.fase)}</dd></dl><h4>Ragionamento</h4><dl class="kv"><dt>Tesi</dt><dd>${esc(c.tesi)}</dd><dt>Piano</dt><dd>${esc(c.piano)}</dd><dt>Rischio</dt><dd>${esc(c.rischio)}</dd>${c.dossier?.memoria?.trade ? `<dt>Memoria</dt><dd>${esc(c.dossier.memoria.lezione)}</dd>` : ''}</dl>`; }
+    else { name = 'intraday'; who = 'intraday'; const x = it.x; title = personaDi(`i:${x.simbolo}`)?.nome ?? `Operatore intraday ${x.simbolo}`; sub = `Operatore intraday su ${conNome(x.simbolo)} · candele ${x.candela} · ${x.fase}`; body = `<h4>Operazione</h4><dl class="kv"><dt>Candela</dt><dd>${esc(x.candela)}${x.orizzonte ? ` · orizzonte ${esc(x.orizzonte)}` : ''}</dd><dt>Fase</dt><dd>${esc(x.fase)}</dd>${x.obiettivo ? `<dt>Ingresso</dt><dd>${px(x.ingresso)}</dd><dt>Obiettivo</dt><dd class="up">${px(x.obiettivo)}</dd><dt>Stop</dt><dd class="down">${px(x.stop)}</dd>` : ''}${x.controllo ? `<dt>Controllo</dt><dd>${esc(x.controllo)}</dd>` : ''}</dl><h4>Perché</h4><p class="why">${esc(x.motivo)}</p>`; }
     const v = val(who);
     if (v) body += `<h4>Giudizio del capo</h4><div class="vote" style="margin-top:0"><b>Giudizio:</b> <span class="pill ${v.giudizio === 'richiamato' ? 'down' : v.giudizio === 'ottimo' || v.giudizio === 'bene' ? 'up' : ''}">${esc(v.giudizio)}</span> <span class="why">${v.vinti}/${v.trade} vinti · ${usd(v.risultato)}</span><br><span class="why">${esc(v.messaggio)}</span>${v.consigli.length ? `<ul>${v.consigli.map((c) => `<li class="why">${esc(c)}</li>`).join('')}</ul>` : ''}</div>`;
-    const sc = sched(name);
-    if (sc) body += `<h4>Impostazioni</h4><details><summary>${sc.parametri.length} parametri</summary><p class="why">${esc(sc.come)}</p><table>${sc.parametri.map((p) => `<tr><td class="why">${esc(p.etichetta)}</td><td class="n ${p.cambiato ? 'agent-c' : ''}">${esc(fmtP(p))}</td></tr>`).join('')}</table></details>`;
+    // Calibrazione del capo ufficio per questo agente (e per il trading agent, la sua soglia personale).
+    const calDi = { custodi: ['custodi (squadra)', who], intraday: ['intraday'], kronos: ['kronos'], rientro: ['rientro'] }[name] || [];
+    const righeCal = (st.calibrazione || []).filter((r) => calDi.includes(r.agente));
+    if (righeCal.length) body += `<h4>Calibrazione del capo</h4>${righeCal.map((r) => `<div class="why">• ${r.agente.startsWith('custode ') ? 'Personale: ' : r.agente === 'custodi (squadra)' ? 'Squadra: ' : ''}${esc(r.etichetta)} ${fmtCal(r)}</div>`).join('')}`;
   }
-  card.innerHTML = `<button type="button" class="x" aria-label="chiudi">✕</button><div class="portrait"></div><h3>${esc(title)}</h3><div class="why">${esc(sub)}</div>${body}
+  cardInfo.innerHTML = `<button type="button" class="x" aria-label="chiudi">✕</button><div class="portrait"></div><h3>${esc(title)}</h3><div class="why">${esc(sub)}</div>${body}
     <div class="row" style="margin-top:10px">${it.kind === 'custode' || it.kind === 'intraday' ? '<button type="button" class="btn" data-go="titolo">Apri il grafico</button>' : ''}</div>`;
-  card.querySelector('.portrait').appendChild(portrait.renderer.domElement);
-  card.querySelector('.x').addEventListener('click', closeCard);
-  card.querySelector('[data-go="titolo"]')?.addEventListener('click', () => { openChart(it.kind === 'custode' ? it.c.simbolo : it.x.simbolo); });
+  cardInfo.querySelector('.portrait').appendChild(portrait.renderer.domElement);
+  cardInfo.querySelector('.x').addEventListener('click', closeCard);
+  cardInfo.querySelector('[data-go="titolo"]')?.addEventListener('click', () => { openChart(it.kind === 'custode' ? it.c.simbolo : it.x.simbolo); });
   cardAgente = name || (it.kind === 'capo' ? 'motore' : null);
 }
 animate();
@@ -1448,7 +1552,7 @@ function paintPositions(st) {
   const eq = st.conto?.patrimonio || 1;
   $('#positions').innerHTML = `<table class="stack-sm"><thead><tr><th>Titolo</th><th class="n">Quantità</th><th class="n">Carico</th><th class="n">Prezzo</th><th class="n">Guadagno</th><th class="n">Peso</th></tr></thead><tbody>${pos.map((p) => {
     const gain = (p.prezzoAttuale - p.prezzoCarico) * p.quantita;
-    return `<tr><td><b>${esc(p.simbolo)}</b>${p.dal ? `<br><span class="why" title="${esc(new Date(p.dal).toLocaleString('it-IT', { timeZone: 'Europe/Rome' }))}">dal ${quando(p.dal)} · da ${durata(p.dal)}</span>` : ''}</td><td class="n" data-l="Quantità">${qty(p.quantita)}</td><td class="n" data-l="Carico">${px(p.prezzoCarico)}</td><td class="n" data-l="Prezzo">${px(p.prezzoAttuale)}</td><td class="n ${cls(gain)}" data-l="Guadagno">${usd(gain)} <span class="why">${pct(p.variazione)}</span></td><td class="n" data-l="Peso">${(p.valore / eq * 100).toFixed(1).replace('.', ',')}%</td></tr>`;
+    return `<tr><td><b>${esc(p.simbolo)}</b>${tn(p.simbolo)}${p.dal ? `<br><span class="why" title="${esc(new Date(p.dal).toLocaleString('it-IT', { timeZone: 'Europe/Rome' }))}">dal ${quando(p.dal)} · da ${durata(p.dal)}</span>` : ''}</td><td class="n" data-l="Quantità">${qty(p.quantita)}</td><td class="n" data-l="Carico">${px(p.prezzoCarico)}</td><td class="n" data-l="Prezzo">${px(p.prezzoAttuale)}</td><td class="n ${cls(gain)}" data-l="Guadagno">${usd(gain)} <span class="why">${pct(p.variazione)}</span></td><td class="n" data-l="Peso">${(p.valore / eq * 100).toFixed(1).replace('.', ',')}%</td></tr>`;
   }).join('')}</tbody></table>`;
 }
 
@@ -1459,11 +1563,11 @@ function paintPnl(st) {
   let html = `<div class="pnl-line"><div><div class="lab">Incassato oggi</div><div class="val ${cls(pl.realizzato)}">${usd(pl.realizzato)}</div></div><div><div class="lab">Sulle posizioni aperte</div><div class="val ${cls(pl.nonRealizzato)}">${usd(pl.nonRealizzato)}</div></div><div><div class="lab">Totale giornata</div><div class="val ${cls(total)}">${usd(total)}</div></div></div>`;
   if (!pl.vendite.length && !pl.acquisti.length) html += `<p class="empty">Nessuna operazione oggi.</p>`;
   if (pl.vendite.length) {
-    html += `<table class="stack-sm"><thead><tr><th>Vendita</th><th class="n">Carico → uscita · orari</th><th class="n">Risultato</th></tr></thead><tbody>${pl.vendite.map((v) => `<tr><td><b>${esc(v.simbolo)}</b> ${qty(v.quantita)}${v.chiuso ? '' : ' <span class="pill">parziale</span>'}<br><span class="why">${esc(v.motivo)}${v.agenti?.length ? ` · voto di ${v.agenti.map(agentName).join(', ')}` : ''}</span></td><td class="n" data-l="Carico → uscita">${fmt(v.carico)} → ${fmt(v.prezzo)}${v.ora ? `<br><span class="why">${v.aperto ? `${quando(v.aperto)} → ` : ''}${quando(v.ora)}${v.aperto ? ` · ${durata(v.aperto, v.ora)}` : ''}</span>` : ''}</td><td class="n ${cls(v.pnl)}" data-l="Risultato"><b>${usd(v.pnl)}</b> <span class="why">${pct(v.risultato)}</span></td></tr>`).join('')}</tbody></table>`;
+    html += `<table class="stack-sm"><thead><tr><th>Vendita</th><th class="n">Carico → uscita · orari</th><th class="n">Risultato</th></tr></thead><tbody>${pl.vendite.map((v) => `<tr><td><b>${esc(v.simbolo)}</b>${tn(v.simbolo)} ${qty(v.quantita)}${v.chiuso ? '' : ' <span class="pill">parziale</span>'}<br><span class="why">${esc(v.motivo)}${v.agenti?.length ? ` · voto di ${v.agenti.map(agentName).join(', ')}` : ''}</span></td><td class="n" data-l="Carico → uscita">${fmt(v.carico)} → ${fmt(v.prezzo)}${v.ora ? `<br><span class="why">${v.aperto ? `${quando(v.aperto)} → ` : ''}${quando(v.ora)}${v.aperto ? ` · ${durata(v.aperto, v.ora)}` : ''}</span>` : ''}</td><td class="n ${cls(v.pnl)}" data-l="Risultato"><b>${usd(v.pnl)}</b> <span class="why">${pct(v.risultato)}</span></td></tr>`).join('')}</tbody></table>`;
   }
   const per = Object.entries(pl.perAgente || {});
   if (per.length) html += `<div class="row" style="margin-top:12px"><span class="why">Per agente:</span>${per.sort((a, b) => b[1].pnl - a[1].pnl).map(([a, g]) => `<span class="pill ${cls(g.pnl)}">${agentName(a)} ${usd(g.pnl)}</span>`).join('')}</div>`;
-  if (pl.acquisti?.length) html += `<p class="why" style="margin-top:10px">Comprato oggi: ${pl.acquisti.slice().sort((a, b) => String(a.ora).localeCompare(String(b.ora))).map((a) => `<b>${esc(a.simbolo)}</b> ${qty(a.quantita)} a ${px(a.prezzo)}${a.ora ? ` alle ${quando(a.ora)}` : ''}`).join(', ')}.</p>`;
+  if (pl.acquisti?.length) html += `<p class="why" style="margin-top:10px">Comprato oggi: ${pl.acquisti.slice().sort((a, b) => String(a.ora).localeCompare(String(b.ora))).map((a) => `<b>${esc(a.simbolo)}</b>${tn(a.simbolo)} ${qty(a.quantita)} a ${px(a.prezzo)}${a.ora ? ` alle ${quando(a.ora)}` : ''}`).join(', ')}.</p>`;
   $('#pnl').innerHTML = html;
 }
 
@@ -1500,7 +1604,7 @@ function paintScores(st) {
   $('#scores').innerHTML = `<table><tbody>${sc.map((s) => {
     const w = Math.abs(s.punteggio) / max * 50;
     const bar = s.punteggio >= 0 ? `left:50%; width:${w}%` : `left:${50 - w}%; width:${w}%`;
-    return `<tr><td style="width:84px"><b>${esc(s.simbolo)}</b></td><td style="width:34%"><div class="bar" title="sopra +0,5 si compra, sotto −0,5 si vende"><i class="${cls(s.punteggio)}" style="${bar}"></i></div></td><td class="n ${cls(s.punteggio)}" style="width:70px">${s.punteggio >= 0 ? '+' : ''}${s.punteggio.toFixed(2).replace('.', ',')}</td><td class="why">${(s.agenti || []).map(agentName).join(', ')}</td></tr>`;
+    return `<tr><td style="width:84px"><b>${esc(s.simbolo)}</b>${tn(s.simbolo)}</td><td style="width:34%"><div class="bar" title="sopra +0,5 si compra, sotto −0,5 si vende"><i class="${cls(s.punteggio)}" style="${bar}"></i></div></td><td class="n ${cls(s.punteggio)}" style="width:70px">${s.punteggio >= 0 ? '+' : ''}${s.punteggio.toFixed(2).replace('.', ',')}</td><td class="why">${(s.agenti || []).map(agentName).join(', ')}</td></tr>`;
   }).join('')}</tbody></table>`;
 }
 
@@ -1538,7 +1642,7 @@ function paintCustodi(st) {
   $('#ta-filtro').innerHTML = [['tutti', `Tutti (${list.length})`], ...['posizione', 'pronto', 'osserva'].map((k) => [k, `<span class="sw" style="background:${hex(k)}"></span>${CAT_INFO[k].nome} (${per[k].length})`])].map(([k, t]) => `<button type="button" data-k="${k}" aria-pressed="${taFiltro === k}">${t}</button>`).join('');
   for (const b of $('#ta-filtro').querySelectorAll('button')) b.addEventListener('click', () => { taFiltro = b.dataset.k; try { localStorage.setItem('agenti.ta.filtro', taFiltro); } catch {} paintCustodi(status); });
   if (!list.length) { $('#custodi').innerHTML = '<p class="empty">Nessun trading agent attivo: ne nasce uno per ogni titolo in trend o in portafoglio.</p>'; return; }
-  const card = (c) => { const p = c.dossier ? Math.round(c.dossier.probabilita * 100) : null; const pos = (st.posizioni || []).find((x) => x.simbolo === c.simbolo); return `<button type="button" data-sym="${esc(c.simbolo)}"><div class="row" style="justify-content:space-between"><span><b>${esc(c.simbolo)}</b>${p !== null ? ` <b class="${p >= 60 ? 'up' : p < 45 ? 'down' : ''}">${p}%</b>` : ''}</span>${pos ? `<span class="${cls(pos.variazione)}">${pct(pos.variazione)}</span>` : `<span class="pill ${CATEGORIA(c) === 'pronto' ? 'up' : c.fase === 'attende' ? 'warn' : ''}">${CATEGORIA(c) === 'pronto' ? 'pronto a entrare' : c.fase === 'attende' ? 'in attesa' : 'osserva'}</span>`}</div><div class="why" style="margin-top:4px">${esc(c.dossier?.prossimaAzione || c.stato)}</div></button>`; };
+  const card = (c) => { const p = c.dossier ? Math.round(c.dossier.probabilita * 100) : null; const pos = (st.posizioni || []).find((x) => x.simbolo === c.simbolo); return `<button type="button" data-sym="${esc(c.simbolo)}"><div class="row" style="justify-content:space-between"><span>${personaDi(`c:${c.simbolo}`) ? `<span class="persona">${esc(personaDi(`c:${c.simbolo}`).nome)}</span> · ` : ''}<b>${esc(c.simbolo)}</b>${tn(c.simbolo)}${p !== null ? ` <b class="${p >= 60 ? 'up' : p < 45 ? 'down' : ''}">${p}%</b>` : ''}</span>${pos ? `<span class="${cls(pos.variazione)}">${pct(pos.variazione)}</span>` : `<span class="pill ${CATEGORIA(c) === 'pronto' ? 'up' : c.fase === 'attende' ? 'warn' : ''}">${CATEGORIA(c) === 'pronto' ? 'pronto a entrare' : c.fase === 'attende' ? 'in attesa' : 'osserva'}</span>`}</div><div class="why" style="margin-top:4px">${esc(c.dossier?.prossimaAzione || c.stato)}</div></button>`; };
   const gruppi = (taFiltro === 'tutti' ? ['posizione', 'pronto', 'osserva'] : [taFiltro]).filter((k) => per[k].length);
   $('#custodi').innerHTML = gruppi.length ? gruppi.map((k) => `<h3 class="ta-h"><span class="sw" style="background:${hex(k)}"></span>${CAT_INFO[k].nome} <span class="why">${per[k].length}</span></h3><div class="custode-list ta-grid">${per[k].map(card).join('')}</div>`).join('') : '<p class="empty">Nessun trading agent in questo stato.</p>';
   for (const b of $('#custodi').querySelectorAll('button')) b.addEventListener('click', () => { openChart(b.dataset.sym); });
@@ -1592,7 +1696,7 @@ function paintChips(st) {
     const it = intra.get(p.simbolo); const inPos = it?.fase === 'in posizione';
     const chi = inPos ? `intraday su candele ${it.candela}${it.orizzonte ? ` · orizzonte ${it.orizzonte}` : ''}` : (p.agenti || []).map(agentName).join(', ');
     return `<button type="button" class="inv-card" data-sym="${esc(p.simbolo)}" aria-pressed="${sel(p.simbolo)}">
-      <div class="h"><span class="s">${esc(p.simbolo)}</span><span class="pill ${p.simbolo.includes('/') ? 'agent' : ''}">${p.simbolo.includes('/') ? 'crypto' : 'azione'}${inPos ? ' · intraday' : ''}</span></div>
+      <div class="h"><span class="s">${esc(p.simbolo)}${tn(p.simbolo, true)}</span><span class="pill ${p.simbolo.includes('/') ? 'agent' : ''}">${p.simbolo.includes('/') ? 'crypto' : 'azione'}${inPos ? ' · intraday' : ''}</span></div>
       <div class="h"><span class="big">${money(p.valore)}</span><span class="${cls(gain)}"><b>${usd(gain)}</b><br><span style="float:right">${pct(p.variazione)}</span></span></div>
       ${spark(p.simbolo, p.prezzoAttuale)}
       <dl><dt>Quantità</dt><dd>${qty(p.quantita)}</dd><dt>Carico → adesso</dt><dd>${px(p.prezzoCarico)} → ${px(p.prezzoAttuale)}</dd><dt>Peso</dt><dd>${((p.valore / eq) * 100).toFixed(1).replace('.', ',')}%</dd>${p.dal ? `<dt>Aperta da</dt><dd>${durata(p.dal)}</dd>` : ''}${inPos && it.obiettivo ? `<dt>Obiettivo · stop</dt><dd><span class="up">${px(it.obiettivo)}</span> · <span class="down">${px(it.stop)}</span></dd>` : ''}</dl>
@@ -1605,14 +1709,14 @@ function paintChips(st) {
     const stato = (it?.ingresso ?? null) !== null ? ['up', 'ingresso intraday votato'] : voted.has(s) ? ['agent', 'votato nell’ultimo giro'] : waiting.has(s) ? ['warn', 'in attesa'] : c ? [faseCls(c.fase), FASI[c.fase] || c.fase] : ['', 'osservato'];
     const perche = waiting.get(s) || c?.dossier?.prossimaAzione || it?.motivo || c?.stato || '';
     return `<button type="button" class="inv-card" data-sym="${esc(s)}" aria-pressed="${sel(s)}">
-      <div class="h"><span class="s">${esc(s)}</span><span class="pill ${stato[0]}">${esc(stato[1])}</span></div>
+      <div class="h"><span class="s">${esc(s)}${tn(s, true)}</span><span class="pill ${stato[0]}">${esc(stato[1])}</span></div>
       <div class="h"><span class="big">${prezzo(s) ? `${px(prezzo(s))} $` : '–'}</span>${p !== null ? `<span><b class="${p >= 60 ? 'up' : p < 45 ? 'down' : ''}">${p}%</b> <span class="why">favorevole</span></span>` : ''}</div>
       ${spark(s, prezzo(s))}
       ${perche ? `<div class="why">${esc(String(perche).slice(0, 180))}${String(perche).length > 180 ? '…' : ''}</div>` : ''}
     </button>`;
   }).join('') : '<p class="empty">Nessun titolo sotto osservazione in questo giro.</p>';
   $('#radar-n').textContent = `(${groups.idle.length})`;
-  $('#chips').innerHTML = groups.idle.map((s) => `<button type="button" class="chip idle" data-sym="${esc(s)}" aria-pressed="${sel(s)}">${esc(s)}</button>`).join('');
+  $('#chips').innerHTML = groups.idle.map((s) => `<button type="button" class="chip idle" data-sym="${esc(s)}" aria-pressed="${sel(s)}" title="${esc(nomeTitolo(s))}">${esc(s)}${tn(s)}</button>`).join('');
   for (const b of document.querySelectorAll('#inv-held .inv-card, #inv-watch .inv-card, #chips .chip')) b.addEventListener('click', () => openChart(b.dataset.sym));
   if (selected && panelOpen) paintTitle();
 }
@@ -1773,7 +1877,7 @@ function onCross(param) {
   const f = futureInfo.get(param.time);
   if (b && b.open !== undefined) {
     const label = typeof param.time === 'number' ? new Date(param.time * 1000).toLocaleString('it-IT', { timeZone: 'UTC', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : param.time;
-    box.innerHTML = `<b>${esc(selected)}</b> · ${label}${b.live ? ' · in formazione' : ''}<br>A <b>${px(b.open)}</b> · Max <b>${px(b.high)}</b> · Min <b>${px(b.low)}</b> · C <b>${px(b.close)}</b> <span class="${cls(b.close - b.open)}">${pct(b.close / b.open - 1)}</span>`;
+    box.innerHTML = `<b>${esc(selected)}</b>${tn(selected)} · ${label}${b.live ? ' · in formazione' : ''}<br>A <b>${px(b.open)}</b> · Max <b>${px(b.high)}</b> · Min <b>${px(b.low)}</b> · C <b>${px(b.close)}</b> <span class="${cls(b.close - b.open)}">${pct(b.close / b.open - 1)}</span>`;
   } else if (f) {
     box.innerHTML = `<b>Proiezione, ${tf === 'giorno' ? 'seduta' : 'candela'} +${f.k}</b><br>atteso <b>${px(f.mid)}</b> (${pct(f.r)}) · 50%: ${px(f.l50)} – ${px(f.u50)} · 80%: ${px(f.l80)} – ${px(f.u80)}<br><span class="up">↑ ${Math.round(f.pUp * 100)}% sopra</span> · <span class="down">↓ ${Math.round((1 - f.pUp) * 100)}% sotto</span> il prezzo di adesso`;
   } else box.innerHTML = defaultLegend();
@@ -1799,7 +1903,7 @@ function drawChart() {
   futureInfo = new Map(); cone = null; chartProb = null;
   if (!bars.length) {
     for (const k of ['c', 'vol', 'm1', 'm2', 'm3', 'u80', 'l80', 'fc']) S[k].setData([]);
-    S.c.setMarkers([]); legendText = status ? `<b>${esc(selected || '')}</b> · le candele arrivano con il primo giro riuscito del motore${tfNote ? ` · ${esc(tfNote)}` : ''}` : 'Nessun dato.'; $('#ohlc').innerHTML = legendText; $('#kronos-box').hidden = true; drawCone(); return;
+    S.c.setMarkers([]); legendText = status ? `<b>${esc(selected || '')}</b>${tn(selected || '')} · le candele arrivano con il primo giro riuscito del motore${tfNote ? ` · ${esc(tfNote)}` : ''}` : 'Nessun dato.'; $('#ohlc').innerHTML = legendText; $('#kronos-box').hidden = true; drawCone(); return;
   }
   const crypto = String(selected).includes('/');
   const tOf = (b) => intra ? romeSec(b.date) : String(b.date).slice(0, 10);
@@ -1854,7 +1958,7 @@ function drawChart() {
   for (const t of tradesFor(selected)) { const tt = findT(t.at || t.date, t.date); if (tt === null) continue; marks.push({ time: tt, position: t.side === 'buy' ? 'belowBar' : 'aboveBar', color: t.side === 'buy' ? up : down, shape: t.side === 'buy' ? 'arrowUp' : 'arrowDown', text: `${t.side === 'buy' ? 'acquisto' : 'vendita'} ${px(t.price)}${t.pnl !== undefined ? ` ${usd(t.pnl)}` : ''}` }); }
   marks.sort((a, b) => (a.time < b.time ? -1 : a.time > b.time ? 1 : 0));
   S.c.setMarkers(marks);
-  legendText = `<b>${esc(selected)}</b> · ${intra ? `candele da ${TF_LABEL[tf]}` : 'giornaliero'} · ultimo <b>${px(lb?.close ?? last)}</b>${tfNote ? ` · <span class="why">${esc(tfNote)}</span>` : ''}<br><span class="why">${intra ? 'EMA 9 · EMA 20 · media 50' : 'media 20 · 50 · 200'}</span>`;
+  legendText = `<b>${esc(selected)}</b>${tn(selected)} · ${intra ? `candele da ${TF_LABEL[tf]}` : 'giornaliero'} · ultimo <b>${px(lb?.close ?? last)}</b>${tfNote ? ` · <span class="why">${esc(tfNote)}</span>` : ''}<br><span class="why">${intra ? 'EMA 9 · EMA 20 · media 50' : 'media 20 · 50 · 200'}</span>`;
   $('#ohlc').innerHTML = legendText;
   const key = `${selected}|${tf}`;
   if (key !== fitKey) {
@@ -1875,7 +1979,7 @@ function paintTitle() {
   $('#t-pos-wrap').hidden = !posT;
   if (posT) $('#t-pos').innerHTML = `<span class="${cls(posT.variazione)}">${pct(posT.variazione)}</span> <span class="why" style="font-size:13px">${posT.dal ? `da ${durata(posT.dal)}` : ''}</span>`;
   const label = posT ? 'Riepilogo investimento' : 'Analisi investimento';
-  $('#inv-btn').textContent = label; $('#sheet-title').textContent = `${label} · ${selected}`;
+  $('#inv-btn').textContent = label; $('#sheet-title').textContent = `${label} · ${conNome(selected)}`;
   $('#sheet-sub').textContent = posT ? 'Come sta andando e cosa pensano gli agenti di tenerla' : 'Non in portafoglio: cosa ne pensano gli agenti e perché';
   drawChart();
   paintTf();
@@ -1907,7 +2011,7 @@ function custodeCard(c) {
   const d = c.dossier;
   const p = d ? Math.round(d.probabilita * 100) : null;
   const src = (lab, x, nota) => `<div class="row" style="gap:6px"><span class="why" style="min-width:64px">${lab}</span><div class="bar" style="flex:1; max-width:140px"><i class="${x === null ? '' : x >= 0.5 ? '' : 'down'}" style="left:0; width:${x === null ? 0 : Math.round(x * 100)}%; background:${x === null ? 'transparent' : x >= 0.6 ? 'var(--up)' : x <= 0.4 ? 'var(--down)' : 'var(--ink-3)'}"></i></div><span class="why">${x === null ? 'n.d.' : `${Math.round(x * 100)}%`}${nota ? ` · ${esc(nota)}` : ''}</span></div>`;
-  return `<div class="custode-card"><div class="h"><b>Custode di ${esc(c.simbolo)}</b><span class="pill ${faseCls(c.fase)}">${FASI[c.fase] || esc(c.fase)}</span></div>
+  return `<div class="custode-card"><div class="h"><b>${personaDi(`c:${c.simbolo}`) ? `${esc(personaDi(`c:${c.simbolo}`).nome)} · ` : 'Trading agent di '}${esc(c.simbolo)}</b>${tn(c.simbolo)}<span class="pill ${faseCls(c.fase)}">${FASI[c.fase] || esc(c.fase)}</span></div>
     ${d ? `<div class="h"><span><b class="${p >= 60 ? 'up' : p < 45 ? 'down' : ''}" style="font-size:22px">${p}%</b> <span class="why">favorevole</span></span><span class="why">dossier delle ${hhmm(d.aggiornato)}</span></div>
     <div><b>Prossima azione.</b> ${esc(d.prossimaAzione)}</div>
     ${src('Grafico', d.tecnica.punteggio, d.tecnica.pattern.join(', '))}${src('Kronos', d.kronos.punteggio, d.kronos.nota)}${src('Notizie', d.notizie.punteggio, d.notizie.nota)}${src('Contesto', d.contesto.punteggio, d.contesto.nota)}
@@ -1940,6 +2044,9 @@ function paintVerdict(v) {
 // Il dialogo del titolo: si apre dal pulsante accanto al prezzo, si chiude con ✕, con Esc o toccando fuori.
 $('#inv-btn').addEventListener('click', () => { if (!selected) return; const d = $('#sheet'); if (!d.open) d.showModal(); });
 $('#sheet-x').addEventListener('click', () => $('#sheet').close());
+$('#apri-lavagna').addEventListener('click', apriLavagna);
+$('#lavagna-x').addEventListener('click', () => $('#lavagna').close());
+$('#lavagna').addEventListener('click', (e) => { if (e.target === e.currentTarget) e.currentTarget.close(); });
 $('#sheet').addEventListener('click', (e) => { if (e.target === e.currentTarget) e.currentTarget.close(); });
 $('#ask').addEventListener('click', async () => {
   if (!selected) return;
@@ -2079,7 +2186,7 @@ function paintLog() {
     const g = romeDate(o.t);
     if (g !== giorno) { giorno = g; html += `<div class="log-day">${new Date(`${g}T12:00:00`).toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' })}</div>`; }
     const ora = new Date(o.t).toLocaleTimeString('it-IT', { timeZone: 'Europe/Rome', hour: '2-digit', minute: '2-digit' });
-    html += `<div class="log-row" data-sym="${esc(o.simbolo)}" title="apri il grafico"><time class="why">${ora}</time><span class="op"><span class="pill ${o.lato === 'buy' ? 'up' : 'down'}">${o.lato === 'buy' ? 'Acquisto' : 'Vendita'}</span></span><span><b>${esc(o.simbolo)}</b><br><span class="q">${qty(o.q)} a ${px(o.prezzo)}</span></span><span class="why">${esc(o.perche)}${o.dur ? ` · tenuta ${o.dur}` : ''}</span><span class="r">${o.lato === 'sell' ? `<b class="${cls(o.pnl)}">${usd(o.pnl)}</b><br><span class="why">${pct(o.ris)}</span>` : `<span class="why">${money(o.q * o.prezzo)}</span>`}</span></div>`;
+    html += `<div class="log-row" data-sym="${esc(o.simbolo)}" title="apri il grafico"><time class="why">${ora}</time><span class="op"><span class="pill ${o.lato === 'buy' ? 'up' : 'down'}">${o.lato === 'buy' ? 'Acquisto' : 'Vendita'}</span></span><span><b>${esc(o.simbolo)}</b>${tn(o.simbolo)}<br><span class="q">${qty(o.q)} a ${px(o.prezzo)}</span></span><span class="why">${esc(o.perche)}${o.dur ? ` · tenuta ${o.dur}` : ''}</span><span class="r">${o.lato === 'sell' ? `<b class="${cls(o.pnl)}">${usd(o.pnl)}</b><br><span class="why">${pct(o.ris)}</span>` : `<span class="why">${money(o.q * o.prezzo)}</span>`}</span></div>`;
   }
   $('#log').innerHTML = html;
   for (const r of $('#log').querySelectorAll('.log-row')) r.addEventListener('click', () => openChart(r.dataset.sym));
@@ -2107,10 +2214,10 @@ rinominaTesto(document.body);
 
 // ---------- pagine ----------
 const PAGES = ['dashboard', 'ufficio', 'investimenti', 'log', 'impostazioni', 'guida'];
-const SUBS = { impostazioni: ['agenti', 'chiavi'] };
+const SUBS = { impostazioni: ['generali', 'chiavi'] };
 const NOMI_PAGINE = { dashboard: 'Dashboard', ufficio: 'Ufficio', investimenti: 'Investimenti', log: 'Log operazioni', impostazioni: 'Impostazioni', guida: 'Guida' };
 // I vecchi indirizzi (segnalibri, link nella guida) portano alla nuova sistemazione.
-const OLD = { panoramica: 'dashboard', oggi: 'investimenti', cronologia: 'log', registro: 'log', 'dashboard/registro': 'log', '3d': 'ufficio', titoli: 'investimenti', 'titoli/registro': 'log', agenti: 'ufficio', 'agenti/squadra': 'ufficio', 'agenti/ufficio': 'ufficio', 'impostazioni/guida': 'guida', schede: 'impostazioni/agenti' };
+const OLD = { panoramica: 'dashboard', oggi: 'investimenti', cronologia: 'log', registro: 'log', 'dashboard/registro': 'log', '3d': 'ufficio', titoli: 'investimenti', 'titoli/registro': 'log', agenti: 'ufficio', 'agenti/squadra': 'ufficio', 'agenti/ufficio': 'ufficio', 'impostazioni/guida': 'guida', schede: 'impostazioni/generali', 'impostazioni/agenti': 'impostazioni/generali' };
 function showPage() {
   let h = location.hash.replace('#', '');
   if (OLD[h]) { location.replace(`#${OLD[h]}`); return; }
@@ -2119,7 +2226,7 @@ function showPage() {
   const subs = SUBS[currentPage];
   let saved = ''; try { saved = localStorage.getItem(`agenti.sotto.${currentPage}`) || ''; } catch {}
   currentSub = subs ? (subs.includes(sb) ? sb : subs.includes(saved) ? saved : subs[0]) : '';
-  if (window.STATIC_MODE && currentPage === 'impostazioni' && currentSub === 'chiavi') currentSub = 'agenti';
+  if (window.STATIC_MODE && currentPage === 'impostazioni' && currentSub === 'chiavi') currentSub = 'generali';
   for (const el of document.querySelectorAll('.page')) el.classList.toggle('on', el.dataset.page === currentPage);
   for (const a of document.querySelectorAll('.side-nav a')) { if (a.dataset.page === currentPage) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); }
   $('#mobile-page').textContent = NOMI_PAGINE[currentPage] || ''; menu(false);
@@ -2131,7 +2238,7 @@ function showPage() {
   if (currentPage === 'dashboard') loadPeriodo();
   if (officeOn()) { resize(); loadOfficeData(); }
   if (currentPage === 'impostazioni' && currentSub === 'chiavi') loadSettings();
-  if (currentPage === 'impostazioni' && currentSub === 'agenti' && !$('#schede').children.length) loadCards();
+  if (currentPage === 'impostazioni' && currentSub === 'generali' && !$('#schede').children.length) loadCards();
   if (currentPage === 'log') loadLog();
   try { localStorage.setItem('agenti.pagina', currentPage); } catch {}
 }
@@ -2146,7 +2253,7 @@ function paintIntraday(st) {
   const note = $('#intraday-note');
   if (note) note.textContent = open.length ? '' : list.length ? `Intraday: ${list.length} ${list.length === 1 ? 'titolo osservato' : 'titoli osservati'} sulle candele brevi, nessuna operazione aperta.` : '';
   if (!list.length) { $('#intraday').innerHTML = ''; return; }
-  const row = (x) => `<tr><td><b>${esc(x.simbolo)}</b><br><span class="why">${esc(x.candela)}${x.controllo ? ` · controllo ${esc(x.controllo.replace(/^poi /, ''))}` : ''}</span></td><td data-l="Fase"><span class="pill ${x.fase === 'in posizione' ? 'up' : x.fase === 'cerca ingresso' ? 'agent' : ''}">${esc(x.fase)}</span></td><td class="n" data-l="Ingresso">${x.ingresso !== null ? px(x.ingresso) : '–'}</td><td class="n up" data-l="Obiettivo">${x.obiettivo !== null ? px(x.obiettivo) : '–'}</td><td class="n down" data-l="Stop">${x.stop !== null ? px(x.stop) : '–'}</td><td class="why" data-l="Perché">${esc(x.motivo)}</td></tr>`;
+  const row = (x) => `<tr><td><b>${esc(x.simbolo)}</b>${tn(x.simbolo)}<br><span class="why">${esc(x.candela)}${x.controllo ? ` · controllo ${esc(x.controllo.replace(/^poi /, ''))}` : ''}</span></td><td data-l="Fase"><span class="pill ${x.fase === 'in posizione' ? 'up' : x.fase === 'cerca ingresso' ? 'agent' : ''}">${esc(x.fase)}</span></td><td class="n" data-l="Ingresso">${x.ingresso !== null ? px(x.ingresso) : '–'}</td><td class="n up" data-l="Obiettivo">${x.obiettivo !== null ? px(x.obiettivo) : '–'}</td><td class="n down" data-l="Stop">${x.stop !== null ? px(x.stop) : '–'}</td><td class="why" data-l="Perché">${esc(x.motivo)}</td></tr>`;
   $('#intraday').innerHTML = `<table class="stack-sm"><thead><tr><th>Titolo</th><th>Fase</th><th class="n">Ingresso</th><th class="n">Obiettivo</th><th class="n">Stop</th><th>Perché</th></tr></thead><tbody>${[...open, ...rest].slice(0, 40).map(row).join('')}</tbody></table>`;
 }
 function paintSimulazioni(st) {
@@ -2154,7 +2261,7 @@ function paintSimulazioni(st) {
   $('#sim-card').hidden = !list.length;
   if (!list.length) { $('#simulazioni').innerHTML = '<p class="empty">Nessuna simulazione ancora: gli agenti osservano e votano, gli acquisti che proporrebbero compaiono qui.</p>'; return; }
   const tot = list.reduce((a, x) => a + (x.virtuale ?? 0), 0);
-  $('#simulazioni').innerHTML = `<p class="why" style="margin-bottom:8px">Esito virtuale complessivo <b class="${cls(tot)}">${usd(tot)}</b> su ${list.length} operazioni simulate (nessun ordine inviato).</p><table class="stack-sm"><thead><tr><th>Titolo</th><th class="n">Quantità</th><th class="n">Prezzo simulato</th><th class="n">Ora</th><th class="n">Virtuale</th><th>Agenti</th></tr></thead><tbody>${list.map((x) => `<tr><td><b>${esc(x.simbolo)}</b><br><span class="why">${hhmm(x.quando)}</span></td><td class="n" data-l="Quantità">${qty(x.quantita)}</td><td class="n" data-l="Prezzo simulato">${px(x.prezzo)}</td><td class="n" data-l="Ora">${x.prezzoOra !== null ? px(x.prezzoOra) : '–'}</td><td class="n ${cls(x.virtuale ?? 0)}" data-l="Virtuale">${x.virtuale !== null ? `${usd(x.virtuale)}<br><span class="why">${pct(x.risultato)}</span>` : '–'}</td><td class="why" data-l="Agenti">${(x.agenti || []).map(agentName).join(', ')}</td></tr>`).join('')}</tbody></table>`;
+  $('#simulazioni').innerHTML = `<p class="why" style="margin-bottom:8px">Esito virtuale complessivo <b class="${cls(tot)}">${usd(tot)}</b> su ${list.length} operazioni simulate (nessun ordine inviato).</p><table class="stack-sm"><thead><tr><th>Titolo</th><th class="n">Quantità</th><th class="n">Prezzo simulato</th><th class="n">Ora</th><th class="n">Virtuale</th><th>Agenti</th></tr></thead><tbody>${list.map((x) => `<tr><td><b>${esc(x.simbolo)}</b>${tn(x.simbolo)}<br><span class="why">${hhmm(x.quando)}</span></td><td class="n" data-l="Quantità">${qty(x.quantita)}</td><td class="n" data-l="Prezzo simulato">${px(x.prezzo)}</td><td class="n" data-l="Ora">${x.prezzoOra !== null ? px(x.prezzoOra) : '–'}</td><td class="n ${cls(x.virtuale ?? 0)}" data-l="Virtuale">${x.virtuale !== null ? `${usd(x.virtuale)}<br><span class="why">${pct(x.risultato)}</span>` : '–'}</td><td class="why" data-l="Agenti">${(x.agenti || []).map(agentName).join(', ')}</td></tr>`).join('')}</tbody></table>`;
 }
 function paintCapo(st) {
   if (!$('#capo')) return;
@@ -2178,11 +2285,11 @@ function paintKpi(st) {
   $('#dash-kpi').innerHTML = [
     tile('Posizioni aperte', String(pos.length), `${crypto} crypto, ${pos.length - crypto} azioni · investito ${eq ? Math.round((investito / eq) * 100) : 0}% del conto`, '#investimenti'),
     tile('Operazioni di oggi', `${pl.acquisti.length} acquisti · ${pl.vendite.length} vendite`, `incassato <span class="${cls(pl.realizzato)}">${usd(pl.realizzato)}</span>, sulle aperte <span class="${cls(pl.nonRealizzato)}">${usd(pl.nonRealizzato)}</span>`, '#investimenti'),
-    tile('Vittorie', st.diario?.statistiche?.trade ? `<span class="${st.diario.statistiche.vinti / st.diario.statistiche.trade >= 0.51 ? 'up' : 'down'}">${Math.round((st.diario.statistiche.vinti / st.diario.statistiche.trade) * 100)}%</span>` : '–', st.diario?.statistiche?.trade ? `${st.diario.statistiche.vinti} trade chiusi in guadagno su ${st.diario.statistiche.trade} · obiettivo 51%` : 'nessun trade chiuso ancora · obiettivo 51%', '#log'),
+    tile('Vittorie', st.diario?.statistiche?.trade ? `<span class="${st.diario.statistiche.vinti / st.diario.statistiche.trade >= 0.51 ? 'up' : 'down'}">${Math.round((st.diario.statistiche.vinti / st.diario.statistiche.trade) * 100)}%</span>` : '–', st.diario?.statistiche?.trade ? `${st.diario.statistiche.vinti} trade chiusi in guadagno su ${st.diario.statistiche.trade} · obiettivo 51%${st.diario.statistiche.percCapitaleVinti != null ? ` · <span class="${st.diario.statistiche.percCapitaleVinti > 0.5 ? 'up' : 'down'}">${Math.round(st.diario.statistiche.percCapitaleVinti * 100)}%</span> del capitale sui vincenti` : ''}` : 'nessun trade chiuso ancora · obiettivo 51%', '#log'),
     tile('Contesto', esc(st.contesto?.generale || 'n.d.'), `${fg ? `Fear & Greed ${fg.valore} (${esc(fg.classe)}) · ` : ''}rischio ammesso ${Math.round((st.rischio ?? 1) * 100)}%`),
     tile('Kronos', st.kronos ? `${st.kronos.simboli} proiezioni` : 'n.d.', esc(st.kronos?.stato || '')),
     tile('Agenti', `${(st.caffe?.operativi || []).length} al lavoro · ${(st.caffe?.presenti || []).length} in pausa`, `${(st.custodi || []).length} custodi · ${(st.intraday || []).filter((x) => x.fase === 'in posizione').length} operazioni intraday aperte${st.analisi ? ` · analisi d'ingresso ogni ${st.analisi.ogniMinuti} min${st.analisi.prossima ? `, prossima alle ${hhmm(st.analisi.prossima)}` : ''}` : ''}`, '#ufficio'),
-    tile('Esplorazione', `${att.length} opportunità`, att.length ? att.map((x) => esc(x.simbolo)).join(', ') : 'nessuna aperta', '#ufficio'),
+    tile('Esplorazione', `${att.length} opportunità`, att.length ? att.map((x) => esc(conNome(x.simbolo))).join(', ') : 'nessuna aperta', '#ufficio'),
   ].join('');
 }
 const NOMI_MODELLI = { kronos: 'Kronos', chronos2: 'Chronos-2', timesfm: 'TimesFM 2.5' };
@@ -2201,7 +2308,7 @@ function paintCaffe(st) {
 function paintEsplorazione(st) {
   const e = st.esplorazione;
   if (!e) { $('#esplorazione').innerHTML = '<p class="empty">Nessun dato: l\u2019esplorazione parte con il prossimo giro.</p>'; return; }
-  const row = (x) => `<div class="vote"><b>${esc(x.simbolo)}</b> <span class="pill">${esc(x.settore)}</span> <span class="pill ${x.stato === 'attiva' ? 'up' : x.stato === 'comprata' ? 'agent' : ''}">${esc(x.stato)}</span> <span class="why">trovato da ${esc(keyName(x.scopritore))} alle ${hhmm(x.trovata)} · Kronos ${pct(x.kronos)}${x.stato === 'attiva' ? ` · nell'universo fino al ${esc(x.validaFino)}` : ''}</span><br><span class="why">${esc(x.motivo)}</span>${x.stato === 'attiva' ? `<br><button type="button" class="btn ghost" data-sym="${esc(x.simbolo)}" style="margin-top:6px; padding:3px 10px; font-size:13px">Apri il grafico</button>` : ''}</div>`;
+  const row = (x) => `<div class="vote"><b>${esc(x.simbolo)}</b>${tn(x.simbolo)} <span class="pill">${esc(x.settore)}</span> <span class="pill ${x.stato === 'attiva' ? 'up' : x.stato === 'comprata' ? 'agent' : ''}">${esc(x.stato)}</span> <span class="why">trovato da ${esc(keyName(x.scopritore))} alle ${hhmm(x.trovata)} · Kronos ${pct(x.kronos)}${x.stato === 'attiva' ? ` · nell'universo fino al ${esc(x.validaFino)}` : ''}</span><br><span class="why">${esc(x.motivo)}</span>${x.stato === 'attiva' ? `<br><button type="button" class="btn ghost" data-sym="${esc(x.simbolo)}" style="margin-top:6px; padding:3px 10px; font-size:13px">Apri il grafico</button>` : ''}</div>`;
   $('#esplorazione').innerHTML = `
     <p class="why">Gli agenti in pausa cercano opportunità nel radar · ${e.ultimoGiro ? `ultimo giro alle ${hhmm(e.ultimoGiro)}` : 'nessun giro ancora'} · ${e.daEsaminareOggi} titoli ancora da esaminare oggi</p>
     ${(e.attive || []).length ? `<div class="why" style="margin:10px 0 4px">Opportunità al lavoro</div>${e.attive.map(row).join('')}` : '<p class="empty" style="margin-top:8px">Nessuna opportunità aperta.</p>'}
@@ -2251,16 +2358,22 @@ const fmtVal = (p, v) => p.tipo === 'percento' ? String(Math.round(v * 10000) / 
 const parseVal = (p, raw) => p.tipo === 'percento' ? Number(String(raw).replace(',', '.')) / 100 : p.tipo === 'bool' ? raw : String(raw).replace(',', '.');
 async function loadCards() {
   const d = await (await fetch('/api/agenti/schede')).json();
-  $('#schede').innerHTML = d.schede.map((c) => `<form class="scheda" data-agente="${esc(c.agente)}"><h3>${esc(c.titolo)}</h3><div class="ruolo">${esc(c.ruolo)}</div><details><summary>Come decide</summary><div class="ruolo" style="margin-top:6px">${esc(c.come)}</div></details>
+  // Le regole comuni: il motore e gli agenti generali che non hanno una scrivania nell'ufficio (quelli effettivi le hanno
+  // anche nella loro scheda di persona).
+  renderSchede($('#schede'), d.schede.filter((c) => c.agente === 'motore' || (!['custodi', 'intraday'].includes(c.agente) && !desks.has(`a:${c.agente}`))), loadCards, false);
+}
+// Le schede come moduli: valori attuali, «Di serie», «Salva». Usata dalle Generali e dalla scheda di ogni agente.
+function renderSchede(box, schede, dopo, compatta) {
+  box.innerHTML = schede.map((c) => `<form class="scheda ${compatta ? 'compatta' : ''}" data-agente="${esc(c.agente)}">${compatta ? '' : `<h3>${esc(c.titolo)}</h3><div class="ruolo">${esc(c.ruolo)}</div>`}<details><summary>Come decide</summary><div class="ruolo" style="margin-top:6px">${esc(c.come)}</div></details>
     ${c.parametri.map((p) => `<label class="prm ${p.cambiato ? 'cambiato' : ''}" title="di serie: ${esc(fmtVal(p, p.diSerie))}"><span>${esc(p.etichetta)}${p.tipo === 'percento' ? ' (%)' : ''}<small>${esc(p.descrizione)}</small></span>${p.tipo === 'bool' ? `<select name="${esc(p.chiave)}" data-tipo="bool"><option value="true" ${p.attuale ? 'selected' : ''}>sì</option><option value="false" ${!p.attuale ? 'selected' : ''}>no</option></select>` : p.tipo === 'scelta' ? `<select name="${esc(p.chiave)}" data-tipo="scelta">${p.opzioni.map((o) => `<option ${o === p.attuale ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select>` : `<input name="${esc(p.chiave)}" data-tipo="${p.tipo}" value="${esc(fmtVal(p, p.attuale))}" ${p.tipo === 'ora' ? 'placeholder="HH:MM"' : `type="number" step="${p.tipo === 'intero' ? 1 : p.tipo === 'percento' ? 0.01 : (p.passo ?? 0.01)}" ${p.min !== undefined ? `min="${p.tipo === 'percento' ? p.min * 100 : p.min}"` : ''} ${p.max !== undefined ? `max="${p.tipo === 'percento' ? p.max * 100 : p.max}"` : ''}`}>`}</label>`).join('')}
     <div class="row" style="justify-content:space-between"><button type="button" class="btn ghost reset">Di serie</button><button type="submit" class="btn">Salva</button></div><div class="msg"></div></form>`).join('');
   if (window.STATIC_MODE) {
-    for (const el of $('#schede').querySelectorAll('input, select')) el.disabled = true;
-    for (const el of $('#schede').querySelectorAll('form > .row')) el.remove();
+    for (const el of box.querySelectorAll('input, select')) el.disabled = true;
+    for (const el of box.querySelectorAll('form > .row')) el.remove();
     return;
   }
-  for (const f of $('#schede').querySelectorAll('form')) {
-    const card = d.schede.find((c) => c.agente === f.dataset.agente);
+  for (const f of box.querySelectorAll('form')) {
+    const card = schede.find((c) => c.agente === f.dataset.agente);
     f.addEventListener('submit', async (e) => {
       e.preventDefault();
       const body = {};
@@ -2268,17 +2381,15 @@ async function loadCards() {
       const r = await fetch('/api/agenti/schede', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ...(await currentSaved()), ...body }) });
       const x = await r.json();
       f.querySelector('.msg').textContent = x.ok ? x.nota : `Non salvato: ${x.errori.join('; ')}`;
-      if (x.ok) loadCards();
+      if (x.ok) setTimeout(dopo, 1200);
     });
     f.querySelector('.reset').addEventListener('click', async () => {
-      const body = {};
-      for (const p of card.parametri) body[p.chiave] = '';
       const saved = await currentSaved();
-      for (const k of Object.keys(body)) delete saved[k];
+      for (const p of card.parametri) delete saved[p.chiave];
       const r = await fetch('/api/agenti/schede', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(saved) });
       const x = await r.json();
       f.querySelector('.msg').textContent = x.ok ? 'Riportati ai valori di serie.' : `Errore: ${x.errori.join('; ')}`;
-      if (x.ok) loadCards();
+      if (x.ok) setTimeout(dopo, 1200);
     });
   }
 }
@@ -2309,13 +2420,13 @@ function describe(e) {
     case 'allocazione': return `Proposte: ${(e.proposte || []).map((p) => `${side(p.side)} ${qty(p.qty)} ${esc(p.symbol)}`).join(', ') || 'nessuna'}`;
     case 'ordine': return `<span class="pill ${e.lato === 'buy' ? 'up' : 'down'}">${e.lato === 'buy' ? 'Comprato' : 'Venduto'}</span> <b>${qty(e.quantita)} ${esc(e.simbolo)}</b> — ${esc(e.esito)}${e.stato ? ` (${esc(e.stato)})` : ''}${e.errore ? ` <span class="down">${esc(cleanErr(e.errore))}</span>` : ''}`;
     case 'caffe': return `<span class="pill">Sala caffè</span> ${(e.entrati || []).length ? `in pausa: ${e.entrati.map((k) => esc(keyName(k))).join(', ')}` : ''}${(e.entrati || []).length && (e.usciti || []).length ? ' · ' : ''}${(e.usciti || []).length ? `tornano alla scrivania: ${e.usciti.map((u) => `${esc(keyName(u.chiave))} (${esc(u.perche)})`).join(', ')}` : ''}`;
-    case 'esplorazione': return `<span class="pill agent">Esplorazione</span> ${(e.nuove || []).length ? `trovati: ${e.nuove.map((n) => `<b>${esc(n.simbolo)}</b> da ${esc(agentName(n.agente))} (Kronos ${pct(n.kronos)})`).join(', ')}` : 'nessuna opportunità'} · esaminati ${(e.esaminati || []).map(esc).join(', ')}`;
-    case 'attesa': return `<span class="pill warn">In attesa</span> <b>${esc(e.simbolo)}</b>: ${esc(e.motivo)}`;
-    case 'rifiuto': if (e.origine === 'contesto' && !e.quantita) return describe({ ...e, tipo: 'attesa' }); return `<span class="pill">Fermato dalle regole</span> ${side(e.lato)} ${qty(e.quantita)} <b>${esc(e.simbolo)}</b>: ${esc(e.motivo)}`;
+    case 'esplorazione': return `<span class="pill agent">Esplorazione</span> ${(e.nuove || []).length ? `trovati: ${e.nuove.map((n) => `<b>${esc(n.simbolo)}</b>${tn(n.simbolo)} da ${esc(agentName(n.agente))} (Kronos ${pct(n.kronos)})`).join(', ')}` : 'nessuna opportunità'} · esaminati ${(e.esaminati || []).map(esc).join(', ')}`;
+    case 'attesa': return `<span class="pill warn">In attesa</span> <b>${esc(e.simbolo)}</b>${tn(e.simbolo)}: ${esc(e.motivo)}`;
+    case 'rifiuto': if (e.origine === 'contesto' && !e.quantita) return describe({ ...e, tipo: 'attesa' }); return `<span class="pill">Fermato dalle regole</span> ${side(e.lato)} ${qty(e.quantita)} <b>${esc(e.simbolo)}</b>${tn(e.simbolo)}: ${esc(e.motivo)}`;
     case 'stop': return `Stop di protezione ${e.azione === 'piazzato' ? 'messo' : 'tolto'}: ${esc(cleanErr(e.dettaglio))}`;
     case 'trade': return e.stato === 'aperto'
-      ? `<span class="pill up">Posizione aperta</span> <b>${esc(e.simbolo)}</b> ${qty(e.quantita)} a ${fmt(e.prezzo)}${(e.agenti || []).length ? ` su voto di ${e.agenti.map(agentName).join(', ')}` : ''}`
-      : `<span class="pill ${cls(e.risultato)}">Posizione chiusa</span> <b>${esc(e.simbolo)}</b> <span class="${cls(e.risultato)}"><b>${e.pnl !== undefined ? usd(e.pnl) : ''}</b> (${pct(e.risultato)})</span> dopo ${e.giorni} giorni: ${esc(e.uscita)}`;
+      ? `<span class="pill up">Posizione aperta</span> <b>${esc(e.simbolo)}</b>${tn(e.simbolo)} ${qty(e.quantita)} a ${fmt(e.prezzo)}${(e.agenti || []).length ? ` su voto di ${e.agenti.map(agentName).join(', ')}` : ''}`
+      : `<span class="pill ${cls(e.risultato)}">Posizione chiusa</span> <b>${esc(e.simbolo)}</b>${tn(e.simbolo)} <span class="${cls(e.risultato)}"><b>${e.pnl !== undefined ? usd(e.pnl) : ''}</b> (${pct(e.risultato)})</span> dopo ${e.giorni} giorni: ${esc(e.uscita)}`;
     case 'capo': return `<span class="pill agent">Capo ufficio</span> ${esc(e.sintesi)}${(e.richiamati || []).length ? ` <span class="down">Richiamati: ${e.richiamati.map((r) => esc(r.agente)).join(', ')}</span>` : ''}`;
     case 'allarme': return `<b>${esc(e.titolo)}</b>: ${esc(cleanErr(e.dettaglio))}`;
     default: return esc(e.testo ?? JSON.stringify(e));

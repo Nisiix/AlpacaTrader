@@ -329,6 +329,20 @@ d'opinione prima di una candela giornaliera nuova: escono solo stop e regole vin
 ## 9. Cosa impara il motore
 
 - **Capo ufficio** e **sala caffè** (capitolo 4), dal diario dei trade, da subito e con limiti.
+- **Gli agenti come persone** (`src/agents/persone.ts`): ogni agente ha un nome. Fissi per gli agenti generali (Roberto
+  capo ufficio, Marco trend, Giulia rientro, Paolo regime, Sara orizzonte, Luca uscite, Davide presa di profitto, Elena
+  contesto, Chiara Kronos, Andrea capo della sala intraday); ogni trading agent e ogni operatore intraday riceve un nome
+  la prima volta che compare e lo tiene (`state/persone.json`).
+- **Calibrazione del capo** (`src/agents/calibrazione.ts`): quando un agente vince meno del 51% dei suoi trade chiusi
+  (almeno 5, contati dall'ultima correzione) il capo rende più selettivo di un passo il suo parametro d'ingresso; quando
+  torna sopra il 60% lo riavvicina di un passo al valore di base. Parametri: probabilità minima intraday (+2,5 punti a
+  passo, fino al 70%), probabilità minima del dossier dei trading agents (squadra +5 punti fino al 65%, e una soglia
+  personale per ognuno fino al 70%), fiducia minima di Kronos contro tendenza (+5 punti fino all'80%), RSI d'ingresso del
+  rientro (−1 fino a 4). Al massimo 4 passi; mai sotto il valore di base della scheda, mai fuori dai limiti della scheda
+  né dai principi del motore. Stato in `state/calibrazione.json`.
+- **Capitale sui vincenti**: oltre alla percentuale di trade vinti (obiettivo 51%) il diario misura la parte del capitale
+  investito finita nei trade in guadagno: sopra il 50% si è investito di più dove si è vinto. La dimensione di ogni
+  ingresso cresce già con la probabilità (fiducia di Kronos per i trading agents, probabilità netta per l'intraday).
 - **Vittorie per candela** (obiettivo: almeno il 51% di trade chiusi in guadagno): sugli ultimi 20 trade intraday chiusi
   di ogni candela (almeno 8), se si vince meno del 51% per entrare su quella candela servono 5 punti di probabilità in
   più (10 sotto il 40%). Gli ingressi non si fermano: si spostano sulle candele dove si vince.
@@ -358,15 +372,22 @@ Menu a sinistra (sul telefono si apre con ☰):
   oggi, rischio, confronto con SPY); **rendimento per periodo** (oggi, 7 e 30 giorni, mese, anno, tutto o date a
   scelta: variazione del patrimonio dallo storico di Alpaca, realizzato, operazioni chiuse e vinte, migliore e
   peggiore, ribasso massimo, grafico del patrimonio, giorno per giorno); profitto e perdita di oggi, situazione in breve;
-- **Ufficio**: la mappa 3D con gli agenti e a destra il loro elenco (passando sopra un nome l'avatar si alza e si
-  illumina; clic per la scheda); sotto, a schede: Decisioni (punteggi e voti), Trading agents (i custodi dei titoli),
-  Esplorazione, Sala caffè (lezioni);
+- **Ufficio**: la mappa 3D con gli agenti e a destra il loro elenco col nome di ognuno (passando sopra un nome l'avatar
+  si alza e si illumina; clic per la scheda della persona: chi è, cosa fa, la calibrazione del capo e **le sue
+  impostazioni**, modificabili lì; sugli schermi grandi la scheda si apre su due colonne). Gli agenti generali hanno una
+  scrivania solo se sono effettivi, cioè hanno votato l'ingresso di almeno un trade; gli altri lavorano come strumenti
+  comuni e le loro regole stanno in Impostazioni → Generali. La **lavagna dei risultati** si apre in un dialogo (clic
+  sulla lavagna o pulsante in alto): per agente e per giorno trade vinti e persi, percentuale, capitale sui vincenti,
+  risultato. Sotto, a schede: Trading agents (nome dell'agente e titolo seguito), Decisioni, Esplorazione, Sala caffè;
+- Ovunque compare un codice si vede anche il **nome del titolo o della crypto** (Apple Inc., Bitcoin), chiesto ad
+  Alpaca una volta per simbolo e tenuto in `state/nomi-titoli.json`;
 - **Investimenti**: card dei titoli in portafoglio e in osservazione; clic per il **grafico** (TradingView Lightweight
   Charts, Apache 2.0, incluso nel repository) con time frame 1m, 5m, 15m, 1h, 4h, 1G, medie, volumi, carico, stop,
   obiettivo, operazioni e la **proiezione dei modelli con il cono** al 50% e all'80%; le candele da 1 e 5 minuti si
   aggiornano ogni 15 secondi; poi operazioni intraday, simulazioni e tabella delle posizioni;
 - **Log operazioni**: acquisti e vendite eseguiti negli ultimi 7 giorni, con ricerca e filtri, risultato di ogni vendita;
-- **Impostazioni**: schede degli agenti con i parametri, chiavi, riavvio;
+- **Impostazioni**: Generali (regole del motore e della gabbia, conto Alpaca, pagina pubblica su GitHub Pages, e le
+  regole degli agenti generali senza scrivania), chiavi, riavvio;
 - **Guida**.
 
 Telegram riceve ordini, allarmi e il riepilogo serale.

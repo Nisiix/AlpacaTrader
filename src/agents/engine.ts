@@ -33,6 +33,9 @@ import { applyGuidance, review, type CapoReport } from "./capo.ts";
 import { simboliIntraday } from "./posizioni.ts";
 import type { Cervello, RigaCervello } from "./cervello.ts";
 import { BIBLIOTECA, type Principio } from "./biblioteca.ts";
+import { aggiornaCalibrazione, applicaCalibrazione, type RigaCalibrazione } from "./calibrazione.ts";
+import { persone, type Persona } from "./persone.ts";
+import { nomiTitoli } from "../nomi-titoli.ts";
 import { plausibile } from "./fiducia.ts";
 import { refreshEarnings, type EarningsFetcher } from "../earnings.ts";
 import { addEarnings } from "../events.ts";
@@ -117,6 +120,12 @@ export interface AgentsStatus {
   cervello?: { righe: RigaCervello[]; inAttesa: number };
   // La biblioteca degli agenti: i principi dei libri di trading tradotti in regole.
   biblioteca?: { principi: Principio[] };
+  // Gli agenti come persone (nome e ruolo), per chiave dell'ufficio: 'capo', 'a:trend', 'c:AAPL', 'i:BTC/USD'.
+  persone?: Record<string, Persona>;
+  // I nomi dei titoli e delle crypto (Apple, Bitcoin...), per mostrarli accanto ai codici.
+  nomi?: Record<string, string>;
+  // La calibrazione del capo ufficio: per agente il parametro d'ingresso, il valore di base e quello calibrato.
+  calibrazione?: RigaCalibrazione[];
 }
 
 // Il registro degli errori nel motore tiene solo le regole di sicurezza: niente riacquisto dopo uno stop e niente nuovo
@@ -353,6 +362,8 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
     // Le impostazioni degli agenti cambiate dalla dashboard valgono dal giro successivo, senza riavvio.
     const settings = applyAgentSettings(deps.stateDir);
     for (const e of settings.errori) log.warn(`impostazioni agenti: ${e}`);
+    // Poi la calibrazione del capo ufficio sopra le impostazioni delle schede (solo verso ingressi più selettivi, nei limiti).
+    const calibrazione = applicaCalibrazione(deps.stateDir);
     // 2. L'universo crypto del giorno, poi Alpaca.
     await loadUniverse(deps, cache, today, (m) => {
       log.info(m);
@@ -471,6 +482,10 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
       for (const t of primi.opened) bus.emit("trade", { stato: "aperto", simbolo: t.simbolo, quantita: t.comprate, prezzo: t.costo / t.comprate, agenti: t.contesto?.agenti ?? [] });
       for (const t of primi.closed) bus.emit("trade", { stato: "chiuso", simbolo: t.simbolo, risultato: t.risultato ?? 0, pnl: t.incassato - t.costo, giorni: t.giorni ?? 0, uscita: t.motivoUscita ?? "sconosciuto", agenti: t.contesto?.agenti ?? [] });
       if (primi.opened.length || primi.closed.length) writeJournal(deps.stateDir, journal);
+    }
+    for (const n of aggiornaCalibrazione(deps.stateDir, journal, startedAt)) {
+      log.info(n);
+      bus.emit("nota", { testo: n });
     }
 
     // 4. Il massimo visto da ogni trade aperto (per lo stop che segue il profitto), poi le proiezioni, poi gli agenti.
@@ -698,6 +713,9 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
       pnlOggi: { ...dailyPnl(journal, today), nonRealizzato: positions.reduce((s, p) => s + (p.currentPrice - p.avgEntryPrice) * p.qty, 0) },
       custodi: Object.values(reports).flatMap((r) => r.custodi ?? []),
       intraday: Object.values(reports).flatMap((r) => r.intraday ?? []),
+      nomi: await nomiTitoli(deps.stateDir, deps.broker, [...AGENTS.universe, ...positions.map((p) => p.symbol), ...Object.values(reports).flatMap((r) => r.intraday ?? []).map((x) => x.simbolo)]).catch(() => ({})),
+      persone: persone(deps.stateDir, Object.values(reports).flatMap((r) => r.custodi ?? []).map((c) => c.simbolo), Object.values(reports).flatMap((r) => r.intraday ?? []).filter((x) => x.fase === "in posizione" || x.fase === "cerca ingresso").map((x) => x.simbolo)),
+      calibrazione,
       universo: { titoli: AGENTS.universe.filter((s) => !isCrypto(s)), crypto: AGENTS.universe.filter(isCrypto), fonteCrypto: cache.universeInfo?.fonte ?? null, aggiornatoCrypto: cache.universeInfo?.aggiornato ?? null },
       kronos: { stato: deps.kronosStato?.() ?? (deps.forecaster ? "attivo" : "non configurato"), proiezioniDel: cache.previsioni?.giorno ?? null, simboli: Object.keys(cache.previsioni?.data ?? {}).length, scartate },
       giornata: { pnlPct, obiettivoPct: AGENTS.daily.targetPct, pavimentoPct: AGENTS.daily.pavimentoPct, picco: giornata.picco, perditaMaxPct: AGENTS.daily.maxLossPct, obiettivoRaggiunto: giornata.obiettivoRaggiunto, difesa: giornata.difesa, perditaOltre: giornata.perditaOltre },

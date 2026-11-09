@@ -28,8 +28,8 @@ export interface AgentCard {
 export const AGENT_CARDS: AgentCard[] = [
   {
     agente: "motore",
-    titolo: "Motore e gabbia",
-    ruolo: "Le regole comuni a tutti: quanto si può avere in portafoglio, le soglie dei voti, il ritmo dei giri.",
+    titolo: "Generali",
+    ruolo: "Le regole comuni del profilo di investimento su Alpaca e della piattaforma: quanto si può avere in portafoglio, soglie dei voti, ritmo dei giri, obiettivo del giorno, stop, pagina pubblica su GitHub.",
     come: "L'allocatore somma i voti pesati; sopra la soglia di acquisto compra, sotto quella di vendita vende. La gabbia impone peso massimo per titolo, orari dei titoli (le crypto sempre) e il limite di guadagno del giorno; nessun tetto di perdita né interruttore: decidono gli agenti con Kronos.",
     parametri: [
       { chiave: "AGENTS.tickMinutes", etichetta: "Minuti tra un giro e l'altro", descrizione: "Ogni quanto il motore rilegge conto, prezzi e posizioni: uscite, stop, protezione del profitto.", tipo: "intero", min: 1, max: 60 },
@@ -171,6 +171,7 @@ export const AGENT_CARDS: AgentCard[] = [
       { chiave: "AGENTS.custodi.enabled", etichetta: "Attivi", descrizione: "Spenti, niente custodi.", tipo: "bool" },
       { chiave: "AGENTS.custodi.pullbackSmaDays", etichetta: "Media del rientro (giorni)", descrizione: "Vicino a questa media l'ingresso è migliore.", tipo: "intero", min: 5, max: 60 },
       { chiave: "AGENTS.custodi.extendedPct", etichetta: "Esteso oltre la media a 50", descrizione: "Sopra questa distanza si entra solo a taglia ridotta.", tipo: "percento", min: 0.03, max: 0.5 },
+      { chiave: "AGENTS.custodi.minProbabilita", etichetta: "Probabilità minima del dossier per votare l'acquisto", descrizione: "Sotto questa probabilità favorevole il trading agent non vota (è il suo «restare fuori»). Il capo ufficio la alza di un passo se la squadra o il singolo vincono meno del 51%.", tipo: "percento", min: 0.3, max: 0.8 },
       { chiave: "AGENTS.custodi.keepIdleTicks", etichetta: "Giri di attesa prima di lasciare", descrizione: "Dopo tanti giri fuori dai criteri il custode muore.", tipo: "intero", min: 1, max: 200 },
     ],
   },
@@ -212,13 +213,13 @@ export function getPath(chiave: string): unknown {
   for (const k of rest) o = o?.[k];
   return o;
 }
-function setPath(chiave: string, value: unknown) {
+export function setPath(chiave: string, value: unknown) {
   const [root, ...rest] = chiave.split(".");
   let o: any = ROOTS[root!];
   for (const k of rest.slice(0, -1)) o = o[k];
   o[rest[rest.length - 1]!] = value;
 }
-const paramOf = (chiave: string) => AGENT_CARDS.flatMap((c) => c.parametri).find((p) => p.chiave === chiave);
+export const paramOf = (chiave: string) => AGENT_CARDS.flatMap((c) => c.parametri).find((p) => p.chiave === chiave);
 
 // Controlla un valore contro lo schema: tipo e limiti. Restituisce il valore pulito o un errore.
 export function validate(chiave: string, raw: unknown): { ok: true; value: unknown } | { ok: false; errore: string } {

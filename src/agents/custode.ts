@@ -282,6 +282,9 @@ export class CustodiAgent implements Agent {
       const st = this.judge(c, v, held.get(c.simbolo), cands.has(c.simbolo), mine);
       c.dossier = await this.study(c, v, v.closes[c.simbolo], st.livelli.prezzo, st.fase, st.livelli);
       st.dossier = c.dossier;
+      // Sotto la probabilità minima (della squadra o personale, calibrata dal capo ufficio) niente voto d'acquisto.
+      const minP = AGENTS.custodi.minProbabilitaPer?.[c.simbolo] ?? AGENTS.custodi.minProbabilita;
+      if (c.dossier.probabilita < minP) for (let i = mine.length - 1; i >= 0; i--) if (mine[i]!.lato === "buy") mine.splice(i, 1);
       // Il dossier modula la forza del voto d'ingresso (mai le uscite, che sono regole): 50% → invariata, 80% → +30%, 30% → -20%.
       for (const sg of mine) {
         if (sg.lato === "buy") {

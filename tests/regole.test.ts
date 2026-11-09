@@ -112,3 +112,39 @@ describe("regole del primo motore riviste", () => {
     expect(inPerdita.inAttesa[0]!.motivo).toContain("non si media al ribasso");
   });
 });
+
+describe("calibrazione del capo ufficio", () => {
+  test("sotto il 51% di vittorie un agente diventa più selettivo di un passo, mai oltre i limiti; tornato a vincere si riavvicina alla base", async () => {
+    const { aggiornaCalibrazione, applicaCalibrazione } = await import("../src/agents/calibrazione.ts");
+    const { applyAgentSettings } = await import("../src/agent-settings.ts");
+    const dir = mkdtempSync(join(tmpdir(), "cal-"));
+    const t = (i: number, agenti: string[], vinto: boolean, quando = `2026-11-09T10:${String(i).padStart(2, "0")}:00Z`) => ({ id: `t${i}`, simbolo: "ETH/USD", stato: "chiuso", apertoIl: "2026-11-09T09:00:00Z", chiusoIl: quando, comprate: 1, costo: 100, vendute: 1, incassato: vinto ? 101 : 99, quantita: 0, contesto: { setup: "", momentum20: null, volGiornaliera: null, distanzaMedia: null, fiducia: null, attesa: "", perche: "", agenti } }) as any;
+    const j = { ...emptyJournal(), trade: [...Array.from({ length: 6 }, (_, i) => t(i, ["intraday"], i < 2)), ...Array.from({ length: 5 }, (_, i) => t(20 + i, ["custode AAPL"], i < 1))] };
+    applyAgentSettings(dir);
+    const base = AGENTS.intraday.kronos.minProb;
+    const note = aggiornaCalibrazione(dir, j, new Date("2026-11-09T11:00:00Z"));
+    expect(note.some((n) => n.includes("intraday"))).toBe(true);
+    const righe = applicaCalibrazione(dir);
+    expect(AGENTS.intraday.kronos.minProb).toBeCloseTo(base + 0.025, 6);
+    expect(righe.find((r) => r.agente === "intraday")!.passi).toBe(1);
+    // Il trading agent di AAPL (1 su 5) ha la sua soglia personale, sopra quella della squadra (anch'essa salita: 1 su 5).
+    expect(AGENTS.custodi.minProbabilitaPer.AAPL).toBeGreaterThan(AGENTS.custodi.minProbabilita);
+    // Gli stessi trade non contano due volte: senza trade nuovi niente altro passo.
+    expect(aggiornaCalibrazione(dir, j, new Date("2026-11-09T12:00:00Z"))).toEqual([]);
+    // Cinque trade nuovi tutti vinti: un passo indietro, verso la base.
+    j.trade.push(...Array.from({ length: 5 }, (_, i) => t(40 + i, ["intraday"], true, `2026-11-09T13:0${i}:00Z`)));
+    aggiornaCalibrazione(dir, j, new Date("2026-11-09T14:00:00Z"));
+    applyAgentSettings(dir); applicaCalibrazione(dir);
+    expect(AGENTS.intraday.kronos.minProb).toBeCloseTo(base, 6);
+    applyAgentSettings(dir);
+    AGENTS.custodi.minProbabilitaPer = {};
+  });
+});
+
+import { nomeBreve } from "../src/nomi-titoli.ts";
+test("nomi dei titoli: forma breve per la dashboard", () => {
+  expect(nomeBreve("Apple Inc. Common Stock")).toBe("Apple Inc.");
+  expect(nomeBreve("Bitcoin  / US Dollar")).toBe("Bitcoin");
+  expect(nomeBreve("SPDR S&P 500 ETF Trust")).toBe("SPDR S&P 500 ETF Trust");
+  expect(nomeBreve("Alphabet Inc. Class A Common Stock")).toBe("Alphabet Inc.");
+});

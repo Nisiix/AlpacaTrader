@@ -270,6 +270,7 @@ export interface Stats {
   trade: number;
   vinti: number;
   percVinti: number | null;
+  percCapitaleVinti: number | null;
   mediaVincita: number | null;
   mediaPerdita: number | null;
   attesa: number | null; // risultato medio per trade: è questo che dice se il metodo guadagna
@@ -279,7 +280,11 @@ export interface Stats {
 const mean = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
 
 export function statsOf(trades: Trade[]): Stats {
-  const r = trades.filter((t) => t.stato === "chiuso" && t.risultato !== undefined).map((t) => t.risultato!);
+  const chiusi = trades.filter((t) => t.stato === "chiuso" && t.risultato !== undefined);
+  const r = chiusi.map((t) => t.risultato!);
+  // Capitale sui vincenti: la parte del capitale investito nei trade chiusi finita in quelli in guadagno.
+  const capV = chiusi.filter((t) => t.risultato! > 0).reduce((a, t) => a + t.costo, 0);
+  const capT = chiusi.reduce((a, t) => a + t.costo, 0);
   const wins = r.filter((x) => x > 0);
   const losses = r.filter((x) => x <= 0);
   const n = r.length;
@@ -287,6 +292,7 @@ export function statsOf(trades: Trade[]): Stats {
     trade: n,
     vinti: wins.length,
     percVinti: n ? wins.length / n : null,
+    percCapitaleVinti: capT > 0 ? capV / capT : null,
     mediaVincita: mean(wins),
     mediaPerdita: mean(losses),
     attesa: mean(r),

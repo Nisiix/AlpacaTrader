@@ -249,6 +249,6 @@ describe("intraday nel motore vero: candele da 5 minuti, Kronos, ordini", () => 
     const journal: JournalFile = { ...emptyJournal(), trade: Array.from({ length: 10 }, (_, i) => chiuso(i, i < 3)) };
     const v = { today: "2026-09-27", now, prices: { "BTC/USD": 76_000 }, closes: { "BTC/USD": syntheticCloses(76_000, 0.02, 260) }, indicators: {}, positions: [], account: { equity: 100_000, lastEquity: 100_000, cash: 100_000, status: "ACTIVE" }, journal, mercatoAperto: false } as unknown as AgentView;
     const r = await new IntradayAgent(async (syms) => Object.fromEntries(syms.map((x) => [x, bars])), async (b, step, h) => Object.fromEntries(Object.keys(b).map((x) => [x, Array.from({ length: h }, (_, i) => (step === 5 ? Math.min(0.015, 0.005 * (i + 1)) : 0))]))).observe(v);
-    expect(r.note.some((n) => n.includes("candele 5Min: 3 vinti su 10 (30%)") && n.includes("+10 punti"))).toBe(true);
+    expect((r.note ?? []).some((n) => n.includes("candele 5Min: 3 vinti su 10 (30%)") && n.includes("+10 punti"))).toBe(true);
   });
 });

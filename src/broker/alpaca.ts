@@ -174,6 +174,11 @@ export class AlpacaBroker implements Broker {
       .sort();
   }
 
+  async getAssetName(symbol: string): Promise<string | null> {
+    const a = await this.request(this.baseUrl, `/v2/assets/${encodeURIComponent(symbol.replace("/", ""))}`);
+    return typeof a?.name === "string" && a.name.trim() ? a.name.trim() : null;
+  }
+
   async getPortfolioHistory(start: string, end: string, timeframe: string): Promise<{ t: string; equity: number; pnl: number }[]> {
     // intraday_reporting=continuous: anche fuori orario (crypto 24 ore su 24); pnl_reset=no_reset: guadagno dall'inizio del periodo.
     const q = `timeframe=${encodeURIComponent(timeframe)}&start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}&intraday_reporting=continuous&pnl_reset=no_reset`;

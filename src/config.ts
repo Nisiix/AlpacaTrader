@@ -226,7 +226,12 @@ export const AGENTS = {
   // Custodi: un agente per ogni crypto in portafoglio o tra le migliori candidate; ognuno segue il suo titolo
   // con tesi, piano e rischio dichiarati, dentro le stesse regole del motore.
   // Custodi senza numero fisso: uno per ogni titolo o crypto in trend (maxCandidates è solo una sicurezza).
-  custodi: { enabled: true, maxCandidates: 100, pullbackSmaDays: 20, extendedPct: 0.15, keepIdleTicks: 12 },
+  // minProbabilita: sotto questa probabilità favorevole del dossier il trading agent non vota l'acquisto (è il suo stesso
+  // consiglio «restare fuori»); il capo ufficio può alzarla per la squadra e per il singolo (minProbabilitaPer).
+  custodi: { enabled: true, maxCandidates: 100, pullbackSmaDays: 20, extendedPct: 0.15, keepIdleTicks: 12, minProbabilita: 0.45, minProbabilitaPer: {} as Record<string, number> },
+  // Calibrazione del capo ufficio (src/agents/calibrazione.ts): sotto `obiettivo` di vittorie su almeno `minTrade` trade
+  // chiusi un agente diventa più selettivo di un passo (al massimo `maxPassi`); da `buono` in su torna di un passo.
+  calibrazione: { enabled: true, minTrade: 5, obiettivo: 0.51, buono: 0.6, maxPassi: 4 },
   // Evidenza combinata del dossier (Kronos, grafico, notizie, contesto) minima per un ingresso nuovo di più giorni:
   // sopra la media a 200 e, più alta, sotto la 200 (contro tendenza).
   evidenza: { min: 0.5, minContro: 0.6 },
