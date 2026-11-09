@@ -888,7 +888,18 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
         // A borsa chiusa si toccano solo gli stop delle crypto; quelli dei titoli restano com'erano.
         const manageable = equitiesOpen ? positions : positions.filter((p) => isCrypto(p.symbol));
         const relevantOpen = equitiesOpen ? open : open.filter((o) => isCrypto(o.symbol));
-        stops = await manageStops(deps.broker, giro, manageable, relevantOpen, log, closes, AGENTS.exit.enabled && AGENTS.exit.stopMode === "fisso" ? AGENTS.exit.stopPct : undefined, deps.now());
+        // Operazioni intraday: su Alpaca lo stop dell'operazione (quello che l'agente segue, anche dopo pareggio e rialzi),
+        // non quello largo dei più giorni. Prima dallo stato dell'agente in questo giro, poi dai livelli salvati nel diario
+        // (se l'agente non ha risposto); le operazioni promosse a più giorni restano con lo stop dei più giorni.
+        const stopIntraday: Record<string, number> = {};
+        if (AGENTS.intraday.stopSuAlpaca) {
+          for (const t of journal.trade) if (t.stato === "aperto" && t.contesto?.agenti?.includes("intraday") && !t.contesto.promossa && t.contesto.livelli?.stop) stopIntraday[t.simbolo] = t.contesto.livelli.stop;
+          for (const x of Object.values(reports).flatMap((r) => r.intraday ?? [])) {
+            const st = x.fase === "in posizione" ? x.stop : x.livelli?.stop;
+            if (st && st > 0 && !journal.trade.some((t) => t.simbolo === x.simbolo && t.stato === "aperto" && t.contesto?.promossa)) stopIntraday[x.simbolo] = st;
+          }
+        }
+        stops = await manageStops(deps.broker, giro, manageable, relevantOpen, log, closes, AGENTS.exit.enabled && AGENTS.exit.stopMode === "fisso" ? AGENTS.exit.stopPct : undefined, deps.now(), stopIntraday);
       } catch (e) {
         stops = { ok: [], placed: [], cancelled: [], errors: [`Alpaca non risponde: ${(e as Error).message}`] };
       }

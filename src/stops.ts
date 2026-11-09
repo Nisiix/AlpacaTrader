@@ -50,11 +50,14 @@ const frazioneRifiutata = new Map<string, string>();
 export const azzeraRifiutiFrazioni = () => frazioneRifiutata.clear();
 
 const stessaQty = (a: number, b: number) => Math.abs(a - b) < 1e-9;
-const descr = (p: Position, parte: ParteStop, prezzo: number) => `${p.symbol} ${nove(parte.qty)}${parte.giornaliero ? " (frazione, stop day)" : ""} @ ${prezzoStringa(p.symbol, prezzo)}`;
+const descr = (p: Position, parte: ParteStop, prezzo: number, intraday = false) => `${p.symbol} ${nove(parte.qty)}${parte.giornaliero ? " (frazione, stop day)" : ""} @ ${prezzoStringa(p.symbol, prezzo)}${intraday ? " (stop intraday)" : ""}`;
 
 // Ogni posizione ha i suoi stop su Alpaca, per tutta la quantità (in una o due parti, vedi partiStop), alla distanza di
 // stopPctFor. Così la protezione vale anche tra un giro e l'altro e a macchina spenta.
-export async function manageStops(broker: Broker, runId: string, positions: Position[], openOrders: Order[], log: Logger, closes: Record<string, number[]> = {}, fixedPct?: number, now: Date = new Date()): Promise<StopsReport> {
+// `stopIntraday`: per le operazioni intraday il prezzo dello stop deciso dall'agente (anche dopo pareggio e rialzi): su
+// Alpaca va quello, non lo stop largo dei più giorni, così la protezione vera vale anche a PC spento. Si usa solo se sta
+// sotto il prezzo di adesso (se il prezzo è già sotto, l'agente vende in questo giro).
+export async function manageStops(broker: Broker, runId: string, positions: Position[], openOrders: Order[], log: Logger, closes: Record<string, number[]> = {}, fixedPct?: number, now: Date = new Date(), stopIntraday: Record<string, number> = {}): Promise<StopsReport> {
   const r: StopsReport = { ok: [], placed: [], cancelled: [], errors: [] };
   const oggi = now.toISOString().slice(0, 10);
   const stops = openOrders.filter(isProtectiveStop);
@@ -68,9 +71,11 @@ export async function manageStops(broker: Broker, runId: string, positions: Posi
     if (nota) r.ok.push(`${p.symbol} ${nove(p.qty)}: ${nota}`);
     // Senza storico la distanza non si può ricalcolare: gli stop già giusti per quantità restano dove sono, e una parte
     // mancante (la frazione scaduta ieri) si rimette allo stesso prezzo delle intere.
+    const fisso = stopIntraday[p.symbol];
+    const intraday = fisso !== undefined && fisso > 0 && (!(p.currentPrice > 0) || fisso < p.currentPrice * 0.999);
     const prezzoEsistente = existing.find((o) => o.stopPrice && parti.some((pt) => stessaQty(o.qty, pt.qty)))?.stopPrice ?? null;
-    const senzaStorico = fixedPct === undefined && !closes[p.symbol] && prezzoEsistente !== null;
-    const want = senzaStorico ? prezzoEsistente! : stopPriceFor(p, closes[p.symbol], fixedPct);
+    const senzaStorico = !intraday && fixedPct === undefined && !closes[p.symbol] && prezzoEsistente !== null;
+    const want = intraday ? arrotondaPrezzo(p.symbol, fisso) : senzaStorico ? prezzoEsistente! : stopPriceFor(p, closes[p.symbol], fixedPct);
     // Ogni parte tiene lo stop che c'è già se ha la stessa quantità, lo stesso prezzo (entro un millesimo o un centesimo;
     // senza storico qualunque prezzo) e la durata giusta (le intere non su uno stop «day»).
     const usati = new Set<string>();
@@ -79,7 +84,7 @@ export async function manageStops(broker: Broker, runId: string, positions: Posi
       const o = existing.find((x) => !usati.has(x.id) && stessaQty(x.qty, parte.qty) && (senzaStorico || Math.abs((x.stopPrice ?? 0) - want) < Math.min(0.01, want * 0.001)) && (parte.giornaliero || x.tif !== "day"));
       if (o) {
         usati.add(o.id);
-        r.ok.push(`${descr(p, parte, o.stopPrice ?? want)}${senzaStorico ? " (storico non disponibile: stop lasciato com'era)" : ""}`);
+        r.ok.push(`${descr(p, parte, o.stopPrice ?? want, intraday)}${senzaStorico ? " (storico non disponibile: stop lasciato com'era)" : ""}`);
       } else mancanti.push(parte);
     }
     const daTogliere = existing.filter((o) => !usati.has(o.id));
@@ -98,8 +103,8 @@ export async function manageStops(broker: Broker, runId: string, positions: Posi
         }
         try {
           await placeStop(broker, runId, p.symbol, parte.qty, want, parte.giornaliero);
-          r.placed.push(descr(p, parte, want));
-          log.info(`stop su Alpaca: ${descr(p, parte, want)}`);
+          r.placed.push(descr(p, parte, want, intraday));
+          log.info(`stop su Alpaca: ${descr(p, parte, want, intraday)}`);
         } catch (e) {
           // Uno stop sulla frazione rifiutato in modo definitivo (non un errore di rete): non si riprova fino a domani e
           // non è un allarme; le intere restano coperte dal loro stop GTC.

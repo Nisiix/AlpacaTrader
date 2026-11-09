@@ -938,6 +938,8 @@ describe("contesto economico", () => {
   });
 
   test("lettura esterna (claude) peggiora ma non migliora le regole; cache rispettata; l'allocatore non apre sui titoli in attesa", async () => {
+    // L'universo crypto lo lasciano altri test: qui serve BTC (in ordine casuale a volte mancava).
+    setCryptoUniverse(["BTC/USD", "ETH/USD"]);
     let calls = 0;
     const runner = async () => {
       calls++;

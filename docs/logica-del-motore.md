@@ -261,6 +261,19 @@ sedute, uscita di trend) non riguardano questi trade.
   stop minimo (0,4% azioni, 1% crypto) e quello dell'ATR; con questo stop decide l'aspettativa (Thorp), non il rapporto
   fisso 1,2. Senza percorsi vale l'ATR, che ora non conta il salto tra una seduta e l'altra (prima gonfiava lo stop
   delle candele da 1 ora delle azioni: NVDA −2,56%).
+- **Candele che non rendono**: con almeno 300 previsioni e una resa media (seguendo Kronos, lorda dei costi) ≤ 0 la
+  candela non si usa nemmeno se indovina la direzione più di metà delle volte. Esempio: le 15 minuti, giuste il 51% su
+  1.085 ma con resa −0,06% (`intraday.vantaggio.minResa`). Oggi Kronos rende sulle 1 ora (+0,44%) e sulle 4 ore (+0,71%).
+- **Crypto** (`intraday.crypto`): andata e ritorno costa lo 0,4%, più del vantaggio di Kronos sulle candele brevi. Si
+  entra sulle 1 e 4 ore con il solito doppio dei costi; sulle 5 e 15 minuti solo con un rialzo previsto di almeno 3
+  volte i costi (1,2%). Le crypto si muovono insieme: al massimo **2 ingressi crypto nuovi a giro** (prima i più
+  probabili) e **3 operazioni crypto intraday aperte** insieme. Nella prova sullo storico 7 crypto entrate nello stesso
+  giro sono uscite tutte allo stop.
+- **Stop su Alpaca al livello dell'operazione** (`intraday.stopSuAlpaca`): per le operazioni intraday lo stop su Alpaca
+  è quello che l'agente segue (−0,4%, poi pareggio e rialzi), non quello largo dei più giorni (−5/−10%): a PC spento la
+  perdita si ferma dove deve. Se il prezzo è già sotto lo stop dell'operazione (l'agente vende in quel giro) resta lo
+  stop normale; un'operazione promossa a più giorni torna allo stop dei più giorni. Uno stop su Alpaca scatta anche su
+  un calo di pochi secondi tra un giro e l'altro: è la protezione vera, non quella vista ogni 5 minuti.
 - **Meno titoli, più qualità** (`intraday.selezione`): una coppia titolo-candela si proietta solo se il prezzo si muove
   abbastanza da coprire due volte i costi sull'orizzonte più lungo (es. BTC a 5 minuti no: ±0,5% in un'ora contro lo
   0,8% che serve); poi per ogni candela al massimo 8 (5 min), 10 (15 min), 16 (1 ora) proiezioni nuove a giro, prima

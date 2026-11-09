@@ -391,11 +391,23 @@ export const AGENTS = {
     // coppie a giro) per misurarla, e torna utilizzabile appena il vantaggio compare.
     // Anche con almeno minCampioneContro previsioni e direzione giusta sotto minGiusti (peggio di una moneta) la candela non
     // si usa: né per entrare né come candela superiore che conferma o blocca (es. 4 ore: giusta il 41% su 44).
-    vantaggio: { minCampione: 300, minFattore: 0.25, misuraPerGiro: 6, minCampioneContro: 40, minGiusti: 0.5 },
+    // Con almeno minCampione previsioni e una resa media (seguendo il segno di Kronos, lorda dei costi) ≤ minResa la
+    // candela non si usa neanche se la direzione è giusta più della metà delle volte: indovinare i movimenti piccoli e
+    // sbagliare quelli grandi non rende.
+    vantaggio: { minCampione: 300, minFattore: 0.25, misuraPerGiro: 6, minCampioneContro: 40, minGiusti: 0.5, minResa: 0 },
     // Le informazioni del dossier (Kronos a 5 sedute, grafico giornaliero, notizie e post, contesto con Fear & Greed e
     // funding) o, senza dossier, il contesto del settore pesano `peso` nella probabilità con cui si decide l'ingresso
     // (il resto è Kronos sulle candele): una parte minima, che sposta solo i casi al limite.
     evidenza: { peso: 0.15 },
+    // Crypto intraday. I costi di andata e ritorno (0,4%) sono più grandi del vantaggio misurato di Kronos sulle candele
+    // brevi: si entra sulle `candele` (1 e 4 ore) come per le azioni; sulle 5 e 15 minuti solo con un rialzo previsto di
+    // almeno rialzoCosti volte i costi. Le crypto si muovono insieme: al massimo maxIngressiGiro ingressi crypto nuovi a
+    // giro (prima i più probabili) e maxAperte operazioni crypto intraday aperte insieme, se no è una scommessa sola
+    // ripetuta (nella prova sullo storico 7 crypto entrate nello stesso giro e uscite tutte allo stop).
+    crypto: { candele: ["1Hour", "4Hour"] as string[], rialzoCosti: 3, maxIngressiGiro: 2, maxAperte: 3 },
+    // Stop su Alpaca delle operazioni intraday al loro livello (quello che l'agente segue: −0,4%, pareggio, rialzi), non a
+    // quello largo dei più giorni (−5/−10%): a PC spento o tra un giro e l'altro la perdita si ferma dove deve.
+    stopSuAlpaca: true,
     // Più ingressi sullo stesso titolo nello stesso giorno: dopo un'operazione chiusa in guadagno si può rientrare, al
     // massimo `max` volte al giorno; dopo una chiusa in perdita no, fino a domani.
     ingressiGiorno: { max: 3 },

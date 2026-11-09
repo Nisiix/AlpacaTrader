@@ -25,8 +25,9 @@ function salita(fine: number, finoA: Date, n = 120, passo = 300_000, osc = 0.003
 
 const now = new Date("2026-09-27T21:00:00+02:00"); // domenica sera: solo crypto
 const vista = (prezzo = 76_000) => ({ today: "2026-09-27", now, prices: { "BTC/USD": prezzo }, closes: { "BTC/USD": syntheticCloses(prezzo, 0.02, 260) }, indicators: {}, positions: [], account: { equity: 100_000, lastEquity: 100_000, cash: 100_000, status: "ACTIVE" }, journal: emptyJournal(), mercatoAperto: false }) as unknown as AgentView;
-// `su` percorsi su 16 salgono a +1,5% (+0,5% a candela), gli altri scendono piano (−0,1% a candela).
-const percorsi = (h: number, su: number) => Array.from({ length: 16 }, (_, j) => Array.from({ length: h }, (_, i) => (j < su ? Math.min(0.015, 0.005 * (i + 1)) : -0.001 * (i + 1))));
+// `su` percorsi su 16 salgono a +2,1% (+0,7% a candela), gli altri scendono piano (−0,1% a candela). Con 12 su 16 la
+// media a 15 minuti è +1,5%: sopra il rialzo minimo delle crypto sulle candele brevi (3 volte i costi, 1,2%).
+const percorsi = (h: number, su: number) => Array.from({ length: 16 }, (_, j) => Array.from({ length: h }, (_, i) => (j < su ? Math.min(0.021, 0.007 * (i + 1)) : -0.001 * (i + 1))));
 const media = (cs: number[][]) => cs[0]!.map((_, i) => cs.reduce((a, r) => a + r[i]!, 0) / cs.length);
 
 describe("Kronos a percorsi: probabilità, stop, candele senza vantaggio, selezione", () => {
@@ -62,7 +63,7 @@ describe("Kronos a percorsi: probabilità, stop, candele senza vantaggio, selezi
     const fetch = async (syms: string[]) => Object.fromEntries(syms.map((x) => [x, bars]));
     // 12 percorsi su 16 salgono senza scendere, 4 scendono dell'1,2%: lo stop è quello dei peggiori (1,2%), tra il minimo
     // delle crypto (1%) e quello dell'ATR (più largo).
-    const cs = (h: number) => Array.from({ length: 16 }, (_, j) => Array.from({ length: h }, (_, i) => (j < 12 ? Math.min(0.02, 0.006 * (i + 1)) : -Math.min(0.012, 0.004 * (i + 1)))));
+    const cs = (h: number) => Array.from({ length: 16 }, (_, j) => Array.from({ length: h }, (_, i) => (j < 12 ? Math.min(0.027, 0.009 * (i + 1)) : -Math.min(0.012, 0.004 * (i + 1)))));
     const a = new IntradayAgent(fetch, async (b, step, h) => Object.fromEntries(Object.keys(b).map((x) => [x, step === 5 ? { path: media(cs(h)), campioni: cs(h) } : { path: Array.from({ length: h }, () => 0) }])), () => ({ fattore: 1, quota: 0.55, campione: 0 }));
     const r = await a.observe(vista());
     const buy = r.segnali.find((x) => x.lato === "buy")!;
