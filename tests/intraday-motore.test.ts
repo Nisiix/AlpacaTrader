@@ -100,7 +100,7 @@ describe("intraday nel motore vero: candele da 5 minuti, Kronos, ordini", () => 
     expect(r2.segnali.find((x) => x.lato === "sell")!.perche).toContain("durata massima");
   });
 
-  test("medie brevi non ancora in ordine: decide Kronos da solo, con probabilità più alta e metà taglia", async () => {
+  test("medie brevi non ancora in ordine: decide Kronos da solo, con probabilità più alta e taglia dal rischio", async () => {
     setCryptoUniverse(["BTC/USD"]);
     const now = new Date("2026-09-27T21:00:00+02:00");
     // Candele in leggera discesa con oscillazioni: EMA 9 sotto EMA 20, nessuna rottura né rientro.
@@ -116,7 +116,11 @@ describe("intraday nel motore vero: candele da 5 minuti, Kronos, ordini", () => 
     const forte = await con(0.015).observe(v);
     const buy = forte.segnali.find((x) => x.lato === "buy")!;
     expect(buy.perche).toContain("Kronos anticipa la ripartenza sulle candele 5Min");
-    expect(buy.pesoMassimo!).toBeLessThanOrEqual(AGENTS.intraday.maxWeight / 2 + 1e-9);
+    // Le medie brevi non in ordine alzano la soglia (minProbSenzaGrafico) ma non dimezzano più la taglia: decide il rischio,
+    // con il pavimento.
+    expect(buy.perche).toContain("medie brevi delle candele 5Min non ancora in ordine");
+    expect(buy.pesoMassimo!).toBeLessThanOrEqual(AGENTS.intraday.maxWeight + 1e-9);
+    expect(buy.pesoMassimo!).toBeGreaterThanOrEqual(AGENTS.intraday.maxWeight * AGENTS.intraday.taglia.pavimento - 1e-9);
     const debole = await con(0.006).observe(v); // +0,6%: non copre 2 volte i costi crypto (0,8%)
     expect(debole.segnali.filter((x) => x.lato === "buy")).toEqual([]);
     expect(debole.intraday!.find((x) => x.simbolo === "BTC/USD")!.motivo).toContain("non basta");

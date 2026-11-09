@@ -414,6 +414,10 @@ export const AGENTS = {
     // giro (prima i più probabili) e maxAperte operazioni crypto intraday aperte insieme, se no è una scommessa sola
     // ripetuta (nella prova sullo storico 7 crypto entrate nello stesso giro e uscite tutte allo stop).
     crypto: { candele: ["1Hour", "4Hour"] as string[], rialzoCosti: 3, maxIngressiGiro: 2, maxAperte: 3 },
+    // Taglia intraday: gli indizi contrari tolgono penalitaIndizio di probabilità ciascuno (non dimezzano la taglia); i
+    // fattori di rischio della taglia (fiducia, medie, stop, serie di perdite) non la portano sotto `pavimento` della
+    // taglia massima.
+    taglia: { pavimento: 0.3, penalitaIndizio: 0.02 },
     // Stop su Alpaca delle operazioni intraday al loro livello (quello che l'agente segue: −0,4%, pareggio, rialzi), non a
     // quello largo dei più giorni (−5/−10%): a PC spento o tra un giro e l'altro la perdita si ferma dove deve.
     stopSuAlpaca: true,

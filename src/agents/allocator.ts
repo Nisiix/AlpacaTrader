@@ -249,7 +249,9 @@ export function allocate(view: AgentView, reports: Record<string, AgentReport>, 
     let w = maxWeightFor(view.closes[sc.simbolo]).max * rischioDi(sc.simbolo, !(kronosSu(sc.simbolo) || sc.intraday)) * (AGENTS.scaleByScore ? Math.min(1, sc.punteggio) : 1);
     if (sc.pesoMassimo !== undefined) w = Math.min(w, sc.pesoMassimo);
     // Taglia proporzionale alla fiducia nella proiezione di Kronos: più è probabile che il rialzo si avveri, più si investe.
-    if (AGENTS.sizing.byKronos) {
+    // Solo per i trade di più giorni: un trade intraday ha già la sua taglia dalla probabilità sulle candele (Kronos a 5
+    // sedute non c'entra: prima lo riduceva fino a ×0,4).
+    if (AGENTS.sizing.byKronos && !sc.intraday) {
       const f = kronosConfidence(view, sc.simbolo);
       sc.fiducia = f.p;
       w *= f.factor;

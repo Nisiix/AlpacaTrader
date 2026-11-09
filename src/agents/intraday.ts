@@ -837,12 +837,24 @@ export class IntradayAgent implements Agent {
       // Il grafico giornaliero lo pesa la scaletta delle medie (sotto); qui solo le candele superiori intraday.
       if (up !== "1Day" && eUp !== null && price < eUp && !trend) correttivi.push(`grafico ${up === "1Day" ? "giornaliero" : `a ${up}`} sotto la sua media a 20`);
       if (this.forecast && fc !== undefined && fc <= -AGENTS.kronos.anticipaSoglia) correttivi.push(`Kronos a ${AGENTS.kronos.horizon} sedute ${pct(fc)}`);
+      // Indizi contrari (grafico superiore sotto la sua media, Kronos a 5 sedute al ribasso): sono informazioni sulla
+      // direzione, quindi tolgono punti di probabilità (taglia.penalitaIndizio ciascuno) invece di dimezzare la taglia. Se
+      // con gli indizi la probabilità scende sotto la soglia non si entra, con il motivo; se resta sopra, si entra con la
+      // taglia del rischio. «Medie brevi non in ordine» è già nella soglia più alta (minProbSenzaGrafico): non conta due volte.
+      const indizi = correttivi.filter((x) => !/medie brevi/.test(x));
+      const penalita = indizi.length * c.taglia.penalitaIndizio;
+      const prA = pr === null ? null : pr - penalita;
+      const sogliaQui = sogliaDi(s, best.breve || read.entra) + extraVittorie(tf);
+      if (penalita > 0 && prA !== null && prA < sogliaQui) {
+        stati.push({ simbolo: s, candela: tf, fase: "cerca ingresso", ingresso: null, obiettivo: null, stop: null, prezzo: price, motivo: `indizi contrari (${indizi.join(" e ")}): la probabilità scende da ${Math.round(pr! * 100)}% a ${Math.round(prA * 100)}%, sotto la soglia del ${Math.round(sogliaQui * 100)}% · probabilità netta per candela: ${valutate}` });
+        continue;
+      }
       // Obiettivo: il rialzo che Kronos prevede sull'orizzonte scelto (trade di pochi minuti su candele da 5 minuti, di ore
       // su quelle più lunghe), mai sotto il minimo dei costi; senza Kronos quello dell'ATR.
       // Con Kronos l'obiettivo è il rialzo previsto (mai sotto due volte i costi); senza, il minimo fisso o l'ATR.
       const targetPct = k !== undefined ? Math.max(costoDi(s), k) : read.targetPct;
       // Aspettativa (Thorp): probabilità × guadagno netto − (1 − probabilità) × perdita allo stop (costi compresi) > 0.
-      const pE = trend ? trend.pr : pr;
+      const pE = trend ? trend.pr - penalita : prA;
       const gE = (trend ? trend.k : targetPct) - costoVero(s);
       const aspettativa = pE === null ? null : pE * gE - (1 - pE) * (stopPct + costoVero(s));
       if (aspettativa !== null && aspettativa <= 0) {
@@ -859,17 +871,21 @@ export class IntradayAgent implements Agent {
       // I livelli si tengono da subito; il blocco "un ingresso al giorno" scatta solo a ordine eseguito (dal diario): se
       // l'allocatore o la gabbia scartano il voto, il titolo resta candidato al giro dopo.
       this.operazioni.set(s, { simbolo: s, candela: tf, giorno: v.today, ingresso: price, obiettivo: target, stop, aperta: v.now.toISOString(), sopraMedia: read.ema20 !== null && price > read.ema20, ...(h !== undefined && k !== undefined ? { orizzonteMin: h } : {}), ...(trend ? { sostegno: { tf: trend.tf, obiettivo: obiettivoTrend!, orizzonteMin: trend.h } } : {}) });
-      // Taglia: la fiducia in Kronos intraday la scala (al minimo metà, dal 70% piena); ogni correttivo la dimezza; uno stop
-      // più largo (trade di trend) la riduce in proporzione; una serie di perdite di oggi la riduce ancora.
+      // Taglia, dal rischio: la fiducia (probabilità con gli indizi, da metà a piena dal 70%), la scaletta delle medie
+      // giornaliere, uno stop più largo (trade di trend: stesso rischio in euro) e una serie di perdite di oggi. Il prodotto
+      // non scende sotto taglia.pavimento della taglia massima: un trade che ha passato soglia, aspettativa e controlli
+      // si fa con una taglia vera. Prima 5-6 riduzioni in fila lo portavano allo 0,2-0,5% del conto e il minimo d'ordine lo
+      // scartava (SHEL 67%, SAP 63%, POL 74%: 2-5 $).
       // Soglia e peso sono quelli dell'intraday agent che lavora sul titolo (il suo profilo), altrimenti di serie.
       const minProb = valore("AGENTS.intraday.kronos.minProb", s);
-      const fid = pr === null ? 1 : Math.max(0.5, Math.min(1, 0.5 + ((pr - minProb) / Math.max(0.05, 0.7 - minProb)) * 0.5));
+      const fid = prA === null ? 1 : Math.max(0.5, Math.min(1, 0.5 + ((prA - minProb) / Math.max(0.05, 0.7 - minProb)) * 0.5));
       const pru = prudenza(s);
-      const peso = valore("AGENTS.intraday.maxWeight", s) * fid * pru.f * Math.pow(0.5, correttivi.length) * Math.min(1, stopIn / stopPct) * (inSerie ? c.serieNegativa.fattore : 1);
+      const fattoriTaglia = fid * pru.f * Math.min(1, stopIn / stopPct) * (inSerie ? c.serieNegativa.fattore : 1);
+      const peso = valore("AGENTS.intraday.maxWeight", s) * Math.max(c.taglia.pavimento, fattoriTaglia);
       const ingresso = `${rimbalzi.has(s) ? `${fmtCalo(s)}: ` : ""}${read.entra ? read.pattern : best.breve ? `medie brevi in ordine sulle candele ${tf} (prezzo sopra EMA 9 sopra EMA 20)` : `Kronos anticipa la ripartenza sulle candele ${tf} prima delle medie brevi`}`;
       const superiori = sup.letti.length ? `candele superiori: ${sup.letti.join(", ")}` : "";
       const tipo = trend ? `; trade di trend: le candele ${trend.tf} vedono ${pct(trend.k)} in ${etichetta(trend.h)} (probabilità ${Math.round(trend.pr * 100)}%), obiettivo finale ${num(obiettivoTrend!)}, stop della candela ${trend.tf}` : superiori ? "; trade breve: le candele superiori non sono contrarie ma non vedono un rialzo netto" : "";
-      segnali.push({ agente: this.name, simbolo: s, lato: "buy", forza: 1, orizzonteSedute: 1, intraday: true, pesoMassimo: peso, ...(best.prGrezza !== null && best.prGrezza !== undefined ? { misure: { probabilita: best.prGrezza, ...(rimbalzi.has(s) ? { rimbalzo: rimbalzi.get(s)!.calo } : {}), ...(livMedie(s) >= 0 ? { medie: livMedie(s) } : {}) } } : {}), ...(k !== undefined ? {} : fc !== undefined ? { kronos: fc } : {}), perche: `${s} intraday su candele ${tf}${valutate ? ` (scelta per probabilità netta dei costi: ${valutate})` : ""}: ${ingresso}${k !== undefined ? `; Kronos a ${etichetta(h!)} sulle candele ${tf} ${pct(k)} (probabilità ${Math.round((pr ?? 0) * 100)}%)` : fc !== undefined ? `; Kronos ${pct(fc)} a ${AGENTS.kronos.horizon} sedute` : ""}${superiori ? `; ${superiori}` : ""}${tipo}${pru.f < 1 ? `; ${pru.etichetta}: taglia ×${pru.f}` : ""}${correttivi.length ? `; in parte contrari: ${correttivi.join(" e ")}, taglia ridotta` : ""}${inSerie ? `; dopo ${perditeDiFila} perdite di fila, taglia ridotta` : ""}; obiettivo ${num(target)} (${pct(targetPct)}${k !== undefined ? `, da Kronos in ${etichetta(h!)}` : ""}), stop ${num(stop)} (${pct(-stopPct)}), poi controllo su candele ${controlloDi(s, tf)}, chiusura ${chiusuraDi(s)}` });
+      segnali.push({ agente: this.name, simbolo: s, lato: "buy", forza: 1, orizzonteSedute: 1, intraday: true, pesoMassimo: peso, ...(best.prGrezza !== null && best.prGrezza !== undefined ? { misure: { probabilita: best.prGrezza, ...(rimbalzi.has(s) ? { rimbalzo: rimbalzi.get(s)!.calo } : {}), ...(livMedie(s) >= 0 ? { medie: livMedie(s) } : {}) } } : {}), ...(k !== undefined ? {} : fc !== undefined ? { kronos: fc } : {}), perche: `${s} intraday su candele ${tf}${valutate ? ` (scelta per probabilità netta dei costi: ${valutate})` : ""}: ${ingresso}${k !== undefined ? `; Kronos a ${etichetta(h!)} sulle candele ${tf} ${pct(k)} (probabilità ${Math.round((pr ?? 0) * 100)}%)` : fc !== undefined ? `; Kronos ${pct(fc)} a ${AGENTS.kronos.horizon} sedute` : ""}${superiori ? `; ${superiori}` : ""}${tipo}${pru.f < 1 ? `; ${pru.etichetta}: taglia ×${pru.f}` : ""}${indizi.length ? `; indizi contrari: ${indizi.join(" e ")} (−${Math.round(penalita * 100)} punti di probabilità, ${Math.round(prA! * 100)}%)` : ""}${correttivi.length > indizi.length ? `; ${correttivi.find((x) => /medie brevi/.test(x))}` : ""}${fattoriTaglia < c.taglia.pavimento ? `; taglia al pavimento (${Math.round(c.taglia.pavimento * 100)}% della massima)` : ""}${inSerie ? `; dopo ${perditeDiFila} perdite di fila, taglia ridotta` : ""}; obiettivo ${num(target)} (${pct(targetPct)}${k !== undefined ? `, da Kronos in ${etichetta(h!)}` : ""}), stop ${num(stop)} (${pct(-stopPct)}), poi controllo su candele ${controlloDi(s, tf)}, chiusura ${chiusuraDi(s)}` });
       const opNuova = this.operazioni.get(s)!;
       stati.push({ simbolo: s, candela: tf, livelli: { candela: tf, previsione: `${tf}|${barsOf(s, tf)!.at(-1)!.t}`, obiettivo: opNuova.obiettivo, stop: opNuova.stop, ...(opNuova.orizzonteMin !== undefined ? { orizzonteMin: opNuova.orizzonteMin } : {}), sopraMedia: !!opNuova.sopraMedia, ...(opNuova.sostegno ? { sostegno: opNuova.sostegno } : {}) }, ...(h !== undefined && k !== undefined ? { orizzonte: etichetta(trend ? trend.h : h) } : {}), controllo: [`poi candele ${controlloDi(s, tf)}`, superiori].filter(Boolean).join(" · "), fase: "cerca ingresso", ingresso: price, obiettivo: obiettivoTrend ?? target, stop, prezzo: price, motivo: `ingresso votato: ${ingresso}${trend ? ` · trade di trend sulle candele ${trend.tf}` : ""}${valutate ? ` · probabilità netta per candela: ${valutate}` : ""}` });
     }

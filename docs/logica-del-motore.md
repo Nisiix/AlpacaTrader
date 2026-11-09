@@ -426,9 +426,14 @@ rimasto (azioni fino a 30 minuti dalla chiusura vera; crypto entro la durata mas
    l'obiettivo vale almeno **1,2 volte lo stop**.
 6. **Aspettativa positiva (Thorp)**: probabilità × guadagno netto − (1 − probabilità) × perdita allo stop (costi
    compresi) deve essere maggiore di zero.
-7. **Taglia**: 10% del conto × fiducia (55% → metà, 70% → piena); il grafico della candela superiore sotto la sua media
-   (se non è un trade di trend) e il Kronos a 5 sedute contrario la dimezzano ciascuno; uno stop più largo la riduce in
-   proporzione; dopo **3 operazioni intraday in perdita di fila** nella giornata, ancora × 0,5. Il richiamo del capo
+7. **Indizi contrari e taglia**: il grafico della candela superiore sotto la sua media (se non è un trade di trend) e il
+   Kronos a 5 sedute contrario sono **indizi sulla direzione**: tolgono 2 punti di probabilità ciascuno
+   (`intraday.taglia.penalitaIndizio`); se la probabilità scende sotto la soglia non si entra, con il motivo. La
+   **taglia** viene dal rischio: 10% del conto × fiducia (55% → metà, 70% → piena) × scaletta delle medie × stop più largo
+   (trade di trend) × dopo **3 operazioni intraday in perdita di fila** ancora 0,5; il prodotto non scende sotto il **30%
+   della taglia massima** (`intraday.taglia.pavimento`). Prima ogni indizio dimezzava la taglia e 5-6 riduzioni in fila
+   portavano un trade buono allo 0,2-0,5% del conto, sotto il minimo d'ordine (SHEL 67%, SAP 63%, POL 74%: 2-5 $). Kronos
+   a 5 sedute non riduce più la taglia dei trade intraday nell'allocatore (vale solo per quelli di più giorni). Il richiamo del capo
    (×0,6) e la prudenza della sala caffè (×0,85) riducono la **taglia**, non la forza del voto: l'ingresso resta deciso
    da Kronos.
 

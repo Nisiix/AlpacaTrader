@@ -744,7 +744,7 @@ describe("intraday", () => {
     expect(r6.segnali.filter((x) => x.simbolo === "NVDA")).toEqual([]);
   });
 
-  test("con Kronos intraday decide la proiezione sulle candele brevi, non la media a 200; grafico più lungo e Kronos a 5 sedute pesano solo sulla taglia", async () => {
+  test("con Kronos intraday decide la proiezione sulle candele brevi, non la media a 200; grafico più lungo e Kronos a 5 sedute contano come indizi sulla probabilità", async () => {
     setCryptoUniverse(["BTC/USD", "ETH/USD"]);
     const bars: Record<string, IntradayBar[]> = { NVDA: candles(180, 40, [180.2, 180.5, 180.9]), "BTC/USD": candles(76_000, 40, [76_100, 76_250, 76_450]) };
     const closes: Record<string, number[]> = {};
@@ -774,12 +774,15 @@ describe("intraday", () => {
     expect(prot.perche).toContain("protezione del profitto");
     bars["BTC/USD"]!.pop();
     kint = { "BTC/USD": 0.013, NVDA: 0.006 };
-    // Lo stesso ingresso con il Kronos a 5 sedute contrario: si entra lo stesso, ma a taglia ridotta.
+    // Lo stesso ingresso con il Kronos a 5 sedute contrario: è un indizio contrario, toglie punti di probabilità (non
+    // dimezza più la taglia); con la probabilità ancora sopra la soglia si entra.
     const a2 = new IntradayAgent(async (syms) => Object.fromEntries(syms.filter((x) => bars[x]).map((x) => [x, bars[x]!])), async (b) => Object.fromEntries(Object.keys(b).map((x) => [x, kint[x] ?? -0.01])));
     const rr = await a2.observe(view({ closes, prices, now, today: "2026-09-22", previsioni: { "BTC/USD": -0.03 } }));
     const btc2 = rr.segnali.find((x) => x.lato === "buy" && x.simbolo === "BTC/USD")!;
-    expect(btc2.perche).toContain("taglia ridotta");
-    expect(btc2.pesoMassimo!).toBeCloseTo(btc.pesoMassimo! / 2, 9);
+    expect(btc2.perche).toContain("indizi contrari: Kronos a 5 sedute -3.00%");
+    expect(btc2.perche).toContain(`−${Math.round(AGENTS.intraday.taglia.penalitaIndizio * 100)} punti di probabilità`);
+    expect(btc2.pesoMassimo!).toBeLessThanOrEqual(btc.pesoMassimo! + 1e-12);
+    expect(btc2.pesoMassimo!).toBeGreaterThanOrEqual(AGENTS.intraday.maxWeight * AGENTS.intraday.taglia.pavimento - 1e-12);
     // Kronos intraday al ribasso: nessun ingresso, con il motivo.
     kint = { "BTC/USD": -0.004 };
     const b2 = new IntradayAgent(async (syms) => Object.fromEntries(syms.filter((x) => bars[x]).map((x) => [x, bars[x]!])), async (b) => Object.fromEntries(Object.keys(b).map((x) => [x, kint[x] ?? -0.01])));
