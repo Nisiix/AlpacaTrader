@@ -10,4 +10,7 @@ export interface ProposedOrder {
   intraday?: boolean;
   // Proiezione di Kronos a sostegno: la gabbia ammette l'acquisto sotto la media a 50 (ma sopra la 200) se è netta.
   kronos?: number;
+  // Vendita di sostituzione: il ricavato conta già per gli acquisti dello stesso giro (la gabbia lo somma ai contanti,
+  // l'invio aspetta che la vendita sia eseguita prima di comprare).
+  libera?: boolean;
 }

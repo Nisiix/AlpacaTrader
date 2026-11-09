@@ -847,8 +847,30 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
     const acquisti = cage.orders.filter((o) => o.side === "buy" && o.source === "modello");
     let freschi: Record<string, number> = {};
     if (acquisti.length) { try { freschi = await deps.broker.getLatestPrices(acquisti.map((o) => o.symbol)); } catch {} }
+    // Vendite di sostituzione: prima di comprare si aspetta che siano eseguite e si rilegge il conto; gli acquisti che i
+    // contanti veri non coprono (vendita non ancora eseguita) si rimandano al giro dopo invece di farli rifiutare da Alpaca.
+    let contantiVeri: number | null = null;
+    let venditeAttese = false;
     for (const plan of cage.orders) {
+      if (plan.side === "buy" && !venditeAttese) {
+        venditeAttese = true;
+        const ids = outcomes.filter((o) => o.kind === "inviato" && o.plan.side === "sell" && o.plan.libera).map((o) => o.id);
+        if (ids.length) {
+          await waitForFills(deps.broker, ids, deps.sleep, log);
+          try { contantiVeri = (await deps.broker.getAccount()).cash - cashImpegnato - snap.account.equity * AGENTS.riservaContanti; } catch { contantiVeri = 0; }
+        }
+      }
       const p0 = snap.prices[plan.symbol], p1 = freschi[plan.symbol] ?? p0;
+      if (plan.side === "buy" && contantiVeri !== null) {
+        const costo = plan.qty * (p1 ?? 0);
+        if (costo > contantiVeri + 0.01) {
+          const m = `${plan.symbol}: acquisto rimandato al giro dopo, la vendita di sostituzione non ha ancora liberato i contanti (${Math.max(0, contantiVeri).toFixed(2)} $ disponibili, ne servono ${costo.toFixed(2)})`;
+          log.info(m);
+          bus.emit("nota", { testo: m });
+          continue;
+        }
+        contantiVeri -= costo;
+      }
       if (plan.side === "buy" && plan.source === "modello" && p0 && p1 && p1 > p0 * (1 + AGENTS.esecuzione.maxRialzo)) {
         const m = `${plan.symbol}: acquisto non inviato, il prezzo è salito da ${p0} a ${p1} (+${((p1 / p0 - 1) * 100).toFixed(2)}%) durante il giro: l'occasione si rivaluta al giro dopo`;
         log.info(m);

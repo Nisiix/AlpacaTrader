@@ -449,6 +449,13 @@ export const AGENTS = {
       // per la parte `quota` (1 = tutto), fino a `tetto` del conto. Sotto il capitale di partenza vale la quota di serie.
       // Con il budget al 100% il profitto è già tutto reinvestito (il budget è il conto intero): conta se la quota scende.
       reinvesti: { enabled: true, quota: 1, tetto: 0.8 } },
+    // Sostituzione dei trade deboli: con budget o contanti pieni (spazio libero sotto `mancanza` di quanto chiede la
+    // migliore occasione nuova), si vende l'operazione aperta più debole per far posto a quella. Debole: aperta da almeno
+    // `minMinuti`, nessuna uscita già decisa, non sostenuta dalle candele superiori né in corsa, e probabilità di salire
+    // sulla sua candela di controllo sotto la soglia d'ingresso (oggi non la si aprirebbe). La nuova deve avere almeno
+    // `margine` punti di probabilità in più (netta dei costi, contro una che non li conta: il confronto è prudente).
+    // Al massimo una a giro e `maxGiorno` al giorno; mai quando nello stesso giro si vende già altro (lo spazio si libera da sé).
+    sostituzione: { enabled: true, mancanza: 0.5, minMinuti: 30, margine: 0.1, maxGiorno: 4 },
     // Finestre, ora di Roma: ingressi solo se resta tempo per chiudere in giornata; poi chiusura forzata.
     // Crypto: sempre aperte, un'operazione intraday dura al massimo cryptoOreMax ore. Azioni: tutta la seduta vera
     // (orologio di Alpaca): ingressi fino a minutiPrimaChiusura.ingresso dalla chiusura, uscita a minutiPrimaChiusura.uscita.

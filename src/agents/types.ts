@@ -26,6 +26,8 @@ export interface Signal {
   // Misure del momento del voto (probabilità di riuscita, RSI...): vanno nel diario con il trade, per la prova in ombra
   // delle impostazioni, la calibrazione delle probabilità e il meta-modello.
   misure?: Record<string, number>;
+  // Vendita di sostituzione: libera contanti e budget per gli acquisti dello stesso giro (allocatore, gabbia, invio).
+  libera?: boolean;
 }
 
 import type { FontiDati } from "./fonti.ts";

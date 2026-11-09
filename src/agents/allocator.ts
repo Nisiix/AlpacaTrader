@@ -134,6 +134,9 @@ export function allocate(view: AgentView, reports: Record<string, AgentReport>, 
 
   // Prima le regole vincolanti (stop, obiettivo, proiezione contraria): vendono tutto, senza voto.
   const forced = new Set<string>();
+  // Vendite di sostituzione (intera posizione): il loro ricavato e il loro posto nel budget e nel settore vanno subito
+  // agli acquisti di questo giro.
+  const liberate = new Map<string, number>();
   for (const s of signals) {
     if (!s.vincolante || s.lato !== "sell" || forced.has(s.simbolo)) continue;
     const p = held.get(s.simbolo);
@@ -145,7 +148,9 @@ export function allocate(view: AgentView, reports: Record<string, AgentReport>, 
     const giaFrazioni = !isCrypto(s.simbolo) && Math.abs(p.qty - Math.round(p.qty)) > 1e-9;
     const qty = parziale ? roundQty(s.simbolo, p.qty * s.frazione!, isCrypto(s.simbolo) ? undefined : giaFrazioni || (intere(p.qty * s.frazione!) === 0 && aFrazioni(s.simbolo))) : p.qty;
     if (qty <= 0) continue;
-    proposte.push({ symbol: s.simbolo, side: "sell", qty, why: `${s.agente}: ${s.perche}`, confidence: "alta", expect: s.frazione && s.frazione < 1 ? "presa di profitto parziale" : "regola di rischio" });
+    const libera = !!s.libera && !parziale;
+    if (libera) liberate.set(s.simbolo, qty * (view.prices[s.simbolo] ?? p.currentPrice) * (1 - (isCrypto(s.simbolo) ? AGENTS.costi.cryptoAndataRitorno / 2 : 0) - AGENTS.intraday.budget.scivolamento));
+    proposte.push({ symbol: s.simbolo, side: "sell", qty, why: `${s.agente}: ${s.perche}`, confidence: "alta", expect: libera ? "sostituzione: il ricavato va all'occasione nuova" : s.frazione && s.frazione < 1 ? "presa di profitto parziale" : "regola di rischio", ...(libera ? { libera: true } : {}) });
   }
   // Comprati oggi: i voti di vendita "di opinione" (trend, custodi, punteggio) aspettano una candela giornaliera nuova;
   // le uscite vincolanti (stop, obiettivo, intraday, proiezione contraria) restano sopra e valgono sempre.
@@ -299,7 +304,7 @@ export function allocate(view: AgentView, reports: Record<string, AgentReport>, 
   // restava niente, anche quando poi il budget riduceva i primi due.
   const bud = AGENTS.intraday.budget;
   const intradayAperta = (s: string) => view.journal.trade.some((t) => t.simbolo === s && t.stato === "aperto" && t.contesto?.agenti?.includes("intraday") && !t.contesto?.promossa);
-  const valoreAperto = (pred: (s: string) => boolean) => [...held.values()].filter((p) => intradayAperta(p.symbol) && pred(p.symbol)).reduce((a, p) => a + p.qty * (view.prices[p.symbol] ?? p.currentPrice), 0);
+  const valoreAperto = (pred: (s: string) => boolean) => [...held.values()].filter((p) => intradayAperta(p.symbol) && !liberate.has(p.symbol) && pred(p.symbol)).reduce((a, p) => a + p.qty * (view.prices[p.symbol] ?? p.currentPrice), 0);
   const tagliati = new Map<string, string>();
   const ripartisci = (gruppo: typeof asks, spazio: number, perche: string) => {
     const tot = gruppo.reduce((a, x) => a + x.chiesto, 0);
@@ -328,13 +333,13 @@ export function allocate(view: AgentView, reports: Record<string, AgentReport>, 
   // in proporzione alla qualità (come il budget), così i contanti non vanno a un titolo che la gabbia poi rifiuterebbe.
   // Prima si riempiva in ordine di punteggio: con il budget al 50% il terzo titolo dello stesso settore restava a zero.
   const usato = new Map<string, number>();
-  for (const p of held.values()) usato.set(sectorOf(p.symbol), (usato.get(sectorOf(p.symbol)) ?? 0) + p.qty * (view.prices[p.symbol] ?? p.currentPrice));
+  for (const p of held.values()) if (!liberate.has(p.symbol)) usato.set(sectorOf(p.symbol), (usato.get(sectorOf(p.symbol)) ?? 0) + p.qty * (view.prices[p.symbol] ?? p.currentPrice));
   for (const sec of new Set(asks.map((x) => sectorOf(x.sc.simbolo)))) {
     if (sec === "altro") continue;
     const tetto = LIMITS.groupMaxBySector[sec] ?? LIMITS.groupMaxPct;
     ripartisci(asks.filter((x) => sectorOf(x.sc.simbolo) === sec), tetto * equity * 0.999 - (usato.get(sec) ?? 0), `settore ${sec} al tetto del ${Math.round(tetto * 100)}% del conto: lo spazio rimasto diviso per qualità`);
   }
-  const avail = Math.max(0, view.account.cash - (view.cashImpegnato ?? 0) - equity * AGENTS.riservaContanti);
+  const avail = Math.max(0, view.account.cash + [...liberate.values()].reduce((a, x) => a + x, 0) - (view.cashImpegnato ?? 0) - equity * AGENTS.riservaContanti);
   const totale = asks.reduce((a, x) => a + x.chiesto, 0);
   let riparto = false;
   if (totale > avail && totale > 0) {

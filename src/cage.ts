@@ -22,6 +22,8 @@ export interface PlannedOrder {
   source: OrderSource;
   // Prezzo limite (acquisti crypto con ordini limite): deciso al momento dell'invio.
   limitPrice?: number;
+  // Vendita di sostituzione: l'invio aspetta che sia eseguita prima degli acquisti dello stesso giro.
+  libera?: boolean;
 }
 
 // stop-loss = protezione contro i crolli; uscita-trend = l'uscita normale del metodo, decisa dal codice.
@@ -175,6 +177,13 @@ export function applyCage(i: CageInput): CageResult {
     if (p.side === "sell") {
       const q = held.get(p.symbol)?.qty ?? 0;
       if (p.qty > q + 1e-9) { reject(`niente short: in portafoglio ce ne sono ${q}`); continue; }
+      // Vendita di sostituzione (tutta la posizione): il ricavato (meno costi e scivolamento) va ai contanti degli acquisti
+      // di questo giro, e il titolo esce dai conti del peso e del settore.
+      if (p.libera && p.qty >= q - 1e-9) {
+        const px = i.prices[p.symbol] ?? held.get(p.symbol)?.currentPrice ?? 0;
+        cash += p.qty * px * (1 - (isCrypto(p.symbol) ? AGENTS.costi.cryptoAndataRitorno / 2 : 0) - AGENTS.intraday.budget.scivolamento);
+        added.set(p.symbol, (added.get(p.symbol) ?? 0) - q * px);
+      }
     } else {
       if (i.buyBlock) { reject(i.buyBlock); continue; }
       // L'intraday si chiude in giornata con obiettivo e stop propri: non segue il filtro macro né il trend giornaliero.
@@ -221,7 +230,7 @@ export function applyCage(i: CageInput): CageResult {
       added.set(p.symbol, (added.get(p.symbol) ?? 0) + cost);
     }
     seen.add(key);
-    orders.push({ symbol: p.symbol, side: p.side, qty: p.qty, why: p.why, source: "modello" });
+    orders.push({ symbol: p.symbol, side: p.side, qty: p.qty, why: p.why, source: "modello", ...(p.side === "sell" && p.libera ? { libera: true } : {}) });
   }
   return { orders, rejected };
 }

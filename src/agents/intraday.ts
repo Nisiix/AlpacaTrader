@@ -225,6 +225,8 @@ export class IntradayAgent implements Agent {
   private kCache = new Map<string, { chiave: string; path: number[]; campioni?: number[][] }>();
   // Uscite «morbide» in attesa di conferma (lascia correre): simbolo → motivo, candela di controllo dell'ultimo conteggio, quante.
   private attese = new Map<string, { chiave: string; n: number; motivo: string; massimo: number }>();
+  // Sostituzioni dei trade deboli fatte oggi (intraday.sostituzione.maxGiorno).
+  private sostituzioni = { giorno: "", n: 0 };
   // La probabilità vista all'ultima proiezione di ogni coppia titolo-candela: decide chi si riproietta per primo.
   private ultimaProb = new Map<string, number>();
   // Gli stati delle candidate all'ultima analisi d'ingresso: tra un'analisi e l'altra restano visibili in dashboard.
@@ -248,6 +250,9 @@ export class IntradayAgent implements Agent {
     const rt = romeTime(v.now);
     const segnali: Signal[] = [];
     const note: string[] = [];
+    // Per la sostituzione: le operazioni aperte che oggi non si aprirebbero e le occasioni nuove votate in questo giro.
+    const deboli: { s: string; pl: number; gain: number; valore: number; minuti: number; tf: string }[] = [];
+    const nuovi: { s: string; pr: number; peso: number }[] = [];
     const stati: IntradayStato[] = [];
     const held = new Map(v.positions.filter((p) => p.qty > 0).map((p) => [p.symbol, p]));
     // Le mie operazioni aperte: dal diario (trade aperti votati da "intraday") e dalla memoria del processo.
@@ -689,6 +694,7 @@ export class IntradayAgent implements Agent {
         } else motivo = morbido;
       } else this.attese.delete(s);
       if (motivo) segnali.push({ agente: this.name, simbolo: s, lato: "sell", forza: 1, orizzonteSedute: 1, vincolante: true, intraday: true, perche: why(motivo) });
+      else if (!appoggio && !corre && pl !== null) deboli.push({ s, pl, gain, valore: p.qty * price, minuti: apertaDa(s) ?? 0, tf: lo });
       stati.push({ simbolo: s, candela: tf, controllo: [controllo, superiori].filter(Boolean).join(" · "), fase: "in posizione", ingresso: op.ingresso, obiettivo: op.sostegno?.obiettivo ?? op.obiettivo, stop: op.stop, prezzo: price, motivo: motivo ?? (attesa || `${op.riporti ? `riportata ${op.riporti === 1 ? "una volta" : `${op.riporti} volte`} al giorno dopo · ` : ""}${corre && price >= op.obiettivo ? "oltre l'obiettivo, si lascia correre" : appoggio ? `trade di trend sostenuto dalle candele ${op.sostegno!.tf}` : "in corsa"}: obiettivo ${num(op.obiettivo)}${op.sostegno ? `, poi ${num(op.sostegno.obiettivo)} (candele ${op.sostegno.tf})` : ""}, stop ${num(op.stop)}, ${pct(gain)}`) });
     }
 
@@ -951,6 +957,7 @@ export class IntradayAgent implements Agent {
       const superiori = sup.letti.length ? `candele superiori: ${sup.letti.join(", ")}` : "";
       const tipo = trend ? `; trade di trend: le candele ${trend.tf} vedono ${pct(trend.k)} in ${etichetta(trend.h)} (probabilità ${Math.round(trend.pr * 100)}%), obiettivo finale ${num(obiettivoTrend!)}, stop della candela ${trend.tf}` : superiori ? "; trade breve: le candele superiori non sono contrarie ma non vedono un rialzo netto" : "";
       segnali.push({ agente: this.name, simbolo: s, lato: "buy", forza: 1, orizzonteSedute: 1, intraday: true, pesoMassimo: peso, ...(best.prGrezza !== null && best.prGrezza !== undefined ? { misure: { probabilita: best.prGrezza, ...(rimbalzi.has(s) ? { rimbalzo: rimbalzi.get(s)!.calo } : {}), ...(livMedie(s) >= 0 ? { medie: livMedie(s) } : {}) } } : {}), ...(k !== undefined ? {} : fc !== undefined ? { kronos: fc } : {}), perche: `${s} intraday su candele ${tf}${valutate ? ` (scelta per probabilità netta dei costi: ${valutate})` : ""}: ${ingresso}${k !== undefined ? `; Kronos a ${etichetta(h!)} sulle candele ${tf} ${pct(k)} (probabilità ${Math.round((pr ?? 0) * 100)}%)` : fc !== undefined ? `; Kronos ${pct(fc)} a ${AGENTS.kronos.horizon} sedute` : ""}${superiori ? `; ${superiori}` : ""}${tipo}${pru.f < 1 ? `; ${pru.etichetta}: taglia ×${pru.f}` : ""}${indizi.length ? `; indizi contrari: ${indizi.join(" e ")} (−${Math.round(penalita * 100)} punti di probabilità, ${Math.round(prA! * 100)}%)` : ""}${correttivi.length > indizi.length ? `; ${correttivi.find((x) => /medie brevi/.test(x))}` : ""}${fattoriTaglia < c.taglia.pavimento ? `; taglia al pavimento (${Math.round(c.taglia.pavimento * 100)}% della massima)` : ""}${inSerie ? `; dopo ${perditeDiFila} perdite di fila, taglia ridotta` : ""}; obiettivo ${num(target)} (${pct(targetPct)}${k !== undefined ? `, da Kronos in ${etichetta(h!)}` : ""}), stop ${num(stop)} (${pct(-stopPct)}), poi controllo su candele ${controlloDi(s, tf)}, chiusura ${chiusuraDi(s)}` });
+      nuovi.push({ s, pr: pE ?? prA ?? 0, peso });
       const opNuova = this.operazioni.get(s)!;
       stati.push({ simbolo: s, candela: tf, livelli: { candela: tf, previsione: `${tf}|${barsOf(s, tf)!.at(-1)!.t}`, obiettivo: opNuova.obiettivo, stop: opNuova.stop, ...(opNuova.orizzonteMin !== undefined ? { orizzonteMin: opNuova.orizzonteMin } : {}), sopraMedia: !!opNuova.sopraMedia, ...(opNuova.sostegno ? { sostegno: opNuova.sostegno } : {}) }, ...(h !== undefined && k !== undefined ? { orizzonte: etichetta(trend ? trend.h : h) } : {}), controllo: [`poi candele ${controlloDi(s, tf)}`, superiori].filter(Boolean).join(" · "), fase: "cerca ingresso", ingresso: price, obiettivo: obiettivoTrend ?? target, stop, prezzo: price, motivo: `ingresso votato: ${ingresso}${trend ? ` · trade di trend sulle candele ${trend.tf}` : ""}${valutate ? ` · probabilità netta per candela: ${valutate}` : ""}` });
     }
@@ -961,6 +968,30 @@ export class IntradayAgent implements Agent {
     const eq = v.account.equity > 0 ? v.account.equity : 1;
     const investito = [...mine].reduce((a, s) => a + (held.get(s)?.qty ?? 0) * (v.prices[s] ?? held.get(s)?.currentPrice ?? 0), 0);
     const qb = quotaBudget(eq, v.capitaleBase, Number(valore("AGENTS.intraday.budget.quota", "")), guadagniAperti(v.positions, v.prices));
+    // Sostituzione dei trade deboli (intraday.sostituzione): budget o contanti pieni e un'occasione nuova nettamente più
+    // probabile di un'operazione aperta che oggi non si aprirebbe più: si vende quella, e il ricavato va subito alla nuova
+    // (la vendita è «libera»: allocatore, gabbia e invio ne contano il ricavato nello stesso giro).
+    const so = c.sostituzione;
+    if (this.sostituzioni.giorno !== v.today) this.sostituzioni = { giorno: v.today, n: 0 };
+    if (so.enabled && nuovi.length && deboli.length && !segnali.some((x) => x.lato === "sell") && this.sostituzioni.n < so.maxGiorno) {
+      const impegnato = v.cashImpegnato ?? 0;
+      const spazio = Math.max(0, Math.min(qb.quota * eq - investito - impegnato, v.account.cash - impegnato - AGENTS.riservaContanti * eq));
+      const migliore = [...nuovi].sort((a, b) => b.pr - a.pr)[0]!;
+      const chiesto = Math.min(nuovi.reduce((a, x) => a + x.peso * eq, 0), migliore.peso * eq);
+      if (spazio < so.mancanza * chiesto) {
+        const debole = deboli
+          .filter((d) => d.s !== migliore.s && d.minuti >= so.minMinuti && d.pl < Number(valore("AGENTS.intraday.kronos.minProb", d.s)) && migliore.pr - d.pl >= so.margine && (isCrypto(d.s) || v.mercatoAperto !== false))
+          .sort((a, b) => a.pl - b.pl || a.gain - b.gain)[0];
+        if (debole) {
+          this.sostituzioni.n++;
+          const m = `sostituito da ${migliore.s} (probabilità ${Math.round(migliore.pr * 100)}% contro ${Math.round(debole.pl * 100)}% di salire qui sulle candele ${debole.tf}): budget pieno (${spazio.toFixed(2)} $ liberi su ${chiesto.toFixed(2)} $ chiesti), si chiude a ${pct(debole.gain)} per far posto (${this.sostituzioni.n}ª sostituzione di oggi)`;
+          segnali.push({ agente: this.name, simbolo: debole.s, lato: "sell", forza: 1, orizzonteSedute: 1, vincolante: true, intraday: true, libera: true, perche: `${debole.s} intraday: ${m}` });
+          note.push(`${debole.s}: ${m}`);
+          const st = stati.find((x) => x.simbolo === debole.s && x.fase === "in posizione");
+          if (st) st.motivo = m;
+        }
+      }
+    }
     note.push(`budget intraday: investito ${((investito / eq) * 100).toFixed(1).replace(".", ",")}% del conto su ${(qb.quota * 100).toFixed(1).replace(".", ",").replace(",0", "")}%${qb.reinvestito > 0.5 ? ` (${Math.round(Number(valore("AGENTS.intraday.budget.quota", "")) * 100)}% del capitale di partenza più ${qb.reinvestito.toFixed(2).replace(".", ",")} $ di profitto reinvestito)` : ""} (crypto al massimo ${Math.round(c.budget.maxCrypto * 100)}%), rischio allo stop ${(c.budget.rischioTrade * 100).toFixed(2).replace(".", ",")}% per operazione`);
     const tempi = this.forecast ? ` · tempi: candele ${(msCandele / 1000).toFixed(1)} s, Kronos ${(msKronos / 1000).toFixed(1)} s su ${serieKronos} serie nuove` : "";
     note.unshift(v.analisi === false ? `${[...mine].length} operazioni aperte seguite; nuove candidate alla prossima analisi d'ingresso (ogni ${AGENTS.analisiMinuti} minuti)${tempi}` : `${[...mine].length} operazioni aperte, ${candidates.length} candidate, ${n} ingressi votati${this.forecast ? ` · candele valutate: ${TFS.filter((tf) => !senzaVantaggio(tf)).join(", ")}${TFS.some((tf) => senzaVantaggio(tf)) ? ` (senza vantaggio misurato, solo misurate: ${TFS.filter((tf) => senzaVantaggio(tf)).join(", ")})` : ""}` : ""}${tempi}`);
