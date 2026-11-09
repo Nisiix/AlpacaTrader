@@ -256,6 +256,11 @@ export const AGENTS = {
   // sopra la media a 200 e, più alta, sotto la 200 (contro tendenza).
   // Stessa soglia della scrivania: si vota e si entra solo da «pronto» (57%); contro tendenza serve di più.
   evidenza: { min: 0.57, minContro: 0.65 },
+  // Il motore punta all'intraday: gli ingressi nuovi si decidono solo sulle candele (5 e 15 minuti, 1 e 4 ore) con gli
+  // intraday agents; un trade si estende su più giorni solo se a fine giornata le proiezioni di Kronos sulle candele
+  // restano dentro la forchetta del trade (intraday.riporto). I voti di più giorni (trend, custodi, Kronos a 5 sedute,
+  // rientro) restano come contesto ma da soli non aprono posizioni. false = comportamento di prima.
+  puntaIntraday: true,
   // Rimbalzo di breve: la media a 50 giorni diventa facoltativa. Con il prezzo sotto la 50 (anche sotto la 200), dopo un
   // calo netto nell'ultimo giorno (oltre caloMin o caloVol volte la volatilità giornaliera; la giornata conclusa o quella
   // in corso) si cerca il rimbalzo con gli intraday agents: tutto si decide sulle candele (5 min, 15 min, 1 ora, 4 ore) e
@@ -337,6 +342,11 @@ export const AGENTS = {
     // rispetta i criteri del metodo di più giorni (trend o Kronos netto, Kronos a 5 sedute che copre i costi con probabilità
     // ≥ minProb, nessuna attesa del contesto né trimestrale vicina) non si chiude: passa alle regole di più giorni.
     promozione: { enabled: true, minProb: 0.55 },
+    // Riporto al giorno dopo (sostituisce la promozione a posizione di più giorni): a fine giornata un'operazione si tiene
+    // se le proiezioni di Kronos sulle sue candele e su quelle superiori restano dentro la forchetta del trade (nessuna
+    // tocca lo stop, la più lunga vede salire con probabilità ≥ minProb); il giorno dopo decidono di nuovo le candele.
+    // Al massimo maxRiporti volte.
+    riporto: { enabled: true, minProb: 0.55, maxRiporti: 5 },
     // Stop minimo: sulle crypto sopra il costo di andata e ritorno (0,5%), altrimenti ogni stop costa quasi il doppio.
     targetAtr: 1.5, stopAtr: 1.2, minStopPct: { stocks: 0.004, crypto: 0.01 },
     maxWeight: 0.1, // peso massimo di un'operazione intraday (comparto a taglia ridotta)

@@ -192,6 +192,19 @@ export function allocate(view: AgentView, reports: Record<string, AgentReport>, 
     const p = held.get(sc.simbolo);
     // Le attese che valgono solo per un ingresso di più giorni. Se scattano su un punteggio misto e la parte intraday da
     // sola supera la soglia, si entra come trade intraday (taglia e uscite dell'intraday) invece di lasciar perdere l'occasione.
+    // Il motore punta all'intraday: un ingresso (o un'aggiunta) di più giorni non si fa; se sul titolo c'è anche un voto
+    // intraday che da solo basta, entra quello (candele da 5 minuti a 4 ore).
+    if (AGENTS.puntaIntraday && !sc.intraday) {
+      const alt = soloParteIntraday(sc);
+      if (alt && alt.punteggio >= AGENTS.buyScore) {
+        alt.perche = [...alt.perche, "ufficio: il motore punta all'intraday, entra solo la parte intraday (candele)"];
+        punteggi[punteggi.indexOf(sc)] = alt;
+        sc = alt;
+      } else {
+        inAttesa.push({ simbolo: sc.simbolo, motivo: "il motore punta all'intraday: si entra solo quando lo decidono le candele (5 minuti - 4 ore) e Kronos su quelle candele" });
+        continue;
+      }
+    }
     // Sotto la media a 50 (downtrend) si preferisce il timeframe breve: se sul titolo c'è anche un voto intraday che da
     // solo basta, si entra come trade intraday (candele da 5 minuti a 4 ore) invece che di più giorni.
     if (!p && !sc.intraday) {

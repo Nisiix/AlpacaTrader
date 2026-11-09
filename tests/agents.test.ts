@@ -36,6 +36,11 @@ function sogliePiccole() {
 }
 import { makeEnv, ordersFor, openStopsFor, type TestEnv } from "./helpers.ts";
 
+// Questi test provano anche il metodo di più giorni e la promozione: il motore che punta all'intraday (e il riporto al
+// giorno dopo) ha i suoi test, che lo riaccendono.
+AGENTS.puntaIntraday = false;
+AGENTS.intraday.riporto.enabled = false;
+
 const day = (d: string, hhmm: string) => new Date(`${d}T${hhmm}:00+02:00`);
 const PRICES: Record<string, number> = { SPY: 600, QQQ: 520, IWM: 230, AAPL: 250, MSFT: 480, NVDA: 180, GLD: 380, TLT: 90 };
 
@@ -1313,6 +1318,20 @@ describe("capo ufficio e intraday", () => {
     expect(s.pesoMassimo).toBeCloseTo(0.1 * 0.6 * 0.85, 6);
     const a = allocate(view({ positions: [] } as any), reports, { intraday: 1 });
     expect(a.punteggi[0]!.punteggio).toBeGreaterThanOrEqual(AGENTS.buyScore);
+  });
+
+  test("il motore punta all'intraday: un voto di più giorni da solo non apre; con un voto intraday entra quello", () => {
+    AGENTS.puntaIntraday = true;
+    try {
+      const v = view();
+      const kronos = { segnali: [{ agente: "kronos", simbolo: "SPY", lato: "buy" as const, forza: 1, orizzonteSedute: 5, kronos: 0.05, perche: "Kronos +5%" }] };
+      const intraday = { segnali: [{ agente: "intraday", simbolo: "SPY", lato: "buy" as const, forza: 1, orizzonteSedute: 1, intraday: true, pesoMassimo: 0.02, perche: "candele 1Hour, Kronos a 2 h +1.5%" }] };
+      const solo = allocate(v, { kronos }, { kronos: 1 });
+      expect(solo.proposte.find((p) => p.symbol === "SPY")).toBeUndefined();
+      expect(solo.inAttesa.find((x) => x.simbolo === "SPY")!.motivo).toContain("punta all'intraday");
+      const con = allocate(v, { kronos, intraday }, { kronos: 1, intraday: 1 });
+      expect(con.proposte.find((p) => p.symbol === "SPY")!.intraday).toBe(true);
+    } finally { AGENTS.puntaIntraday = false; }
   });
 
   test("voti misti: se l'ingresso di più giorni aspetta (evidenza bassa), entra la sola parte intraday con la sua taglia", () => {

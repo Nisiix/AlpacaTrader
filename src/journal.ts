@@ -45,6 +45,10 @@ export interface LivelliIntraday {
   orizzonteMin?: number;
   sopraMedia?: boolean;
   sostegno?: { tf: string; obiettivo: number; orizzonteMin: number };
+  // Riportata al giorno dopo: quante volte, da quando conta la nuova finestra (ISO) e in che giorno si è deciso.
+  riporti?: number;
+  rinnovo?: string;
+  riportoGiorno?: string;
 }
 
 export interface Intent {

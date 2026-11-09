@@ -606,7 +606,8 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
     const aggiungi = (rep: "trading" | "intraday", b: Bisogno) => { if (!b.tiene && !entrabile(b.simbolo)) return; const x = bisogni[rep].find((y) => y.simbolo === b.simbolo); if (x) { x.tiene ||= b.tiene; x.voto ||= b.voto; } else bisogni[rep].push(b); };
     for (const c of custodiGiro) {
       const tiene = (c.fase === "in posizione" || c.fase === "in uscita") && !inIntraday.has(c.simbolo);
-      const pronto = c.fase === "pronto" && (c.dossier?.probabilita ?? 0) >= 0.595;
+      // Con il motore che punta all'intraday un trading agent «pronto» non apre posizioni: alla scrivania solo chi le segue.
+      const pronto = !AGENTS.puntaIntraday && c.fase === "pronto" && (c.dossier?.probabilita ?? 0) >= Number(valore("AGENTS.custodi.minProbabilita", c.simbolo)) - 0.005;
       if (tiene || pronto) aggiungi("trading", { simbolo: c.simbolo, tiene, voto: false, ...(preferite.get(`c:${c.simbolo}`) ? { preferita: preferite.get(`c:${c.simbolo}`)! } : {}) });
     }
     for (const x of intradayGiro) if (x.fase === "in posizione") aggiungi("intraday", { simbolo: x.simbolo, tiene: true, voto: false });
@@ -617,6 +618,7 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
       const cust = custodiGiro.find((c) => c.simbolo === desk.slice(2));
       if (desk.startsWith("c:") && cust && cust.fase !== "pronto" && cust.fase !== "in posizione" && cust.fase !== "in uscita") continue;
       if (desk.startsWith("c:") && cust?.fase === "pronto" && (cust.dossier?.probabilita ?? 0) < 0.595) continue;
+      if (desk.startsWith("c:") && AGENTS.puntaIntraday) continue;
       if (desk.startsWith("c:")) aggiungi("trading", { simbolo: desk.slice(2), tiene: false, voto: true, ...(preferite.get(desk) ? { preferita: preferite.get(desk)! } : {}) });
       else if (desk.startsWith("i:")) aggiungi("intraday", { simbolo: desk.slice(2), tiene: false, voto: true, ...(preferite.get(desk) ? { preferita: preferite.get(desk)! } : {}) });
     }

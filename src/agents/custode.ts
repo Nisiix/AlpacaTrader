@@ -241,6 +241,7 @@ export class CustodiAgent implements Agent {
     if (fase === "in posizione") prossimaAzione = p >= 55 ? `Tenere: ${p}% favorevole. Si esce solo sotto la media a 50 (${num(m50)}) o con lo stop (${num(livelli.stop)}).` : `Tenere con prudenza: ${p}% favorevole. Un'altra chiusura debole e si riduce; stop a ${num(livelli.stop)}.`;
     else if (fase === "in uscita") prossimaAzione = "Uscire al prossimo giro utile: il trend che reggeva la posizione è finito.";
     else if (fase === "attende") prossimaAzione = `Nessun ingresso finché ${wait ? "il contesto non cambia" : "il titolo non rientra nei criteri"}; intanto si studia: ${p}% favorevole.`;
+    else if (AGENTS.puntaIntraday) prossimaAzione = `Il motore punta all'intraday: se e quando entrare lo decidono le candele (5 minuti - 4 ore) e Kronos su quelle candele; questo dossier (${p}% favorevole) fa da contesto.`;
     else if (p >= Math.round(Number(valore("AGENTS.custodi.minProbabilita", c.simbolo)) * 100)) prossimaAzione = `Entrare al prossimo giro se il prezzo tiene sopra la media a 20 (${num(m20)}): ${p}% favorevole. Stop a ${num(livelli.stop)}.`;
     else if (p >= 45) prossimaAzione = `Aspettare una conferma (chiusura sopra ${num(m20)} o rottura dei massimi a 20 sedute): ${p}% favorevole, non basta per la taglia piena.`;
     else prossimaAzione = `Restare fuori: ${p}% favorevole. Si rivaluta al prossimo giro.`;

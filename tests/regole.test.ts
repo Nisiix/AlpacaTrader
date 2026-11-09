@@ -156,6 +156,11 @@ describe("calibrazione del capo ufficio", () => {
 });
 
 import { nomeBreve } from "../src/nomi-titoli.ts";
+
+// Questi test provano anche il metodo di più giorni e la promozione: il motore che punta all'intraday (e il riporto al
+// giorno dopo) ha i suoi test, che lo riaccendono.
+AGENTS.puntaIntraday = false;
+AGENTS.intraday.riporto.enabled = false;
 test("nomi dei titoli: forma breve per la dashboard", () => {
   expect(nomeBreve("Apple Inc. Common Stock")).toBe("Apple Inc.");
   expect(nomeBreve("Bitcoin  / US Dollar")).toBe("Bitcoin");

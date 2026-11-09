@@ -184,6 +184,21 @@ l'opportunità regge. Si chiude quando è comprato (lo segue il suo custode), qu
    conto e 100 $; un'aggiunta da 2%.
 5. Gli acquisti si decidono solo nei giri con **analisi d'ingresso** (ogni 5 minuti); le vendite in ogni giro.
 
+### Il motore punta all'intraday
+
+Di serie (`AGENTS.puntaIntraday`) gli ingressi nuovi si decidono **solo sulle candele** (5 e 15 minuti, 1 e 4 ore; le
+azioni 1 e 4 ore) con gli intraday agents e Kronos su quelle candele. I voti di più giorni (trend, trading agents,
+Kronos a 5 sedute, rientro) restano come contesto ma da soli non aprono posizioni: l'allocatore entra solo con la parte
+intraday, altrimenti il titolo resta in attesa.
+
+Un trade si estende su più giorni solo per **riporto** (`AGENTS.intraday.riporto`): a fine giornata (chiusura della
+borsa, 12 ore per le crypto) l'operazione si tiene se le proiezioni di Kronos sulla sua candela e su quelle superiori,
+all'orizzonte più lungo, restano **dentro la forchetta del trade** (nessuna arriva allo stop) e la più lunga vede ancora
+salire con probabilità ≥ 55%; niente riporto con una trimestrale il giorno dopo, al massimo 5 volte. Il giorno dopo
+decidono di nuovo le candele: obiettivo e stop restano quelli del trade, l'orizzonte è quello della proiezione usata
+per il riporto e la durata massima delle crypto riparte dal riporto. Le regole a sedute (uscita a tempo, rientro a 5
+sedute, uscita di trend) non riguardano questi trade.
+
 ### La scaletta delle medie (prudenza)
 
 Si investe anche sotto le medie giornaliere, con taglie via via più piccole (la 200 conta più della 50;

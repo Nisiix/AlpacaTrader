@@ -15,6 +15,11 @@ function sogliePiccole() {
 }
 import { emptyJournal, type JournalFile, type Trade } from "../src/journal.ts";
 
+// Questi test provano anche il metodo di più giorni e la promozione: il motore che punta all'intraday (e il riporto al
+// giorno dopo) ha i suoi test, che lo riaccendono.
+AGENTS.puntaIntraday = false;
+AGENTS.intraday.riporto.enabled = false;
+
 // Un trade chiuso: aperto un giorno, chiuso qualche giorno dopo (salvo indicato), con agenti, motivo e risultato.
 function trade(i: number, simbolo: string, risultato: number, agenti: string[], perche: string, o: { kronos?: number; stessoGiorno?: boolean; uscita?: string } = {}): Trade {
   const aperto = `2026-10-${String(1 + i).padStart(2, "0")}T14:00:00Z`;
