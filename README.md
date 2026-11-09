@@ -155,8 +155,8 @@ bun test                           # test con broker finto
 - Calendario: Fed scritta in `src/events.ts` (niente acquisti di azioni ed ETF nel giorno della decisione; le crypto no);
   trimestrali di tutti i titoli seguiti lette ogni giorno dal calendario pubblico di Nasdaq (`state/trimestrali.json`):
   niente acquisti del titolo nei 2 giorni di borsa prima dei conti.
-- Registro degli errori (`state/lessons.json`): dopo uno stop loss niente riacquisto per 5 giorni di borsa; due rifiuti di
-  Alpaca uguali bloccano quel titolo-lato per 5 giorni. Imparare dai risultati lo fanno capo ufficio e sala caffè.
+- Registro degli errori (`state/lessons.json`): dopo uno stop loss una pausa di 2 ore sul titolo (poi l'agente intraday
+  rientra solo con 3 punti di probabilità in più per 24 ore); due rifiuti di Alpaca uguali, una pausa di 4 ore. Imparare dai risultati lo fanno capo ufficio e sala caffè.
 - Interruttore (`state/breaker.json`): spento di serie, si riaccende dalle impostazioni come freno d'emergenza.
 - Azioni solo a borsa aperta (orologio di Alpaca); crypto 24 ore su 24.
 

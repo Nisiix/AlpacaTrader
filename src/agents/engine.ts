@@ -22,7 +22,7 @@ import { clientOrderId, sendOne, waitForFills, type ExecOutcome } from "../execu
 import { isObject, readJson, writeJsonAtomic } from "../fsutil.ts";
 import { indicatorsFor } from "../indicators.ts";
 import { applyFills, closeDust, contextFor, dailyPnl, pruneJournal, readJournal, recordIntent, statsOf, writeJournal, type DailyPnl, type Stats } from "../journal.ts";
-import { activeLessons, learnFromBrokerReject, learnFromStopLoss, pruneLessons, readLessons, writeLessons, type Lesson } from "../lessons.ts";
+import { activeLessons, learnFromBrokerReject, learnFromStopLoss, pauseAOre, pruneLessons, readLessons, writeLessons, type Lesson } from "../lessons.ts";
 import { acquireLock, inspectLock, releaseLock, type LockData } from "../lock.ts";
 import { Logger, type Redactor } from "../log.ts";
 import { romeTime } from "../slots.ts";
@@ -151,7 +151,7 @@ export interface AgentsStatus {
 // Il registro degli errori nel motore tiene solo le regole di sicurezza: niente riacquisto dopo uno stop e niente nuovo
 // tentativo dopo due rifiuti di Alpaca. Le lezioni statistiche dal diario non si usano: imparare dai risultati lo fanno il
 // capo ufficio e la sala caffè, da subito e con limiti, e due sistemi insieme punirebbero due volte lo stesso errore.
-const lezioniDiSicurezza = (file: Parameters<typeof activeLessons>[0], today: string) => activeLessons(file, today).filter((l) => l.tipo !== "statistica");
+const lezioniDiSicurezza = (file: Parameters<typeof activeLessons>[0], today: string, now: Date) => activeLessons(file, today, now).filter((l) => l.tipo !== "statistica");
 // Tutti gli agenti votano con lo stesso peso: chi va male lo richiama il capo ufficio (forza ridotta, soglia di Kronos).
 const pesiUguali = (agents: { name: string }[]) => Object.fromEntries(agents.map((a) => [a.name, 1]));
 
@@ -477,9 +477,10 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
     const lessonsFile = lr.file;
     if (lr.problem) await alarm("Registro degli errori illeggibile", lr.problem);
     const learned: Lesson[] = [];
+    pauseAOre(lessonsFile, today, startedAt);
     for (const o of snap.recentOrders) {
       if (!isProtectiveStop(o) || o.status !== "filled") continue;
-      const l = learnFromStopLoss(lessonsFile, `stop-${o.clientOrderId}`, o.symbol, today, `stop su Alpaca eseguito, ${o.filledQty} azioni`);
+      const l = learnFromStopLoss(lessonsFile, `stop-${o.clientOrderId}`, o.symbol, today, `stop su Alpaca eseguito, ${o.filledQty} azioni`, startedAt);
       if (l) learned.push(l);
     }
     let buyBlock: string | null = null;
@@ -522,7 +523,7 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
         await alarm("Perdita del giorno oltre la soglia", buyBlock);
       }
     }
-    const lessonsNow = lezioniDiSicurezza(lessonsFile, today);
+    const lessonsNow = lezioniDiSicurezza(lessonsFile, today, startedAt);
     const jr = readJournal(deps.stateDir, startedAt);
     const journal = jr.file;
     // Dal diario: calibrazione delle probabilità e meta-modello, attivi solo se verificati sui trade più recenti.
@@ -893,7 +894,7 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
     const failed = outcomes.filter((o) => o.kind === "fallito");
     if (failed.length) await alarm("Ordini rifiutati da Alpaca", failed.map((o) => `${o.id}: ${o.kind === "fallito" ? o.error : ""}`).join("\n"));
     for (const o of outcomes) {
-      const l = o.kind === "inviato" && o.plan.source === "stop-loss" ? learnFromStopLoss(lessonsFile, `stop-${o.id}`, o.plan.symbol, today, o.plan.why) : o.kind === "fallito" ? learnFromBrokerReject(lessonsFile, o.plan.symbol, o.plan.side, today, o.error) : null;
+      const l = o.kind === "inviato" && o.plan.source === "stop-loss" ? learnFromStopLoss(lessonsFile, `stop-${o.id}`, o.plan.symbol, today, o.plan.why, startedAt) : o.kind === "fallito" ? learnFromBrokerReject(lessonsFile, o.plan.symbol, o.plan.side, today, o.error, startedAt) : null;
       if (l) learned.push(l);
     }
 
@@ -983,7 +984,7 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
       inAttesa: alloc.inAttesa,
       stopSuAlpaca: stops,
       acquistiBloccati: buyBlock,
-      lezioniAttive: lezioniDiSicurezza(lessonsFile, today),
+      lezioniAttive: lezioniDiSicurezza(lessonsFile, today, startedAt),
       allarmi: alarms,
       diario: { stato: `${journal.trade.filter((t) => t.stato === "chiuso").length} trade chiusi: da questi imparano il capo ufficio e la sala caffè`, statistiche: statsOf(journal.trade) },
       confronto: bm.cmp,
@@ -1117,7 +1118,7 @@ export async function valutaTitolo(deps: EngineDeps, cache: EngineCache, symbol:
   const proposals = alloc.proposte.filter((p) => p.symbol === symbol);
   const entry = stockEntryOpen(clock, now);
   const recentOrders = open;
-  const cage = applyCage({ today, marketOpen: clock.isOpen, account, positions, prices, closes, recentOrders, lessons: lezioniDiSicurezza(lessonsFile, today), buyBlock, proposals, previsioni: view.previsioni, apertiOggi: openedToday(view), intradayAperti: simboliIntraday(journal) });
+  const cage = applyCage({ today, marketOpen: clock.isOpen, account, positions, prices, closes, recentOrders, lessons: lezioniDiSicurezza(lessonsFile, today, now), buyBlock, proposals, previsioni: view.previsioni, apertiOggi: openedToday(view), intradayAperti: simboliIntraday(journal) });
   const pos = positions.find((p) => p.symbol === symbol && p.qty > 0) ?? null;
   const price = prices[symbol] ?? closes[symbol]?.at(-1) ?? null;
   const c = closes[symbol];

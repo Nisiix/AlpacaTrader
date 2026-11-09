@@ -69,10 +69,13 @@ export const LIMITS = {
   // Perdita in giornata oltre la quale l'interruttore classico ferma gli acquisti: vale solo con breakerEnabled (spento);
   // nel motore degli agenti il limite del giorno è AGENTS.daily.maxLossPct (0 = nessun limite).
   maxDailyLossPct: 0.02,
-  // Dopo uno stop loss su un titolo, niente riacquisto per questi giorni di borsa.
-  stopLossCooldownDays: 5,
-  // Due rifiuti di Alpaca uguali (titolo + lato) entro questi giorni bloccano quel titolo-lato per altrettanti giorni.
+  // Dopo uno stop loss su un titolo: pausa di qualche ora (non giorni), poi si può rientrare ma con più margine
+  // (AGENTS.intraday.rientro: probabilità più alta e una proiezione nuova). Niente blocchi di un titolo per giorni.
+  stopLossPausaOre: 2,
+  // Due rifiuti di Alpaca uguali (titolo + lato) entro brokerRejectWindowDays giorni: pausa di brokerRejectPausaOre ore
+  // su quel titolo-lato (non giorni: un rifiuto tecnico si riprova lo stesso giorno o quello dopo).
   brokerRejectWindowDays: 5,
+  brokerRejectPausaOre: 4,
 };
 
 // Storico giornaliero da chiedere: media a 200 giorni più margine per festività.
@@ -426,8 +429,12 @@ export const AGENTS = {
     // Stop su Alpaca delle operazioni intraday al loro livello (quello che l'agente segue: −0,4%, pareggio, rialzi), non a
     // quello largo dei più giorni (−5/−10%): a PC spento o tra un giro e l'altro la perdita si ferma dove deve.
     stopSuAlpaca: true,
-    // Più ingressi sullo stesso titolo nello stesso giorno: dopo un'operazione chiusa in guadagno si può rientrare, al
-    // massimo `max` volte al giorno; dopo una chiusa in perdita no, fino a domani.
+    // Più ingressi sullo stesso titolo nello stesso giorno: al massimo `max` volte al giorno. Dopo una chiusa in perdita
+    // (stop compreso) vale `rientro`: pausa di qualche ora, poi più margine.
+    // Rientro dopo una perdita sul titolo (qualsiasi agente, stop compresi): nessun blocco di giorni. Pausa di `pausaOre`
+    // ore dalla chiusura, poi per `finestraOre` ore la soglia di probabilità sale di `extraProb` (rientro valutato con
+    // più margine), sempre con una proiezione nuova di Kronos (la stessa che ha fatto il trade non rientra).
+    rientro: { pausaOre: 2, finestraOre: 24, extraProb: 0.03 },
     ingressiGiorno: { max: 3 },
     // Riporto al giorno dopo (sostituisce la promozione a posizione di più giorni): a fine giornata un'operazione si tiene
     // se le proiezioni di Kronos sulle sue candele e su quelle superiori restano dentro la forchetta del trade (nessuna

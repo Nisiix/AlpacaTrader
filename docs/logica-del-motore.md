@@ -29,8 +29,8 @@ ora legale), le crypto lavorano 24 ore su 24.
    scoperti dall'esplorazione ancora attivi.
 2. **Alpaca.** Conto, posizioni, ordini, orologio della borsa, prezzi.
 3. **Trimestrali** (una volta al giorno) e **storico giornaliero** (solo giornate concluse, 320 sedute).
-4. **Memoria del rischio.** Registro degli errori (dopo uno stop niente riacquisto per 5 giorni di borsa; due rifiuti
-   uguali di Alpaca bloccano quel titolo per 5 giorni), limite del giorno, diario dei trade.
+4. **Memoria del rischio.** Registro degli errori (dopo uno stop una pausa di 2 ore sul titolo; due rifiuti uguali di
+   Alpaca una pausa di 4 ore: niente blocchi di giorni), limite del giorno, diario dei trade.
 5. **Previsioni.** Kronos e il cervello delle previsioni (capitolo 3), riportate al prezzo di adesso.
 6. **Fonti esterne.** Fear & Greed delle crypto, funding dei futures; le notizie le leggono i custodi.
 7. **Contesto economico**, prima di tutti gli altri agenti: decide dove aspettare e di quali proiezioni fidarsi.
@@ -337,8 +337,10 @@ sedute, uscita di trend) non riguardano questi trade.
   deve essere almeno 0,8%. Un limite non eseguito in 10 minuti si cancella (`costi.ordiniLimite`).
 - **Obiettivo** = il rialzo previsto da Kronos (mai sotto due volte i costi); con lo stop dell'ATR deve valere almeno
   1,2 volte lo stop, con quello dei percorsi decide l'aspettativa.
-- **Rientri**: dopo un'operazione chiusa in guadagno si può rientrare sullo stesso titolo nello stesso giorno, al
-  massimo 3 ingressi; dopo una chiusa in perdita no, fino al giorno dopo (`intraday.ingressiGiorno`).
+- **Rientri**: sullo stesso titolo al massimo 3 ingressi al giorno (`intraday.ingressiGiorno`). Dopo una chiusura in
+  perdita (stop compresi, di qualsiasi agente) nessun blocco di giorni (`intraday.rientro`): pausa di 2 ore, poi per 24
+  ore la soglia di probabilità sale di 3 punti e serve una proiezione nuova di Kronos; in dashboard la pausa si vede con
+  l'ora da cui il titolo si rivaluta.
 
 ### La scaletta delle medie (prudenza)
 

@@ -739,10 +739,11 @@ describe("intraday", () => {
     await fresh.observe(view({ closes, prices, now, today: "2026-09-22" }));
     const again = await fresh.observe(view({ closes, prices, now: day("2026-09-22", "16:35"), today: "2026-09-22" }));
     expect(again.segnali.some((x) => x.lato === "buy" && x.simbolo === "BTC/USD")).toBe(true);
-    // Stesso giorno, dopo l'uscita (trade di oggi nel diario): niente secondo ingresso su BTC.
-    const diario = { versione: 1, trade: [{ simbolo: "BTC/USD", stato: "chiuso", apertoIl: day("2026-09-22", "16:31").toISOString(), contesto: { agenti: ["intraday"] } }] } as unknown as JournalFile;
+    // Stesso giorno, dopo un'uscita in perdita alle 16:50: pausa di 2 ore, niente secondo ingresso su BTC alle 18:00.
+    const diario = { versione: 1, trade: [{ simbolo: "BTC/USD", stato: "chiuso", apertoIl: day("2026-09-22", "16:31").toISOString(), chiusoIl: day("2026-09-22", "16:50").toISOString(), costo: 100, incassato: 99, contesto: { agenti: ["intraday"] } }] } as unknown as JournalFile;
     const r5 = await a.observe(view({ closes, prices, now: day("2026-09-22", "18:00"), today: "2026-09-22", journal: diario }));
     expect(r5.segnali.filter((x) => x.lato === "buy" && x.simbolo === "BTC/USD")).toEqual([]);
+    expect(r5.intraday?.find((x) => x.simbolo === "BTC/USD")?.motivo ?? "", JSON.stringify(r5.intraday?.find((x) => x.simbolo === "BTC/USD"))).not.toContain("ingresso votato");
     // Fuori orario per i titoli (22:30): NVDA non è candidata neanche con Kronos favorevole.
     const r6 = await a.observe(view({ closes, prices, now: day("2026-09-22", "22:30"), today: "2026-09-22", previsioni: { NVDA: 0.03 } }));
     expect(r6.segnali.filter((x) => x.simbolo === "NVDA")).toEqual([]);

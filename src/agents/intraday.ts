@@ -284,22 +284,42 @@ export class IntradayAgent implements Agent {
     // giornata non decidono le medie giornaliere (50, 200) né il settimanale: decidono la proiezione di Kronos sulle
     // candele brevi e le medie brevi della candela scelta; il grafico più lungo e il Kronos a 5 sedute pesano solo sulla
     // taglia. Senza Kronos intraday (sidecar spento) vale il Kronos a 5 sedute, come prima.
-    // Ingressi di oggi sullo stesso titolo: dopo un'operazione chiusa in guadagno si può rientrare (al massimo
-    // ingressiGiorno.max volte); dopo una chiusa in perdita, o con una ancora aperta, no.
+    // Ultima chiusura in perdita sul titolo (qualsiasi agente, stop compresi) entro rientro.finestraOre: da lì la pausa e
+    // il margine in più per rientrare.
+    const ultimaPerdita = (s: string): number | null => {
+      let ultima: number | null = null;
+      for (const t of v.journal.trade) {
+        if (t.simbolo !== s || t.stato !== "chiuso" || !t.chiusoIl || !(t.incassato - t.costo < 0)) continue;
+        const ms = Date.parse(t.chiusoIl);
+        if (v.now.getTime() - ms <= c.rientro.finestraOre * 3_600_000 && (ultima === null || ms > ultima)) ultima = ms;
+      }
+      return ultima;
+    };
+    const hhmm = (ms: number) => { const m = romeTime(new Date(ms)).minutes; return `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`; };
+    const extraRientro = (s: string) => (ultimaPerdita(s) !== null ? c.rientro.extraProb : 0);
+    // Ingressi di oggi sullo stesso titolo: al massimo ingressiGiorno.max; con una ancora aperta no; dopo una chiusa in
+    // perdita una pausa di qualche ora (rientro.pausaOre), poi si rientra con più margine (extraRientro nella soglia).
     const bloccatoOggi = (s: string): string | null => {
+      const persa = ultimaPerdita(s);
+      if (persa !== null && v.now.getTime() - persa < c.rientro.pausaOre * 3_600_000) return `pausa dopo una perdita (chiusa alle ${hhmm(persa)}): rientro valutato dalle ${hhmm(persa + c.rientro.pausaOre * 3_600_000)}, con ${Math.round(c.rientro.extraProb * 100)} punti di probabilità in più`;
       const oggi = v.journal.trade.filter((t) => t.simbolo === s && t.apertoIl && romeTime(new Date(t.apertoIl)).date === v.today && t.contesto?.agenti?.includes(this.name)).sort((a, b) => a.apertoIl.localeCompare(b.apertoIl));
       if (!oggi.length) return this.entrateOggi.get(s) === v.today ? "ingresso appena fatto" : null;
       if (oggi.length >= c.ingressiGiorno.max) return `già ${oggi.length} ingressi oggi`;
       const ultimo = oggi.at(-1)!;
       if (ultimo.stato !== "chiuso") return "operazione di oggi ancora aperta";
-      if (!(ultimo.incassato - ultimo.costo > 0)) return "ultima operazione di oggi non chiusa in guadagno";
       return null;
     };
     const candidates: string[] = [];
     for (const s of AGENTS.universe) {
       if (v.analisi === false) break; // la scansione delle candidate si fa nell'analisi d'ingresso, ogni AGENTS.analisiMinuti
       if (v.giornata?.perditaOltre) break; // oltre la perdita massima del giorno (se impostata) niente ingressi
-      if (held.has(s) || bloccatoOggi(s)) continue;
+      if (held.has(s)) continue;
+      const blocco = bloccatoOggi(s);
+      if (blocco) {
+        // La pausa dopo una perdita si vede in dashboard (con l'ora da cui si rivaluta), gli altri limiti del giorno no.
+        if (blocco.startsWith("pausa") && inWindow(s)) stati.push({ simbolo: s, candela: "1Hour", fase: "cerca ingresso", ingresso: null, obiettivo: null, stop: null, prezzo: v.prices[s] ?? null, motivo: blocco });
+        continue;
+      }
       if (!inWindow(s)) continue;
       if (!v.closes[s] || !v.prices[s]) continue;
       if (!this.forecast) {
@@ -788,7 +808,8 @@ export class IntradayAgent implements Agent {
     for (const [k, g] of vittorieDi) if (g.n >= c.vittorie.minimo && g.v / g.n < c.vittorie.obiettivo) note.push(`candele ${k}: ${g.v} vinti su ${g.n} (${Math.round((g.v / g.n) * 100)}%), sotto l'obiettivo del ${Math.round(c.vittorie.obiettivo * 100)}%: per entrare serve +${Math.round(extraVittorie(k) * 100)} punti di probabilità`);
     // Probabilità minima per entrare: con le medie brevi in ordine (o rottura/rientro) quella della persona; senza, quella
     // più alta di minProbSenzaGrafico, salvo il rimbalzo dopo un calo netto (AGENTS.rimbalzo.minFiducia).
-    const sogliaDi = (s: string, grafico: boolean) => { const mp = Number(valore("AGENTS.intraday.kronos.minProb", s)); return grafico ? mp : Math.max(rimbalzi.has(s) ? AGENTS.rimbalzo.minFiducia : c.kronos.minProbSenzaGrafico, mp); };
+    // Dopo una perdita recente sul titolo la soglia sale di rientro.extraProb (rientro con più margine).
+    const sogliaDi = (s: string, grafico: boolean) => { const mp = Number(valore("AGENTS.intraday.kronos.minProb", s)); return (grafico ? mp : Math.max(rimbalzi.has(s) ? AGENTS.rimbalzo.minFiducia : c.kronos.minProbSenzaGrafico, mp)) + extraRientro(s); };
     // Candidate che hanno passato i controlli della loro candela: poi si guardano le candele superiori.
     const pronti: { s: string; price: number; best: (typeof prove extends Map<string, (infer P)[]> ? P : never) & { k?: number; pr: number | null; prGrezza?: number | null; h?: number; passa: boolean; fuori: boolean }; valutate: string; fc: number | undefined; stopIn: number }[] = [];
 
@@ -956,7 +977,7 @@ export class IntradayAgent implements Agent {
       const ingresso = `${rimbalzi.has(s) ? `${fmtCalo(s)}: ` : ""}${read.entra ? read.pattern : best.breve ? `medie brevi in ordine sulle candele ${tf} (prezzo sopra EMA 9 sopra EMA 20)` : `Kronos anticipa la ripartenza sulle candele ${tf} prima delle medie brevi`}`;
       const superiori = sup.letti.length ? `candele superiori: ${sup.letti.join(", ")}` : "";
       const tipo = trend ? `; trade di trend: le candele ${trend.tf} vedono ${pct(trend.k)} in ${etichetta(trend.h)} (probabilità ${Math.round(trend.pr * 100)}%), obiettivo finale ${num(obiettivoTrend!)}, stop della candela ${trend.tf}` : superiori ? "; trade breve: le candele superiori non sono contrarie ma non vedono un rialzo netto" : "";
-      segnali.push({ agente: this.name, simbolo: s, lato: "buy", forza: 1, orizzonteSedute: 1, intraday: true, pesoMassimo: peso, ...(best.prGrezza !== null && best.prGrezza !== undefined ? { misure: { probabilita: best.prGrezza, ...(rimbalzi.has(s) ? { rimbalzo: rimbalzi.get(s)!.calo } : {}), ...(livMedie(s) >= 0 ? { medie: livMedie(s) } : {}) } } : {}), ...(k !== undefined ? {} : fc !== undefined ? { kronos: fc } : {}), perche: `${s} intraday su candele ${tf}${valutate ? ` (scelta per probabilità netta dei costi: ${valutate})` : ""}: ${ingresso}${k !== undefined ? `; Kronos a ${etichetta(h!)} sulle candele ${tf} ${pct(k)} (probabilità ${Math.round((pr ?? 0) * 100)}%)` : fc !== undefined ? `; Kronos ${pct(fc)} a ${AGENTS.kronos.horizon} sedute` : ""}${superiori ? `; ${superiori}` : ""}${tipo}${pru.f < 1 ? `; ${pru.etichetta}: taglia ×${pru.f}` : ""}${indizi.length ? `; indizi contrari: ${indizi.join(" e ")} (−${Math.round(penalita * 100)} punti di probabilità, ${Math.round(prA! * 100)}%)` : ""}${correttivi.length > indizi.length ? `; ${correttivi.find((x) => /medie brevi/.test(x))}` : ""}${fattoriTaglia < c.taglia.pavimento ? `; taglia al pavimento (${Math.round(c.taglia.pavimento * 100)}% della massima)` : ""}${inSerie ? `; dopo ${perditeDiFila} perdite di fila, taglia ridotta` : ""}; obiettivo ${num(target)} (${pct(targetPct)}${k !== undefined ? `, da Kronos in ${etichetta(h!)}` : ""}), stop ${num(stop)} (${pct(-stopPct)}), poi controllo su candele ${controlloDi(s, tf)}, chiusura ${chiusuraDi(s)}` });
+      segnali.push({ agente: this.name, simbolo: s, lato: "buy", forza: 1, orizzonteSedute: 1, intraday: true, pesoMassimo: peso, ...(best.prGrezza !== null && best.prGrezza !== undefined ? { misure: { probabilita: best.prGrezza, ...(rimbalzi.has(s) ? { rimbalzo: rimbalzi.get(s)!.calo } : {}), ...(livMedie(s) >= 0 ? { medie: livMedie(s) } : {}) } } : {}), ...(k !== undefined ? {} : fc !== undefined ? { kronos: fc } : {}), perche: `${s} intraday su candele ${tf}${valutate ? ` (scelta per probabilità netta dei costi: ${valutate})` : ""}: ${ingresso}${k !== undefined ? `; Kronos a ${etichetta(h!)} sulle candele ${tf} ${pct(k)} (probabilità ${Math.round((pr ?? 0) * 100)}%)` : fc !== undefined ? `; Kronos ${pct(fc)} a ${AGENTS.kronos.horizon} sedute` : ""}${superiori ? `; ${superiori}` : ""}${tipo}${pru.f < 1 ? `; ${pru.etichetta}: taglia ×${pru.f}` : ""}${indizi.length ? `; indizi contrari: ${indizi.join(" e ")} (−${Math.round(penalita * 100)} punti di probabilità, ${Math.round(prA! * 100)}%)` : ""}${correttivi.length > indizi.length ? `; ${correttivi.find((x) => /medie brevi/.test(x))}` : ""}${fattoriTaglia < c.taglia.pavimento ? `; taglia al pavimento (${Math.round(c.taglia.pavimento * 100)}% della massima)` : ""}${inSerie ? `; dopo ${perditeDiFila} perdite di fila, taglia ridotta` : ""}${extraRientro(s) ? `; rientro dopo una perdita alle ${hhmm(ultimaPerdita(s)!)}: soglia più alta di ${Math.round(c.rientro.extraProb * 100)} punti` : ""}; obiettivo ${num(target)} (${pct(targetPct)}${k !== undefined ? `, da Kronos in ${etichetta(h!)}` : ""}), stop ${num(stop)} (${pct(-stopPct)}), poi controllo su candele ${controlloDi(s, tf)}, chiusura ${chiusuraDi(s)}` });
       nuovi.push({ s, pr: pE ?? prA ?? 0, peso });
       const opNuova = this.operazioni.get(s)!;
       stati.push({ simbolo: s, candela: tf, livelli: { candela: tf, previsione: `${tf}|${barsOf(s, tf)!.at(-1)!.t}`, obiettivo: opNuova.obiettivo, stop: opNuova.stop, ...(opNuova.orizzonteMin !== undefined ? { orizzonteMin: opNuova.orizzonteMin } : {}), sopraMedia: !!opNuova.sopraMedia, ...(opNuova.sostegno ? { sostegno: opNuova.sostegno } : {}) }, ...(h !== undefined && k !== undefined ? { orizzonte: etichetta(trend ? trend.h : h) } : {}), controllo: [`poi candele ${controlloDi(s, tf)}`, superiori].filter(Boolean).join(" · "), fase: "cerca ingresso", ingresso: price, obiettivo: obiettivoTrend ?? target, stop, prezzo: price, motivo: `ingresso votato: ${ingresso}${trend ? ` · trade di trend sulle candele ${trend.tf}` : ""}${valutate ? ` · probabilità netta per candela: ${valutate}` : ""}` });
