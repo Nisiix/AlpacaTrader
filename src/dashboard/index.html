@@ -2420,7 +2420,7 @@ function paintKpi(st) {
     tile('Vittorie', st.diario?.statistiche?.trade ? `<span class="${st.diario.statistiche.vinti / st.diario.statistiche.trade >= 0.51 ? 'up' : 'down'}">${Math.round((st.diario.statistiche.vinti / st.diario.statistiche.trade) * 100)}%</span>` : '–', st.diario?.statistiche?.trade ? `${st.diario.statistiche.vinti} trade chiusi in guadagno su ${st.diario.statistiche.trade} · obiettivo 51%${st.diario.statistiche.percCapitaleVinti != null ? ` · <span class="${st.diario.statistiche.percCapitaleVinti > 0.5 ? 'up' : 'down'}">${Math.round(st.diario.statistiche.percCapitaleVinti * 100)}%</span> del capitale sui vincenti` : ''}` : 'nessun trade chiuso ancora · obiettivo 51%', '#log'),
     tile('Contesto', esc(st.contesto?.generale || 'n.d.'), `${fg ? `Fear & Greed ${fg.valore} (${esc(fg.classe)}) · ` : ''}rischio ammesso ${Math.round((st.rischio ?? 1) * 100)}%`),
     tile('Kronos', st.kronos ? `${st.kronos.simboli} proiezioni` : 'n.d.', esc(st.kronos?.stato || '')),
-    tile('Agenti', `${(st.caffe?.operativi || []).length} al lavoro · ${(st.caffe?.presenti || []).length} in pausa`, `${(st.custodi || []).length} custodi · ${(st.intraday || []).filter((x) => x.fase === 'in posizione').length} operazioni intraday aperte${st.analisi ? ` · analisi d'ingresso ogni ${st.analisi.ogniMinuti} min${st.analisi.prossima ? `, prossima alle ${hhmm(st.analisi.prossima)}` : ''}` : ''}`, '#ufficio'),
+    tile('Agenti', `${(st.caffe?.operativi || []).filter((p) => p.chiave.startsWith('p:')).length} del team al lavoro · ${(st.caffe?.presenti || []).filter((p) => p.chiave.startsWith('p:')).length} in pausa`, `${(st.custodi || []).length} custodi · ${(st.intraday || []).filter((x) => x.fase === 'in posizione').length} operazioni intraday aperte${st.analisi ? ` · analisi d'ingresso ogni ${st.analisi.ogniMinuti} min${st.analisi.prossima ? `, prossima alle ${hhmm(st.analisi.prossima)}` : ''}` : ''}`, '#ufficio'),
     tile('Esplorazione', `${att.length} opportunità`, att.length ? att.map((x) => esc(conNome(x.simbolo))).join(', ') : 'nessuna aperta', '#ufficio'),
   ].join('');
 }
@@ -2431,10 +2431,14 @@ function paintCaffe(st) {
   if (!c) { $('#caffe').innerHTML = '<p class="empty">Nessun dato: la sala caffè arriva con il prossimo giro.</p>'; return; }
   const chip = (p, k) => `<span class="pill ${k}" title="${esc(p.perche)}">${esc(keyName(p.chiave))}</span>`;
   const lez = (c.lezioni || []).filter((l) => l.effetto);
+  // Il team sono le persone dello staff (p:Nome, 20); gli agenti generali senza voti si mostrano a parte.
+  const team = (c.presenti || []).filter((p) => p.chiave.startsWith('p:')), generali = (c.presenti || []).filter((p) => !p.chiave.startsWith('p:'));
+  const teamTot = Object.keys(st.persone || {}).filter((k) => k.startsWith('p:')).length || 20;
   $('#caffe').innerHTML = `
     <div class="why" style="margin-bottom:4px"><b>Lezioni di squadra</b> dai trade chiusi: prudenza dove si è perso, fiducia dove si è vinto</div>
     ${lez.length ? lez.map((l) => `<div class="vote"><span class="pill ${l.effetto === 'prudenza' ? 'down' : 'up'}">${esc(l.effetto)}</span> <span class="why">${esc(String(l.testo).split('. ')[0])}</span></div>`).join('') : '<p class="empty">Ancora nessuna lezione (servono almeno 3 trade chiusi simili).</p>'}
-    <div class="why" style="margin:14px 0 4px"><b>In pausa</b> (${c.presenti.length})</div><div class="row">${c.presenti.map((p) => chip(p, '')).join('') || '<span class="why">nessuno: tutti alla scrivania</span>'}</div>
+    <div class="why" style="margin:14px 0 4px"><b>In pausa</b> (${team.length} del team di ${teamTot})</div><div class="row">${team.map((p) => chip(p, p.formazione ? 'warn' : '')).join('') || '<span class="why">nessuno: tutti alla scrivania</span>'}</div>
+    ${generali.length ? `<div class="why" style="margin:14px 0 4px"><b>Agenti generali senza voti in questo giro</b> (${generali.length}): non fanno parte del team, sono gli strumenti comuni del motore</div><div class="row">${generali.map((p) => chip(p, '')).join('')}</div>` : ''}
     ${(c.scambi || []).length ? `<details style="margin-top:12px"><summary class="why" style="cursor:pointer">Cosa si dicono (${c.scambi.length})</summary>${c.scambi.map((x) => `<div class="vote"><b>${esc(keyName(x.da))}</b>${x.a ? ` → ${esc(keyName(x.a))}` : ''} <span class="pill">${esc(x.tema)}</span><br><span class="why">${esc(x.testo)}</span></div>`).join('')}</details>` : ''}`;
 }
 function paintEsplorazione(st) {

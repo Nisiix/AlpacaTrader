@@ -170,7 +170,9 @@ export function coffeeBreak(input: {
   const operativi: CaffeReport["operativi"] = [];
   const signals = Object.values(reports).flatMap((r) => r.segnali);
   const voted = (pred: (s: Signal) => boolean) => signals.find(pred);
-  const esploratori = input.esploratori ?? new Map<string, string>();
+  // Solo persone dello staff e agenti generali: le scoperte fatte prima dello staff hanno come scopritore una vecchia
+  // postazione (c:SYM, i:SYM) che non è una persona, e con lo staff attivo non vanno contate tra chi lavora.
+  const esploratori = new Map([...(input.esploratori ?? new Map<string, string>())].filter(([k]) => !Object.keys(input.staff?.reg.staff ?? {}).length || k.startsWith("p:") || k.startsWith("a:")));
   for (const [k, why] of esploratori) operativi.push({ chiave: k, nome: k, perche: why });
   // In formazione: in sala caffè qualunque cosa abbia da fare (le sue posizioni le proteggono stop e regole d'uscita).
   const formazione = new Map((input.formazione?.inFormazione ?? []).map((x) => [x.chiave, x]));
