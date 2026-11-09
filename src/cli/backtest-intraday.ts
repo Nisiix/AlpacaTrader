@@ -3,14 +3,14 @@
 // 1. raccolta (sul PC, dove ci sono Alpaca e Kronos): scarica le candele degli ultimi giorni e, per ogni candela chiusa
 //    del periodo, chiede a Kronos la proiezione delle candele successive come la chiederebbe il motore in quel momento
 //    (le ultime 400 candele, solo il modello Kronos, un sidecar suo su un'altra porta). Salva tutto in
-//    state/backtest/raccolta.json.
+//    state/backtest/dati.json.
 //       bun src/cli/backtest-intraday.ts raccolta --giorni 3 --campioni 8
 //
 // 2. replay (ovunque, senza rete): rimette il vero IntradayAgent davanti alle candele e alle proiezioni salvate, giro
 //    per giro ogni 5 minuti, con gli stessi criteri, ordini limite simulati, commissioni e uscite. Stampa quanti trade al
 //    giorno, quanti vinti, il risultato, per candela, e perché la maggior parte delle volte non si entra. Le varianti si
 //    provano con le opzioni (soglie, candele, affidabilità).
-//       bun src/cli/backtest-intraday.ts replay --file state/backtest/raccolta.json [--minprob 0.55] [--senzagrafico 0.57]
+//       bun src/cli/backtest-intraday.ts replay --file state/backtest/dati.json [--minprob 0.55] [--senzagrafico 0.57]
 //         [--margine 2] [--affidabilita misurata|neutra] [--candele 5Min,1Hour,4Hour] [--json out.json]
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -58,7 +58,9 @@ async function raccolta() {
   if (!crypto.length) crypto = ["BTC/USD", "ETH/USD", "SOL/USD", "XRP/USD", "DOGE/USD", "ADA/USD", "AVAX/USD", "LINK/USD", "LTC/USD", "DOT/USD"];
   crypto = crypto.slice(0, Number(arg("crypto", "12")));
   const azioni = (arg("azioni", AGENTS.universe.filter((s) => !isCrypto(s)).join(",")) ?? "").split(",").filter(Boolean);
-  const tfCrypto = (arg("candele", "5Min,15Min,1Hour,4Hour") ?? "").split(",");
+  const tfCrypto = (arg("candele", "5Min,1Hour,4Hour") ?? "").split(",");
+  // Candele da 5 minuti: una proiezione ogni `passo5` candele (con 3: ogni 15 minuti), per stare in tempi ragionevoli.
+  const passo5 = Number(arg("passo5", "3"));
   const tfAzioni = AGENTS.intraday.candeleAzioni;
   // Solo Kronos, con un numero fisso di campioni, su un sidecar suo (quello del motore resta libero).
   AGENTS.kronos.modelli = ["kronos"];
@@ -83,11 +85,11 @@ async function raccolta() {
     log(`candele ${tf}: ${Object.entries(r.barre[tf]!).map(([s, b]) => `${s} ${b.length}`).join(", ")}`);
   }
   r.giornaliere = await deps.broker.getDailyBars(r.simboli, 400);
-  const salva = () => writeFileSync(join(out, "raccolta.json"), JSON.stringify(r));
+  const salva = () => writeFileSync(join(out, "dati.json"), JSON.stringify(r));
   // Le proiezioni: per ogni candela chiusa nel periodo, tutte le serie di quella candela insieme (come nel motore).
   for (const tf of tfCrypto.concat(tfAzioni.filter((x) => !tfCrypto.includes(x)))) {
     const syms = r.simboli.filter((s) => r.candele[s]!.includes(tf));
-    const tempi = [...new Set(syms.flatMap((s) => (r.barre[tf]![s] ?? []).filter((b) => Date.parse(b.t) >= dal.getTime()).map((b) => b.t)))].sort();
+    const tempi = [...new Set(syms.flatMap((s) => (r.barre[tf]![s] ?? []).filter((b) => Date.parse(b.t) >= dal.getTime()).map((b) => b.t)))].sort().filter((t) => tf !== "5Min" || Math.round(Date.parse(t) / 300_000) % passo5 === 0);
     log(`proiezioni ${tf}: ${tempi.length} candele × ${syms.length} titoli`);
     let fatte = 0;
     for (const t of tempi) {
@@ -102,18 +104,19 @@ async function raccolta() {
         const f = await kf(serie, tfMin(tf), profondita(tf));
         for (const [s, p] of Object.entries(f)) r.previsioni[`${s}|${tf}|${t}`] = p.percorso.length ? p.percorso : [p.rendimentoPrevisto];
       } catch (e) { log(`proiezione ${tf} ${t}: ${(e as Error).message}`); }
-      if (++fatte % 50 === 0) { log(`  ${tf}: ${fatte}/${tempi.length}`); salva(); }
+      if (++fatte % 20 === 0) { log(`  ${tf}: ${fatte}/${tempi.length}`); salva(); }
+      if (existsSync(join(out, "stop"))) { log("fermata a richiesta"); salva(); link.stop(); process.exit(0); }
     }
     salva();
   }
   salva();
   link.stop();
-  log(`raccolta finita: ${Object.keys(r.previsioni).length} proiezioni in ${join(out, "raccolta.json")}`);
+  log(`raccolta finita: ${Object.keys(r.previsioni).length} proiezioni in ${join(out, "dati.json")}`);
 }
 
 // ---------- replay ----------
 function replay() {
-  const file = arg("file", "state/backtest/raccolta.json")!;
+  const file = arg("file", "state/backtest/dati.json")!;
   const r = JSON.parse(readFileSync(file, "utf8")) as Raccolta;
   const c = AGENTS.intraday;
   if (arg("minprob")) c.kronos.minProb = Number(arg("minprob"));

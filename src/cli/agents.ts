@@ -175,6 +175,17 @@ try {
     }
   }, 5_000);
   btWatcher.unref();
+  // state/backtest.stop ferma la prova sullo storico e il suo sidecar (porta 8766), anche se l'ha avviata un motore precedente.
+  const btStop = join(deps.stateDir, "backtest.stop");
+  const btStopWatcher = setInterval(() => {
+    if (!existsSync(btStop)) return;
+    try { unlinkSync(btStop); } catch {}
+    const cmd = process.platform === "win32"
+      ? ["powershell", "-NoProfile", "-Command", "Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like '*backtest-intraday*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }; Get-NetTCPConnection -LocalPort 8766 -State Listen -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }"]
+      : ["sh", "-c", "pkill -f backtest-intraday; pkill -f 'server.py.*--port 8766'"];
+    try { Bun.spawn(cmd, { stdout: "ignore", stderr: "ignore" }).unref(); console.log("prova sullo storico fermata"); } catch (e) { console.warn(`prova sullo storico: ${(e as Error).message}`); }
+  }, 5_000);
+  btStopWatcher.unref();
   // Sala caffè: ogni minuto gli agenti in pausa passano un pezzo del radar, anche tra un giro e l'altro.
   const exploreTimer = setInterval(() => {
     if (!stop) exploreNow(engine, cache).catch((e) => console.warn(`esplorazione: ${(e as Error).message}`));
