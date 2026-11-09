@@ -686,7 +686,7 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
       const ctx = contextFor(indicators[o.symbol], snap.prices[o.symbol], o.source === "modello" ? (proposed?.confidence ?? null) : null, o.source === "modello" ? (proposed?.expect ?? "") : "", o.why);
       if (o.source === "modello" && sc) {
         ctx.agenti = sc.agenti;
-        const chi = sc.agenti.map((a) => (a.startsWith("custode ") ? assegnazione.chi[`c:${a.slice(8)}`] : a === "intraday" ? (proposed?.intraday ? assegnazione.chi[`i:${o.symbol}`] : assegnazione.chi[`c:${o.symbol}`]) : `a:${a}`)).filter((k): k is string => !!k);
+        const chi = sc.agenti.map((a) => (a.startsWith("custode ") ? assegnazione.chi[`c:${o.symbol}`] : a === "intraday" ? (proposed?.intraday ? assegnazione.chi[`i:${o.symbol}`] : assegnazione.chi[`c:${o.symbol}`]) : `a:${a}`)).filter((k): k is string => !!k);
         if (chi.length) ctx.persone = [...new Set(chi)];
       }
       if (view.previsioni?.[o.symbol] !== undefined) ctx.kronos = view.previsioni[o.symbol];
