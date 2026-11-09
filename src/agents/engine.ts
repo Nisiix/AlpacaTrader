@@ -2,7 +2,7 @@ import { aggiornaProposte } from "./proposte.ts";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { isOpenOrder, isProtectiveStop, type Account, type Bar, type Broker, type MarketClock, type Order, type Position } from "../broker/types.ts";
-import { compareWithBenchmarks, type Comparison } from "../benchmark.ts";
+import { capitaleIniziale, compareWithBenchmarks, type Comparison } from "../benchmark.ts";
 import { evaluateBreaker, readBreaker, writeBreaker } from "../breaker.ts";
 import { applyCage, lossPct, tradingBlockReason, type Rejection } from "../cage.ts";
 import { AGENTS, CRYPTO_MIN_NOTIONAL, DAILY_BARS_DAYS, LIMITS, RADAR_SECTORS, UNIVERSE, isCrypto, setCryptoUniverse } from "../config.ts";
@@ -585,7 +585,7 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
       (cache.difeseAvvisate ??= []).push(chiave);
       await alarm("Difesa del guadagno di una persona", `${motivo}: si vendono i suoi trade non favorevoli (${sym}${Object.entries(giornataP.difesa).filter(([s2, m]) => s2 !== sym && m === motivo).map(([s2]) => `, ${s2}`).join("")})`);
     }
-    const view: AgentView = { today, now: startedAt, difesaPersonale: giornataP.difesa, prices: snap.prices, closes, indicators, positions: snap.positions, account: snap.account, cashImpegnato, analisi, journal, previsioni, previsioniKronos: previsioni, percorsi, mercatoAperto: snap.clock.isOpen, chiusuraBorsa: snap.clock.nextClose, finestraIngressi: stockEntryOpen(snap.clock, startedAt), giornata, fonti, ...(cache.dossier ? { dossier: cache.dossier } : {}) };
+    const view: AgentView = { today, now: startedAt, difesaPersonale: giornataP.difesa, prices: snap.prices, closes, indicators, positions: snap.positions, account: snap.account, cashImpegnato, capitaleBase: capitaleIniziale(deps.stateDir), analisi, journal, previsioni, previsioniKronos: previsioni, percorsi, mercatoAperto: snap.clock.isOpen, chiusuraBorsa: snap.clock.nextClose, finestraIngressi: stockEntryOpen(snap.clock, startedAt), giornata, fonti, ...(cache.dossier ? { dossier: cache.dossier } : {}) };
     const reports: Record<string, AgentReport> = {};
     const agentStatus: AgentsStatus["agenti"] = {};
     // Il contesto economico si valuta per primo: decide dove si aspetta e di quali proiezioni fidarsi.
@@ -1064,7 +1064,7 @@ export async function valutaTitolo(deps: EngineDeps, cache: EngineCache, symbol:
   const buyBlock = !LIMITS.breakerEnabled ? null : br.kind === "corrupt" ? "interruttore illeggibile" : evaluateBreaker(br.file, account.equity, account.lastEquity, now.toISOString()).buyBlock;
   const journal = readJournal(deps.stateDir, now).file;
   const previsioniNum = riallinea(usableForecasts(cache.previsioni ? Object.fromEntries(Object.entries(cache.previsioni.data).map(([k, v]) => [k, v.rendimentoPrevisto])) : undefined, closes).usabili, cache.previsioni?.data, prices);
-  const view: AgentView = { today, now, prices, closes, indicators, positions, account, journal, previsioni: previsioniNum, previsioniKronos: previsioniNum, mercatoAperto: clock.isOpen, chiusuraBorsa: clock.nextClose, finestraIngressi: stockEntryOpen(clock, now) };
+  const view: AgentView = { today, now, prices, closes, indicators, positions, account, capitaleBase: capitaleIniziale(deps.stateDir), journal, previsioni: previsioniNum, previsioniKronos: previsioniNum, mercatoAperto: clock.isOpen, chiusuraBorsa: clock.nextClose, finestraIngressi: stockEntryOpen(clock, now) };
   const ctxAgent = deps.agents.find((a): a is ContextAgent => a instanceof ContextAgent);
   let contesto: MarketContext | null = null;
   if (ctxAgent) {

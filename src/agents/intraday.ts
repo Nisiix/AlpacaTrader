@@ -8,6 +8,7 @@ import { addTradingDays } from "../slots.ts";
 import type { Agent, AgentReport, AgentView, Signal } from "./types.ts";
 import { valore } from "./profili.ts";
 import { calibraP } from "./statistica.ts";
+import { guadagniAperti, quotaBudget } from "./budget.ts";
 import { isObject, readJson, writeJsonAtomic } from "../fsutil.ts";
 import type { LivelliIntraday } from "../journal.ts";
 
@@ -940,9 +941,10 @@ export class IntradayAgent implements Agent {
       // prende tutto lo spazio, ne resta per le altre (budget 25% → 12,5% a operazione; 50% → 25%).
       // Il peso personale (profilo della persona, formazione: ×0,8) scala la taglia rispetto a quello di serie: con il tetto
       // a metà budget ridurre il solo massimo non avrebbe più effetto.
-      const tettoTrade = Math.min(c.maxWeight, Number(valore("AGENTS.intraday.budget.quota", s)) * c.budget.maxQuotaTrade);
+      const tettoTrade = Math.min(c.maxWeight, quotaBudget(v.account.equity, v.capitaleBase, Number(valore("AGENTS.intraday.budget.quota", s)), guadagniAperti(v.positions, v.prices)).quota * c.budget.maxQuotaTrade);
       const fattorePersona = Math.min(1.5, Math.max(0, Number(valore("AGENTS.intraday.maxWeight", s)) / Math.max(1e-9, c.maxWeight)));
-      const pesoRischio = Math.min(tettoTrade, Number(valore("AGENTS.intraday.budget.rischioTrade", s)) / (stopPct + costoVero(s) + c.budget.scivolamento)) * fattorePersona;
+      // Il peso personale scala la taglia ma non supera il tetto per titolo della gabbia (c.maxWeight).
+      const pesoRischio = Math.min(c.maxWeight, Math.min(tettoTrade, Number(valore("AGENTS.intraday.budget.rischioTrade", s)) / (stopPct + costoVero(s) + c.budget.scivolamento)) * fattorePersona);
       const fattoriTaglia = fid * pru.f * (inSerie ? c.serieNegativa.fattore : 1);
       const peso = pesoRischio * Math.max(c.taglia.pavimento, fattoriTaglia);
       const ingresso = `${rimbalzi.has(s) ? `${fmtCalo(s)}: ` : ""}${read.entra ? read.pattern : best.breve ? `medie brevi in ordine sulle candele ${tf} (prezzo sopra EMA 9 sopra EMA 20)` : `Kronos anticipa la ripartenza sulle candele ${tf} prima delle medie brevi`}`;
@@ -958,7 +960,8 @@ export class IntradayAgent implements Agent {
     // Budget dell'intraday: quanto è investito adesso in operazioni intraday (lo stesso conto dell'allocatore).
     const eq = v.account.equity > 0 ? v.account.equity : 1;
     const investito = [...mine].reduce((a, s) => a + (held.get(s)?.qty ?? 0) * (v.prices[s] ?? held.get(s)?.currentPrice ?? 0), 0);
-    note.push(`budget intraday: investito ${((investito / eq) * 100).toFixed(1).replace(".", ",")}% del conto su ${Math.round(Number(valore("AGENTS.intraday.budget.quota", "")) * 100)}% (crypto al massimo ${Math.round(c.budget.maxCrypto * 100)}%), rischio allo stop ${(c.budget.rischioTrade * 100).toFixed(2).replace(".", ",")}% per operazione`);
+    const qb = quotaBudget(eq, v.capitaleBase, Number(valore("AGENTS.intraday.budget.quota", "")), guadagniAperti(v.positions, v.prices));
+    note.push(`budget intraday: investito ${((investito / eq) * 100).toFixed(1).replace(".", ",")}% del conto su ${(qb.quota * 100).toFixed(1).replace(".", ",").replace(",0", "")}%${qb.reinvestito > 0.5 ? ` (${Math.round(Number(valore("AGENTS.intraday.budget.quota", "")) * 100)}% del capitale di partenza più ${qb.reinvestito.toFixed(2).replace(".", ",")} $ di profitto reinvestito)` : ""} (crypto al massimo ${Math.round(c.budget.maxCrypto * 100)}%), rischio allo stop ${(c.budget.rischioTrade * 100).toFixed(2).replace(".", ",")}% per operazione`);
     const tempi = this.forecast ? ` · tempi: candele ${(msCandele / 1000).toFixed(1)} s, Kronos ${(msKronos / 1000).toFixed(1)} s su ${serieKronos} serie nuove` : "";
     note.unshift(v.analisi === false ? `${[...mine].length} operazioni aperte seguite; nuove candidate alla prossima analisi d'ingresso (ogni ${AGENTS.analisiMinuti} minuti)${tempi}` : `${[...mine].length} operazioni aperte, ${candidates.length} candidate, ${n} ingressi votati${this.forecast ? ` · candele valutate: ${TFS.filter((tf) => !senzaVantaggio(tf)).join(", ")}${TFS.some((tf) => senzaVantaggio(tf)) ? ` (senza vantaggio misurato, solo misurate: ${TFS.filter((tf) => senzaVantaggio(tf)).join(", ")})` : ""}` : ""}${tempi}`);
     return { segnali, note, intraday: stati };

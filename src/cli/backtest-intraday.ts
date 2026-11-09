@@ -20,6 +20,7 @@ import type { Bar, IntradayBar } from "../broker/types.ts";
 import { AGENTS, LIMITS, isCrypto } from "../config.ts";
 import type { JournalFile, Trade } from "../journal.ts";
 import { romeTime } from "../slots.ts";
+import { guadagniAperti, quotaBudget } from "../agents/budget.ts";
 
 interface Raccolta {
   versione: 1;
@@ -159,7 +160,8 @@ function replay() {
   };
   const agent = new IntradayAgent(fetchBars, forecast, aff, null);
   const journal: JournalFile = { versione: 1, trade: [], intenzioni: [] } as unknown as JournalFile;
-  let cash = 100_000;
+  const capitale = 100_000;
+  let cash = capitale;
   const pos = new Map<string, { qty: number; carico: number; trade: Trade }>();
   const prezzoA = (s: string) => chiuse(r.barre["5Min"]?.[s], "5Min").at(-1)?.close ?? null;
   const giornaliere = (s: string) => (r.giornaliere[s] ?? []).filter((b) => b.date.slice(0, 10) < romeTime(ora).date).map((b) => b.close);
@@ -197,9 +199,9 @@ function replay() {
         if (!px || pos.has(s)) continue;
         if (!isCrypto(s) && !aperto) continue;
         // Come nel motore: la taglia dell'agente (dal rischio allo stop), poi il budget dell'intraday (investito insieme al
-        // massimo budget.quota del conto, crypto al massimo budget.maxCrypto).
+        // massimo budget.quota del conto più il profitto incassato reinvestito, crypto al massimo budget.maxCrypto).
         const investito = (pred: (x: string) => boolean) => [...pos.entries()].filter(([x]) => pred(x)).reduce((a, [x, p2]) => a + p2.qty * (prices[x] ?? p2.carico), 0);
-        const spazio = Math.min(c.budget.quota * equity - investito(() => true), isCrypto(s) ? c.budget.maxCrypto * equity - investito(isCrypto) : Infinity);
+        const spazio = Math.min(quotaBudget(equity, capitale, c.budget.quota, guadagniAperti(positions, prices)).quota * equity - investito(() => true), isCrypto(s) ? c.budget.maxCrypto * equity - investito(isCrypto) : Infinity);
         const peso = Math.min(sg.pesoMassimo ?? c.maxWeight, c.maxWeight, Math.max(0, spazio) / equity);
         if (peso * equity < 10) { motivi.set("budget intraday pieno", (motivi.get("budget intraday pieno") ?? 0) + 1); continue; }
         let prezzo = px;

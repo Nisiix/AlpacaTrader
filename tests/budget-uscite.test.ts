@@ -15,13 +15,26 @@ import { emptyJournal, type JournalFile } from "../src/journal.ts";
 AGENTS.intraday.riporto.enabled = false;
 const intra = (simbolo: string, peso: number): Signal => ({ agente: "intraday", simbolo, lato: "buy", forza: 1, orizzonteSedute: 1, intraday: true, pesoMassimo: peso, perche: "prova" });
 const view = (extra: Record<string, unknown> = {}) => {
-  const simboli = ["NVDA", "AAPL", "MSFT", "SPY", "GLD", "IWM", "BTC/USD", "ETH/USD", "SOL/USD"];
+  const simboli = ["NVDA", "AAPL", "MSFT", "SPY", "GLD", "IWM", "TLT", "BTC/USD", "ETH/USD", "SOL/USD"];
   return { today: "2026-09-24", now: new Date("2026-09-24T15:00:00Z"), prices: Object.fromEntries(simboli.map((s) => [s, 100])), closes: Object.fromEntries(simboli.map((s) => [s, syntheticCloses(100, 0.015, 260)])), indicators: {}, positions: [], account: { equity: 100_000, lastEquity: 100_000, cash: 100_000, status: "ACTIVE" }, journal: emptyJournal(), mercatoAperto: true, ...extra } as unknown as AgentView;
 };
 const valore = (a: ReturnType<typeof allocate>, s: string) => (a.proposte.find((x) => x.symbol === s)?.qty ?? 0) * 100;
 
+// Il meccanismo del budget provato con la quota al 50% (di serie è il 100%).
+const conQuota = (q: number, fn: () => void) => { const prima = AGENTS.intraday.budget.quota; AGENTS.intraday.budget.quota = q; try { fn(); } finally { AGENTS.intraday.budget.quota = prima; } };
+
 describe("budget dell'intraday", () => {
-  test("le occasioni intraday insieme non superano il budget (50%); si divide, non si scarta", () => {
+  test("di serie il budget è il 100% del conto: quattro settori al 25% usano tutto, meno la riserva di contanti", () => {
+    setCryptoUniverse(["BTC/USD", "ETH/USD", "SOL/USD"]);
+    expect(AGENTS.intraday.budget.quota).toBe(1);
+    const a = allocate(view(), { intraday: { segnali: [intra("NVDA", 0.25), intra("SPY", 0.25), intra("GLD", 0.25), intra("TLT", 0.25)] } }, { intraday: 1 });
+    const tot = ["NVDA", "SPY", "GLD", "TLT"].reduce((t, s) => t + valore(a, s), 0);
+    expect(tot).toBeLessThanOrEqual(100_000 * (1 - AGENTS.riservaContanti) + 1);
+    expect(tot).toBeGreaterThan(97_000);
+    for (const s of ["NVDA", "SPY", "GLD", "TLT"]) expect(valore(a, s)).toBeLessThanOrEqual(25_000 + 1);
+  });
+
+  test("le occasioni intraday insieme non superano il budget (50%); si divide, non si scarta", () => conQuota(0.5, () => {
     setCryptoUniverse(["BTC/USD", "ETH/USD", "SOL/USD"]);
     const a = allocate(view(), { intraday: { segnali: [intra("NVDA", 0.2), intra("SPY", 0.2), intra("GLD", 0.2)] } }, { intraday: 1 });
     const tot = valore(a, "NVDA") + valore(a, "SPY") + valore(a, "GLD");
@@ -34,9 +47,9 @@ describe("budget dell'intraday", () => {
     const tech = valore(t, "NVDA") + valore(t, "AAPL") + valore(t, "MSFT");
     expect(tech).toBeLessThanOrEqual(35_000 + 1);
     for (const s of ["NVDA", "AAPL", "MSFT"]) expect(valore(t, s)).toBeGreaterThan(10_000);
-  });
+  }));
 
-  test("con il 45% già investito in intraday resta il 5%; le crypto al massimo il 20%", () => {
+  test("con il 45% già investito in intraday resta il 5%; le crypto al massimo il 20%", () => conQuota(0.5, () => {
     setCryptoUniverse(["BTC/USD", "ETH/USD", "SOL/USD"]);
     const aperto: JournalFile = { ...emptyJournal(), trade: [{ id: "t", simbolo: "IWM", stato: "aperto", apertoIl: "2026-09-24T14:00:00Z", comprate: 450, costo: 45_000, vendute: 0, incassato: 0, quantita: 450, contesto: { agenti: ["intraday"], livelli: { candela: "1Hour", obiettivo: 101, stop: 99 } } } as any] };
     const a = allocate(view({ journal: aperto, positions: [{ symbol: "IWM", qty: 450, avgEntryPrice: 100, currentPrice: 100, marketValue: 45_000 }], account: { equity: 100_000, lastEquity: 100_000, cash: 55_000, status: "ACTIVE" } }), { intraday: { segnali: [intra("AAPL", 0.2)] } }, { intraday: 1 });
@@ -44,7 +57,7 @@ describe("budget dell'intraday", () => {
     expect(valore(a, "AAPL")).toBeGreaterThan(4_900);
     const c = allocate(view(), { intraday: { segnali: [intra("BTC/USD", 0.15), intra("ETH/USD", 0.15), intra("SOL/USD", 0.15)] } }, { intraday: 1 });
     expect(valore(c, "BTC/USD") + valore(c, "ETH/USD") + valore(c, "SOL/USD")).toBeLessThanOrEqual(20_000 + 1);
-  });
+  }));
 
   test("gabbia: un'operazione intraday può arrivare al 25% del conto; una di più giorni resta al 10%", () => {
     const base = { today: "2026-09-24", marketOpen: true, account: { equity: 100_000, lastEquity: 100_000, cash: 100_000, status: "ACTIVE" }, positions: [], prices: { NVDA: 100 }, closes: { NVDA: syntheticCloses(100, 0.03, 260) }, recentOrders: [], lessons: [], buyBlock: null };

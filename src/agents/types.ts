@@ -40,6 +40,8 @@ export interface AgentView {
   account: Account;
   // Contanti già impegnati da ordini d'acquisto ancora aperti: l'allocatore non li ridistribuisce.
   cashImpegnato?: number;
+  // Capitale di partenza (state/benchmark.json): il patrimonio sopra questo è profitto accumulato, reinvestito nel budget.
+  capitaleBase?: number;
   // Giro con analisi d'ingresso (ogni AGENTS.analisiMinuti): scansione intraday con Kronos e nuovi acquisti. Negli altri
   // giri si controllano solo le posizioni (uscite, stop, protezione). Assente = analisi (valutazione dalla dashboard, test).
   analisi?: boolean;

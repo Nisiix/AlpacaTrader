@@ -6,6 +6,7 @@ import { dailyVol } from "../indicators.ts";
 import { romeTime } from "../slots.ts";
 import { aFrazioni, frazionabile, intere, roundQty } from "../broker/types.ts";
 import { soloIntraday } from "./posizioni.ts";
+import { guadagniAperti, quotaBudget } from "./budget.ts";
 import type { AgentReport, AgentView, Signal } from "./types.ts";
 
 export interface Score {
@@ -249,7 +250,9 @@ export function allocate(view: AgentView, reports: Record<string, AgentReport>, 
     let w = maxWeightFor(view.closes[sc.simbolo]).max * rischioDi(sc.simbolo, !(kronosSu(sc.simbolo) || sc.intraday)) * (AGENTS.scaleByScore ? Math.min(1, sc.punteggio) : 1);
     // Intraday: la taglia viene dal rischio allo stop (agente intraday), poi il rischio del mercato; il tetto della
     // volatilità giornaliera (maxWeightFor) vale per i trade di più giorni, non per un trade con lo stop a −0,4%.
-    if (sc.intraday && sc.pesoMassimo !== undefined) w = sc.pesoMassimo * rischioDi(sc.simbolo, false);
+    // Mai oltre il tetto per titolo della gabbia (lo stesso numero): sopra, la gabbia scartava l'ordine intero invece di
+    // ridurlo (una persona con il peso personale alto chiedeva fino al 37,5%).
+    if (sc.intraday && sc.pesoMassimo !== undefined) w = Math.min(Math.max(LIMITS.maxPositionPct, AGENTS.intraday.maxWeight), sc.pesoMassimo * rischioDi(sc.simbolo, false));
     else if (sc.pesoMassimo !== undefined) w = Math.min(w, sc.pesoMassimo);
     // Taglia proporzionale alla fiducia nella proiezione di Kronos: più è probabile che il rialzo si avveri, più si investe.
     // Solo per i trade di più giorni: un trade intraday ha già la sua taglia dalla probabilità sulle candele (Kronos a 5
@@ -318,7 +321,9 @@ export function allocate(view: AgentView, reports: Record<string, AgentReport>, 
   const inCorso = view.cashImpegnato ?? 0;
   const cryptoAperto = valoreAperto(isCrypto) + inCorso, intradayAperto = valoreAperto(() => true) + inCorso;
   ripartisci(nuoviIntraday.filter((x) => isCrypto(x.sc.simbolo)), bud.maxCrypto * equity - cryptoAperto, `crypto intraday già al ${((cryptoAperto / Math.max(1, equity)) * 100).toFixed(0)}% del conto (massimo ${Math.round(bud.maxCrypto * 100)}%: si muovono insieme)`);
-  ripartisci(nuoviIntraday, bud.quota * equity - intradayAperto, `budget intraday: ${((intradayAperto / Math.max(1, equity)) * 100).toFixed(0)}% del conto già investito in operazioni intraday (massimo ${Math.round(bud.quota * 100)}%), il resto diviso tra le occasioni per qualità`);
+  // Con il profitto reinvestito il budget cresce oltre la quota di serie (vedi budget.ts).
+  const qb = quotaBudget(equity, view.capitaleBase, bud.quota, guadagniAperti(view.positions, view.prices));
+  ripartisci(nuoviIntraday, qb.quota * equity - intradayAperto, `budget intraday: ${((intradayAperto / Math.max(1, equity)) * 100).toFixed(0)}% del conto già investito in operazioni intraday (massimo ${Math.round(qb.quota * 100)}%${qb.reinvestito > 0.5 ? `, con ${qb.reinvestito.toFixed(2)} $ di profitto reinvestito` : ""}), il resto diviso tra le occasioni per qualità`);
   // Tetto per settore (lo stesso della gabbia): se le occasioni di un settore chiedono più dello spazio rimasto, si divide
   // in proporzione alla qualità (come il budget), così i contanti non vanno a un titolo che la gabbia poi rifiuterebbe.
   // Prima si riempiva in ordine di punteggio: con il budget al 50% il terzo titolo dello stesso settore restava a zero.

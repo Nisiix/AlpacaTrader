@@ -299,9 +299,14 @@ sedute, uscita di trend) non riguardano questi trade.
   una classe su una candela valgono le sue (i costi delle crypto sono 8 volte quelli delle azioni).
 - **Budget dell'intraday** (`intraday.budget`): la taglia di un'operazione la decide il rischio allo stop: perdita allo
   stop (stop + costi + scivolamento 0,2%) al massimo lo **0,25% del conto**, e un'operazione da sola al massimo metà del
-  budget. In operazioni intraday si investe insieme al massimo il **50% del conto** (regola di serie; le crypto, che si
-  muovono insieme, al massimo il 20%); gli ordini ancora in corso contano. Se le occasioni chiedono di più, il budget si
-  divide in proporzione alla qualità (prima del tetto per settore).
+  budget (25% del conto). In operazioni intraday si investe insieme fino al **100% del conto** (regola di serie, meno
+  la riserva di contanti dell'1%; le crypto, che si muovono insieme, al massimo il 20%; un settore al massimo il 35%,
+  diviso per qualità); gli ordini ancora in corso contano. Se le occasioni chiedono di più, il budget si divide in
+  proporzione alla qualità. Un segnale oltre il tetto per titolo (25%) viene ridotto, non scartato dalla gabbia.
+- **Profitto reinvestito** (`intraday.budget.reinvesti`): budget, rischio per operazione e posizione minima sono quote
+  del patrimonio, che contiene il profitto: con il conto che cresce crescono le taglie, con il conto che scende si
+  riducono. Con un budget sotto il 100% il profitto incassato dal capitale di partenza (`state/benchmark.json`) si
+  aggiunge tutto al budget, fino all'80% del conto; i guadagni ancora aperti non contano (possono sparire).
   Le sue proposte sulla taglia cambiano il rischio per operazione; la formazione riduce la taglia della persona.
 - **Lascia correre** (`intraday.lasciaCorrere`): il pareggio mette lo stop sopra i costi di andata e ritorno (crypto
   +0,5%, prima +0,3%: sotto i costi); dopo il pareggio lo stop segue il massimo a 2 ATR della candela di controllo.
