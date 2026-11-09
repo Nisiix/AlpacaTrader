@@ -438,7 +438,7 @@
     <p class="fix" id="fix" hidden></p>
     <div class="money" id="money" hidden>
       <div><div class="lab">Patrimonio totale</div><div class="big" id="k-eq">–</div></div>
-      <div><div class="lab">Oggi</div><div class="val" id="k-day">–</div><div class="why" id="k-obiettivo"></div></div>
+      <div><div class="lab">Oggi</div><div class="val" id="k-day">–</div></div>
       <div><div class="lab">Investito</div><div class="val" id="k-inv">–</div><div class="sub" id="k-inv-sub"></div></div>
       <div><div class="lab">Liquidità</div><div class="val" id="k-cash">–</div></div>
       <div><div class="lab">Sulle posizioni aperte</div><div class="val" id="k-unr">–</div></div>
@@ -1658,8 +1658,6 @@ function paintMoney(st) {
   $('#k-eq').textContent = money(c.patrimonio);
   const dayPct = c.patrimonio - c.pnlGiorno > 0 ? c.pnlGiorno / (c.patrimonio - c.pnlGiorno) : null;
   $('#k-day').textContent = `${usd(c.pnlGiorno)}${dayPct !== null ? ` (${pct(dayPct)})` : ''}${st.giornata?.obiettivoRaggiunto ? ` · obiettivo toccato (${pct(st.giornata.picco)}), difesa a ${pct(st.giornata.pavimentoPct)}` : ''}`; $('#k-day').className = `val ${cls(c.pnlGiorno)}`;
-  // Obiettivo del conto: almeno il 3% al giorno; altrimenti settimana in positivo (in negativo: modalità recupero).
-  { const w = st.settimana; const ob = w?.obiettivoGiorno ?? 0.03; $('#k-obiettivo').innerHTML = w ? `obiettivo ${pct(ob)} al giorno${dayPct !== null ? ` (${dayPct >= ob ? 'raggiunto' : `mancano ${pct(Math.max(0, ob - dayPct))}`})` : ''} · settimana <span class="${cls(w.pct)}">${pct(w.pct)}</span>, media <span class="${cls(w.mediaGiorno)}">${pct(w.mediaGiorno)}</span> al giorno${w.recupero ? ' · <b class="down">in recupero</b>: taglie dimezzate e solo occasioni più nette' : ''}` : ''; }
   $('#k-cash').textContent = money(c.contanti);
   const pos = st.posizioni || [];
   const inv = pos.reduce((a, p) => a + Math.abs(p.valore || 0), 0);

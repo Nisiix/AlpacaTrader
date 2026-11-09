@@ -130,8 +130,6 @@ export interface AgentsStatus {
   formazione?: FormazioneReport;
   // La giornata di ogni persona: guadagno sul capitale dei suoi trade di oggi, obiettivo personale, difesa.
   giornataPersone?: Record<string, GiornataPersona>;
-  // La settimana del conto (obiettivo: almeno il 3% al giorno, comunque settimana positiva).
-  settimana?: { pct: number; mediaGiorno: number; giorni: number; recupero: boolean; obiettivoGiorno: number };
   // Calibrazione delle probabilità e meta-modello: campione, attivi o no, Brier score sulla prova fuori campione.
   statistica?: { probabilita: Record<string, StatoCalibrazione>; meta: StatoMeta };
   // I nomi dei titoli e delle crypto (Apple, Bitcoin...), per mostrarli accanto ai codici.
@@ -189,24 +187,6 @@ export const forecastsPath = (stateDir: string) => join(stateDir, "previsioni.js
 // per tutti gli agenti, la gabbia e il contesto, non solo per l'agente Kronos. Restano nel file e sul grafico, segnate.
 // Il massimo guadagno del giorno toccato finora (ora di Roma), in state/giornata.json: la difesa del guadagno vale anche
 // dopo un riavvio del motore.
-// La settimana del conto: patrimonio all'inizio di ogni giorno (chiusura di ieri), gli ultimi giorni. Rendimento della
-// settimana = patrimonio di adesso / quello all'inizio del giorno più vecchio della finestra − 1; media giornaliera.
-export function aggiornaSettimana(stateDir: string, today: string, inizioOggi: number, ora: number): { pct: number; mediaGiorno: number; giorni: number; recupero: boolean } {
-  const p = join(stateDir, "settimana.json");
-  const r = readJson(p, (v): v is { giorni: Record<string, number> } => isObject(v) && isObject(v.giorni));
-  const giorni: Record<string, number> = r.kind === "ok" ? r.value.giorni : {};
-  if (inizioOggi > 0 && giorni[today] === undefined) {
-    giorni[today] = inizioOggi;
-    const tieni = Object.keys(giorni).sort().slice(-10);
-    writeJsonAtomic(p, { giorni: Object.fromEntries(tieni.map((d) => [d, giorni[d]!])) });
-  }
-  const finestra = Object.keys(giorni).sort().slice(-AGENTS.obiettivi.settimana.giorni);
-  const base = finestra.length ? giorni[finestra[0]!]! : inizioOggi;
-  const pct = base > 0 ? ora / base - 1 : 0;
-  const n = Math.max(1, finestra.length);
-  return { pct, mediaGiorno: Math.pow(1 + pct, 1 / n) - 1, giorni: finestra.length, recupero: finestra.length >= 2 && pct < 0 };
-}
-
 export function registraPicco(stateDir: string, today: string, pnlPct: number): number {
   const p = join(stateDir, "giornata.json");
   const r = readJson(p, (v): v is { data: string; picco: number } => isObject(v) && typeof v.data === "string" && typeof v.picco === "number");
@@ -481,8 +461,6 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
     // riavvio). Toccato l'obiettivo si continua a investire; se il guadagno torna al pavimento, scatta la difesa: gli agenti
     // vendono i trade non favorevoli. Perdita oltre la soglia (se impostata) → niente nuovi acquisti.
     const pnlPct = snap.account.lastEquity > 0 ? snap.account.equity / snap.account.lastEquity - 1 : 0;
-    // La settimana: patrimonio di inizio giorno degli ultimi giorni (state/settimana.json); in negativo → recupero.
-    const settimana = aggiornaSettimana(deps.stateDir, today, snap.account.lastEquity, snap.account.equity);
     const picco = registraPicco(deps.stateDir, today, pnlPct);
     const d = AGENTS.daily;
     // L'obiettivo del giorno è di ogni persona (src/agents/profili.ts): qui resta solo la perdita massima del conto.
@@ -721,15 +699,6 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
       const fuori = (motivo: string) => { alloc.inAttesa.push({ simbolo: o.symbol, motivo }); return false; };
       if (pm !== null && pm < META.soglia) return fuori(`il meta-modello stima solo ${Math.round(pm * 100)}% di probabilità che il trade finisca in guadagno (minimo ${Math.round(META.soglia * 100)}%)`);
       const p = pm ?? (grezza !== undefined ? calibraP(tipo, grezza) : null);
-      // Settimana in negativo: modalità recupero, solo le occasioni più nette e a taglia ridotta.
-      const rec = AGENTS.obiettivi.settimana.recupero;
-      if (settimana.recupero) {
-        const soglia = (o.intraday ? Number(valore("AGENTS.intraday.kronos.minProb", o.symbol)) : Number(valore("AGENTS.custodi.minProbabilita", o.symbol))) + rec.extraProb;
-        if (p === null || p < soglia) return fuori(`settimana in negativo (${(settimana.pct * 100).toFixed(2)}%): in recupero si entra solo con probabilità ≥ ${Math.round(soglia * 100)}%`);
-        o.qty = roundQty(o.symbol, o.qty * rec.taglia);
-        o.expect = `${o.expect} · settimana in negativo: taglia ridotta`;
-        if (o.qty <= 0) return false;
-      }
       if (p === null) return true;
       const lv = Object.values(reports).flatMap((r) => r.intraday ?? []).find((x) => x.simbolo === o.symbol && x.livelli)?.livelli;
       const stop = o.intraday && lv ? Math.max(0.002, 1 - lv.stop / price) : stopPctFor(closes[o.symbol]);
@@ -911,7 +880,6 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
       universo: { titoli: AGENTS.universe.filter((s) => !isCrypto(s)), crypto: AGENTS.universe.filter(isCrypto), fonteCrypto: cache.universeInfo?.fonte ?? null, aggiornatoCrypto: cache.universeInfo?.aggiornato ?? null },
       kronos: { stato: deps.kronosStato?.() ?? (deps.forecaster ? "attivo" : "non configurato"), proiezioniDel: cache.previsioni?.giorno ?? null, simboli: Object.keys(cache.previsioni?.data ?? {}).length, scartate },
       giornataPersone: giornataP.perPersona,
-      settimana: { ...settimana, obiettivoGiorno: AGENTS.obiettivi.giornoPct },
       statistica,
       giornata: { pnlPct, obiettivoPct: AGENTS.daily.targetPct, pavimentoPct: AGENTS.daily.pavimentoPct, picco: giornata.picco, perditaMaxPct: AGENTS.daily.maxLossPct, obiettivoRaggiunto: giornata.obiettivoRaggiunto, difesa: giornata.difesa, perditaOltre: giornata.perditaOltre },
       simulazioni,

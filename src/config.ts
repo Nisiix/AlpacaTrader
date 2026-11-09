@@ -122,12 +122,7 @@ export const AGENTS = {
   // (pavimentoPct), i trade non favorevoli si vendono per difendere quel guadagno: per le posizioni di più giorni Kronos a
   // 5 sedute sotto la soglia di rialzo, per l'intraday né la candela breve né quelle superiori vedono ancora salire.
   // Nessun tetto alla perdita (0).
-  daily: { enabled: true, targetPct: 0.1, pavimentoPct: 0.05, maxLossPct: 0.02 },
-  // Obiettivi del conto: almeno il 3% al giorno nel complessivo dei trade (obiettivo, non un limite: si continua a
-  // investire); se non si raggiunge, la media della settimana (ultimi `giorni` giorni) deve restare positiva. Settimana
-  // in negativo → modalità recupero: taglie × `taglia` e per entrare serve `extraProb` di probabilità in più, finché la
-  // settimana non torna positiva. Perdita del giorno oltre maxLossPct (2%) → niente nuovi acquisti fino a domani.
-  obiettivi: { giornoPct: 0.03, settimana: { giorni: 5, recupero: { taglia: 0.5, extraProb: 0.05 } } },
+  daily: { enabled: true, targetPct: 0.1, pavimentoPct: 0.05, maxLossPct: 0 },
   // Pagina pubblica su GitHub Pages: istantanea in sola lettura spinta sul ramo gh-pages ogni everyMinutes minuti.
   // Spenta di serie: la pagina è visibile a chiunque abbia il link (conto, posizioni, operazioni). remote vuoto = origin.
   pages: { enabled: false, everyMinutes: 10, branch: "gh-pages", remote: "" },

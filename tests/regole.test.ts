@@ -376,14 +376,3 @@ describe("apprendimento verificato", () => {
     aggiornaProbabilita(emptyJournal());
   });
 });
-
-test("settimana: patrimonio di inizio giorno degli ultimi 5 giorni; in negativo scatta il recupero", async () => {
-  const { aggiornaSettimana } = await import("../src/agents/engine.ts");
-  const dir = mkdtempSync(join(tmpdir(), "sett-"));
-  expect(aggiornaSettimana(dir, "2026-11-02", 1000, 1010).recupero).toBe(false); // un giorno solo: niente giudizio
-  aggiornaSettimana(dir, "2026-11-03", 1010, 990);
-  const s = aggiornaSettimana(dir, "2026-11-04", 990, 980);
-  expect(s.pct).toBeCloseTo(-0.02, 6);
-  expect(s.recupero).toBe(true);
-  expect(aggiornaSettimana(dir, "2026-11-04", 990, 1030).recupero).toBe(false); // tornata positiva
-});
