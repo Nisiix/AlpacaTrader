@@ -6,7 +6,7 @@ import { compareWithBenchmarks, type Comparison } from "../benchmark.ts";
 import { evaluateBreaker, readBreaker, writeBreaker } from "../breaker.ts";
 import { applyCage, lossPct, tradingBlockReason, type Rejection } from "../cage.ts";
 import { AGENTS, CRYPTO_MIN_NOTIONAL, DAILY_BARS_DAYS, LIMITS, RADAR_SECTORS, UNIVERSE, isCrypto, setCryptoUniverse } from "../config.ts";
-import { roundQty } from "../broker/types.ts";
+import { roundQty, segnaFrazionabili } from "../broker/types.ts";
 import type { KronosForecastPath } from "../kronos-sidecar.ts";
 import { stopPctFor } from "../stops.ts";
 import type { CustodeStato } from "./custode.ts";
@@ -47,6 +47,9 @@ import { addEarnings } from "../events.ts";
 import type { EventBus } from "./bus.ts";
 import { ContextAgent } from "./context.ts";
 import type { Agent, AgentReport, AgentView, MarketContext, Signal } from "./types.ts";
+
+// Titolo → giorno in cui si è chiesto ad Alpaca se è frazionabile.
+const frazionabiliChiesti = new Map<string, string>();
 
 export interface EngineDeps {
   broker: Broker;
@@ -429,6 +432,22 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
       const keep = new Set([...attive(espl, today).map((x) => x.simbolo), ...snap.positions.map((p) => p.symbol)]);
       for (let i = AGENTS.universe.length - 1; i >= 0; i--) { const u = AGENTS.universe[i]!; if (RADAR_SECTORS[u] && !keep.has(u)) AGENTS.universe.splice(i, 1); }
       for (const p of snap.positions) if (RADAR_SECTORS[p.symbol] && !AGENTS.universe.includes(p.symbol)) AGENTS.universe.push(p.symbol);
+    }
+    // Frazioni di azione: quali titoli Alpaca accetta a frazioni (fractionable), chiesto una volta al giorno per titolo.
+    // Se Alpaca non risponde il titolo resta «non frazionabile» (azioni intere, come prima) e si richiede al giro dopo.
+    if (AGENTS.frazioni.enabled && deps.broker.getFractionable) {
+      const daChiedere = [...new Set([...UNIVERSE, ...AGENTS.universe, ...snap.positions.map((p) => p.symbol)])].filter((x) => !isCrypto(x) && frazionabiliChiesti.get(x) !== today);
+      if (daChiedere.length) {
+        try {
+          const m = await deps.broker.getFractionable(daChiedere);
+          segnaFrazionabili(m);
+          for (const x of Object.keys(m)) frazionabiliChiesti.set(x, today);
+          const no = Object.entries(m).filter(([, v]) => !v).map(([x]) => x);
+          if (no.length) log.info(`frazioni: non frazionabili su Alpaca (solo azioni intere): ${no.join(", ")}`);
+        } catch (e) {
+          log.warn(`frazioni: Alpaca non dice quali titoli sono frazionabili (${(e as Error).message}): azioni intere fino al prossimo giro`);
+        }
+      }
     }
     // Ordini limite d'acquisto non eseguiti entro la scadenza: si cancellano, al giro dopo l'occasione si rivaluta.
     {
@@ -869,7 +888,7 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
         // A borsa chiusa si toccano solo gli stop delle crypto; quelli dei titoli restano com'erano.
         const manageable = equitiesOpen ? positions : positions.filter((p) => isCrypto(p.symbol));
         const relevantOpen = equitiesOpen ? open : open.filter((o) => isCrypto(o.symbol));
-        stops = await manageStops(deps.broker, giro, manageable, relevantOpen, log, closes, AGENTS.exit.enabled && AGENTS.exit.stopMode === "fisso" ? AGENTS.exit.stopPct : undefined);
+        stops = await manageStops(deps.broker, giro, manageable, relevantOpen, log, closes, AGENTS.exit.enabled && AGENTS.exit.stopMode === "fisso" ? AGENTS.exit.stopPct : undefined, deps.now());
       } catch (e) {
         stops = { ok: [], placed: [], cancelled: [], errors: [`Alpaca non risponde: ${(e as Error).message}`] };
       }

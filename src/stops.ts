@@ -1,5 +1,5 @@
-import { DuplicateOrderError, arrotondaPrezzo, isProtectiveStop, prezzoStringa, type Broker, type Order, type Position } from "./broker/types.ts";
-import { CRYPTO_MIN_NOTIONAL, LIMITS, isCrypto } from "./config.ts";
+import { BrokerError, DuplicateOrderError, arrotondaPrezzo, intere, isProtectiveStop, nove, prezzoStringa, type Broker, type Order, type Position } from "./broker/types.ts";
+import { AGENTS, CRYPTO_MIN_NOTIONAL, LIMITS, isCrypto } from "./config.ts";
 import { dailyVol } from "./indicators.ts";
 import type { Logger } from "./log.ts";
 
@@ -21,10 +21,42 @@ export function stopPctFor(closes: number[] | undefined): number {
 
 export const stopPriceFor = (p: Position, closes?: number[], fixedPct?: number) => arrotondaPrezzo(p.symbol, p.avgEntryPrice * (1 - (fixedPct ?? stopPctFor(closes))));
 
-// Ogni posizione ha uno e un solo stop su Alpaca, per tutta la quantità, alla distanza di stopPctFor.
-// Così la protezione vale anche tra un giro e l'altro e a macchina spenta.
-export async function manageStops(broker: Broker, runId: string, positions: Position[], openOrders: Order[], log: Logger, closes: Record<string, number[]> = {}, fixedPct?: number): Promise<StopsReport> {
+// Le parti di una posizione da coprire con uno stop su Alpaca.
+// - Crypto: tutta la quantità, uno stop GTC (salvo le briciole sotto il minimo negoziabile).
+// - Titoli a azioni intere: tutta la quantità, uno stop GTC.
+// - Titoli con una frazione (es. 12,37): le 12 intere con uno stop GTC (vale anche a PC spento, per giorni) e la frazione
+//   0,37 con uno stop «day» (Alpaca non accetta frazioni GTC), che scade alla chiusura e si rimette al primo giro a borsa
+//   aperta del giorno dopo. Una frazione sotto frazioni.minimoUsd non si copre su Alpaca: la protegge lo stop del motore.
+export interface ParteStop { qty: number; giornaliero: boolean }
+export function partiStop(p: Position): { parti: ParteStop[]; nota?: string } {
+  if (isCrypto(p.symbol)) {
+    if (Math.floor(p.qty * 1e6 + 1e-6) <= 0 || p.qty * p.currentPrice < CRYPTO_MIN_NOTIONAL) return { parti: [], nota: "briciola, nessuno stop" };
+    return { parti: [{ qty: p.qty, giornaliero: false }] };
+  }
+  const n = intere(p.qty);
+  const fr = nove(p.qty - n);
+  const parti: ParteStop[] = [];
+  if (n >= 1) parti.push({ qty: n, giornaliero: false });
+  if (fr > 1e-9) {
+    if (fr * p.currentPrice >= AGENTS.frazioni.minimoUsd) parti.push({ qty: fr, giornaliero: true });
+    else return { parti, nota: `frazione ${fr} sotto ${AGENTS.frazioni.minimoUsd} $: la protegge lo stop del motore` };
+  }
+  return parti.length ? { parti } : { parti, nota: "briciola, nessuno stop" };
+}
+
+// Stop «day» di una frazione rifiutati da Alpaca oggi (simbolo|giorno): non si riprovano a ogni giro (sarebbe un
+// allarme ogni 5 minuti); fino a domani la frazione la protegge lo stop del motore (gabbia e uscite intraday).
+const frazioneRifiutata = new Map<string, string>();
+export const azzeraRifiutiFrazioni = () => frazioneRifiutata.clear();
+
+const stessaQty = (a: number, b: number) => Math.abs(a - b) < 1e-9;
+const descr = (p: Position, parte: ParteStop, prezzo: number) => `${p.symbol} ${nove(parte.qty)}${parte.giornaliero ? " (frazione, stop day)" : ""} @ ${prezzoStringa(p.symbol, prezzo)}`;
+
+// Ogni posizione ha i suoi stop su Alpaca, per tutta la quantità (in una o due parti, vedi partiStop), alla distanza di
+// stopPctFor. Così la protezione vale anche tra un giro e l'altro e a macchina spenta.
+export async function manageStops(broker: Broker, runId: string, positions: Position[], openOrders: Order[], log: Logger, closes: Record<string, number[]> = {}, fixedPct?: number, now: Date = new Date()): Promise<StopsReport> {
   const r: StopsReport = { ok: [], placed: [], cancelled: [], errors: [] };
+  const oggi = now.toISOString().slice(0, 10);
   const stops = openOrders.filter(isProtectiveStop);
   const bySymbol = new Map<string, Order[]>();
   for (const o of stops) bySymbol.set(o.symbol, [...(bySymbol.get(o.symbol) ?? []), o]);
@@ -32,30 +64,54 @@ export async function manageStops(broker: Broker, runId: string, positions: Posi
   for (const p of positions.filter((x) => x.qty > 0)) {
     const existing = bySymbol.get(p.symbol) ?? [];
     bySymbol.delete(p.symbol);
-    // Briciola crypto (resto sotto il minimo negoziabile o sotto il milionesimo): Alpaca rifiuterebbe lo stop.
-    if (isCrypto(p.symbol) && (Math.floor(p.qty * 1e6 + 1e-6) <= 0 || p.qty * p.currentPrice < CRYPTO_MIN_NOTIONAL)) {
-      r.ok.push(`${p.symbol} ${p.qty}: briciola, nessuno stop`);
-      continue;
+    const { parti, nota } = partiStop(p);
+    if (nota) r.ok.push(`${p.symbol} ${nove(p.qty)}: ${nota}`);
+    // Senza storico la distanza non si può ricalcolare: gli stop già giusti per quantità restano dove sono, e una parte
+    // mancante (la frazione scaduta ieri) si rimette allo stesso prezzo delle intere.
+    const prezzoEsistente = existing.find((o) => o.stopPrice && parti.some((pt) => stessaQty(o.qty, pt.qty)))?.stopPrice ?? null;
+    const senzaStorico = fixedPct === undefined && !closes[p.symbol] && prezzoEsistente !== null;
+    const want = senzaStorico ? prezzoEsistente! : stopPriceFor(p, closes[p.symbol], fixedPct);
+    // Ogni parte tiene lo stop che c'è già se ha la stessa quantità, lo stesso prezzo (entro un millesimo o un centesimo;
+    // senza storico qualunque prezzo) e la durata giusta (le intere non su uno stop «day»).
+    const usati = new Set<string>();
+    const mancanti: ParteStop[] = [];
+    for (const parte of parti) {
+      const o = existing.find((x) => !usati.has(x.id) && stessaQty(x.qty, parte.qty) && (senzaStorico || Math.abs((x.stopPrice ?? 0) - want) < Math.min(0.01, want * 0.001)) && (parte.giornaliero || x.tif !== "day"));
+      if (o) {
+        usati.add(o.id);
+        r.ok.push(`${descr(p, parte, o.stopPrice ?? want)}${senzaStorico ? " (storico non disponibile: stop lasciato com'era)" : ""}`);
+      } else mancanti.push(parte);
     }
-    // Senza storico la distanza non si può ricalcolare: uno stop già giusto per quantità resta dov'è.
-    if (fixedPct === undefined && !closes[p.symbol] && existing.length === 1 && existing[0]!.qty === p.qty && existing[0]!.stopPrice) {
-      r.ok.push(`${p.symbol} ${p.qty} @ ${prezzoStringa(p.symbol, existing[0]!.stopPrice)} (storico non disponibile: stop lasciato com'era)`);
-      continue;
-    }
-    const want = stopPriceFor(p, closes[p.symbol], fixedPct);
-    // Stesso stop se differisce meno di un millesimo del prezzo (o di un centesimo): non si sposta per l'arrotondamento.
-    if (existing.length === 1 && existing[0]!.qty === p.qty && Math.abs((existing[0]!.stopPrice ?? 0) - want) < Math.min(0.01, want * 0.001)) {
-      r.ok.push(`${p.symbol} ${p.qty} @ ${prezzoStringa(p.symbol, want)}`);
-      continue;
-    }
+    const daTogliere = existing.filter((o) => !usati.has(o.id));
+    if (!mancanti.length && !daTogliere.length) continue;
     try {
-      for (const o of existing) {
+      // Prima si tolgono gli stop vecchi (liberano la quantità), poi si mettono quelli che mancano.
+      for (const o of daTogliere) {
         await broker.cancelOrder(o.id);
         r.cancelled.push(`${p.symbol} ${o.qty} @ ${o.stopPrice === null ? "?" : prezzoStringa(p.symbol, o.stopPrice)}`);
       }
-      await placeStop(broker, runId, p.symbol, p.qty, want);
-      r.placed.push(`${p.symbol} ${p.qty} @ ${prezzoStringa(p.symbol, want)}`);
-      log.info(`stop su Alpaca: ${p.symbol} ${p.qty} @ ${prezzoStringa(p.symbol, want)}`);
+      for (const parte of mancanti) {
+        const chiave = `${p.symbol}|${oggi}`;
+        if (parte.giornaliero && frazioneRifiutata.has(chiave)) {
+          r.ok.push(`${p.symbol} ${nove(parte.qty)}: frazione senza stop su Alpaca oggi (${frazioneRifiutata.get(chiave)}): la protegge lo stop del motore`);
+          continue;
+        }
+        try {
+          await placeStop(broker, runId, p.symbol, parte.qty, want, parte.giornaliero);
+          r.placed.push(descr(p, parte, want));
+          log.info(`stop su Alpaca: ${descr(p, parte, want)}`);
+        } catch (e) {
+          // Uno stop sulla frazione rifiutato in modo definitivo (non un errore di rete): non si riprova fino a domani e
+          // non è un allarme; le intere restano coperte dal loro stop GTC.
+          if (parte.giornaliero && e instanceof BrokerError && !e.transient) {
+            frazioneRifiutata.set(chiave, e.message);
+            r.ok.push(`${p.symbol} ${nove(parte.qty)}: Alpaca non accetta lo stop sulla frazione (${e.message}): la protegge lo stop del motore`);
+            log.warn(`stop sulla frazione di ${p.symbol} rifiutato da Alpaca: ${e.message}; la frazione la protegge lo stop del motore fino a domani`);
+            continue;
+          }
+          throw e;
+        }
+      }
     } catch (e) {
       r.errors.push(`${p.symbol}: ${(e as Error).message}`);
       log.error(`stop su ${p.symbol} non piazzato: ${(e as Error).message}`);
@@ -75,12 +131,13 @@ export async function manageStops(broker: Broker, runId: string, positions: Posi
   return r;
 }
 
-// L'ID resta deterministico; se quello base è già usato (giro rifatto) si prova con un suffisso.
-async function placeStop(broker: Broker, runId: string, symbol: string, qty: number, stopPrice: number) {
+// L'ID resta deterministico; se quello base è già usato (giro rifatto) si prova con un suffisso. La frazione ha il suo
+// (stopfr), così nello stesso giro convivono lo stop delle intere e quello della frazione.
+async function placeStop(broker: Broker, runId: string, symbol: string, qty: number, stopPrice: number, giornaliero = false) {
   for (let n = 1; n <= 5; n++) {
-    const id = `${runId}-${symbol.replace("/", "")}-stop${n > 1 ? `-${n}` : ""}`;
+    const id = `${runId}-${symbol.replace("/", "")}-stop${giornaliero ? "fr" : ""}${n > 1 ? `-${n}` : ""}`;
     try {
-      return await broker.submitStopOrder({ symbol, qty, stopPrice, clientOrderId: id });
+      return await broker.submitStopOrder({ symbol, qty, stopPrice, clientOrderId: id, ...(giornaliero ? { giornaliero: true } : {}) });
     } catch (e) {
       if (!(e instanceof DuplicateOrderError)) throw e;
     }

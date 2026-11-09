@@ -310,6 +310,13 @@ export const AGENTS = {
   // Su un conto piccolo (es. 1.000 $) i 100 $ fissi erano il 10% del conto: quasi nessun ingresso intraday ci arrivava.
   // Il minimo in dollari è al più `quotaConto` del conto (1.000 $ → 10 $; da 10.000 $ in su resta 100 $).
   minNuova: { pct: 0.002, usd: 100, quotaConto: 0.01 },
+  // Frazioni di azione. Alpaca le accetta solo sui titoli con fractionable = true (si chiede una volta al giorno), con
+  // ordini «day» (mai GTC) e almeno 1 $ (minimoUsd). Si compra a frazioni solo quando le azioni intere toglierebbero
+  // troppo: con almeno un'azione intera e uno scarto entro tolleranzaIntere (12,4 → 12, il 3% in meno) si comprano intere,
+  // così la posizione resta protetta per intero dallo stop GTC su Alpaca. Una posizione frazionaria ha due stop: le
+  // azioni intere con uno stop GTC (vale anche a PC spento) e la frazione con uno stop «day», rinnovato ogni giorno al
+  // primo giro a borsa aperta; prima di quel giro (e se Alpaca lo rifiuta) la frazione la protegge lo stop del motore.
+  frazioni: { enabled: true, tolleranzaIntere: 0.1, minimoUsd: 1 },
   // Esplorazione: gli agenti in sala caffè passano in rassegna il radar (RADAR_SECTORS e le crypto rimaste fuori dal
   // tetto di coppie) ogni everyMinutes (di serie ogni minuto, anche tra un giro e l'altro), perGiro titoli alla volta;
   // finito il radar si ricomincia da capo (i prezzi cambiano, Kronos si chiede una volta al giorno per titolo). Un titolo che supera i criteri del motore (sopra la

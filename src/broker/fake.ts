@@ -5,6 +5,19 @@ import { addDays, romeTime } from "../slots.ts";
 import type { Account, Bar, Broker, IntradayBar, MarketClock, Order, OrderRequest, Position, StopOrderRequest } from "./types.ts";
 import { BrokerError, DuplicateOrderError, isOpenOrder, isProtectiveStop } from "./types.ts";
 
+// Data e ora di New York (gli ordini «day» scadono alla chiusura delle 16:00 di New York).
+function oraNewYork(d: Date): { data: string; minuti: number } {
+  const f = new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+  const p = Object.fromEntries(f.formatToParts(d).map((x) => [x.type, x.value]));
+  return { data: `${p.year}-${p.month}-${p.day}`, minuti: Number(p.hour) * 60 + Number(p.minute) };
+}
+// Un ordine «day» è scaduto se è di un giorno di New York precedente o se oggi sono passate le 16:00.
+export function giornalieroScaduto(submittedAt: string, now: Date): boolean {
+  const a = oraNewYork(new Date(submittedAt)), b = oraNewYork(now);
+  return a.data < b.data || (a.data === b.data && a.minuti < 16 * 60 && b.minuti >= 16 * 60);
+}
+const frazione = (q: number) => Math.abs(q - Math.round(q)) > 1e-9;
+
 export interface FakeFaults {
   // Dopo N ordini registrati il processo si uccide da solo (SIGKILL), come una macchina che muore.
   crashAfterSubmits?: number;
@@ -19,6 +32,10 @@ export interface FakeFaults {
   rejectSymbols?: string[];
   // Questi metodi falliscono sempre con un errore temporaneo.
   failMethods?: string[];
+  // Titoli non frazionabili (fractionable = false su Alpaca): frazioni rifiutate. Gli altri titoli lo sono.
+  nonFrazionabili?: string[];
+  // Alpaca rifiuta gli stop «day» sulle frazioni di questi titoli (per provare la protezione del motore).
+  rifiutaStopFrazione?: string[];
 }
 
 export interface FakeState {
@@ -77,8 +94,22 @@ export class FakeBroker implements Broker {
 
   load(): FakeState {
     const s: FakeState = { ...defaultFakeState(), ...JSON.parse(readFileSync(this.file, "utf8")) };
-    if (this.triggerStops(s)) this.save(s);
+    const scaduti = this.scadiGiornalieri(s);
+    if (this.triggerStops(s) || scaduti) this.save(s);
     return s;
+  }
+
+  // Come su Alpaca: gli ordini «day» ancora aperti scadono alla chiusura di New York.
+  private scadiGiornalieri(s: FakeState): boolean {
+    let changed = false;
+    for (const o of s.orders) if (o.tif === "day" && isOpenOrder(o) && giornalieroScaduto(o.submittedAt, this.now())) { o.status = "expired"; changed = true; }
+    return changed;
+  }
+
+  async getFractionable(symbols: string[]): Promise<Record<string, boolean>> {
+    const s = this.load();
+    this.checkOutage(s, "getFractionable");
+    return Object.fromEntries(symbols.filter((x) => !isCrypto(x)).map((x) => [x, !(s.faults.nonFrazionabili ?? []).includes(x)]));
   }
 
   // Come sul broker vero: uno stop aperto scatta da solo quando il prezzo scende sotto la soglia.
@@ -92,7 +123,7 @@ export class FakeBroker implements Broker {
       const qty = Math.min(o.qty, pos.qty);
       pos.qty -= qty;
       s.cash += qty * price;
-      if (pos.qty <= 0) delete s.positions[o.symbol];
+      if (pos.qty <= 1e-9) delete s.positions[o.symbol];
       o.status = "filled";
       o.filledQty = qty;
       o.filledAvgPrice = price;
@@ -187,6 +218,11 @@ export class FakeBroker implements Broker {
     this.checkOutage(s, "submitOrder");
     if (s.orders.some((o) => o.clientOrderId === req.clientOrderId)) throw new DuplicateOrderError(`client_order_id già usato: ${req.clientOrderId}`, 422);
     if (s.faults.rejectSymbols?.includes(req.symbol)) throw new BrokerError(`asset ${req.symbol} is not tradable (broker finto)`, 422);
+    // Frazioni come su Alpaca: solo titoli frazionabili, almeno 1 $ (gli ordini a mercato sono già «day»).
+    if (!isCrypto(req.symbol) && frazione(req.qty)) {
+      if ((s.faults.nonFrazionabili ?? []).includes(req.symbol)) throw new BrokerError("requested asset is not fractionable", 422);
+      if (req.side === "buy" && req.qty * this.price(s, req.symbol) < 1) throw new BrokerError("fractional order notional must be at least $1", 422);
+    }
     // Ordine limite: il broker finto lo esegue subito al prezzo migliore tra mercato e limite (come se il prezzo lo toccasse).
     const price = req.limitPrice ? Math.min(this.price(s, req.symbol), req.limitPrice) : this.price(s, req.symbol);
     const pos = s.positions[req.symbol] ?? { qty: 0, avgEntryPrice: 0 };
@@ -196,12 +232,13 @@ export class FakeBroker implements Broker {
       pos.qty += req.qty;
       s.cash -= req.qty * price;
     } else {
-      if (req.qty > pos.qty) throw new BrokerError("quantità superiore alla posizione", 403);
-      if (req.qty > pos.qty - this.heldForStops(s, req.symbol)) throw new BrokerError("insufficient qty available for order (azioni impegnate da uno stop)", 403);
+      if (req.qty > pos.qty + 1e-9) throw new BrokerError("quantità superiore alla posizione", 403);
+      if (req.qty > pos.qty - this.heldForStops(s, req.symbol) + 1e-9) throw new BrokerError("insufficient qty available for order (azioni impegnate da uno stop)", 403);
       pos.qty -= req.qty;
       s.cash += req.qty * price;
     }
-    if (pos.qty > 0) s.positions[req.symbol] = pos;
+    // Resto sotto il miliardesimo (rumore della virgola mobile dopo frazioni): la posizione è chiusa.
+    if (pos.qty > 1e-9) s.positions[req.symbol] = pos;
     else delete s.positions[req.symbol];
     const order: Order = {
       id: `fake-${s.orders.length + 1}`,
@@ -296,7 +333,12 @@ export class FakeBroker implements Broker {
     this.checkOutage(s, "submitStopOrder");
     if (s.orders.some((o) => o.clientOrderId === req.clientOrderId)) throw new DuplicateOrderError(`client_order_id già usato: ${req.clientOrderId}`, 422);
     const pos = s.positions[req.symbol];
-    if (!pos || req.qty > pos.qty - this.heldForStops(s, req.symbol)) throw new BrokerError("insufficient qty available for order", 403);
+    if (!pos || req.qty > pos.qty - this.heldForStops(s, req.symbol) + 1e-9) throw new BrokerError("insufficient qty available for order", 403);
+    // Frazioni come su Alpaca: solo stop «day»; e, per le prove, un rifiuto voluto.
+    if (!isCrypto(req.symbol) && frazione(req.qty)) {
+      if (!req.giornaliero) throw new BrokerError("fractional orders must be DAY orders", 422);
+      if ((s.faults.rifiutaStopFrazione ?? []).includes(req.symbol)) throw new BrokerError("fractional stop order not accepted (broker finto)", 422);
+    }
     const order: Order = {
       id: `fake-${s.orders.length + 1}`,
       clientOrderId: req.clientOrderId,
@@ -308,6 +350,7 @@ export class FakeBroker implements Broker {
       submittedAt: this.now().toISOString(),
       type: isCrypto(req.symbol) ? "stop_limit" : "stop",
       stopPrice: req.stopPrice,
+      tif: !isCrypto(req.symbol) && req.giornaliero ? "day" : "gtc",
     };
     s.orders.push(order);
     this.save(s);

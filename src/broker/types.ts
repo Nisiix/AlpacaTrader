@@ -1,3 +1,5 @@
+import { AGENTS } from "../config.ts";
+
 export type Side = "buy" | "sell";
 
 export interface Account {
@@ -26,6 +28,8 @@ export interface Order {
   submittedAt: string;
   type: string; // market | stop | ...
   stopPrice: number | null;
+  // Durata dell'ordine su Alpaca: "gtc" (finché non si cancella) o "day" (scade alla chiusura); le frazioni solo "day".
+  tif?: string;
   // Prezzo medio e ora di esecuzione: servono al diario dei trade.
   filledAvgPrice?: number | null;
   filledAt?: string | null;
@@ -52,6 +56,8 @@ export interface StopOrderRequest {
   qty: number;
   stopPrice: number;
   clientOrderId: string;
+  // Stop «day» (scade alla chiusura): obbligatorio per una quantità frazionaria di un titolo.
+  giornaliero?: boolean;
 }
 
 // Stessa interfaccia per il broker vero e per quello finto.
@@ -82,6 +88,8 @@ export interface Broker {
   getPortfolioHistory?(start: string, end: string, timeframe: string): Promise<{ t: string; equity: number; pnl: number }[]>;
   // Nome del titolo o della crypto (es. «Apple Inc.», «Bitcoin»), per mostrarlo accanto al codice.
   getAssetName?(symbol: string): Promise<string | null>;
+  // Quali titoli si possono comprare a frazioni (fractionable su Alpaca); quelli che non risponde restano fuori.
+  getFractionable?(symbols: string[]): Promise<Record<string, boolean>>;
 }
 
 export interface IntradayBar {
@@ -171,9 +179,35 @@ export function arrotondaPrezzo(symbol: string, price: number): number {
 }
 export const prezzoStringa = (symbol: string, price: number) => price.toFixed(decimaliPrezzo(symbol, price));
 
-// Quantità ammessa da Alpaca: azioni intere per i titoli, frazioni (6 decimali) per le crypto.
-export function roundQty(symbol: string, qty: number): number {
-  if (!symbol.includes("/")) return Math.floor(qty);
+// Titoli frazionabili (fractionable su Alpaca), aggiornati dal motore una volta al giorno. Un titolo che manca qui
+// (Alpaca non ha risposto) vale come non frazionabile: azioni intere, come prima.
+const FRAZIONABILI = new Map<string, boolean>();
+export function segnaFrazionabili(m: Record<string, boolean>) {
+  for (const [s, v] of Object.entries(m)) FRAZIONABILI.set(s, v);
+}
+export const azzeraFrazionabili = () => FRAZIONABILI.clear();
+export function frazionabile(symbol: string): boolean | undefined {
+  return FRAZIONABILI.get(symbol);
+}
+// Il titolo si compra a frazioni? Frazioni accese e Alpaca dice fractionable.
+export const aFrazioni = (symbol: string) => !symbol.includes("/") && AGENTS.frazioni.enabled && FRAZIONABILI.get(symbol) === true;
+
+// Una quantità con più di 9 decimali (rumore dei numeri a virgola mobile) riportata a 9: è la precisione di Alpaca.
+export const nove = (q: number) => Math.round(q * 1e9) / 1e9;
+// Parte intera di una quantità, senza farsi ingannare dal rumore (2,9999999999 → 3).
+export const intere = (q: number) => Math.floor(q + 1e-9);
+
+// Quantità ammessa da Alpaca. Crypto: frazioni a 6 decimali (troncate). Titoli: azioni intere, oppure frazioni a 6
+// decimali se il titolo è frazionabile (`frazioni` forza la scelta: true per vendere parte di una posizione già
+// frazionaria). Con almeno un'azione intera e uno scarto entro frazioni.tolleranzaIntere si tengono le intere: la
+// posizione resta tutta sotto lo stop GTC di Alpaca.
+export function roundQty(symbol: string, qty: number, frazioni?: boolean): number {
+  if (!(qty > 0)) return 0;
   const f = 10 ** 6;
-  return Math.floor(qty * f) / f;
+  const sei = Math.floor(qty * f + 1e-6) / f;
+  if (symbol.includes("/")) return sei;
+  const n = intere(qty);
+  if (!(frazioni ?? aFrazioni(symbol))) return n;
+  if (n >= 1 && (qty - n) / qty <= AGENTS.frazioni.tolleranzaIntere) return n;
+  return sei;
 }

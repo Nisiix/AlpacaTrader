@@ -13,7 +13,13 @@ export function canonicalSymbol(symbol: string, assetClass?: string): string {
 }
 // Crypto: 6 decimali troncati, mai arrotondati per eccesso (80,874531937 → 80,874531): con toFixed Alpaca rispondeva
 // "insufficient balance" perché si chiedeva un milionesimo in più di quanto c'è (la commissione si paga nella moneta).
-export const qtyString = (symbol: string, qty: number) => (isCrypto(symbol) ? (Math.floor(qty * 1e6 + 1e-6) / 1e6).toFixed(6).replace(/0+$/, "").replace(/\.$/, "") : String(qty));
+// Titoli: intere come numero intero; frazioni con al massimo 9 decimali (la precisione di Alpaca, oltre tronca), senza
+// il rumore della virgola mobile (0,1 + 0,2 = 0,30000000000000004) e senza zeri in coda. Una vendita di tutta la
+// posizione manda esattamente la quantità che Alpaca ha dato (al più 9 decimali): niente resti.
+export const qtyString = (symbol: string, qty: number) =>
+  isCrypto(symbol)
+    ? (Math.floor(qty * 1e6 + 1e-6) / 1e6).toFixed(6).replace(/0+$/, "").replace(/\.$/, "")
+    : Number.isInteger(qty) ? String(qty) : qty.toFixed(9).replace(/0+$/, "").replace(/\.$/, "");
 
 function toOrder(o: any): Order {
   return {
@@ -29,6 +35,7 @@ function toOrder(o: any): Order {
     stopPrice: o.stop_price === null || o.stop_price === undefined ? null : Number(o.stop_price),
     filledAvgPrice: o.filled_avg_price === null || o.filled_avg_price === undefined ? null : Number(o.filled_avg_price),
     filledAt: o.filled_at ? String(o.filled_at) : null,
+    ...(o.time_in_force ? { tif: String(o.time_in_force) } : {}),
   };
 }
 
@@ -143,7 +150,7 @@ export class AlpacaBroker implements Broker {
     // Le crypto non accettano lo stop a mercato: stop_limit con limite mezzo punto sotto.
     const body = isCrypto(req.symbol)
       ? { symbol: req.symbol, qty: qtyString(req.symbol, req.qty), side: "sell", type: "stop_limit", stop_price: prezzoStringa(req.symbol, req.stopPrice), limit_price: prezzoStringa(req.symbol, req.stopPrice * (1 - CRYPTO_STOP_LIMIT_GAP)), time_in_force: "gtc", client_order_id: req.clientOrderId }
-      : { symbol: req.symbol, qty: String(req.qty), side: "sell", type: "stop", stop_price: prezzoStringa(req.symbol, req.stopPrice), time_in_force: "gtc", client_order_id: req.clientOrderId };
+      : { symbol: req.symbol, qty: qtyString(req.symbol, req.qty), side: "sell", type: "stop", stop_price: prezzoStringa(req.symbol, req.stopPrice), time_in_force: req.giornaliero ? "day" : "gtc", client_order_id: req.clientOrderId };
     return toOrder(await this.request(this.baseUrl, "/v2/orders", { method: "POST", body: JSON.stringify(body) }));
   }
 
@@ -173,6 +180,23 @@ export class AlpacaBroker implements Broker {
       .filter((a: any) => a.tradable && typeof a.symbol === "string" && a.symbol.endsWith("/USD"))
       .map((a: any) => String(a.symbol))
       .sort();
+  }
+
+  // fractionable di ogni titolo (GET /v2/assets/{simbolo}), quattro richieste alla volta; chi non risponde resta fuori.
+  async getFractionable(symbols: string[]): Promise<Record<string, boolean>> {
+    const out: Record<string, boolean> = {};
+    const coda = symbols.filter((s) => !isCrypto(s));
+    let i = 0;
+    await Promise.all(Array.from({ length: Math.min(4, coda.length) }, async () => {
+      while (i < coda.length) {
+        const s = coda[i++]!;
+        try {
+          const a = await this.request(this.baseUrl, `/v2/assets/${encodeURIComponent(s)}`);
+          if (typeof a?.fractionable === "boolean") out[s] = a.fractionable && a.tradable !== false;
+        } catch {}
+      }
+    }));
+    return out;
   }
 
   async getAssetName(symbol: string): Promise<string | null> {

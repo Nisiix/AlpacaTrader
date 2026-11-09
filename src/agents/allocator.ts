@@ -4,7 +4,7 @@ import { livelloMedie, pesoControTendenza, sotto200 } from "./fiducia.ts";
 import { AGENTS, CRYPTO_MIN_NOTIONAL, LIMITS, isCrypto, sectorOf } from "../config.ts";
 import { dailyVol } from "../indicators.ts";
 import { romeTime } from "../slots.ts";
-import { roundQty } from "../broker/types.ts";
+import { aFrazioni, frazionabile, intere, roundQty } from "../broker/types.ts";
 import { soloIntraday } from "./posizioni.ts";
 import type { AgentReport, AgentView, Signal } from "./types.ts";
 
@@ -138,7 +138,11 @@ export function allocate(view: AgentView, reports: Record<string, AgentReport>, 
     const p = held.get(s.simbolo);
     if (!p) continue;
     forced.add(s.simbolo);
-    const qty = s.frazione && s.frazione < 1 ? roundQty(s.simbolo, p.qty * s.frazione) : p.qty;
+    // Vendita parziale (es. metà): da una posizione a frazioni si vende a frazioni; da una a azioni intere si vendono
+    // intere, salvo che non ne venga nemmeno una (metà di un'azione) e il titolo sia frazionabile.
+    const parziale = s.frazione && s.frazione < 1;
+    const giaFrazioni = !isCrypto(s.simbolo) && Math.abs(p.qty - Math.round(p.qty)) > 1e-9;
+    const qty = parziale ? roundQty(s.simbolo, p.qty * s.frazione!, isCrypto(s.simbolo) ? undefined : giaFrazioni || (intere(p.qty * s.frazione!) === 0 && aFrazioni(s.simbolo))) : p.qty;
     if (qty <= 0) continue;
     proposte.push({ symbol: s.simbolo, side: "sell", qty, why: `${s.agente}: ${s.perche}`, confidence: "alta", expect: s.frazione && s.frazione < 1 ? "presa di profitto parziale" : "regola di rischio" });
   }
@@ -319,7 +323,7 @@ export function allocate(view: AgentView, reports: Record<string, AgentReport>, 
     }
     const qty = roundQty(sc.simbolo, delta / price);
     if (qty <= 0 || (isCrypto(sc.simbolo) && qty * price < CRYPTO_MIN_NOTIONAL)) {
-      if (!p) inAttesa.push({ simbolo: sc.simbolo, motivo: `taglia troppo piccola per un ordine (${(qty * price).toFixed(2)} $)` });
+      if (!p) inAttesa.push({ simbolo: sc.simbolo, motivo: !isCrypto(sc.simbolo) && delta < price && !aFrazioni(sc.simbolo) ? `${delta.toFixed(2)} $ non bastano per un'azione intera (${price.toFixed(2)} $) e ${frazionabile(sc.simbolo) === false ? "il titolo non è frazionabile su Alpaca" : AGENTS.frazioni.enabled ? "Alpaca non ha ancora detto se il titolo è frazionabile" : "le frazioni di azione sono spente"}` : `taglia troppo piccola per un ordine (${(qty * price).toFixed(2)} $)` });
       continue;
     }
     proposte.push({ symbol: sc.simbolo, side: "buy", qty, why: sc.perche.join(" · "), confidence: conf(sc.punteggio), expect: `${sc.intraday ? "intraday: " : ""}peso obiettivo ${((target / equity) * 100).toFixed(1)}% del conto${riparto && chiesto > 0 ? ` (riparto del capitale: ${Math.round((dato / chiesto) * 100)}% di quanto chiesto, ${(w * scale * 100).toFixed(1)}%)` : ""}${sc.fiducia !== undefined ? ` (fiducia nella proiezione ${sc.fiducia === null ? "n.d." : `${(sc.fiducia * 100).toFixed(0)}%`})` : ""}${scale < 1 ? ` (ridotto per la volatilità di portafoglio, obiettivo ${(AGENTS.volTarget.annual * 100).toFixed(0)}% annuo)` : ""}`, intraday: sc.intraday || undefined, kronos: sc.kronos });

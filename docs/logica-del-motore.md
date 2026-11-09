@@ -314,6 +314,30 @@ lo cercano gli **intraday agents**, e tutto si decide **sulle candele**, non a s
 
 Il calo dell'ultimo giorno resta nel diario (`misure.rimbalzo`) per giudicare questi ingressi.
 
+### Frazioni di azione
+
+Un conto piccolo (1.000 $) con un ingresso intraday da 16 $ non comprerebbe nemmeno un'azione NVDA (circa 177 $). Le
+azioni si comprano anche **a frazioni** (`AGENTS.frazioni`), con le regole di Alpaca:
+
+- **Solo i titoli frazionabili**: il motore chiede ad Alpaca, una volta al giorno per titolo, se è `fractionable`. Se
+  Alpaca non risponde il titolo vale come non frazionabile (azioni intere, come prima) e si richiede al giro dopo. Un
+  acquisto a frazioni su un titolo non frazionabile la gabbia lo rifiuta, con il motivo.
+- **Intere quando bastano**: con almeno un'azione intera e uno scarto entro il 10% si comprano le intere (12,4 → 12),
+  così la posizione resta tutta sotto lo stop GTC; altrimenti la frazione a 6 decimali (0,0917 NVDA, 1,5 AAPL).
+- **Minimo 1 $** per un acquisto a frazioni (Alpaca); il minimo di una posizione nuova resta l'1% del conto.
+- **Vendite**: sempre ammesse, per tutta la quantità che Alpaca dà (fino a 9 decimali, mandata identica: niente resti);
+  una vendita parziale di una posizione a frazioni è a frazioni, di una a azioni intere resta a intere.
+- **Stop su Alpaca in due parti**: Alpaca accetta frazioni solo con ordini «day» (mai GTC). Una posizione da 12,37 ha
+  uno **stop GTC sulle 12 intere** (vale anche a PC spento, per giorni) e uno **stop «day» sulla frazione 0,37**, che
+  scade alla chiusura e si rimette al primo giro a borsa aperta del giorno dopo; lo stop delle intere non si tocca. Una
+  frazione sotto 1 $ non si copre su Alpaca. Se Alpaca rifiuta lo stop sulla frazione, non si riprova fino al giorno
+  dopo e non è un allarme: la frazione la protegge lo **stop del motore** (gabbia e uscite intraday), come nei pochi
+  minuti tra l'apertura e il primo giro.
+- **Regola dei 25.000 $ (PDT)**: dal 4 giugno 2026 FINRA l'ha tolta e Alpaca l'ha già applicato: un conto piccolo non
+  è più limitato a 3 operazioni in giornata ogni 5 giorni.
+- **Costi**: le commissioni regolamentari sulle vendite si arrotondano al centesimo sul totale della giornata, non per
+  ordine: un trade da 16 $ non costa più dello 0,05% stimato.
+
 ### La gabbia
 
 Il codice che dice l'ultima parola (`src/cage.ts`):

@@ -1,6 +1,6 @@
 import type { ProposedOrder } from "./ordini.ts";
 import type { Account, Order, Position, Side } from "./broker/types.ts";
-import { isOpenOrder, isProtectiveStop } from "./broker/types.ts";
+import { aFrazioni, frazionabile, isOpenOrder, isProtectiveStop } from "./broker/types.ts";
 import { AGENTS, CRYPTO, CRYPTO_MIN_NOTIONAL, LIMITS, UNIVERSE, isCrypto, sectorOf } from "./config.ts";
 import { EVENTS, eventBlockFor, type MarketEvent } from "./events.ts";
 import { dailyVol, indicatorsFor, sma, trendOf } from "./indicators.ts";
@@ -156,7 +156,15 @@ export function applyCage(i: CageInput): CageResult {
     if (isCrypto(p.symbol)) {
       if (!(p.qty > 0)) { reject("quantità positiva"); continue; }
       if (p.side === "buy" && p.qty * (i.prices[p.symbol] ?? 0) < CRYPTO_MIN_NOTIONAL) { reject(`ordine crypto sotto il minimo di ${CRYPTO_MIN_NOTIONAL} $`); continue; }
-    } else if (!Number.isInteger(p.qty) || p.qty < 1) { reject("solo azioni intere e quantità positiva"); continue; }
+    } else {
+      if (!(p.qty > 0)) { reject("quantità positiva"); continue; }
+      // Frazioni di azione: in acquisto solo sui titoli frazionabili (Alpaca) e da almeno frazioni.minimoUsd; in vendita
+      // sempre (una posizione può essere già frazionaria, e va potuta chiudere tutta).
+      if (Math.abs(p.qty - Math.round(p.qty)) > 1e-9 && p.side === "buy") {
+        if (!aFrazioni(p.symbol)) { reject(!AGENTS.frazioni.enabled ? "frazioni di azione spente: solo azioni intere" : frazionabile(p.symbol) === false ? "titolo non frazionabile su Alpaca: solo azioni intere" : "Alpaca non ha ancora detto se il titolo è frazionabile: per ora solo azioni intere"); continue; }
+        if (p.qty * (i.prices[p.symbol] ?? 0) < AGENTS.frazioni.minimoUsd) { reject(`frazione sotto il minimo di ${AGENTS.frazioni.minimoUsd} $ di Alpaca`); continue; }
+      }
+    }
     const key = `${p.symbol}-${p.side}`;
     if (seen.has(key)) { reject(stopped.has(p.symbol) && p.side === "sell" ? "già venduto dal codice (stop o uscita di trend)" : "doppione nello stesso giro"); continue; }
     if (p.side === "buy" && stopped.has(p.symbol)) { reject("in uscita in questo giro (stop o trend)"); continue; }
@@ -166,7 +174,7 @@ export function applyCage(i: CageInput): CageResult {
 
     if (p.side === "sell") {
       const q = held.get(p.symbol)?.qty ?? 0;
-      if (p.qty > q) { reject(`niente short: in portafoglio ce ne sono ${q}`); continue; }
+      if (p.qty > q + 1e-9) { reject(`niente short: in portafoglio ce ne sono ${q}`); continue; }
     } else {
       if (i.buyBlock) { reject(i.buyBlock); continue; }
       // L'intraday si chiude in giornata con obiettivo e stop propri: non segue il filtro macro né il trend giornaliero.
