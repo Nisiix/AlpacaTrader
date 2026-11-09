@@ -311,9 +311,17 @@ export function allocate(view: AgentView, reports: Record<string, AgentReport>, 
     const delta = target - have;
     // Aggiunte a una posizione già aperta solo se valgono la pena (minAddPct); una posizione nuova anche piccola, se il
     // riparto del capitale l'ha resa tale, purché sopra lo 0,2% del conto.
-    if (p ? delta / equity < AGENTS.minAddPct : delta < Math.max(AGENTS.minNuova.pct * equity, AGENTS.minNuova.usd)) continue;
+    const minimo = Math.max(AGENTS.minNuova.pct * equity, Math.min(AGENTS.minNuova.usd, AGENTS.minNuova.quotaConto * equity));
+    if (p ? delta / equity < AGENTS.minAddPct : delta < minimo) {
+      // Un ingresso nuovo troppo piccolo non sparisce in silenzio: resta in attesa con il perché.
+      if (!p && sc.compra > 0) inAttesa.push({ simbolo: sc.simbolo, motivo: `taglia troppo piccola: ${delta.toFixed(2)} $ (${((delta / Math.max(1, equity)) * 100).toFixed(2)}% del conto) sotto il minimo di ${minimo.toFixed(2)} $ per una posizione nuova` });
+      continue;
+    }
     const qty = roundQty(sc.simbolo, delta / price);
-    if (qty <= 0 || (isCrypto(sc.simbolo) && qty * price < CRYPTO_MIN_NOTIONAL)) continue;
+    if (qty <= 0 || (isCrypto(sc.simbolo) && qty * price < CRYPTO_MIN_NOTIONAL)) {
+      if (!p) inAttesa.push({ simbolo: sc.simbolo, motivo: `taglia troppo piccola per un ordine (${(qty * price).toFixed(2)} $)` });
+      continue;
+    }
     proposte.push({ symbol: sc.simbolo, side: "buy", qty, why: sc.perche.join(" · "), confidence: conf(sc.punteggio), expect: `${sc.intraday ? "intraday: " : ""}peso obiettivo ${((target / equity) * 100).toFixed(1)}% del conto${riparto && chiesto > 0 ? ` (riparto del capitale: ${Math.round((dato / chiesto) * 100)}% di quanto chiesto, ${(w * scale * 100).toFixed(1)}%)` : ""}${sc.fiducia !== undefined ? ` (fiducia nella proiezione ${sc.fiducia === null ? "n.d." : `${(sc.fiducia * 100).toFixed(0)}%`})` : ""}${scale < 1 ? ` (ridotto per la volatilità di portafoglio, obiettivo ${(AGENTS.volTarget.annual * 100).toFixed(0)}% annuo)` : ""}`, intraday: sc.intraday || undefined, kronos: sc.kronos });
   }
   return { proposte, punteggi, rischio, pesi: weights, inAttesa };
