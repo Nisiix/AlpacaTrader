@@ -5,7 +5,8 @@ import type { JournalFile, Trade } from "../journal.ts";
 import { entryKind, kronosOf, regolaSuperata } from "./capo.ts";
 import type { AgentReport, Signal } from "./types.ts";
 import { leggiRegistro, nomeDi, personeDelTrade, type Reparto } from "./persone.ts";
-import { PERSONALI, ricalibraPersona, valoriDi } from "./profili.ts";
+import { PERSONALI, proponiProva, valoriDi } from "./profili.ts";
+import { campione, descrivi } from "./apprendimento.ts";
 import { paramOf } from "../agent-settings.ts";
 
 // La formazione in sala caffè. Quando il capo ufficio giudica che una persona lavora male (sui trade chiusi dal suo
@@ -132,7 +133,9 @@ export function ricalibrazione(stateDir: string, k: string, mentori: string[], p
     }
     motivo = `nessun collega bravo con impostazioni diverse: ricalibrato sui dati (${pezzi.join("; ")}) verso ingressi più selettivi e taglie più piccole`;
   }
-  return { cambi: ricalibraPersona(stateDir, k, nuovi, motivo, now), motivo };
+  // Le impostazioni nuove non valgono subito: vanno in prova in ombra (src/agents/profili.ts) e si adottano solo se,
+  // sui trade che si chiudono da qui in poi, avrebbero fatto meglio di quelle in uso.
+  return { cambi: proponiProva(stateDir, k, nuovi, motivo, now), motivo };
 }
 
 // Aggiorna chi va in formazione e chi torna (una volta per giro). `presenti`: le persone di questo giro.
@@ -145,13 +148,26 @@ export function aggiornaFormazione(stateDir: string, journal: JournalFile, prese
   const chiusi = journal.trade.filter((t) => t.stato === "chiuso" && t.chiusoIl && !regolaSuperata(t));
   const per = new Map<string, Trade[]>();
   for (const t of chiusi) for (const k of personeDelTrade(t, vecchi)) per.set(k, [...(per.get(k) ?? []), t]);
-  // Chi lavora bene: almeno il 51% di trade vinti e risultato positivo (almeno 3 trade).
-  const bravi = [...per].filter(([k, ts]) => f.voci[k]?.stato !== "in formazione" && ts.length >= 3 && ts.filter((t) => pnl(t) > 0).length / ts.length >= c.obiettivo && ts.reduce((a, t) => a + pnl(t), 0) > 0)
-    .sort((a, b) => b[1].reduce((x, t) => x + pnl(t), 0) - a[1].reduce((x, t) => x + pnl(t), 0)).map(([k]) => k);
+  // Chi lavora bene: sugli ultimi trade (almeno 10) almeno il 51% di vittorie e guadagno medio positivo.
+  const bravura = (ts: Trade[], minimo: number) => { const x = campione(ts, null, minimo); return x.sufficiente && x.q >= c.obiettivo && x.media > 0 ? x.media : null; };
+  const minBravo = AGENTS.apprendimento.minTradeSquadra, minSimili = Math.max(3, Math.ceil(minBravo / 2));
+  const bravi = [...per].filter(([k, ts]) => f.voci[k]?.stato !== "in formazione" && bravura(ts, minBravo) !== null)
+    .sort((a, b) => bravura(b[1], minBravo)! - bravura(a[1], minBravo)!).map(([k]) => k);
+  // I mentori di chi va in formazione: bravi sullo stesso tipo di titolo (crypto o azioni) in cui lui ha perso e, se ci
+  // sono abbastanza trade, nello stesso clima di mercato di oggi; altrimenti i bravi in generale.
+  const mentoriPer = (k: string) => {
+    const persi = (per.get(k) ?? []).filter((t) => pnl(t) <= 0);
+    const crypto = persi.filter((t) => t.simbolo.includes("/")).length * 2 >= persi.length;
+    const simili = (ts: Trade[]) => { const cl = ts.filter((t) => t.simbolo.includes("/") === crypto); const cc = contesto ? cl.filter((t) => t.contesto?.clima === contesto) : []; return cc.length >= minSimili ? cc : cl; };
+    const scelti = [...per].filter(([m, ts]) => m !== k && f.voci[m]?.stato !== "in formazione" && bravura(simili(ts), minSimili) !== null)
+      .sort((a, b) => bravura(simili(b[1]), minSimili)! - bravura(simili(a[1]), minSimili)!).map(([m]) => m);
+    return (scelti.length ? scelti : bravi.filter((b) => b !== k)).slice(0, 5);
+  };
 
   // 1. Fine della formazione: si torna alla scrivania col bagaglio.
   const rientra = (k: string, v: Voce, perche: string) => {
-    const bag = bagaglioDa(bravi.length ? bravi.slice(0, 5) : v.bagaglio?.mentori ?? [], per, chiusi);
+    const m = mentoriPer(k);
+    const bag = bagaglioDa(m.length ? m : v.bagaglio?.mentori ?? [], per, chiusi);
     f.voci[k] = { stato: "operativo", dal: now.toISOString(), motivo: perche, bagaglio: bag, formazioni: v.formazioni };
     note.push(`capo ufficio: ${nomeDi(k)} torna disponibile (${perche})${bag.testo.length ? ` con il bagaglio: ${bag.testo.join("; ")}` : ""}`);
     cambiato = true;
@@ -163,15 +179,15 @@ export function aggiornaFormazione(stateDir: string, journal: JournalFile, prese
     const v = f.voci[k];
     if (v?.stato === "in formazione" || !presenti.includes(k)) continue;
     const nuovi = ts.filter((t) => !v?.dal || t.chiusoIl! > v.dal);
-    if (nuovi.length < c.minTrade) continue;
-    const vinti = nuovi.filter((t) => pnl(t) > 0).length;
-    const ris = nuovi.reduce((a, t) => a + pnl(t), 0);
-    if (vinti / nuovi.length >= c.obiettivo || ris >= 0) continue;
-    const mentori = bravi.filter((b) => b !== k).slice(0, 5);
+    // Coordinatore dell'apprendimento: ultimi trade, almeno minTrade, vittorie con la media della squadra; lavora male chi
+    // vince meno del 51% e ha un guadagno medio negativo.
+    const cmp = campione(nuovi, k.startsWith("p:") ? chiusi : null, c.minTrade);
+    if (!cmp.sufficiente || cmp.qS >= c.obiettivo || cmp.media >= 0) continue;
+    const mentori = mentoriPer(k);
     const fino = new Date(now.getTime() + c.ore * 3600_000).toISOString();
-    f.voci[k] = { stato: "in formazione", dal: now.toISOString(), fino, motivo: `${vinti} vinti su ${nuovi.length} (${Math.round((vinti / nuovi.length) * 100)}%), ${ris.toFixed(2)} $: lavora male, in sala caffè a imparare${mentori.length ? ` da ${mentori.map(nomeDi).join(", ")}` : " dai trade vinti della squadra"}`, bagaglio: bagaglioDa(mentori, per, chiusi), formazioni: (v?.formazioni ?? 0) + 1 };
+    f.voci[k] = { stato: "in formazione", dal: now.toISOString(), fino, motivo: `${descrivi(cmp)}: lavora male, in sala caffè a imparare${mentori.length ? ` da ${mentori.map(nomeDi).join(", ")}` : " dai trade vinti della squadra"}`, bagaglio: bagaglioDa(mentori, per, chiusi), formazioni: (v?.formazioni ?? 0) + 1 };
     const rc = ricalibrazione(stateDir, k, mentori, per, contesto, now);
-    if (rc.cambi.length) { f.voci[k]!.motivo += `; si ricalibra: ${rc.cambi.join(", ")}`; note.push(`formazione: ${nomeDi(k)} ${rc.motivo}: ${rc.cambi.join(", ")}`); }
+    if (rc.cambi.length) { f.voci[k]!.motivo += `; prova in ombra: ${rc.cambi.join(", ")}`; note.push(`formazione: ${nomeDi(k)} ${rc.motivo}; in prova in ombra: ${rc.cambi.join(", ")}`); }
     note.push(`capo ufficio: ${nomeDi(k)} in sala caffè fino alle ${fino.slice(11, 16)} UTC, ${f.voci[k]!.motivo}`);
     cambiato = true;
   }
@@ -179,7 +195,7 @@ export function aggiornaFormazione(stateDir: string, journal: JournalFile, prese
   // 3. Chi è in sala caffè continua ad ascoltare: il bagaglio si aggiorna con i risultati di chi lavora bene.
   for (const [k, v] of Object.entries(f.voci)) {
     if (v.stato !== "in formazione") continue;
-    const mentori = bravi.filter((b) => b !== k).slice(0, 5);
+    const mentori = mentoriPer(k);
     const bag = bagaglioDa(mentori, per, chiusi);
     if (JSON.stringify(bag) !== JSON.stringify(v.bagaglio)) { v.bagaglio = bag; cambiato = true; }
   }

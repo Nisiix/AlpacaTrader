@@ -13,6 +13,14 @@ import { EVENTS, addEarnings, eventBlockFor } from "../src/events.ts";
 import { emptyJournal } from "../src/journal.ts";
 import { daAdesso, riallinea } from "../src/agents/engine.ts";
 
+
+// Soglie del coordinatore dell'apprendimento abbassate per i test con pochi trade (si ripristinano alla fine).
+function sogliePiccole() {
+  const a = { ...AGENTS.apprendimento }, f = AGENTS.formazione.minTrade, c = AGENTS.calibrazione.minTrade;
+  Object.assign(AGENTS.apprendimento, { minTradePersona: 5, minTradeSquadra: 3 });
+  AGENTS.formazione.minTrade = 5; AGENTS.calibrazione.minTrade = 5;
+  return () => { Object.assign(AGENTS.apprendimento, a); AGENTS.formazione.minTrade = f; AGENTS.calibrazione.minTrade = c; };
+}
 const account = { equity: 100_000, lastEquity: 100_000, cash: 100_000, status: "ACTIVE" };
 const salita = (p: number) => syntheticCloses(p, 0.01, 260);
 
@@ -122,6 +130,7 @@ describe("calibrazione del capo ufficio", () => {
     await Bun.write(join(dir, "persone.json"), JSON.stringify({ versione: 2, staff: { Alessandro: { reparto: "trading", simbolo: "AAPL", dal: "2026-11-09T09:00:00Z" } }, vecchi: {} }));
     const t = (i: number, agenti: string[], vinto: boolean, quando = `2026-11-09T10:${String(i).padStart(2, "0")}:00Z`) => ({ id: `t${i}`, simbolo: "ETH/USD", stato: "chiuso", apertoIl: "2026-11-09T09:00:00Z", chiusoIl: quando, comprate: 1, costo: 100, vendute: 1, incassato: vinto ? 101 : 99, quantita: 0, contesto: { setup: "", momentum20: null, volGiornaliera: null, distanzaMedia: null, fiducia: null, attesa: "", perche: "", agenti, ...(agenti[0]?.startsWith("custode ") ? { persone: ["p:Alessandro"] } : {}) } }) as any;
     const j = { ...emptyJournal(), trade: [...Array.from({ length: 6 }, (_, i) => t(i, ["intraday"], i < 2)), ...Array.from({ length: 5 }, (_, i) => t(20 + i, ["custode AAPL"], i < 1))] };
+    const ripristina = sogliePiccole();
     applyAgentSettings(dir);
     const base = AGENTS.intraday.kronos.minProb;
     const note = aggiornaCalibrazione(dir, j, new Date("2026-11-09T11:00:00Z"));
@@ -142,6 +151,7 @@ describe("calibrazione del capo ufficio", () => {
     applyAgentSettings(dir); applicaCalibrazione(dir);
     expect(AGENTS.intraday.kronos.minProb).toBeCloseTo(base, 6);
     applyAgentSettings(dir);
+    ripristina();
   });
 });
 
@@ -175,6 +185,7 @@ describe("persone e formazione in sala caffè", () => {
   });
 
   test("chi lavora male va in sala caffè e non lavora; rientra con un'occasione approvata dal capo o se alla scrivania servono persone; poi usa il bagaglio", async () => {
+    const ripristina = sogliePiccole();
     const { aggiornaFormazione, applicaFormazione, provaRientro } = await import("../src/agents/formazione.ts");
     const { assegnaPersone } = await import("../src/agents/persone.ts");
     const dir = mkdtempSync(join(tmpdir(), "form-"));
@@ -213,9 +224,11 @@ describe("persone e formazione in sala caffè", () => {
     const rep3: any = { custodi: { segnali: [voto("AMZN", 0.02), voto("META", 0.035)] } };
     applicaFormazione(dir, rep3, r3, {}, { "c:AMZN": "p:Anna", "c:META": "p:Anna" }, new Set(), new Date("2026-11-09T12:10:00Z"));
     expect(rep3.custodi.segnali.map((s: any) => s.kronos)).toEqual([0.035]);
+    ripristina();
   });
 
   test("a fine formazione si torna disponibili anche senza occasioni", async () => {
+    const ripristina = sogliePiccole();
     const { aggiornaFormazione } = await import("../src/agents/formazione.ts");
     const dir = mkdtempSync(join(tmpdir(), "form3-"));
     const j = { ...emptyJournal(), trade: Array.from({ length: 6 }, (_, i) => t(i, "ETH/USD", ["intraday"], ["p:Diana"], i === 0, 0.01, { livelli: { candela: "5Min", obiettivo: 1, stop: 1 } })) };
@@ -223,9 +236,11 @@ describe("persone e formazione in sala caffè", () => {
     const r = aggiornaFormazione(dir, j, ["p:Diana"], new Date("2026-11-10T11:01:00Z"));
     expect(r.inFormazione).toEqual([]);
     expect(r.note[0]).toContain("formazione finita");
+    ripristina();
   });
 
   test("intraday agents: basta una persona alla scrivania; senza nessuno, chi è in formazione rientra con un'occasione", async () => {
+    const ripristina = sogliePiccole();
     const { provaRientro, aggiornaFormazione } = await import("../src/agents/formazione.ts");
     const dir = mkdtempSync(join(tmpdir(), "form4-"));
     const j = { ...emptyJournal(), trade: Array.from({ length: 6 }, (_, i) => t(i, "SOL/USD", ["intraday"], ["p:Diana"], i === 0, 0.01, { livelli: { candela: "5Min", obiettivo: 1, stop: 1 } })) };
@@ -234,6 +249,7 @@ describe("persone e formazione in sala caffè", () => {
     const r = aggiornaFormazione(dir, j, ["p:Diana"], now);
     expect(provaRientro(dir, r, "p:Diana", [v], {}, 1, 1, now)).toBeNull(); // un collega è già alla scrivania
     expect(provaRientro(dir, r, "p:Diana", [v], {}, 0, 1, now)).toContain("almeno 1 persona");
+    ripristina();
   });
 });
 
@@ -243,15 +259,15 @@ describe("profili personali", () => {
     const { preparaProfili, salvaImpostazioni, valore, impostazioniDi } = await import("../src/agents/profili.ts");
     const dir = mkdtempSync(join(tmpdir(), "prof-"));
     await staff(dir, { Anna: { reparto: "trading", simbolo: "AAPL", dal: "" }, Bruno: { reparto: "intraday", simbolo: "SOL/USD", dal: "" } });
-    expect(salvaImpostazioni(dir, "p:Anna", { "LIMITS.trendSmaDays": 40, "AGENTS.pullback.rsiEntry": 6 }, 0.12)).toEqual({ ok: true });
-    expect(salvaImpostazioni(dir, "p:Anna", { "AGENTS.exit.stopPct": 0.1 }).ok).toBe(false); // non è un'impostazione personale
-    expect(salvaImpostazioni(dir, "p:Anna", { "LIMITS.trendSmaDays": 40, "AGENTS.pullback.rsiEntry": 6, "AGENTS.intraday.maxWeight": 0.1 }, 0.12)).toEqual({ ok: true }); // fa anche intraday
+    expect(salvaImpostazioni(dir, "p:Anna", { "LIMITS.trendSmaDays": 40 }).ok).toBe(false); // le medie sono del motore, non personali
+    expect(salvaImpostazioni(dir, "p:Anna", { "AGENTS.exit.stopPct": 0.1 }).ok).toBe(false);
+    expect(salvaImpostazioni(dir, "p:Anna", { "AGENTS.custodi.minProbabilita": 0.7, "AGENTS.pullback.rsiEntry": 6, "AGENTS.intraday.maxWeight": 0.1 }, 0.12)).toEqual({ ok: true }); // fa anche intraday
     preparaProfili(dir);
-    expect(valore("LIMITS.trendSmaDays", "AAPL")).toBe(40);
-    expect(valore("LIMITS.trendSmaDays", "MSFT")).toBe(LIMITS.trendSmaDays);
+    expect(valore("AGENTS.custodi.minProbabilita", "AAPL")).toBe(0.7);
+    expect(valore("AGENTS.custodi.minProbabilita", "MSFT")).toBe(AGENTS.custodi.minProbabilita);
     expect(impostazioniDi(dir, "p:Anna").obiettivo.attuale).toBe(0.12);
     expect(impostazioniDi(dir, "p:Bruno").parametri.map((p) => p.chiave)).toContain("AGENTS.intraday.kronos.minProb");
-    expect(impostazioniDi(dir, "p:Bruno").parametri.map((p) => p.chiave)).toContain("LIMITS.trendSmaDays"); // ognuno ha entrambe le serie
+    expect(impostazioniDi(dir, "p:Bruno").parametri.map((p) => p.chiave)).toContain("AGENTS.custodi.minProbabilita"); // ognuno ha entrambe le serie
   });
 
   test("obiettivo del giorno personale: difesa sotto metà dopo averlo toccato; il giorno dopo sale col successo, scende col fallimento", async () => {
@@ -277,14 +293,16 @@ describe("profili personali", () => {
     const dir = mkdtempSync(join(tmpdir(), "ric-"));
     await staff(dir, { Anna: { reparto: "trading", simbolo: null, dal: "" }, Bruno: { reparto: "trading", simbolo: null, dal: "" } });
     // Tutti uguali: ricalibrazione sui dati, più selettiva (contesto sfavorevole: due passi).
+    // Le impostazioni ricalibrate non valgono subito: vanno in prova in ombra.
     const r1 = ricalibrazione(dir, "p:Anna", ["p:Bruno"], new Map(), "sfavorevole", new Date());
     expect(r1.motivo).toContain("sui dati");
-    expect(impostazioniDi(dir, "p:Anna").parametri.find((p) => p.chiave === "AGENTS.custodi.minProbabilita")!.attuale).toBeCloseTo(AGENTS.custodi.minProbabilita + 0.1, 6);
-    // Bruno (bravo) ha una media breve di 30: Anna si avvicina a metà strada.
-    salvaImpostazioni(dir, "p:Bruno", { "LIMITS.trendSmaDays": 30 });
+    expect(impostazioniDi(dir, "p:Anna").parametri.find((p) => p.chiave === "AGENTS.custodi.minProbabilita")!.attuale).toBe(AGENTS.custodi.minProbabilita);
+    expect(impostazioniDi(dir, "p:Anna").prova!.valori["AGENTS.custodi.minProbabilita"]).toBeCloseTo(Math.min(0.8, AGENTS.custodi.minProbabilita + 0.1), 6);
+    // Bruno (bravo) ha un RSI d'ingresso di 6: la proposta per Anna va a metà strada.
+    salvaImpostazioni(dir, "p:Bruno", { "AGENTS.pullback.rsiEntry": 6 });
     const r2 = ricalibrazione(dir, "p:Anna", ["p:Bruno"], new Map(), "neutro", new Date());
     expect(r2.motivo).toContain("Bruno");
-    expect(impostazioniDi(dir, "p:Anna").parametri.find((p) => p.chiave === "LIMITS.trendSmaDays")!.attuale).toBe(Math.round(LIMITS.trendSmaDays + (30 - LIMITS.trendSmaDays) / 2));
+    expect(impostazioniDi(dir, "p:Anna").prova!.valori["AGENTS.pullback.rsiEntry"]).toBe(Math.round(AGENTS.pullback.rsiEntry + (6 - AGENTS.pullback.rsiEntry) / 2));
   });
 
   test("un titolo, una persona: se trading e intraday lo vogliono entrambi, lo tiene chi ha la posizione", async () => {
@@ -307,4 +325,54 @@ test("il team è fisso a 20: nessuno esce; con tutti occupati una nuova occasion
   const a = assegnaPersone({ stateDir: dir, now: new Date(), sospesi: [], punteggio: () => 0.5, rientro: () => null, bisogni });
   expect(Object.keys(a.reg.staff).length).toBe(20);
   expect(a.senzaPersona).toEqual(["c:NEW"]);
+});
+
+describe("apprendimento verificato", () => {
+  const tr = (i: number, vinto: boolean, extra: any = {}) => ({ id: `s${i}`, simbolo: "AAPL", stato: "chiuso", apertoIl: "2026-10-01T14:00:00Z", chiusoIl: `2026-10-${String(1 + (i % 28)).padStart(2, "0")}T18:${String(i % 60).padStart(2, "0")}:00Z`, comprate: 1, costo: 100, vendute: 1, incassato: vinto ? 103 : 98, quantita: 0, contesto: { setup: "", momentum20: null, volGiornaliera: null, distanzaMedia: null, fiducia: null, attesa: "", perche: "", ...extra } }) as any;
+
+  test("coordinatore: sotto il campione minimo non si giudica; con pochi trade la persona si avvicina alla squadra", async () => {
+    const { campione, daStringere } = await import("../src/agents/apprendimento.ts");
+    const pochi = Array.from({ length: 5 }, (_, i) => tr(i, i === 0));
+    expect(daStringere(campione(pochi, null, AGENTS.apprendimento.minTradePersona))).toBe(false); // 5 trade: non basta
+    const squadra = Array.from({ length: 30 }, (_, i) => tr(100 + i, i % 3 !== 0)); // la squadra vince 2 su 3
+    const c = campione(pochi, squadra, 5);
+    expect(c.q).toBeCloseTo(0.2, 6);
+    expect(c.qS).toBeGreaterThan(0.45); // 1 su 5 pesa poco contro 10 trade «virtuali» della squadra
+  });
+
+  test("prova in ombra: le nuove soglie si adottano solo se sui trade successivi avrebbero fatto meglio", async () => {
+    const { proponiProva, valutaProve, impostazioniDi } = await import("../src/agents/profili.ts");
+    const dir = mkdtempSync(join(tmpdir(), "ombra-"));
+    await Bun.write(join(dir, "persone.json"), JSON.stringify({ versione: 2, staff: { Anna: { reparto: "trading", simbolo: null, dal: "" } }, vecchi: {} }));
+    const dal = new Date("2026-10-01T00:00:00Z");
+    proponiProva(dir, "p:Anna", { "AGENTS.custodi.minProbabilita": 0.7 }, "test", dal);
+    // Dopo: i trade con probabilità 0,62 perdono, quelli con 0,75 vincono → con la soglia 0,7 si sarebbe fatto meglio.
+    const j = { ...emptyJournal(), trade: Array.from({ length: 16 }, (_, i) => tr(i, i % 2 === 0, { misure: { probabilita: i % 2 === 0 ? 0.75 : 0.62 }, tipo: "trading" })) };
+    const note = valutaProve(dir, j, new Date("2026-10-30T00:00:00Z"));
+    expect(note[0]).toContain("adottate");
+    expect(impostazioniDi(dir, "p:Anna").parametri.find((p) => p.chiave === "AGENTS.custodi.minProbabilita")!.attuale).toBe(0.7);
+    // Il contrario: con la soglia alta si sarebbero persi i trade buoni → scartate.
+    proponiProva(dir, "p:Anna", { "AGENTS.custodi.minProbabilita": 0.8 }, "test", dal);
+    const j2 = { ...emptyJournal(), trade: Array.from({ length: 16 }, (_, i) => tr(i, true, { misure: { probabilita: 0.72 }, tipo: "trading" })) };
+    expect(valutaProve(dir, j2, new Date("2026-10-30T00:00:00Z"))[0]).toContain("scartate");
+  });
+
+  test("calibrazione delle probabilità e meta-modello: attivi solo con abbastanza trade e se migliorano sui più recenti; Kelly ferma l'aspettativa negativa", async () => {
+    const { aggiornaProbabilita, calibraP, aggiornaMeta, pesoKelly, estraiBetaMedia } = await import("../src/agents/statistica.ts").then(async (m) => ({ ...m, estraiBetaMedia: (await import("../src/agents/casuale.ts")).estraiBeta }));
+    const poco = { ...emptyJournal(), trade: Array.from({ length: 10 }, (_, i) => tr(i, true, { misure: { probabilita: 0.6 } })) };
+    expect(aggiornaProbabilita(poco).trading.attiva).toBe(false);
+    expect(calibraP("trading", 0.6)).toBe(0.6);
+    // 200 trade: la stima dice 0,7 ma si vince il 40% delle volte → la calibrazione impara a correggerla.
+    let seme = 7; const rnd = () => ((seme = (seme * 16807) % 2147483647) / 2147483647);
+    const molti = { ...emptyJournal(), trade: Array.from({ length: 200 }, (_, i) => tr(i, rnd() < 0.4, { misure: { probabilita: 0.65 + 0.1 * rnd() }, kronos: 0.02 })) };
+    const st = aggiornaProbabilita(molti);
+    expect(st.trading.n).toBe(200);
+    if (st.trading.attiva) expect(calibraP("trading", 0.7)).toBeLessThan(0.6);
+    expect(aggiornaMeta(poco).attivo).toBe(false);
+    expect(pesoKelly(0.4, 1, 0.05)).toBeNull(); // aspettativa negativa: non si entra
+    expect(pesoKelly(0.6, 1.5, 0.05)!).toBeGreaterThan(0.1);
+    let somma = 0; for (let i = 0; i < 2000; i++) somma += estraiBetaMedia(9, 3, rnd);
+    expect(somma / 2000).toBeCloseTo(0.75, 1); // Beta(9, 3) ha media 0,75
+    aggiornaProbabilita(emptyJournal());
+  });
 });

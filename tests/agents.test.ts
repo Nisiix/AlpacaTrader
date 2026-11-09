@@ -26,6 +26,14 @@ import { stopPctFor } from "../src/stops.ts";
 import { startDashboard } from "../src/dashboard/server.ts";
 import { indicatorsFor } from "../src/indicators.ts";
 import { emptyJournal, type JournalFile } from "../src/journal.ts";
+
+// Soglie del coordinatore dell'apprendimento abbassate per i test con pochi trade (si ripristinano alla fine).
+function sogliePiccole() {
+  const a = { ...AGENTS.apprendimento }, f = AGENTS.formazione.minTrade, c = AGENTS.calibrazione.minTrade;
+  Object.assign(AGENTS.apprendimento, { minTradePersona: 5, minTradeSquadra: 3 });
+  AGENTS.formazione.minTrade = 5; AGENTS.calibrazione.minTrade = 5;
+  return () => { Object.assign(AGENTS.apprendimento, a); AGENTS.formazione.minTrade = f; AGENTS.calibrazione.minTrade = c; };
+}
 import { makeEnv, ordersFor, openStopsFor, type TestEnv } from "./helpers.ts";
 
 const day = (d: string, hhmm: string) => new Date(`${d}T${hhmm}:00+02:00`);
@@ -381,7 +389,7 @@ describe("dashboard", () => {
 
 describe("uscite (regole vincolanti)", () => {
   const pos = (symbol: string, avg: number, price: number) => ({ symbol, qty: 10, avgEntryPrice: avg, currentPrice: price, marketValue: price * 10 });
-  const openTrade = (simbolo: string, massimo?: number) => ({ id: simbolo, simbolo, stato: "aperto" as const, apertoIl: "2026-09-01T14:00:00Z", comprate: 10, costo: 1000, vendute: 0, incassato: 0, quantita: 10, contesto: null, massimo });
+  const openTrade = (simbolo: string, massimo?: number) => ({ id: simbolo, simbolo, stato: "aperto" as const, apertoIl: "2026-09-23T14:00:00Z", comprate: 10, costo: 1000, vendute: 0, incassato: 0, quantita: 10, contesto: null, massimo });
 
   test("difesa del guadagno della persona: toccato il suo obiettivo e tornata a metà si vendono solo i suoi trade non favorevoli; il picco resta dopo un riavvio", async () => {
     const j = emptyJournal();
@@ -853,7 +861,9 @@ describe("capo ufficio", () => {
     // Sara (trading agent su SOL/USD) vince con Kronos alto; "trend" perde con Kronos basso.
     [0.04, 0.03, 0.05, 0.02].forEach((r, i) => { add("SOL/USD", ["custode SOL/USD"], r, 0.03, i); j.trade.at(-1)!.contesto!.persone = ["p:Sara"]; });
     [-0.03, -0.02, 0.01, -0.04].forEach((r, i) => add("NVDA", ["trend"], r, 0.002, i + 10));
+    const ripristina = sogliePiccole();
     const rep = review(j, new Date("2026-11-08T12:00:00Z"));
+    ripristina();
     const sol = rep.valutazioni.find((v) => v.agente === "p:Sara")!;
     const tr = rep.valutazioni.find((v) => v.agente === "trend")!;
     expect(sol.giudizio).toBe("ottimo");
@@ -1119,7 +1129,7 @@ describe("evidenza combinata e prudenza sotto la media a 200", () => {
     expect(low.proposte.filter((x) => x.symbol === "NVDA")).toEqual([]);
     expect(low.inAttesa.find((x) => x.simbolo === "NVDA")!.motivo).toContain("evidenza combinata 42,0%");
     const q = (p: number) => allocate(v, { ...buy("NVDA"), custodi: custodiCon("NVDA", p) }, { trend: 1 }).proposte.find((x) => x.symbol === "NVDA")!.qty;
-    expect(q(0.5)).toBeLessThan(q(0.85));
+    expect(q(0.62)).toBeLessThan(q(0.85));
   });
   test("a parità di Kronos ed evidenza, sotto la 200 la taglia è più piccola che sopra (metà) e serve un'evidenza più alta", () => {
     const up = view({ previsioni: { NVDA: 0.04 } });
@@ -1127,8 +1137,8 @@ describe("evidenza combinata e prudenza sotto la media a 200", () => {
     const w = (vv: AgentView, p: number) => { const pr = allocate(vv, { ...buy("NVDA"), kronos: { segnali: [] }, custodi: custodiCon("NVDA", p) }, { trend: 1 }).proposte.find((x) => x.symbol === "NVDA"); return pr ? (pr.qty * vv.prices.NVDA!) / vv.account.equity : 0; };
     expect(w(down, 0.7)).toBeGreaterThan(0);
     expect(w(down, 0.7)).toBeLessThanOrEqual(w(up, 0.7) * 0.5 + 0.002);
-    expect(w(down, 0.55)).toBe(0); // sotto la 200 serve almeno il 60%
-    expect(w(up, 0.55)).toBeGreaterThan(0);
+    expect(w(down, 0.62)).toBe(0); // sotto la 200 serve almeno il 65%
+    expect(w(up, 0.62)).toBeGreaterThan(0); // sopra basta il 60%, come per la scrivania
   });
 });
 
@@ -1286,5 +1296,20 @@ describe("capo ufficio e intraday", () => {
     const b = allocate(v, { kronos: reports.kronos, custodi: reports.custodi }, { kronos: 1 });
     expect(b.proposte.find((p) => p.symbol === "SPY")).toBeUndefined();
     expect(b.inAttesa.find((x) => x.simbolo === "SPY")!.motivo).toContain("evidenza combinata");
+  });
+});
+
+describe("più giorni: profitto minimo e uscita a tempo", () => {
+  const pos = (symbol: string, avg: number, price: number) => ({ symbol, qty: 10, avgEntryPrice: avg, currentPrice: price, marketValue: price * 10 });
+  const t = (simbolo: string, apertoIl: string, massimo?: number) => ({ id: simbolo, simbolo, stato: "aperto" as const, apertoIl, comprate: 10, costo: 1000, vendute: 0, incassato: 0, quantita: 10, contesto: null, massimo });
+  test("arrivato a +2% e tornato a +0,3%: si esce in guadagno; dopo 5 sedute senza rendere e senza Kronos favorevole: si esce", () => {
+    const j = emptyJournal();
+    j.trade.push(t("SPY", "2026-09-23T14:00:00Z", 102.5), t("QQQ", "2026-09-10T14:00:00Z"), t("MSFT", "2026-09-10T14:00:00Z"));
+    const v = view({ positions: [pos("SPY", 100, 100.3), pos("QQQ", 100, 100.1), pos("MSFT", 100, 100.1)], journal: j, previsioni: { MSFT: 0.03 } });
+    v.prices.SPY = 100.3; v.prices.QQQ = 100.1; v.prices.MSFT = 100.1;
+    const r = new ExitAgent(AGENTS.exit).observe(v).segnali;
+    expect(r.find((x) => x.simbolo === "SPY")!.perche).toContain("profitto minimo");
+    expect(r.find((x) => x.simbolo === "QQQ")!.perche).toContain("uscita a tempo");
+    expect(r.find((x) => x.simbolo === "MSFT")).toBeUndefined(); // Kronos vede ancora +3%: resta
   });
 });

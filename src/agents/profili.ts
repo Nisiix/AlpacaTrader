@@ -5,18 +5,15 @@ import { isObject, readJson, writeJsonAtomic } from "../fsutil.ts";
 import type { JournalFile, Trade } from "../journal.ts";
 import { chiavePersona, leggiRegistro, nomeDi, type Reparto } from "./persone.ts";
 
-// Il profilo di ogni persona dello staff: le sue impostazioni, a sé stanti. Partono da quelle di serie e si cambiano in
-// due modi: a mano dalla scheda della persona, e con l'esperienza (la calibrazione del capo sulla sua soglia d'ingresso,
-// l'obiettivo del giorno che sale dopo i successi e scende dopo i fallimenti). Valgono sul titolo su cui la persona
-// lavora: il motore le usa per i voti di trend e rientro, la soglia del dossier, la probabilità e il peso intraday.
-// Kronos resta quello generale, uguale per tutti.
+// Il profilo di ogni persona dello staff: le sue impostazioni, a sé stanti. Riguardano solo come la persona sceglie
+// (quanto è selettiva) e quanto investe (taglia): le regole del mercato (medie del trend, finestre di momentum, uscite
+// del rientro) sono del motore, uguali per tutti, così un trade si gestisce con le stesse regole con cui è stato aperto.
+// Partono da quelle di serie e si cambiano a mano dalla scheda, con la calibrazione del capo sulla soglia d'ingresso e
+// con la ricalibrazione in sala caffè (dopo una prova in ombra). L'obiettivo del giorno sale dopo i successi e scende
+// dopo i fallimenti. Valgono sul titolo su cui la persona lavora. Kronos resta quello generale, uguale per tutti.
 
 export const PERSONALI: Record<Reparto, string[]> = {
-  trading: [
-    "LIMITS.trendSmaDays", "LIMITS.longSmaDays", "LIMITS.rankMomentumDays", "AGENTS.absMomentum.days", "AGENTS.cryptoMomentumDays",
-    "AGENTS.pullback.rsiEntry", "AGENTS.pullback.rsiExit", "AGENTS.pullback.maxHoldSessions", "AGENTS.pullback.maxWeight",
-    "AGENTS.custodi.minProbabilita", "AGENTS.custodi.pullbackSmaDays", "AGENTS.custodi.extendedPct",
-  ],
+  trading: ["AGENTS.custodi.minProbabilita", "AGENTS.custodi.extendedPct", "AGENTS.pullback.rsiEntry", "AGENTS.pullback.maxWeight"],
   intraday: ["AGENTS.intraday.kronos.minProb", "AGENTS.intraday.maxWeight"],
 };
 // Ogni persona ha tutte e due le serie: può prendere un'operazione di più giorni o una intraday.
@@ -26,7 +23,7 @@ export const tipoDi = (chiave: string): Reparto => (PERSONALI.intraday.includes(
 export const chiaveCalibrazione = (p: string, tipo: Reparto) => (tipo === "intraday" ? `${p}|intraday` : p);
 // La soglia che la calibrazione del capo sposta per ogni persona (un passo = più selettiva).
 export const CALIBRATA: Record<Reparto, { chiave: string; passo: number; limite: number }> = {
-  trading: { chiave: "AGENTS.custodi.minProbabilita", passo: 0.05, limite: 0.7 },
+  trading: { chiave: "AGENTS.custodi.minProbabilita", passo: 0.025, limite: 0.75 },
   intraday: { chiave: "AGENTS.intraday.kronos.minProb", passo: 0.025, limite: 0.7 },
 };
 // Obiettivo del giorno personale: di serie 10%, +1 punto dopo un giorno in cui l'ha toccato, −1 dopo un giorno chiuso in
@@ -40,6 +37,9 @@ export interface Profilo {
   giorno?: Giorno;
   storia: { data: string; pct: number; obiettivo: number; esito: "successo" | "fallimento" | "pari" }[];
   ricalibrazioni?: { quando: string; motivo: string; cambi: string[] }[]; // fatte in sala caffè
+  // Prova in ombra: impostazioni proposte in sala caffè, non ancora in uso; si adottano solo se sui trade chiusi da `dal`
+  // in poi avrebbero fatto meglio di quelle in uso.
+  prova?: { valori: Record<string, number>; base: Record<string, number>; dal: string; scade: string; motivo: string; cambi: string[] };
 }
 interface File { versione: 1; persone: Record<string, Profilo> }
 const percorso = (stateDir: string) => join(stateDir, "profili.json");
@@ -95,6 +95,7 @@ export function impostazioniDi(stateDir: string, p: string) {
     }),
     obiettivo: { attuale: prof.obiettivo, diSerie: OBIETTIVO.diSerie, min: OBIETTIVO.min, max: OBIETTIVO.max, storia: prof.storia.slice(-10), giorno: prof.giorno ?? null },
     ricalibrazioni: (prof.ricalibrazioni ?? []).slice(-5),
+    prova: prof.prova ?? null,
   };
 }
 
@@ -133,13 +134,16 @@ export function preparaProfili(stateDir: string): void {
   const reg = leggiRegistro(stateDir);
   const f = leggiProfili(stateDir);
   const passi = passiCalibrazione(stateDir);
+  const voci = readJson(join(stateDir, "calibrazione.json"), (v): v is { voci: Record<string, { passi: number }> } => isObject(v) && isObject(v.voci));
+  const squadra: Partial<Record<Reparto, number>> = voci.kind === "ok" ? { trading: voci.value.voci["custodi (squadra)"]?.passi ?? 0, intraday: voci.value.voci["intraday"]?.passi ?? 0 } : {};
   perSimbolo = {};
   for (const [n, m] of Object.entries(reg.staff)) {
     if (!m.simbolo) continue;
     const p = chiavePersona(n);
-    const valori: Record<string, unknown> = { ...(f.persone[p]?.valori ?? {}) };
+    const valori: Record<string, unknown> = Object.fromEntries(Object.entries(f.persone[p]?.valori ?? {}).filter(([k]) => TUTTI_PERSONALI.includes(k)));
     for (const tipo of ["trading", "intraday"] as Reparto[]) {
-      const cal = CALIBRATA[tipo]; const n = passi[chiaveCalibrazione(p, tipo)];
+      // Tetto: i passi della persona più quelli della sua squadra non superano maxPassiTotali.
+      const cal = CALIBRATA[tipo]; const n = Math.min(passi[chiaveCalibrazione(p, tipo)] ?? 0, Math.max(0, AGENTS.apprendimento.maxPassiTotali - (squadra[tipo] ?? 0)));
       if (n) valori[cal.chiave] = calibrato(Number(valori[cal.chiave] ?? getPath(cal.chiave)), n, tipo);
     }
     perSimbolo[m.simbolo] = { ...(perSimbolo[m.simbolo] ?? {}), ...valori };
@@ -149,7 +153,9 @@ export function preparaProfili(stateDir: string): void {
 // La giornata di ogni persona: guadagno dei suoi trade di oggi (chiusi oggi o aperti) sul capitale che ci ha messo,
 // massimo toccato, obiettivo e difesa. Al cambio di giorno l'obiettivo si aggiusta con l'esito di ieri.
 export interface GiornataPersona { pct: number; pnl: number; capitale: number; picco: number; obiettivo: number; raggiunto: boolean; difesa: boolean; trade: number }
-export function giornataPersone(stateDir: string, journal: JournalFile, prezzi: Record<string, number>, today: string, giornoDi: (iso: string) => string): { perPersona: Record<string, GiornataPersona>; difesa: Record<string, string>; note: string[] } {
+// La giornata parte dall'inizio del giorno: per un trade aperto prima di oggi il punto di partenza è l'ultima chiusura
+// giornaliera (`inizio`), non il prezzo d'ingresso, così i guadagni dei giorni passati non contano come guadagni di oggi.
+export function giornataPersone(stateDir: string, journal: JournalFile, prezzi: Record<string, number>, today: string, giornoDi: (iso: string) => string, inizio: (simbolo: string) => number | undefined = () => undefined): { perPersona: Record<string, GiornataPersona>; difesa: Record<string, string>; note: string[] } {
   const f = leggiProfili(stateDir);
   const note: string[] = [];
   const perPersona: Record<string, GiornataPersona> = {};
@@ -172,8 +178,21 @@ export function giornataPersone(stateDir: string, journal: JournalFile, prezzi: 
     cambiato = true;
   }
   for (const [p, ts] of per) {
-    const capitale = ts.reduce((a, t) => a + t.costo, 0);
-    const pnl = ts.reduce((a, t) => a + t.incassato + (t.stato === "aperto" ? t.quantita * (prezzi[t.simbolo] ?? t.costo / Math.max(t.comprate, 1e-9)) : 0) - t.costo, 0);
+    let capitale = 0, pnl = 0;
+    for (const t of ts) {
+      const carico = t.costo / Math.max(t.comprate, 1e-9);
+      const ora = prezzi[t.simbolo] ?? carico;
+      const diOggi = giornoDi(t.apertoIl) === today;
+      const base = diOggi ? carico : (inizio(t.simbolo) ?? carico);
+      if (t.stato === "aperto") {
+        const q = t.quantita;
+        capitale += diOggi ? t.costo : q * base;
+        pnl += diOggi ? t.incassato + q * ora - t.costo : q * (ora - base);
+      } else {
+        capitale += diOggi ? t.costo : t.vendute * base;
+        pnl += diOggi ? t.incassato - t.costo : t.incassato - t.vendute * base;
+      }
+    }
     const pct = capitale > 0 ? pnl / capitale : 0;
     const prof = profiloDi(f, p);
     const picco = Math.max(prof.giorno?.data === today ? prof.giorno.picco : 0, pct);
@@ -216,4 +235,82 @@ export function ricalibraPersona(stateDir: string, p: string, nuovi: Record<stri
 export function valoriDi(stateDir: string, p: string, rep: Reparto): Record<string, number> {
   const prof = leggiProfili(stateDir).persone[p];
   return Object.fromEntries(PERSONALI[rep].map((k) => [k, Number(prof?.valori[k] ?? getPath(k))]));
+}
+
+// ---------- Prova in ombra ----------
+// Le impostazioni ricalibrate in sala caffè non valgono subito (sarebbe scegliere la variante andata meglio per caso):
+// restano in prova e si confrontano con quelle in uso sui trade che si chiudono da quel momento (fuori campione), con le
+// misure salvate all'ingresso: con le nuove soglie quel trade sarebbe stato preso? con la nuova taglia quanto avrebbe
+// reso? Dopo almeno PROVA.minTrade trade del tipo interessato si adottano se il risultato è almeno pari, altrimenti si
+// scartano; senza abbastanza trade entro PROVA.giorni si scartano.
+export const PROVA = { minTrade: 15, giorni: 30 };
+const fmtValore = (k: string, x: unknown) => (paramOf(k)?.tipo === "percento" ? `${Math.round(Number(x) * 1000) / 10}%` : String(x));
+
+export function proponiProva(stateDir: string, p: string, nuovi: Record<string, number>, motivo: string, now: Date): string[] {
+  const f = leggiProfili(stateDir);
+  const prof = profiloDi(f, p);
+  const attuali = { ...valoriDi(stateDir, p, "trading"), ...valoriDi(stateDir, p, "intraday") };
+  const valori: Record<string, number> = {}, base: Record<string, number> = {};
+  const cambi: string[] = [];
+  for (const [k, v] of Object.entries(nuovi)) {
+    if (!TUTTI_PERSONALI.includes(k) || !validate(k, v).ok || v === attuali[k]) continue;
+    valori[k] = v; base[k] = attuali[k]!;
+    cambi.push(`${paramOf(k)!.etichetta}: ${fmtValore(k, attuali[k])} → ${fmtValore(k, v)}`);
+  }
+  if (!cambi.length) return [];
+  prof.prova = { valori, base, dal: now.toISOString(), scade: new Date(now.getTime() + PROVA.giorni * 86_400_000).toISOString(), motivo, cambi };
+  writeJsonAtomic(percorso(stateDir), f);
+  return cambi;
+}
+
+// Con queste impostazioni il trade sarebbe stato preso, e con che taglia (rispetto a quella usata)?
+function conImpostazioni(t: Trade, set: Record<string, number>, usate: Record<string, number>): number | null {
+  const m = t.contesto?.misure ?? {};
+  const intraday = (t.contesto?.tipo ?? (t.contesto?.livelli ? "intraday" : "trading")) === "intraday";
+  if (intraday) {
+    if (m.probabilita !== undefined && set["AGENTS.intraday.kronos.minProb"] !== undefined && m.probabilita < set["AGENTS.intraday.kronos.minProb"]!) return null;
+    const k = "AGENTS.intraday.maxWeight";
+    return set[k] !== undefined && usate[k] ? set[k]! / usate[k]! : 1;
+  }
+  if (m.probabilita !== undefined && set["AGENTS.custodi.minProbabilita"] !== undefined && m.probabilita < set["AGENTS.custodi.minProbabilita"]!) return null;
+  const dist = t.contesto?.distanzaMedia;
+  if (dist !== null && dist !== undefined && set["AGENTS.custodi.extendedPct"] !== undefined && dist > set["AGENTS.custodi.extendedPct"]!) return null;
+  const rientro = t.contesto?.agenti?.length === 1 && t.contesto.agenti[0] === "rientro";
+  if (rientro && m.rsi2 !== undefined && set["AGENTS.pullback.rsiEntry"] !== undefined && m.rsi2 >= set["AGENTS.pullback.rsiEntry"]!) return null;
+  const k = "AGENTS.pullback.maxWeight";
+  return rientro && set[k] !== undefined && usate[k] ? set[k]! / usate[k]! : 1;
+}
+
+export function valutaProve(stateDir: string, journal: JournalFile, now: Date): string[] {
+  const f = leggiProfili(stateDir);
+  const note: string[] = [];
+  let cambiato = false;
+  for (const [p, prof] of Object.entries(f.persone)) {
+    const pr = prof.prova;
+    if (!pr) continue;
+    const tipi = new Set(Object.keys(pr.valori).map(tipoDi));
+    const ts = journal.trade.filter((t) => t.stato === "chiuso" && t.chiusoIl && t.chiusoIl > pr.dal && tipi.has(t.contesto?.tipo ?? (t.contesto?.livelli ? "intraday" : "trading")));
+    if (ts.length < PROVA.minTrade) {
+      if (now.toISOString() > pr.scade) { delete prof.prova; cambiato = true; note.push(`${nomeDi(p)}: prova in ombra scartata (solo ${ts.length} trade in ${PROVA.giorni} giorni)`); }
+      continue;
+    }
+    let vecchio = 0, nuovoR = 0;
+    for (const t of ts) {
+      const r = (t.incassato - t.costo) / Math.max(t.costo, 1e-9);
+      const usate = { ...pr.base, ...(t.contesto?.impostazioni ?? {}) };
+      const a = conImpostazioni(t, { ...usate, ...pr.base }, usate), b = conImpostazioni(t, { ...usate, ...pr.valori }, usate);
+      if (a !== null) vecchio += r * a;
+      if (b !== null) nuovoR += r * b;
+    }
+    const esito = `su ${ts.length} trade: con le nuove ${(nuovoR * 100).toFixed(2)}%, con quelle in uso ${(vecchio * 100).toFixed(2)}%`;
+    if (nuovoR >= vecchio) {
+      prof.valori = { ...prof.valori, ...pr.valori };
+      prof.ricalibrazioni = [...(prof.ricalibrazioni ?? []), { quando: now.toISOString(), motivo: `${pr.motivo}; adottate dopo la prova in ombra (${esito})`, cambi: pr.cambi }].slice(-10);
+      note.push(`${nomeDi(p)}: impostazioni della sala caffè adottate dopo la prova in ombra (${esito})`);
+    } else note.push(`${nomeDi(p)}: impostazioni della sala caffè scartate dopo la prova in ombra (${esito})`);
+    delete prof.prova;
+    cambiato = true;
+  }
+  if (cambiato) writeJsonAtomic(percorso(stateDir), f);
+  return note;
 }

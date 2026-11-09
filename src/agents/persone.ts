@@ -75,6 +75,7 @@ export interface Assegnazione {
   chi: Record<string, string>; // c:SYM / i:SYM → p:Nome
   senzaPersona: string[]; // c:SYM / i:SYM con un voto ma nessuna persona disponibile
   bloccati: Record<string, string>; // c:SYM / i:SYM: il titolo è già di una persona dell'altro reparto (motivo)
+  esplorazione: string[]; // c:SYM / i:SYM date a chi ha meno dati (Thompson sampling): taglia ridotta
   note: string[];
   reg: Registro;
 }
@@ -89,6 +90,9 @@ export function assegnaPersone(input: {
   bisogni: Record<Reparto, Bisogno[]>;
   sospesi: string[]; // chi è in formazione, da chi c'è da più tempo
   punteggio: (p: string, tipo: Reparto) => number;
+  // Facoltativo: la bravura media (senza estrazione). Se la persona scelta è sotto la migliore libera, l'occasione è
+  // un'esplorazione (taglia ridotta).
+  media?: (p: string, tipo: Reparto) => number;
   rientro: (p: string, desk: string, tipo: Reparto, scrivania: number) => string | null;
 }): Assegnazione {
   const reg = leggiRegistro(input.stateDir);
@@ -132,8 +136,11 @@ export function assegnaPersone(input: {
   // Le occasioni nuove, prima le posizioni da seguire e i voti, prima quelle di più giorni.
   const tutte = (["trading", "intraday"] as Reparto[]).flatMap((tipo) => bisogniDi[tipo].map((b) => ({ tipo, b })))
     .sort((x, y) => Number(y.b.tiene) - Number(x.b.tiene) || Number(y.b.voto) - Number(x.b.voto) || (x.tipo === "trading" ? -1 : 1) - (y.tipo === "trading" ? -1 : 1));
-  const liberi = (tipo: Reparto) => Object.entries(reg.staff).filter(([n, m]) => m.simbolo === null && !sospesi.has(chiavePersona(n)))
-    .sort((a, b) => input.punteggio(chiavePersona(b[0]), tipo) - input.punteggio(chiavePersona(a[0]), tipo) || a[1].dal.localeCompare(b[1].dal)).map(([n]) => n);
+  const esplorazione: string[] = [];
+  // Thompson sampling: `punteggio` è un'estrazione dalla bravura stimata (incerta per chi ha pochi trade): di solito vince
+  // il migliore, ma ogni tanto un'occasione va a chi ha meno dati, che così impara.
+  const liberi = (tipo: Reparto) => { const sc = new Map(Object.keys(reg.staff).map((n) => [n, input.punteggio(chiavePersona(n), tipo)])); return Object.entries(reg.staff).filter(([n, m]) => m.simbolo === null && !sospesi.has(chiavePersona(n)))
+    .sort((a, b) => sc.get(b[0])! - sc.get(a[0])! || a[1].dal.localeCompare(b[1].dal)).map(([n]) => n); };
   for (const { tipo, b } of tutte) {
     const desk = `${pref(tipo)}${b.simbolo}`;
     if (chi[desk]) continue;
@@ -143,7 +150,10 @@ export function assegnaPersone(input: {
     let nome: string | null = null;
     const l = liberi(tipo);
     if (b.preferita && l.includes(nomeDi(b.preferita))) nome = nomeDi(b.preferita);
-    else if (l.length) nome = l[0]!;
+    else if (l.length) {
+      nome = l[0]!;
+      if (input.media) { const best = Math.max(...l.map((n) => input.media!(chiavePersona(n), tipo))); if (input.media(chiavePersona(nome), tipo) < best - 0.05) esplorazione.push(desk); }
+    }
     else if (staffTotale < AGENTS.persone.totale) nome = assumi(tipo); // il team si completa fino a 20, mai oltre
     else if (b.voto) {
       // Nessuno libero: può rientrare chi è in formazione, se il capo lo consente (da chi è lì da più tempo).
@@ -158,7 +168,7 @@ export function assegnaPersone(input: {
     cambiato = true;
   }
   if (cambiato) scrivi(input.stateDir, reg);
-  return { chi, senzaPersona, bloccati, note, reg };
+  return { chi, senzaPersona, bloccati, esplorazione, note, reg };
 }
 
 // Le persone per la dashboard: agenti generali (a:nome), staff (p:Nome) con reparto e titolo, e per comodità anche le

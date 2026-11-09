@@ -4,6 +4,7 @@ import { stopPctFor } from "../stops.ts";
 import { controTendenza, pesoControTendenza } from "./fiducia.ts";
 import { crowdAdjustment } from "./fonti.ts";
 import { clamp01, type Agent, type AgentReport, type AgentView, type Signal } from "./types.ts";
+import { calibraP } from "./statistica.ts";
 import { valore } from "./profili.ts";
 
 // I custodi: un investitore per ogni crypto che il motore segue. Ognuno guarda un solo titolo e ragiona come un
@@ -17,7 +18,8 @@ export type CustodeFase = "osserva" | "pronto" | "in posizione" | "in uscita" | 
 // con un voto da 0 a 1, e una probabilità complessiva che il titolo sia favorevole all'ingresso (o alla tenuta).
 export interface Dossier {
   aggiornato: string;
-  probabilita: number; // 0..1
+  probabilita: number; // 0..1, calibrata sui risultati del diario quando la calibrazione è attiva
+  grezza?: number; // la stima prima della calibrazione (quella che va nel diario)
   tecnica: { punteggio: number; pattern: string[] };
   kronos: { punteggio: number | null; nota: string };
   notizie: { punteggio: number | null; titoli: { titolo: string; fonte: string; quando: string }[]; nota: string };
@@ -230,7 +232,9 @@ export class CustodiAgent implements Agent {
     // ridistribuiscono il loro peso.
     const parts: [number, number | null][] = [[0.45, kronos.punteggio], [0.25, tecnica.punteggio], [0.15, notizie.punteggio], [0.15, contesto.punteggio]];
     const wsum = parts.reduce((a, [w, x]) => a + (x === null ? 0 : w), 0);
-    const probabilita = wsum ? parts.reduce((a, [w, x]) => a + (x === null ? 0 : w * x), 0) / wsum : 0.5;
+    const grezza = wsum ? parts.reduce((a, [w, x]) => a + (x === null ? 0 : w * x), 0) / wsum : 0.5;
+    // Calibrata sui risultati: quante volte una stima così è davvero finita in guadagno (src/agents/statistica.ts).
+    const probabilita = calibraP("trading", grezza);
     const p = Math.round(probabilita * 100);
     const m20 = livelli.media20, m50 = livelli.media50;
     let prossimaAzione: string;
@@ -240,7 +244,7 @@ export class CustodiAgent implements Agent {
     else if (p >= 60) prossimaAzione = `Entrare al prossimo giro se il prezzo tiene sopra la media a 20 (${num(m20)}): ${p}% favorevole. Stop a ${num(livelli.stop)}.`;
     else if (p >= 45) prossimaAzione = `Aspettare una conferma (chiusura sopra ${num(m20)} o rottura dei massimi a 20 sedute): ${p}% favorevole, non basta per la taglia piena.`;
     else prossimaAzione = `Restare fuori: ${p}% favorevole. Si rivaluta al prossimo giro.`;
-    return { aggiornato: v.now.toISOString(), probabilita, tecnica, kronos, notizie, contesto, memoria, prossimaAzione };
+    return { aggiornato: v.now.toISOString(), probabilita, grezza, tecnica, kronos, notizie, contesto, memoria, prossimaAzione };
   }
 
   // Candidate: tutti i titoli e le crypto dell'universo in trend (sopra le medie, momentum a 12 mesi positivo; per le
@@ -309,7 +313,7 @@ export class CustodiAgent implements Agent {
     const s = c.simbolo;
     const closes = v.closes[s];
     const price = v.prices[s] ?? closes?.at(-1) ?? null;
-    const m20 = closes ? sma(closes, valore("AGENTS.custodi.pullbackSmaDays", s)) : null;
+    const m20 = closes ? sma(closes, AGENTS.custodi.pullbackSmaDays) : null;
     const m50 = closes ? sma(closes, LIMITS.trendSmaDays) : null;
     const m200 = closes ? sma(closes, LIMITS.longSmaDays) : null;
     const mom3 = closes ? momentum(closes, AGENTS.cryptoMomentumDays) : null;
@@ -361,7 +365,7 @@ export class CustodiAgent implements Agent {
     // Candidata: ingresso migliore vicino alla media a 20 giorni; troppo lontano dalla 50 si aspetta un rientro.
     if (dist50 !== null && dist50 > valore("AGENTS.custodi.extendedPct", s)) {
       segnali.push({ agente, simbolo: s, lato: "buy", forza: 0.25, orizzonteSedute: horizon, perche: `${s} in trend ma ${pct(dist50)} sopra la media a ${LIMITS.trendSmaDays} giorni: ingresso solo a taglia ridotta, meglio aspettare un rientro` });
-      return { ...base, fase: "osserva", piano: `Aspettare un rientro verso la media a ${valore("AGENTS.custodi.pullbackSmaDays", s)} giorni (${num(m20)}): il prezzo è ${pct(dist50)} sopra la ${LIMITS.trendSmaDays}, troppo esteso per entrare pieno.`, stato: `Candidata dal ${c.dalle}, non in portafoglio.` };
+      return { ...base, fase: "osserva", piano: `Aspettare un rientro verso la media a ${AGENTS.custodi.pullbackSmaDays} giorni (${num(m20)}): il prezzo è ${pct(dist50)} sopra la ${LIMITS.trendSmaDays}, troppo esteso per entrare pieno.`, stato: `Candidata dal ${c.dalle}, non in portafoglio.` };
     }
     const nearPullback = m20 !== null && price !== null && price <= m20 * 1.02;
     const forza = Math.min(1, (nearPullback ? 0.8 : 0.6) * spinta);

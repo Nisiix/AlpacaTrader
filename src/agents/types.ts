@@ -23,6 +23,9 @@ export interface Signal {
   intraday?: boolean;
   // Proiezione di Kronos che sostiene il voto (rendimento a `horizon` sedute), se c'è.
   kronos?: number;
+  // Misure del momento del voto (probabilità di riuscita, RSI...): vanno nel diario con il trade, per la prova in ombra
+  // delle impostazioni, la calibrazione delle probabilità e il meta-modello.
+  misure?: Record<string, number>;
 }
 
 import type { FontiDati } from "./fonti.ts";

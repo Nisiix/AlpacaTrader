@@ -4,6 +4,7 @@ import { prossimaTrimestrale } from "../events.ts";
 import { stopPctFor } from "../stops.ts";
 import { kronosProb } from "./fiducia.ts";
 import { soloIntraday } from "./posizioni.ts";
+import { addTradingDays } from "../slots.ts";
 import type { Agent, AgentReport, AgentView, Signal } from "./types.ts";
 
 export interface ExitPolicy {
@@ -95,6 +96,26 @@ export class ExitAgent implements Agent {
       if (pp.enabled && gain > margine && dip !== null && dip < 0 && (1 + gain) * (1 + dip) - 1 <= margine) {
         sell(`protezione del profitto: in guadagno del ${pct(gain)}, ma Kronos vede ${pct(dip)} nelle prossime ${pp.sedute} sedute, che lo azzererebbe: si incassa adesso`);
         continue;
+      }
+      // Profitto minimo sui più giorni: arrivato all'attivazione, il trade non torna in perdita; se ridiscende al minimo
+      // (costi coperti più un piccolo guadagno) si esce in profitto.
+      const pg = AGENTS.piuGiorni;
+      const crypto = isCrypto(p.symbol);
+      const minimo = crypto ? pg.profittoMinimo.minimo.crypto : pg.profittoMinimo.minimo.stocks;
+      const picco = peak / p.avgEntryPrice - 1;
+      if (pg.profittoMinimo.enabled && picco >= (crypto ? pg.profittoMinimo.attivazione.crypto : pg.profittoMinimo.attivazione.stocks) && gain <= minimo) {
+        sell(`profitto minimo: il trade era arrivato a ${pct(picco)} ed è sceso a ${pct(gain)}: si esce in guadagno prima che torni in perdita`);
+        continue;
+      }
+      // Uscita a tempo: dopo l'orizzonte di Kronos (sedute di borsa per le azioni, giorni per le crypto) un trade che non
+      // rende almeno il minimo e per cui Kronos non vede più rialzo si chiude: niente giorni persi su un trade che non va.
+      if (pg.tempo.enabled && trade?.apertoIl) {
+        const giorni = crypto ? (v.now.getTime() - Date.parse(trade.apertoIl)) / 86_400_000 : null;
+        const scaduto = crypto ? giorni! >= pg.tempo.sedute : v.today >= addTradingDays(trade.apertoIl.slice(0, 10), pg.tempo.sedute);
+        if (scaduto && gain < minimo && !(fcUscita !== undefined && fcUscita >= AGENTS.kronos.anticipaSoglia)) {
+          sell(`uscita a tempo: dopo ${pg.tempo.sedute} ${crypto ? "giorni" : "sedute"} il trade rende ${pct(gain)} (meno del minimo ${pct(minimo)}) e Kronos non vede più rialzo: si libera il capitale`);
+          continue;
+        }
       }
       // Stessa soglia con cui si compra (anticipaSoglia): un -0,2% non è una proiezione netta, e uscire sul rumore costa.
       if (fcUscita !== undefined && fcUscita <= -AGENTS.kronos.anticipaSoglia) {

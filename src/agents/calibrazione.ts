@@ -6,6 +6,7 @@ import type { JournalFile } from "../journal.ts";
 import { regolaSuperata, SQUADRA_CUSTODI } from "./capo.ts";
 import { leggiRegistro, nomeDi, personeDelTrade } from "./persone.ts";
 import { CALIBRATA, calibrato, chiaveCalibrazione, leggiProfili } from "./profili.ts";
+import { campione, daAllentare, daStringere, descrivi, tipoTrade } from "./apprendimento.ts";
 
 // La calibrazione del capo ufficio: quando un agente vince meno del 51% dei suoi trade chiusi, il capo rende più
 // selettivo il suo parametro d'ingresso di un passo; quando torna a vincere almeno il 60%, lo riavvicina di un passo al
@@ -20,7 +21,7 @@ export interface Calibrabile {
 
 export const CALIBRABILI: Record<string, Calibrabile> = {
   intraday: { chiave: "AGENTS.intraday.kronos.minProb", passo: 0.025, limite: 0.7 },
-  [SQUADRA_CUSTODI]: { chiave: "AGENTS.custodi.minProbabilita", passo: 0.05, limite: 0.65 },
+  [SQUADRA_CUSTODI]: { chiave: "AGENTS.custodi.minProbabilita", passo: 0.025, limite: 0.7 },
   kronos: { chiave: "AGENTS.kronos.controTendenza.minFiducia", passo: 0.05, limite: 0.8 },
   rientro: { chiave: "AGENTS.pullback.rsiEntry", passo: -1, limite: 4 },
 };
@@ -64,21 +65,26 @@ export function aggiornaCalibrazione(stateDir: string, journal: JournalFile, now
     for (const a of ag) per.set(a, [...(per.get(a) ?? []), t]);
     if (ag.some((a) => a.startsWith("custode "))) per.set(SQUADRA_CUSTODI, [...(per.get(SQUADRA_CUSTODI) ?? []), t]);
     // Le persone si calibrano per tipo d'operazione: p:Nome sui trade di più giorni, p:Nome|intraday su quelli intraday.
-    for (const p of personeDelTrade(t, reg.vecchi)) if (p.startsWith("p:") && reg.staff[nomeDi(p)]) { const k = chiaveCalibrazione(p, t.contesto?.livelli ? "intraday" : "trading"); per.set(k, [...(per.get(k) ?? []), t]); }
+    for (const p of personeDelTrade(t, reg.vecchi)) if (p.startsWith("p:") && reg.staff[nomeDi(p)]) { const k = chiaveCalibrazione(p, tipoTrade(t)); per.set(k, [...(per.get(k) ?? []), t]); }
   }
+  // Coordinatore dell'apprendimento: finestra degli ultimi trade, campione minimo (persona 20, squadra 10), per le persone
+  // la media con la squadra dello stesso tipo d'operazione, giudizio su aspettativa e vittorie. Il tetto: i passi di una
+  // persona più quelli della sua squadra non superano maxPassiTotali.
+  const tutti = { trading: chiusi.filter((t) => tipoTrade(t) === "trading"), intraday: chiusi.filter((t) => tipoTrade(t) === "intraday") };
+  const passiSquadra = (tipo: "trading" | "intraday") => f.voci[tipo === "intraday" ? "intraday" : SQUADRA_CUSTODI]?.passi ?? 0;
   for (const [agente, ts] of per) {
     if (!CALIBRABILI[agente] && !agente.startsWith("p:")) continue; // squadre e persone (p:Nome, p:Nome|intraday)
     const v = f.voci[agente] ?? { passi: 0, dal: "", motivo: "" };
     const nuovi = ts.filter((t) => !v.dal || t.chiusoIl! > v.dal);
-    if (nuovi.length < c.minTrade) continue;
-    const vinti = nuovi.filter((t) => t.incassato - t.costo > 0).length;
-    const q = vinti / nuovi.length;
-    const max = c.maxPassi;
-    if (q < c.obiettivo && v.passi < max) {
-      f.voci[agente] = { passi: v.passi + 1, dal: now.toISOString(), motivo: `${vinti} vinti su ${nuovi.length} (${Math.round(q * 100)}%), sotto il ${Math.round(c.obiettivo * 100)}%: ingressi più selettivi di un passo` };
+    const persona = agente.startsWith("p:");
+    const tipo = agente.endsWith("|intraday") ? "intraday" : "trading";
+    const cmp = campione(nuovi, persona ? tutti[tipo] : null, persona ? AGENTS.apprendimento.minTradePersona : Math.max(c.minTrade, AGENTS.apprendimento.minTradeSquadra));
+    const max = persona ? Math.max(0, AGENTS.apprendimento.maxPassiTotali - passiSquadra(tipo)) : c.maxPassi;
+    if (daStringere(cmp) && v.passi < max) {
+      f.voci[agente] = { passi: v.passi + 1, dal: now.toISOString(), motivo: `${descrivi(cmp)}: ingressi più selettivi di un passo` };
       note.push(`capo ufficio: ${agente} ricalibrato, ${f.voci[agente]!.motivo}`);
-    } else if (q >= c.buono && v.passi > 0) {
-      f.voci[agente] = { passi: v.passi - 1, dal: now.toISOString(), motivo: `${vinti} vinti su ${nuovi.length} (${Math.round(q * 100)}%): torna di un passo verso il valore di base` };
+    } else if (daAllentare(cmp) && v.passi > 0) {
+      f.voci[agente] = { passi: v.passi - 1, dal: now.toISOString(), motivo: `${descrivi(cmp)}: torna di un passo verso il valore di base` };
       note.push(`capo ufficio: ${agente} ricalibrato, ${f.voci[agente]!.motivo}`);
     }
   }

@@ -201,6 +201,11 @@ export const AGENTS = {
   // mentre il trend continuava); l'uscita di trend resta quella della gabbia (chiusura sotto la media a 50).
   // Protezione del profitto: con una posizione in guadagno (oltre il margine dei costi), se Kronos nelle prossime
   // `sedute` vede un calo che lo azzererebbe, si vende subito con il profitto di adesso.
+  // Trade di più giorni. Profitto minimo: un trade che è arrivato ad `attivazione` di guadagno non deve tornare in perdita:
+  // se ridiscende a `minimo` (costi coperti più un piccolo guadagno) si esce in profitto. Uscita a tempo: dopo `sedute`
+  // (l'orizzonte di Kronos) un trade che non rende almeno il minimo e per cui Kronos non vede più rialzo si chiude, per
+  // non perdere giorni (e capitale fermo) su un trade che non funziona.
+  piuGiorni: { profittoMinimo: { enabled: true, attivazione: { stocks: 0.02, crypto: 0.04 }, minimo: { stocks: 0.004, crypto: 0.012 } }, tempo: { enabled: true, sedute: 5 } },
   protezioneProfitto: { enabled: true, sedute: 2, margine: { stocks: 0.002, crypto: 0.006 } },
   // Uscita prima delle trimestrali (azioni): nell'ultima seduta prima dei conti (lo stesso giorno se escono dopo la
   // chiusura, il giorno prima se escono prima dell'apertura o l'orario non è noto), negli ultimi minutiPrimaChiusura
@@ -228,10 +233,13 @@ export const AGENTS = {
   // Custodi senza numero fisso: uno per ogni titolo o crypto in trend (maxCandidates è solo una sicurezza).
   // minProbabilita: sotto questa probabilità favorevole del dossier il trading agent non vota l'acquisto (è il suo stesso
   // consiglio «restare fuori»); il capo ufficio può alzarla per la squadra e per la singola persona (src/agents/profili.ts).
-  custodi: { enabled: true, maxCandidates: 100, pullbackSmaDays: 20, extendedPct: 0.15, keepIdleTicks: 12, minProbabilita: 0.45 },
+  custodi: { enabled: true, maxCandidates: 100, pullbackSmaDays: 20, extendedPct: 0.15, keepIdleTicks: 12, minProbabilita: 0.6 },
   // Calibrazione del capo ufficio (src/agents/calibrazione.ts): sotto `obiettivo` di vittorie su almeno `minTrade` trade
   // chiusi un agente diventa più selettivo di un passo (al massimo `maxPassi`); da `buono` in su torna di un passo.
-  calibrazione: { enabled: true, minTrade: 5, obiettivo: 0.51, buono: 0.6, maxPassi: 4 },
+  calibrazione: { enabled: true, minTrade: 10, obiettivo: 0.51, buono: 0.55, maxPassi: 4 },
+  // Coordinatore dell'apprendimento (src/agents/apprendimento.ts): finestra degli ultimi trade, campioni minimi, quanto
+  // pesa la squadra per chi ha pochi trade, tetto ai passi di selettività sommati (squadra + persona).
+  apprendimento: { finestra: 30, minTradePersona: 20, minTradeSquadra: 10, forzaSquadra: 10, maxPassiTotali: 4 },
   // Formazione in sala caffè: chi, sugli ultimi trade chiusi dal suo rientro (almeno minTrade), vince meno di `obiettivo`
   // e chiude in perdita va in sala caffè per `ore` ore a imparare da chi lavora bene; alla scrivania restano sempre
   // almeno `minOperativi` trading agents (e agenti generali) e almeno `minIntraday` operatori della sala intraday quando
@@ -241,10 +249,11 @@ export const AGENTS = {
   // così ognuno accumula esperienza e i suoi parametri migliorano. Il team è fisso: nessuno esce, chi non lavora è in
   // sala caffè (in pausa o in formazione).
   persone: { totale: 20 },
-  formazione: { enabled: true, minTrade: 5, obiettivo: 0.51, ore: 24, minOperativi: 10, minIntraday: 1 },
+  formazione: { enabled: true, minTrade: 20, obiettivo: 0.51, ore: 24, minOperativi: 10, minIntraday: 1 },
   // Evidenza combinata del dossier (Kronos, grafico, notizie, contesto) minima per un ingresso nuovo di più giorni:
   // sopra la media a 200 e, più alta, sotto la 200 (contro tendenza).
-  evidenza: { min: 0.5, minContro: 0.6 },
+  // Stessa soglia della scrivania: si vota e si entra solo da «pronto» (60%); contro tendenza serve di più.
+  evidenza: { min: 0.6, minContro: 0.65 },
   // Contanti che restano sempre liberi (quota del patrimonio): il riparto del capitale divide il resto.
   riservaContanti: 0.01,
   // Costi di andata e ritorno su Alpaca: crypto 0,25% per lato (taker, livello base: percentuale, nessuna quota fissa);
@@ -298,6 +307,9 @@ export const AGENTS = {
     vittorie: { obiettivo: 0.51, ultimi: 20, minimo: 8, passo: 0.05 },
     // Le candele su cui si cerca l'ingresso: con Kronos si sceglie quella con la probabilità di successo più alta.
     candele: ["5Min", "15Min", "1Hour", "4Hour"] as string[],
+    // Azioni: il feed gratuito di Alpaca è solo IEX (circa il 2% degli scambi): le candele da 5 e 15 minuti sono troppo
+    // rumorose per Kronos. Per le azioni si usano solo 1 ora e 4 ore; le crypto hanno tutte le candele.
+    candeleAzioni: ["1Hour", "4Hour"] as string[],
     // Obiettivo: con Kronos è il rialzo che Kronos prevede sull'orizzonte scelto (minuti o ore), mai sotto questo minimo,
     // che copre i costi con margine (azioni 0,3%, crypto 1,2% contro lo 0,5% di andata e ritorno); senza Kronos il maggiore
     // tra minimo e targetAtr × ATR. Si entra solo se l'obiettivo vale almeno rapportoMin volte lo stop: un trade breve da

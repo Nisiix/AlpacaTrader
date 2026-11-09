@@ -5,6 +5,14 @@ import { AGENTS } from "../src/config.ts";
 import { applyGuidance, kronosOf, regolaSuperata, review } from "../src/agents/capo.ts";
 import type { CustodeStato } from "../src/agents/custode.ts";
 import type { AgentReport } from "../src/agents/types.ts";
+
+// Soglie del coordinatore dell'apprendimento abbassate per i test con pochi trade (si ripristinano alla fine).
+function sogliePiccole() {
+  const a = { ...AGENTS.apprendimento }, f = AGENTS.formazione.minTrade, c = AGENTS.calibrazione.minTrade;
+  Object.assign(AGENTS.apprendimento, { minTradePersona: 5, minTradeSquadra: 3 });
+  AGENTS.formazione.minTrade = 5; AGENTS.calibrazione.minTrade = 5;
+  return () => { Object.assign(AGENTS.apprendimento, a); AGENTS.formazione.minTrade = f; AGENTS.calibrazione.minTrade = c; };
+}
 import { emptyJournal, type JournalFile, type Trade } from "../src/journal.ts";
 
 // Un trade chiuso: aperto un giorno, chiuso qualche giorno dopo (salvo indicato), con agenti, motivo e risultato.
@@ -38,7 +46,9 @@ describe("capo ufficio", () => {
 
   test("il capo giudica le persone, non i titoli: chi perde su tre titoli diversi è richiamato, e il richiamo vale dove lavora", () => {
     const ts = ["SOL/USD", "LTC/USD", "AVAX/USD"].map((s, i) => ({ ...trade(i, s, -0.02, [`custode ${s}`], `custode ${s}: rialzo anticipato da Kronos`, { kronos: 0.012 }), contesto: { ...trade(i, s, -0.02, [`custode ${s}`], `custode ${s}: rialzo anticipato da Kronos`, { kronos: 0.012 }).contesto!, persone: ["p:Anna"] } }));
+    const ripristina = sogliePiccole();
     const r = review(journalOf(ts), new Date("2026-11-08T17:00:00Z"));
+    ripristina();
     expect(r.valutazioni.map((v) => v.agente)).toEqual(["p:Anna"]);
     expect(r.valutazioni[0]!.giudizio).toBe("richiamato");
     expect(r.valutazioni[0]!.sessioni).toEqual({ positive: 0, negative: 3 });
@@ -49,8 +59,9 @@ describe("capo ufficio", () => {
     ] } };
     const chi: Record<string, string> = { "DOT/USD": "p:Anna", "ADA/USD": "p:Bruno" };
     const note = applyGuidance(reports, r, undefined, (s) => chi[s.simbolo]);
-    expect(note[0]).toContain("custode DOT/USD");
-    expect(reports.custodi!.segnali.map((s) => [s.simbolo, s.forza])).toEqual([["ADA/USD", 1]]);
+    // Per le persone dello staff il richiamo non stringe i voti: agiscono calibrazione e formazione (una leva sola).
+    expect(note).toEqual([]);
+    expect(reports.custodi!.segnali.map((s) => [s.simbolo, s.forza])).toEqual([["DOT/USD", 1], ["ADA/USD", 1]]);
   });
 });
 

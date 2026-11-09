@@ -23,6 +23,12 @@ export interface EntryContext {
   agenti?: string[];
   // Le persone che hanno preso l'occasione (p:Nome per trading e intraday agents, a:nome per gli agenti generali).
   persone?: string[];
+  // Il momento dell'ingresso: misure (probabilità di riuscita, RSI(2)...), le impostazioni della persona in vigore, il
+  // clima del mercato. Servono a giudicare a posteriori (prova in ombra, calibrazione delle probabilità, meta-modello).
+  misure?: Record<string, number>;
+  impostazioni?: Record<string, number>;
+  clima?: string;
+  tipo?: "trading" | "intraday";
   // Proiezione di Kronos all'ingresso: il capo ufficio la confronta con l'esito per consigliare la soglia giusta.
   kronos?: number;
   // Operazione intraday promossa a posizione di più giorni (ISO del momento): da lì la seguono le regole di più giorni.

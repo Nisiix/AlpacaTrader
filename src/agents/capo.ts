@@ -113,16 +113,25 @@ export function review(journal: JournalFile, now: Date, vecchi: Record<string, s
     let messaggio: string;
     let kronosMin: number | null = null;
     let forza = 1;
-    if (n < 3) {
+    // Si giudica prima l'aspettativa (guadagno medio a trade, profit factor), poi il vincolo del 51% di vittorie. Sotto i
+    // 10 trade non si giudica: con meno il risultato è quasi tutto caso.
+    const guad = ts.filter((t) => pnlOf(t) > 0).reduce((a, t) => a + pnlOf(t), 0);
+    const perd = -ts.filter((t) => pnlOf(t) <= 0).reduce((a, t) => a + pnlOf(t), 0);
+    const pf = perd > 0 ? guad / perd : null;
+    const pfTxt = pf !== null ? `, profit factor ${pf.toFixed(2)}` : "";
+    if (n < AGENTS.apprendimento.minTradeSquadra) {
       giudizio = "nuovo";
-      messaggio = `${n} trade chiusi: troppo pochi per giudicare. Continua seguendo Kronos e le regole del motore.`;
-    } else if ((media ?? 0) > 0 && (percVinti ?? 0) >= 0.55) {
-      giudizio = (percVinti ?? 0) >= 0.65 ? "ottimo" : "bene";
-      messaggio = `Ottimo lavoro: ${vinti} vinti su ${n}, risultato medio ${pct(media, 2)}. Continua così.`;
+      messaggio = `${n} trade chiusi: troppo pochi per giudicare (servono ${AGENTS.apprendimento.minTradeSquadra}). Continua seguendo Kronos e le regole del motore.`;
+    } else if ((media ?? 0) > 0 && (percVinti ?? 0) >= 0.51) {
+      giudizio = (pf ?? 99) >= 1.5 && (percVinti ?? 0) >= 0.55 ? "ottimo" : "bene";
+      messaggio = `Ottimo lavoro: ${vinti} vinti su ${n}, guadagno medio ${pct(media, 2)} a trade${pfTxt}. Continua così.`;
     } else if ((media ?? 0) > 0) {
       giudizio = "da seguire";
-      messaggio = `In attivo (${pct(media, 2)} a trade) ma vinci solo ${Math.round((percVinti ?? 0) * 100)}% delle volte: seleziona meglio gli ingressi.`;
+      messaggio = `In attivo (${pct(media, 2)} a trade${pfTxt}) ma vinci solo ${Math.round((percVinti ?? 0) * 100)}% delle volte: seleziona meglio gli ingressi.`;
       if (sogliaKronos !== null) consigli.push(`Entra solo con Kronos ≥ ${pct(sogliaKronos)}: è la soglia da cui i trade di tutti hanno reso di più.`);
+    } else if ((percVinti ?? 0) >= 0.51) {
+      giudizio = "da seguire";
+      messaggio = `Vinci spesso (${Math.round((percVinti ?? 0) * 100)}%) ma il guadagno medio è ${pct(media, 2)} a trade${pfTxt}: gli incassi sono troppo piccoli rispetto alle perdite. Lascia correre di più i trade buoni o taglia prima quelli cattivi.`;
     } else {
       giudizio = "richiamato";
       messaggio = `Richiamo: ${vinti} vinti su ${n}, risultato medio ${pct(media, 2)}. Così non va: da ora entri solo quando Kronos è netto e con forza ridotta, finché i risultati non migliorano.`;
@@ -160,7 +169,9 @@ export function applyGuidance(reports: Record<string, AgentReport>, capo: CapoRe
     const kept: Signal[] = [];
     for (const s of r.segnali) {
       const chi = chiDelVoto(s);
-      const rule = chi ? rules.get(chi) : undefined;
+      // Coordinatore dell'apprendimento: per le persone dello staff agiscono la calibrazione e la formazione; il richiamo del
+      // capo vale per gli agenti generali (niente doppia stretta sugli stessi trade).
+      const rule = chi && !chi.startsWith("p:") ? rules.get(chi) : undefined;
       if (!rule || s.lato !== "buy" || s.vincolante) {
         kept.push(s);
         continue;

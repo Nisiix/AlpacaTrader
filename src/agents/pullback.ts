@@ -16,9 +16,10 @@ export class PullbackAgent implements Agent {
 
   observe(v: AgentView): AgentReport {
     const segnali: Signal[] = [];
-    // Soglie RSI, sedute e peso sono quelle della persona che lavora sul titolo (il suo profilo), altrimenti di serie.
-    const { rsiDays } = AGENTS.pullback;
-    const per = (s: string) => ({ rsiEntry: valore("AGENTS.pullback.rsiEntry", s), rsiExit: valore("AGENTS.pullback.rsiExit", s), maxHoldSessions: valore("AGENTS.pullback.maxHoldSessions", s), maxWeight: valore("AGENTS.pullback.maxWeight", s) });
+    // RSI d'ingresso e peso sono della persona che lavora sul titolo (quanto è selettiva, quanto investe); uscita e sedute
+    // sono regole del motore, uguali per tutti.
+    const { rsiDays, rsiExit, maxHoldSessions } = AGENTS.pullback;
+    const per = (s: string) => ({ rsiEntry: valore("AGENTS.pullback.rsiEntry", s), rsiExit, maxHoldSessions, maxWeight: valore("AGENTS.pullback.maxWeight", s) });
     const held = new Set(v.positions.filter((p) => p.qty > 0).map((p) => p.symbol));
     for (const s of AGENTS.universe) {
       if (held.has(s)) continue;
@@ -29,7 +30,7 @@ export class PullbackAgent implements Agent {
       const r = rsi(conAdesso(c, price, v, s), rsiDays);
       const { rsiEntry, maxHoldSessions, maxWeight } = per(s);
       if (m200 === null || r === null || price <= m200 || r >= rsiEntry) continue;
-      segnali.push({ agente: this.name, simbolo: s, lato: "buy", forza: 0.7, orizzonteSedute: maxHoldSessions, pesoMassimo: maxWeight, perche: `RSI(${rsiDays}) a ${r.toFixed(0)} sopra la media a 200: ipervenduto di breve, rientro con taglia ridotta` });
+      segnali.push({ agente: this.name, simbolo: s, lato: "buy", forza: 0.7, misure: { rsi2: r }, orizzonteSedute: maxHoldSessions, pesoMassimo: maxWeight, perche: `RSI(${rsiDays}) a ${r.toFixed(0)} sopra la media a 200: ipervenduto di breve, rientro con taglia ridotta` });
     }
     // Le uscite valgono solo per i trade aperti dal rientro da solo: quelli del trend li gestisce il trend.
     for (const t of v.journal.trade) {

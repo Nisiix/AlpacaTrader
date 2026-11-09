@@ -377,6 +377,26 @@ d'opinione prima di una candela giornaliera nuova: escono solo stop e regole vin
   mercato, quanto erano estesi i suoi trade persi, che tipo d'ingresso perdeva) verso ingressi più selettivi e taglie più
   piccole, sempre dentro i limiti della scheda.
   Stato in `state/formazione.json`.
+- **Sicurezza dell'apprendimento** (`src/agents/apprendimento.ts`): nessun acquisto senza una persona alla scrivania
+  (con lo staff attivo); si vota e si entra solo da «pronto» (dossier e evidenza ≥ 60%, contro tendenza 65%). Un
+  coordinatore unico giudica chi impara: ultimi 30 trade, almeno 20 per una persona e 10 per una squadra, vittorie della
+  persona avvicinate a quelle della squadra ((vinti + 10 × squadra) / (trade + 10)), giudizio prima sul guadagno medio a
+  trade e sul profit factor e poi sul vincolo del 51%; si stringe con guadagno medio negativo o vittorie sotto il 51%, si
+  allenta con guadagno medio positivo e vittorie ≥ 55%; passi di squadra più persona ≤ 4. Il richiamo del capo agisce
+  solo sugli agenti generali; per le persone agiscono calibrazione e formazione. Assegnazione con Thompson sampling
+  (estrazione da Beta(vinti + 1, persi + 1)); un'occasione data a chi ha meno dati ha taglia ×0,75. Le impostazioni
+  personali riguardano solo selettività e taglia (le regole del mercato sono del motore); quelle ricalibrate in sala
+  caffè passano da una **prova in ombra** (`valutaProve`): sui trade chiusi dopo la proposta, con le misure salvate
+  all'ingresso (`contesto.misure`, `contesto.impostazioni`), si confronta il risultato con le soglie nuove e con quelle
+  in uso; dopo 15 trade si adottano se almeno pari, entro 30 giorni o si scartano. I mentori sono scelti sullo stesso tipo
+  di titolo (crypto o azioni) e, se ci sono abbastanza trade, sullo stesso clima di mercato.
+- **Statistica verificata** (`src/agents/statistica.ts`): calibrazione isotonica delle probabilità di riuscita (≥ 50
+  trade per tipo) e meta-modello logistico sulle misure d'ingresso (≥ 100 trade; sotto il 45% non si entra), attivi solo
+  se migliorano il Brier score sul 30% di trade più recenti (non usati per imparare). Kelly frazionario (¼): con
+  aspettativa stimata negativa il trade non si fa; il peso è al più quota di rischio / distanza dello stop.
+- **Più giorni**: profitto minimo (arrivato a +2%, crypto +4%, non si torna sotto +0,4%, crypto +1,2%) e uscita a
+  tempo (dopo 5 sedute, crypto 5 giorni, se non rende il minimo e Kronos non vede più rialzo). La giornata personale
+  parte dall'ultima chiusura giornaliera per i trade aperti prima di oggi. Intraday sulle azioni solo su 1 e 4 ore.
 - **Capitale sui vincenti**: oltre alla percentuale di trade vinti (obiettivo 51%) il diario misura la parte del capitale
   investito finita nei trade in guadagno: sopra il 50% si è investito di più dove si è vinto. La dimensione di ogni
   ingresso cresce già con la probabilità (fiducia di Kronos per i trading agents, probabilità netta per l'intraday).

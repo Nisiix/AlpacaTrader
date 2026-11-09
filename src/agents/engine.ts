@@ -34,8 +34,10 @@ import { simboliIntraday } from "./posizioni.ts";
 import type { Cervello, RigaCervello } from "./cervello.ts";
 import { BIBLIOTECA, type Principio } from "./biblioteca.ts";
 import { aggiornaCalibrazione, applicaCalibrazione, type RigaCalibrazione } from "./calibrazione.ts";
-import { giornataPersone, preparaProfili, type GiornataPersona } from "./profili.ts";
+import { aggiornaMeta, aggiornaProbabilita, calibraP, KELLY, META, pesoKelly, probMeta, rapportoVinciPerdi, type StatoCalibrazione, type StatoMeta } from "./statistica.ts";
+import { giornataPersone, preparaProfili, TUTTI_PERSONALI, valore, valutaProve, type GiornataPersona } from "./profili.ts";
 import { aggiornaFormazione, applicaFormazione, postazioneDelVoto, provaRientro, type FormazioneReport } from "./formazione.ts";
+import { estraiBeta } from "./casuale.ts";
 import { assegnaPersone, chiavePersona, leggiRegistro, persone, personeDelTrade, rilascia, type Bisogno, type Persona } from "./persone.ts";
 import { nomiTitoli } from "../nomi-titoli.ts";
 import { plausibile } from "./fiducia.ts";
@@ -128,6 +130,8 @@ export interface AgentsStatus {
   formazione?: FormazioneReport;
   // La giornata di ogni persona: guadagno sul capitale dei suoi trade di oggi, obiettivo personale, difesa.
   giornataPersone?: Record<string, GiornataPersona>;
+  // Calibrazione delle probabilità e meta-modello: campione, attivi o no, Brier score sulla prova fuori campione.
+  statistica?: { probabilita: Record<string, StatoCalibrazione>; meta: StatoMeta };
   // I nomi dei titoli e delle crypto (Apple, Bitcoin...), per mostrarli accanto ai codici.
   nomi?: Record<string, string>;
   // La calibrazione del capo ufficio: per agente il parametro d'ingresso, il valore di base e quello calibrato.
@@ -482,6 +486,8 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
     const lessonsNow = lezioniDiSicurezza(lessonsFile, today);
     const jr = readJournal(deps.stateDir, startedAt);
     const journal = jr.file;
+    // Dal diario: calibrazione delle probabilità e meta-modello, attivi solo se verificati sui trade più recenti.
+    const statistica = { probabilita: aggiornaProbabilita(journal), meta: aggiornaMeta(journal) };
     if (jr.problem) await alarm("Diario dei trade illeggibile", jr.problem);
     // Le esecuzioni dal giro scorso entrano nel diario prima che agenti, allocatore e gabbia decidano. Prima entravano solo
     // a fine giro: al giro dopo un acquisto appena eseguito non risultava «aperto oggi» né intraday, e l'uscita di trend o
@@ -492,6 +498,7 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
       for (const t of primi.closed) bus.emit("trade", { stato: "chiuso", simbolo: t.simbolo, risultato: t.risultato ?? 0, pnl: t.incassato - t.costo, giorni: t.giorni ?? 0, uscita: t.motivoUscita ?? "sconosciuto", agenti: t.contesto?.agenti ?? [] });
       if (primi.opened.length || primi.closed.length) writeJournal(deps.stateDir, journal);
     }
+    for (const n of valutaProve(deps.stateDir, journal, startedAt)) { log.info(`formazione: ${n}`); bus.emit("nota", { testo: `formazione: ${n}` }); }
     for (const n of aggiornaCalibrazione(deps.stateDir, journal, startedAt)) {
       log.info(n);
       bus.emit("nota", { testo: n });
@@ -530,7 +537,7 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
     const cashImpegnato = snap.recentOrders.filter((o) => isOpenOrder(o) && !isProtectiveStop(o) && o.side === "buy").reduce((a, o) => a + (o.qty - o.filledQty) * (snap.prices[o.symbol] ?? 0), 0);
     // La giornata di ogni persona: il suo obiettivo del giorno e, se dopo averlo toccato torna sotto metà, la difesa dei
     // suoi trade. Al cambio di giorno l'obiettivo si aggiusta con l'esito di ieri.
-    const giornataP = giornataPersone(deps.stateDir, journal, snap.prices, today, (iso) => romeTime(new Date(iso)).date);
+    const giornataP = giornataPersone(deps.stateDir, journal, snap.prices, today, (iso) => romeTime(new Date(iso)).date, (sym) => closes[sym]?.at(-1));
     for (const n of giornataP.note) { log.info(n); bus.emit("nota", { testo: n }); }
     for (const [sym, motivo] of Object.entries(giornataP.difesa)) {
       const chiave = `${today}-difesa-${motivo.split(" ")[0]}`;
@@ -622,8 +629,15 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
       now: startedAt,
       bisogni,
       sospesi: [...formazione.inFormazione].sort((a, b) => a.dal.localeCompare(b.dal)).map((x) => x.chiave),
-      punteggio: (p, tipo) => { const g = record.get(`${p}|${tipo}`) ?? record.get(p); return g ? (g.v + 1) / (g.n + 2) : 0.5; },
+      // Thompson sampling: un'estrazione dalla distribuzione Beta(vinti + 1, persi + 1) di ogni persona in quel tipo.
+      punteggio: (p, tipo) => { const g = record.get(`${p}|${tipo}`) ?? record.get(p) ?? { n: 0, v: 0 }; return estraiBeta(g.v + 1, g.n - g.v + 1); },
+      media: (p, tipo) => { const g = record.get(`${p}|${tipo}`) ?? record.get(p); return g ? (g.v + 1) / (g.n + 2) : 0.5; },
       rientro: (p, desk, rep, scrivania) => provaRientro(deps.stateDir, formazione, p, votiDi(desk), view.previsioni, scrivania, rep === "intraday" ? AGENTS.formazione.minIntraday : AGENTS.formazione.minOperativi, startedAt),
+    });
+    // Esplorazione (occasione data a chi ha meno dati): taglia ridotta a 3/4.
+    for (const r of Object.values(reports)) r.segnali = r.segnali.map((s) => {
+      if (s.lato !== "buy" || s.vincolante || !assegnazione.esplorazione.includes(postazioneDelVoto(s))) return s;
+      return { ...s, pesoMassimo: (s.pesoMassimo ?? LIMITS.maxPositionPct) * 0.75, perche: `${s.perche} · occasione di apprendimento per chi ha meno trade: taglia ridotta` };
     });
     // Una sola posizione per titolo: su un titolo con un'operazione intraday aperta non entra nessun voto di più giorni
     // (neanche degli agenti generali), e viceversa (i voti intraday li ferma già l'assegnazione).
@@ -660,6 +674,47 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
     }
     const weights = pesiUguali(deps.agents);
     const alloc = allocate(view, reports, weights);
+    // Nessun acquisto senza una persona alla scrivania: ogni trade ha qualcuno che ne risponde (e da cui si impara).
+    // (Senza trading agents né intraday agents nel motore, ad esempio in una prova con i soli agenti generali, non c'è
+    // staff e la regola non si applica.)
+    const conStaff = deps.agents.some((a) => a.name === "custodi" || a.name === "intraday");
+    alloc.proposte = alloc.proposte.filter((o) => {
+      if (!conStaff || o.side !== "buy" || assegnazione.chi[`c:${o.symbol}`] || assegnazione.chi[`i:${o.symbol}`]) return true;
+      alloc.inAttesa.push({ simbolo: o.symbol, motivo: "nessuna persona alla scrivania su questo titolo (non è «pronto a entrare» o lo staff è tutto occupato): non si compra" });
+      return false;
+    });
+    // Meta-modello e Kelly frazionario sugli acquisti: il meta-modello (se attivo) stima la probabilità che il trade finisca
+    // in guadagno e sotto il 45% lo ferma; Kelly (un quarto) ferma i trade ad aspettativa stimata negativa e limita la
+    // taglia a quota di rischio / distanza dello stop.
+    alloc.proposte = alloc.proposte.filter((o) => {
+      if (o.side !== "buy") return true;
+      const price = snap.prices[o.symbol];
+      if (!price) return true;
+      const tipo: "trading" | "intraday" = o.intraday ? "intraday" : "trading";
+      const voti = Object.values(reports).flatMap((r) => r.segnali).filter((x) => x.lato === "buy" && x.simbolo === o.symbol);
+      const dos = Object.values(reports).flatMap((r) => r.custodi ?? []).find((c) => c.simbolo === o.symbol)?.dossier;
+      const grezza = o.intraday ? voti.find((x) => x.intraday && x.misure?.probabilita !== undefined)?.misure?.probabilita : (dos?.grezza ?? dos?.probabilita ?? voti.find((x) => x.misure?.probabilita !== undefined)?.misure?.probabilita);
+      const ctx = contextFor(indicators[o.symbol], price, null, "", "");
+      const pm = grezza !== undefined ? probMeta({ probabilita: grezza, kronos: view.previsioni?.[o.symbol] ?? 0, distanzaMedia: ctx.distanzaMedia ?? 0, vol: ctx.volGiornaliera ?? 0, momentum: ctx.momentum20 ?? 0, crypto: isCrypto(o.symbol) ? 1 : 0, intraday: o.intraday ? 1 : 0 }) : null;
+      const fuori = (motivo: string) => { alloc.inAttesa.push({ simbolo: o.symbol, motivo }); return false; };
+      if (pm !== null && pm < META.soglia) return fuori(`il meta-modello stima solo ${Math.round(pm * 100)}% di probabilità che il trade finisca in guadagno (minimo ${Math.round(META.soglia * 100)}%)`);
+      const p = pm ?? (grezza !== undefined ? calibraP(tipo, grezza) : null);
+      if (p === null) return true;
+      const lv = Object.values(reports).flatMap((r) => r.intraday ?? []).find((x) => x.simbolo === o.symbol && x.livelli)?.livelli;
+      const stop = o.intraday && lv ? Math.max(0.002, 1 - lv.stop / price) : stopPctFor(closes[o.symbol]);
+      const b = rapportoVinciPerdi(journal, tipo) ?? (o.intraday && lv ? Math.max(0.5, (lv.obiettivo / price - 1) / stop) : KELLY.bDiSerie);
+      const kw = pesoKelly(p, b, stop);
+      if (kw === null) return fuori(`aspettativa stimata negativa (probabilità ${Math.round(p * 100)}%, guadagno medio / perdita media ${b.toFixed(2)}): Kelly dice di non entrare`);
+      const eq = snap.account.equity;
+      let qty = o.qty;
+      if (pm !== null) qty = qty * Math.max(0.5, Math.min(1, 0.5 + (pm - META.soglia) / 0.3));
+      if (eq > 0 && (qty * price) / eq > kw) qty = (kw * eq) / price;
+      qty = roundQty(o.symbol, qty);
+      if (qty <= 0 || (isCrypto(o.symbol) && qty * price < CRYPTO_MIN_NOTIONAL)) return fuori("taglia troppo piccola dopo Kelly e meta-modello");
+      if (qty < o.qty) o.expect = `${o.expect} · taglia ridotta da ${pm !== null ? "meta-modello e " : ""}Kelly frazionario`;
+      o.qty = qty;
+      return true;
+    });
     // Un titolo votato ma in attesa (contesto, Kronos al ribasso) non è un ordine rifiutato: nessuna quantità, evento a sé.
     for (const w of alloc.inAttesa) bus.emit("attesa", { simbolo: w.simbolo, motivo: w.motivo });
     // Chi aveva preso un titolo che il riparto mette «in attesa» torna in sala caffè (resta chi segue una posizione).
@@ -689,6 +744,23 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
         ctx.agenti = sc.agenti;
         const chi = sc.agenti.map((a) => (a.startsWith("custode ") ? assegnazione.chi[`c:${o.symbol}`] : a === "intraday" ? (proposed?.intraday ? assegnazione.chi[`i:${o.symbol}`] : assegnazione.chi[`c:${o.symbol}`]) : `a:${a}`)).filter((k): k is string => !!k);
         if (chi.length) ctx.persone = [...new Set(chi)];
+      }
+      if (o.side === "buy") {
+        // Le misure del momento: probabilità di riuscita (intraday: Kronos sulle candele; più giorni: dossier), RSI del
+        // rientro; le impostazioni della persona in vigore sul titolo; il clima del mercato.
+        const voti = Object.values(reports).flatMap((r) => r.segnali).filter((x) => x.lato === "buy" && x.simbolo === o.symbol);
+        const dos = Object.values(reports).flatMap((r) => r.custodi ?? []).find((c) => c.simbolo === o.symbol)?.dossier;
+        const dossierP = dos?.grezza ?? dos?.probabilita; // nel diario la stima grezza: la calibrazione si rifà su quella
+        const pIntra = voti.find((x) => x.intraday && x.misure?.probabilita !== undefined)?.misure?.probabilita;
+        const rsi2 = voti.find((x) => x.misure?.rsi2 !== undefined)?.misure?.rsi2;
+        const misure: Record<string, number> = {};
+        const prob = proposed?.intraday ? pIntra : (dossierP ?? pIntra);
+        if (prob !== undefined) misure.probabilita = prob;
+        if (rsi2 !== undefined) misure.rsi2 = rsi2;
+        if (Object.keys(misure).length) ctx.misure = misure;
+        ctx.impostazioni = Object.fromEntries(TUTTI_PERSONALI.map((k) => [k, Number(valore(k, o.symbol))]));
+        if (view.contesto?.generale) ctx.clima = view.contesto.generale;
+        ctx.tipo = proposed?.intraday ? "intraday" : "trading";
       }
       if (view.previsioni?.[o.symbol] !== undefined) ctx.kronos = view.previsioni[o.symbol];
       // Operazione intraday: i livelli decisi all'ingresso vanno nel diario con il trade (sopravvivono a un riavvio).
@@ -808,6 +880,7 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
       universo: { titoli: AGENTS.universe.filter((s) => !isCrypto(s)), crypto: AGENTS.universe.filter(isCrypto), fonteCrypto: cache.universeInfo?.fonte ?? null, aggiornatoCrypto: cache.universeInfo?.aggiornato ?? null },
       kronos: { stato: deps.kronosStato?.() ?? (deps.forecaster ? "attivo" : "non configurato"), proiezioniDel: cache.previsioni?.giorno ?? null, simboli: Object.keys(cache.previsioni?.data ?? {}).length, scartate },
       giornataPersone: giornataP.perPersona,
+      statistica,
       giornata: { pnlPct, obiettivoPct: AGENTS.daily.targetPct, pavimentoPct: AGENTS.daily.pavimentoPct, picco: giornata.picco, perditaMaxPct: AGENTS.daily.maxLossPct, obiettivoRaggiunto: giornata.obiettivoRaggiunto, difesa: giornata.difesa, perditaOltre: giornata.perditaOltre },
       simulazioni,
       analisi: { questoGiro: analisi, ultima: cache.ultimaAnalisi ?? null, prossima: cache.ultimaAnalisi ? new Date(Date.parse(cache.ultimaAnalisi) + AGENTS.analisiMinuti * 60_000).toISOString() : null, ogniMinuti: AGENTS.analisiMinuti },
