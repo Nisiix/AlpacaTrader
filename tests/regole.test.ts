@@ -101,16 +101,10 @@ describe("regole del primo motore riviste", () => {
     expect(allocate(conPosizione, { uscite: { segnali: [sig("sell", true)] } }, {}).proposte.map((p) => p.side)).toEqual(["sell"]);
   });
 
-  test("biblioteca: regola del 2% per costruzione, regola del 6% sul mese, niente medie al ribasso (Livermore)", async () => {
-    const { BIBLIOTECA, perditaDelMese } = await import("../src/agents/biblioteca.ts");
+  test("biblioteca: regola del 2% per costruzione, niente medie al ribasso (Livermore)", async () => {
+    const { BIBLIOTECA } = await import("../src/agents/biblioteca.ts");
     expect(LIMITS.maxPositionPct * LIMITS.stop.maxPct).toBeLessThanOrEqual(0.02 + 1e-9);
     expect(BIBLIOTECA.filter((p) => p.applicato).length).toBeGreaterThanOrEqual(10);
-    const chiuso = (quando: string, pnl: number) => ({ id: quando, simbolo: "SPY", stato: "chiuso", apertoIl: quando, chiusoIl: quando, comprate: 1, costo: 10_000, vendute: 1, incassato: 10_000 + pnl, quantita: 0 }) as any;
-    const j = { ...emptyJournal(), trade: [chiuso("2026-11-03T15:00:00Z", -4_000), chiuso("2026-11-05T15:00:00Z", -2_500), chiuso("2026-10-20T15:00:00Z", -9_000)] };
-    const m = perditaDelMese(j, "2026-11-09", 100_000);
-    expect(m.pnl).toBe(-6_500);
-    expect(m.oltre).toBe(true);
-    expect(perditaDelMese({ ...j, trade: j.trade.slice(1) }, "2026-11-09", 100_000).oltre).toBe(false);
     const sig = { agente: "trend", simbolo: "SPY", lato: "buy" as const, forza: 1, orizzonteSedute: 60, perche: "x" };
     const base = { today: "2026-11-09", now: new Date(), prices: { SPY: 570 }, closes: { SPY: salita(600) }, indicators: {}, account, journal: emptyJournal(), previsioni: { SPY: 0.03 }, analisi: true } as unknown as AgentView;
     const inPerdita = allocate({ ...base, positions: [{ symbol: "SPY", qty: 5, avgEntryPrice: 600, currentPrice: 570, marketValue: 2850 }] } as AgentView, { trend: { segnali: [sig] } }, {});

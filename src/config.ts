@@ -176,8 +176,6 @@ export const AGENTS = {
     // grafici della dashboard e della pagina pubblica 0,7 s (solo indicativi: non tolgono tempo agli agenti).
     campioni: { min: 4, max: 128, giorno: { msPerSerie: 6_000, iniziali: 24 }, intraday: { msPerSerie: 3_000, iniziali: 16 }, esplorazione: { msPerSerie: 1_500, iniziali: 8 }, grafico: { msPerSerie: 700, iniziali: 4 } },
     cervello: { minCampione: 100, prudenza: 50, kronosMinimo: 0.5, maxAperte: 6000, bravuraAttesa: 0.03, affidabilita: { kronos: 1, chronos2: 0.13, timesfm: 0.05 } as Record<string, number>, affidabilitaIgnota: 0.05 } },
-  // Biblioteca degli agenti (src/agents/biblioteca.ts): regola del 6% di Elder sulle perdite realizzate del mese.
-  biblioteca: { meseMaxPerdita: 0.06 },
   // Riepilogo su Telegram una volta al giorno, alla prima passata dopo quest'ora di Roma.
   summaryAfter: "22:05",
   // Presa di profitto parziale (agente "profitto"): a +3% vende metà e lascia correre il resto col trend. Scelta col

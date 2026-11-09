@@ -1,6 +1,4 @@
 import { AGENTS, LIMITS } from "../config.ts";
-import type { JournalFile } from "../journal.ts";
-import { romeTime } from "../slots.ts";
 
 // La biblioteca degli agenti: i principi dei libri di trading e di economia più noti, tradotti in regole che il motore
 // applica davvero. Gli agenti non «leggono» i libri: ogni principio qui sotto corrisponde a un controllo nel codice (indicato
@@ -21,7 +19,6 @@ const pc = (x: number) => `${+(x * 100).toFixed(1)}%`;
 export const BIBLIOTECA: Principio[] = [
   { id: "triple-screen", autore: "Alexander Elder", libro: "Come si diventa un trader vincente (Trading for a Living)", principio: "Triple Screen: la direzione la dà la candela lunga, il momento d'ingresso quella breve.", nelMotore: "Un ingresso su candele da 5 o 15 minuti richiede che Kronos su 1 ora e 4 ore non preveda un calo oltre i costi; se lì prevede un rialzo netto il trade diventa di trend (obiettivo e stop delle ore) e i cali di pochi minuti non lo chiudono.", applicato: true },
   { id: "elder-2", autore: "Alexander Elder", libro: "Come si diventa un trader vincente", principio: "Regola del 2%: mai rischiare più del 2% del conto su un'operazione.", nelMotore: `Al massimo ${pc(LIMITS.maxPositionPct)} del conto per titolo con stop al massimo a ${pc(LIMITS.stop.maxPct)}: rischio massimo ${pc(LIMITS.maxPositionPct * LIMITS.stop.maxPct)} per operazione; l'intraday rischia molto meno (taglia ≤ ${pc(AGENTS.intraday.maxWeight)} con stop di 1-3%).`, applicato: true },
-  { id: "elder-6", autore: "Alexander Elder", libro: "Come si diventa un trader vincente", principio: "Regola del 6%: se le perdite del mese arrivano al 6% del conto, stop ai nuovi trade fino al mese dopo.", nelMotore: `Perdite realizzate del mese (diario) oltre ${pc(AGENTS.biblioteca.meseMaxPerdita)} del patrimonio: niente nuovi acquisti fino al mese successivo; vendite e stop restano attivi.`, applicato: true },
   { id: "livermore", autore: "Edwin Lefèvre (Jesse Livermore)", libro: "Memorie di un operatore di borsa (Reminiscences of a Stock Operator)", principio: "Taglia le perdite, lascia correre i profitti; non mediare mai al ribasso.", nelMotore: "Stop su ogni posizione (anche su Alpaca); oltre l'obiettivo, se Kronos vede altro rialzo, si lascia correre con lo stop alzato; nessuna aggiunta a una posizione in perdita.", applicato: true },
   { id: "thorp", autore: "Edward O. Thorp", libro: "Beat the Market / Un uomo per tutti i mercati", principio: "Si gioca solo con aspettativa positiva (criterio di Kelly).", nelMotore: "Un ingresso intraday passa solo se probabilità × guadagno netto − (1 − probabilità) × perdita allo stop (costi compresi) è maggiore di zero.", applicato: true },
   { id: "tharp", autore: "Van K. Tharp", libro: "Trade Your Way to Financial Freedom", principio: "La taglia della posizione decide il risultato: rischio costante per operazione.", nelMotore: "Taglia scalata sulla volatilità del titolo e sulla fiducia in Kronos; un trade di trend con stop più largo ha la taglia ridotta in proporzione, così il rischio in euro non cambia.", applicato: true },
@@ -35,16 +32,3 @@ export const BIBLIOTECA: Principio[] = [
   { id: "malkiel", autore: "Burton G. Malkiel", libro: "A Random Walk Down Wall Street", principio: "Costi e rumore mangiano i rendimenti: molti segnali brevi sono caso.", nelMotore: "Il rialzo previsto deve coprire 2 volte i costi di andata e ritorno; la probabilità che decide la candela è quella di un guadagno netto dei costi.", applicato: true },
   { id: "graham", autore: "Benjamin Graham", libro: "L'investitore intelligente", principio: "Margine di sicurezza sul valore dei bilanci.", nelMotore: "Non applicato: il motore non legge bilanci e lavora su orizzonti da minuti a giorni; ne resta lo spirito nel rapporto obiettivo/stop minimo (1,2) e nell'uscita prima delle trimestrali.", applicato: false },
 ];
-
-// Regola del 6% di Elder: perdite realizzate nel mese corrente (ora di Roma) rispetto al patrimonio.
-export function perditaDelMese(journal: JournalFile, today: string, equity: number): { pnl: number; pct: number; oltre: boolean } {
-  const mese = today.slice(0, 7);
-  let pnl = 0;
-  for (const t of journal.trade) {
-    if (t.stato !== "chiuso" || !t.chiusoIl) continue;
-    if (romeTime(new Date(t.chiusoIl)).date.slice(0, 7) !== mese) continue;
-    pnl += (t.incassato ?? 0) - (t.costo ?? 0);
-  }
-  const pct = equity > 0 ? pnl / equity : 0;
-  return { pnl, pct, oltre: pct <= -AGENTS.biblioteca.meseMaxPerdita };
-}

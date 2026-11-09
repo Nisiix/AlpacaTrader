@@ -309,8 +309,6 @@ d'opinione prima di una candela giornaliera nuova: escono solo stop e regole vin
   fino a domani: gli agenti continuano **in simulazione** (operazioni virtuali misurate) e l'intraday incassa. Nessun
   limite alla perdita del giorno: proteggono stop e uscite.
 - **Interruttore** (−5% dal massimo): spento di serie, attivabile dalle impostazioni come freno d'emergenza.
-- **Regola del 6% (Elder)**: perdite realizzate del mese oltre il 6% del patrimonio → niente nuovi acquisti fino al mese
-  dopo (vendite e stop restano attivi).
 - **Niente medie al ribasso (Livermore)**: nessuna aggiunta a una posizione in perdita.
 - **Prezzi degli ordini con i decimali giusti**: azioni 2 (4 sotto il dollaro), crypto 4 cifre significative fino a 9
   decimali (lo stop di PEPE a 0,0000045 non diventa più 0).
@@ -327,13 +325,13 @@ d'opinione prima di una candela giornaliera nuova: escono solo stop e regole vin
 - **Memoria per titolo** dei custodi.
 - **Registro degli errori**: solo sicurezza (dopo uno stop, dopo due rifiuti di Alpaca).
 - **Biblioteca degli agenti** (`src/agents/biblioteca.ts`): i principi dei libri di trading più noti tradotti in regole
-  che tutti gli agenti condividono, perché passano dagli stessi controlli. Elder (Triple Screen, regole del 2% e del 6%),
+  che tutti gli agenti condividono, perché passano dagli stessi controlli. Elder (Triple Screen, regola del 2%),
   Lefèvre/Livermore (taglia le perdite, lascia correre, mai medie al ribasso), Thorp (aspettativa positiva), Tharp
   (rischio costante per operazione), Douglas e Kahneman (probabilità, niente rincorsa dopo le perdite), Murphy (trend,
   medie, più time frame), Covel/Faith (trend following con stop ATR), O'Neil (titoli forti, perdite tagliate), Schwager
   (gestione del rischio), Taleb (diffidare delle previsioni estreme), Lo (mercati adattivi: pesare ciò che funziona),
   Malkiel (costi e rumore). Graham (margine di sicurezza sui bilanci) non si applica a orizzonti da minuti a giorni. Gli
-  agenti non «leggono» i libri: ogni principio è un controllo del codice, visibile in Ufficio → Biblioteca.
+  agenti non «leggono» i libri: ogni principio è un controllo del codice.
 - **Kronos e i prezzi minuscoli**: Kronos normalizza ogni serie con (x − media) / (dev. std + 1e-5); su PEPE (0,000005 $)
   la deviazione standard è 1e-7 e la serie diventava piatta, con proiezioni fuori misura. Le serie sotto 1 $ ora arrivano
   al modello scalate (ultima chiusura = 100): i rendimenti non cambiano.
@@ -351,7 +349,7 @@ Menu a sinistra (sul telefono si apre con ☰):
   peggiore, ribasso massimo, grafico del patrimonio, giorno per giorno); profitto e perdita di oggi, situazione in breve;
 - **Ufficio**: la mappa 3D con gli agenti e a destra il loro elenco (passando sopra un nome l'avatar si alza e si
   illumina; clic per la scheda); sotto, a schede: Decisioni (punteggi e voti), Trading agents (i custodi dei titoli),
-  Previsioni (cervello), Esplorazione, Sala caffè (lezioni), Biblioteca;
+  Esplorazione, Sala caffè (lezioni);
 - **Investimenti**: card dei titoli in portafoglio e in osservazione; clic per il **grafico** (TradingView Lightweight
   Charts, Apache 2.0, incluso nel repository) con time frame 1m, 5m, 15m, 1h, 4h, 1G, medie, volumi, carico, stop,
   obiettivo, operazioni e la **proiezione dei modelli con il cono** al 50% e all'80%; le candele da 1 e 5 minuti si
