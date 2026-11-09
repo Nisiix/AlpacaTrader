@@ -10,6 +10,14 @@ export const isCrypto = (symbol: string) => symbol.includes("/");
 export const CRYPTO_MIN_NOTIONAL = 10;
 // Settori: servono al contesto economico per dire "in questo settore oggi si aspetta".
 export const SECTORS: Record<string, string> = { SPY: "indici", IWM: "indici", QQQ: "tecnologia", AAPL: "tecnologia", MSFT: "tecnologia", NVDA: "tecnologia", GLD: "oro", TLT: "obbligazioni", "BTC/USD": "crypto", "ETH/USD": "crypto" };
+// Borse europee: il conto Alpaca (Trading API) tratta solo i mercati americani; le azioni europee si comprano come
+// titoli europei quotati in America (ADR e azioni con doppia quotazione) e come ETF sull'Europa, negli orari della borsa
+// americana (15:30-22:00 in Italia), con la stessa logica di tutti gli altri titoli. Settore "europa" (tetto 35%).
+export const EUROPA: Record<string, string> = {
+  ASML: "ASML (Paesi Bassi)", SAP: "SAP (Germania)", NVO: "Novo Nordisk (Danimarca)", AZN: "AstraZeneca (Regno Unito)", SHEL: "Shell (Regno Unito)", TTE: "TotalEnergies (Francia)", UL: "Unilever (Regno Unito)", SNY: "Sanofi (Francia)",
+  VGK: "ETF Europa", EZU: "ETF Eurozona", EWG: "ETF Germania", EWI: "ETF Italia",
+};
+for (const s of Object.keys(EUROPA)) SECTORS[s] = "europa";
 // Il radar dell'esplorazione: azioni e ETF liquidi fuori dall'universo fisso, con il loro settore. Gli agenti in pausa li
 // passano in rassegna; quelli che superano i criteri del motore entrano nell'universo per qualche giorno.
 export const RADAR_SECTORS: Record<string, string> = {
@@ -133,7 +141,8 @@ export const AGENTS = {
   // Le crypto entrano con enableCrypto (di serie nel motore degli agenti, --no-crypto per toglierle; --crypto altrove):
   // nel backtest ago 2025 - nov 2026 hanno tolto 5-6 punti.
   // La gabbia accetta comunque vendite su tutto UNIVERSE ∪ CRYPTO.
-  universe: ["SPY", "QQQ", "AAPL", "MSFT", "NVDA", "GLD"] as string[],
+  // Più i titoli europei quotati in America (EUROPA): stessa logica, orari della borsa americana.
+  universe: ["SPY", "QQQ", "AAPL", "MSFT", "NVDA", "GLD", ...Object.keys(EUROPA)] as string[],
   // Finestra degli ingressi sui titoli, ora di Roma: tutta la seduta (dopo i primi 5 minuti, fino a 5 minuti dalla
   // chiusura). Le crypto non hanno finestra. Il bot decide a ogni giro se investire o no.
   entryWindow: { from: "15:35", to: "21:55" },

@@ -184,6 +184,15 @@ l'opportunità regge. Si chiude quando è comprato (lo segue il suo custode), qu
    conto e 100 $; un'aggiunta da 2%.
 5. Gli acquisti si decidono solo nei giri con **analisi d'ingresso** (ogni 5 minuti); le vendite in ogni giro.
 
+### Titoli europei
+
+Il conto Alpaca (Trading API) tratta solo i mercati americani: le borse europee (Xetra e le altre) sono riservate ai
+broker partner. Le azioni europee entrano quindi come **titoli europei quotati in America** e **ETF sull'Europa**
+(`EUROPA` in `src/config.ts`): ASML, SAP, Novo Nordisk (NVO), AstraZeneca (AZN), Shell (SHEL), TotalEnergies (TTE),
+Unilever (UL), Sanofi (SNY) e gli ETF VGK (Europa), EZU (Eurozona), EWG (Germania), EWI (Italia). Fanno parte
+dell'universo fisso con la stessa logica di tutti gli altri titoli, negli orari della borsa americana (15:30-22:00 in
+Italia), settore «europa» con il tetto del 35%.
+
 ### Il motore punta all'intraday
 
 Di serie (`AGENTS.puntaIntraday`) gli ingressi nuovi si decidono **solo sulle candele** (5 e 15 minuti, 1 e 4 ore; le
