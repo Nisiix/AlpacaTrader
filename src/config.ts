@@ -108,6 +108,9 @@ export const AGENTS = {
   // decidere se investire e su cosa (scansione intraday con Kronos sulle candele, nuovi acquisti) ogni analisiMinuti:
   // tre volte il tempo per Kronos, quindi più campioni e previsioni più stabili.
   tickMinutes: 5,
+  // Secondi dopo la chiusura di ogni candela da 5 minuti in cui parte il giro (i dati della candela chiusa sono già
+  // disponibili); -1 = giri ogni tickMinutes da quando parte il processo, senza allineamento.
+  allineamentoSecondi: 20,
   // 5 minuti (come i giri): più momenti per cogliere un'occasione, con le stesse soglie (le proiezioni restano in cache
   // finché la candela non cambia, quindi Kronos lavora solo dove serve).
   analisiMinuti: 5,

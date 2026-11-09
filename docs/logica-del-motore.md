@@ -184,6 +184,19 @@ l'opportunità regge. Si chiude quando è comprato (lo segue il suo custode), qu
    conto e 100 $; un'aggiunta da 2%.
 5. Gli acquisti si decidono solo nei giri con **analisi d'ingresso** (ogni 5 minuti); le vendite in ogni giro.
 
+### Voti e tempi
+
+- **Quanti voti**: ogni agente vota con una forza (0-1) e il punteggio di un titolo è la somma dei voti d'acquisto
+  meno quelli di vendita (tutti gli agenti pesano 1). Si compra da +0,5. Con il motore che punta all'intraday conta la
+  sola parte intraday: il voto dell'intraday agent vale 1, quindi **basta il suo voto** (deciso dalle candele e da
+  Kronos su quelle candele); i voti di vendita d'opinione lo possono abbassare.
+- **Quando**: i giri sono **allineati alla chiusura delle candele da 5 minuti** (partono 20 secondi dopo: :00:20,
+  :05:20, ...). In ogni giro l'intraday legge le candele appena chiuse e Kronos le riproietta solo se è chiusa una
+  candela nuova; il voto e l'ordine arrivano nello stesso giro, dopo circa 1-2 minuti (il tempo di Kronos).
+- **Prezzo riletto**: prima di inviare un acquisto il prezzo si rilegge; se nel frattempo è salito oltre lo 0,3%
+  l'acquisto non parte e si rivaluta al giro dopo. Le crypto entrano con un ordine limite sul prezzo di adesso.
+- Lo stato del motore registra la durata di ogni agente e delle fasi del giro (`tempi`).
+
 ### Titoli europei
 
 Il conto Alpaca (Trading API) tratta solo i mercati americani: le borse europee (Xetra e le altre) sono riservate ai

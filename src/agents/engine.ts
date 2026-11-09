@@ -1223,7 +1223,13 @@ export async function runEngine(deps: EngineDeps, tickMs: number, shouldStop: ()
     } finally {
       cache.inTick = false;
     }
-    const wait = Math.max(5_000, tickMs - (deps.now().getTime() - t0));
+    // Giri allineati alla chiusura delle candele: il prossimo parte `allineamentoSecondi` dopo il prossimo multiplo di
+    // tickMs (con 5 minuti: alle :00:20, :05:20, ...), quando la candela appena chiusa è già disponibile. Così tra la
+    // chiusura di una candela e la decisione passano pochi secondi più la durata del giro, non fino a 5 minuti.
+    const off = AGENTS.allineamentoSecondi * 1000;
+    const ora = deps.now().getTime();
+    const prossimo = off >= 0 ? Math.floor((ora - off) / tickMs) * tickMs + tickMs + off : t0 + tickMs;
+    const wait = Math.max(5_000, prossimo - ora);
     await deps.sleep(wait);
   }
 }
