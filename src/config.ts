@@ -270,7 +270,7 @@ export const AGENTS = {
   evidenza: { min: 0.57, minContro: 0.65 },
   // Proposte del capo ufficio sulle impostazioni generali (src/agents/proposte.ts): solo con almeno minTrade operazioni
   // intraday chiuse e minGruppo nel gruppo che giustifica la proposta; analizza le ultime `finestra`; una proposta
-  // rifiutata non torna per giorniRifiuto giorni. Il capo propone, decide l'utente (Impostazioni → Generali).
+  // rifiutata non torna per giorniRifiuto giorni. Il capo propone (nell'Ufficio si alza e alza la mano), decide l'utente dalla sua scheda.
   capo: { proposte: { minTrade: 30, minGruppo: 12, finestra: 200, giorniRifiuto: 7 } },
   // Il motore punta all'intraday: gli ingressi nuovi si decidono solo sulle candele (5 e 15 minuti, 1 e 4 ore) con gli
   // intraday agents; un trade si estende su più giorni solo se a fine giornata le proiezioni di Kronos sulle candele

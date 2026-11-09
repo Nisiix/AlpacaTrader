@@ -201,7 +201,7 @@ di cambiare un'impostazione generale, con il valore attuale, quello proposto e i
 - rientri nello stesso giorno in perdita → meno ingressi al giorno per titolo;
 - operazioni riportate al giorno dopo in perdita → riporto più selettivo.
 
-Il capo non cambia niente da solo: la proposta compare in Impostazioni → Generali (e su Telegram); «Accetta» la salva
+Il capo non cambia niente da solo: nell'ufficio 3D si alza in piedi con la mano alzata e l'avviso «proposta per te»; la proposta è nella sua scheda (clic sul capo, sull'avviso o sul suo nome nell'elenco) e arriva su Telegram; «Accetta» la salva
 come le altre impostazioni, «Rifiuta» la tiene ferma 7 giorni. Dopo un'accettazione la stessa impostazione si riguarda
 solo con almeno 12 operazioni nuove. Per queste analisi ogni ingresso intraday registra nel diario anche la posizione
 rispetto alle medie a 50 e 200 (`misure.medie`).

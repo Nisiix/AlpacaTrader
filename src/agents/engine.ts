@@ -620,7 +620,7 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
         const m = `capo ufficio: propone di cambiare «${x.etichetta}» da ${x.attuale} a ${x.proposto}. ${x.motivo}`;
         log.info(m);
         bus.emit("nota", { testo: m });
-        const r = await deps.notifier.send(deps.redactor.apply(`🧑‍💼 Agentics sniper · proposta del capo ufficio\n«${x.etichetta}»: ${x.attuale} → ${x.proposto}\n${x.motivo}\nDecidi in Impostazioni → Generali.`));
+        const r = await deps.notifier.send(deps.redactor.apply(`🧑‍💼 Agentics sniper · proposta del capo ufficio\n«${x.etichetta}»: ${x.attuale} → ${x.proposto}\n${x.motivo}\nDecidi nell'Ufficio, nella scheda del capo ufficio.`));
         if (!r.ok) log.error(`Telegram non ha ricevuto la proposta: ${r.error}`);
       }
     } catch (e) {

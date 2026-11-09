@@ -341,6 +341,10 @@
   .side-nav a[aria-current="page"] { background:var(--ink); color:var(--card); font-weight:600; }
   .side-nav a:focus-visible { outline:2px solid var(--agent); outline-offset:2px; }
   .side-foot { margin-top:auto; padding:8px; color:var(--ink-3); font-size:13px; display:grid; gap:10px; }
+  .lbl.avviso-capo { z-index:5; font:inherit; font-size:12px; font-weight:700; color:#fff; background:#d97706; border:0; border-radius:999px; padding:5px 11px; cursor:pointer; pointer-events:auto; box-shadow:0 4px 14px rgba(217,119,6,.45); animation:avviso 1.2s ease-in-out infinite; white-space:nowrap; }
+  @keyframes avviso { 0%,100% { translate:0 0; } 50% { translate:0 -4px; } } /* translate, non transform: la posizione la dà CSS2DRenderer */
+  @media (prefers-reduced-motion: reduce) { .lbl.avviso-capo { animation:none; } }
+  .prop-storia { margin:6px 0 10px; } .prop-storia summary { cursor:pointer; }
   .proposta { border:1px solid var(--line); border-left:4px solid var(--agent); border-radius:10px; background:var(--card-2); padding:12px 14px; margin-top:10px; display:grid; gap:6px; font-size:14px; }
   .proposta .h { display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; align-items:baseline; }
   .proposta .val { font-variant-numeric:tabular-nums; }
@@ -612,10 +616,6 @@
     <h1 class="page-title">Impostazioni</h1>
     <nav class="subnav" aria-label="impostazioni"><a href="#impostazioni/generali" data-sub="generali">Generali</a><a href="#impostazioni/chiavi" data-sub="chiavi">Chiavi motore</a></nav>
     <div class="sub" data-sub="generali">
-      <section class="card" id="proposte-card" style="margin-bottom:16px">
-        <h2>Proposte del capo ufficio <small>cambi alle impostazioni generali suggeriti dai risultati degli agenti: decidi tu</small></h2>
-        <div id="proposte"><p class="empty">Caricamento…</p></div>
-      </section>
       <section class="card">
         <h2>Generali <small>le regole comuni del profilo di investimento; le impostazioni di ogni agente si aprono cliccandolo nell'Ufficio</small></h2>
         <div id="schede" class="schede"></div>
@@ -691,7 +691,7 @@
       </ul>
       <h3>4. Gli agenti in breve</h3>
       <ul>
-        <li><b>Trend</b> compra chi chiude sopra le medie a 50 e 200 con rendimento a 12 mesi positivo; vende sotto la 50. <b>Rientro</b> compra gli ipervenduti di breve dentro un trend lungo. <b>Regime</b> riduce le taglie se il mercato è brutto. <b>Uscite</b> e <b>Presa di profitto</b> sono regole vincolanti: stop sulla volatilità, metà della posizione a +3% e <b>protezione del profitto</b> (in guadagno, se Kronos nelle prossime 2 sedute, o sulle prossime candele per l'intraday, vede un calo che lo azzererebbe, si incassa subito). Ogni ingresso nuovo di più giorni passa anche dall'<b>evidenza combinata</b> del dossier (Kronos, grafico, notizie, contesto con Fear & Greed e funding): almeno 57% sopra la media a 200, 65% sotto. <b>Proposte del capo ufficio</b>: con abbastanza operazioni chiuse (almeno 30) il capo propone cambi alle impostazioni generali, con il perché in numeri; le trovi in Impostazioni → Generali e su Telegram, decidi tu con «Accetta» o «Rifiuta». <b>Titoli europei</b>: il conto Alpaca tratta solo i mercati americani, quindi le azioni europee entrano come titoli europei quotati in America (ASML, SAP, Novo Nordisk, AstraZeneca, Shell, TotalEnergies, Unilever, Sanofi) ed ETF sull'Europa (VGK, EZU, EWG Germania, EWI Italia): stessa logica, orari della borsa americana (15:30-22:00 in Italia), settore «europa» al massimo al 35%. <b>Il motore punta all'intraday</b>: gli ingressi si decidono solo sulle candele (5 e 15 minuti, 1 e 4 ore) e su Kronos per quelle candele, ma solo dove Kronos ha dimostrato di indovinare la direzione più del caso; la probabilità è per l'85% Kronos e per il 15% il dossier del titolo (notizie, contesto, Fear & Greed, grafico giornaliero) o il contesto del settore; soglia 57% (55% con le medie brevi in ordine). Le crypto si comprano con ordini limite (commissione 0,15% invece di 0,25%), quindi basta un rialzo previsto dello 0,8%. Dopo un'operazione chiusa in guadagno si può rientrare sullo stesso titolo (al massimo 3 volte al giorno), dopo una in perdita no. Un trade dura più giorni solo se a fine giornata le proiezioni di Kronos sulle candele restano dentro la forchetta del trade (nessuna arriva allo stop, la più lunga vede ancora salire): si tiene e il giorno dopo decidono di nuovo le candele (al massimo 5 volte). <b>Scaletta delle medie</b>: si investe anche sotto le medie, con più prudenza (la 200 conta più della 50): taglia di più giorni ×1 sopra entrambe, ×0,75 sotto la 50, ×0,5 sotto la 200, ×0,4 sotto entrambe; intraday ×1, ×0,85, ×0,75, ×0,65. Sotto la 50 si preferisce il timeframe breve (5 minuti - 4 ore): se c'è anche un voto intraday, si entra intraday. <b>Rimbalzo di breve</b>: la media a 50 è facoltativa: se il titolo è sotto la 50 (anche sotto la 200) e ha avuto un calo netto improvviso (nell'ultimo giorno oltre il 3% per le azioni, il 5% per le crypto, o 1,5 volte la sua volatilità; oppure negli ultimi 3 giorni o nelle ultime 8 ore), il rimbalzo lo cercano gli intraday agents sulle candele (5 e 15 minuti, 1 e 4 ore): si entra se Kronos su quella candela vede un rialzo che copre i costi con probabilità ≥ 57%; obiettivo il rialzo previsto, scadenza l'orizzonte di Kronos sulla candela (prolungato se le candele superiori vedono ancora salire), stop della candela.</li>
+        <li><b>Trend</b> compra chi chiude sopra le medie a 50 e 200 con rendimento a 12 mesi positivo; vende sotto la 50. <b>Rientro</b> compra gli ipervenduti di breve dentro un trend lungo. <b>Regime</b> riduce le taglie se il mercato è brutto. <b>Uscite</b> e <b>Presa di profitto</b> sono regole vincolanti: stop sulla volatilità, metà della posizione a +3% e <b>protezione del profitto</b> (in guadagno, se Kronos nelle prossime 2 sedute, o sulle prossime candele per l'intraday, vede un calo che lo azzererebbe, si incassa subito). Ogni ingresso nuovo di più giorni passa anche dall'<b>evidenza combinata</b> del dossier (Kronos, grafico, notizie, contesto con Fear & Greed e funding): almeno 57% sopra la media a 200, 65% sotto. <b>Proposte del capo ufficio</b>: con abbastanza operazioni chiuse (almeno 30) il capo propone cambi alle impostazioni generali, con il perché in numeri; il capo si alza e alza la mano nell'ufficio 3D con l'avviso «proposta per te»; la proposta è nella sua scheda (clic sul capo o sull'avviso) e arriva su Telegram: decidi tu con «Accetta» o «Rifiuta». <b>Titoli europei</b>: il conto Alpaca tratta solo i mercati americani, quindi le azioni europee entrano come titoli europei quotati in America (ASML, SAP, Novo Nordisk, AstraZeneca, Shell, TotalEnergies, Unilever, Sanofi) ed ETF sull'Europa (VGK, EZU, EWG Germania, EWI Italia): stessa logica, orari della borsa americana (15:30-22:00 in Italia), settore «europa» al massimo al 35%. <b>Il motore punta all'intraday</b>: gli ingressi si decidono solo sulle candele (5 e 15 minuti, 1 e 4 ore) e su Kronos per quelle candele, ma solo dove Kronos ha dimostrato di indovinare la direzione più del caso; la probabilità è per l'85% Kronos e per il 15% il dossier del titolo (notizie, contesto, Fear & Greed, grafico giornaliero) o il contesto del settore; soglia 57% (55% con le medie brevi in ordine). Le crypto si comprano con ordini limite (commissione 0,15% invece di 0,25%), quindi basta un rialzo previsto dello 0,8%. Dopo un'operazione chiusa in guadagno si può rientrare sullo stesso titolo (al massimo 3 volte al giorno), dopo una in perdita no. Un trade dura più giorni solo se a fine giornata le proiezioni di Kronos sulle candele restano dentro la forchetta del trade (nessuna arriva allo stop, la più lunga vede ancora salire): si tiene e il giorno dopo decidono di nuovo le candele (al massimo 5 volte). <b>Scaletta delle medie</b>: si investe anche sotto le medie, con più prudenza (la 200 conta più della 50): taglia di più giorni ×1 sopra entrambe, ×0,75 sotto la 50, ×0,5 sotto la 200, ×0,4 sotto entrambe; intraday ×1, ×0,85, ×0,75, ×0,65. Sotto la 50 si preferisce il timeframe breve (5 minuti - 4 ore): se c'è anche un voto intraday, si entra intraday. <b>Rimbalzo di breve</b>: la media a 50 è facoltativa: se il titolo è sotto la 50 (anche sotto la 200) e ha avuto un calo netto improvviso (nell'ultimo giorno oltre il 3% per le azioni, il 5% per le crypto, o 1,5 volte la sua volatilità; oppure negli ultimi 3 giorni o nelle ultime 8 ore), il rimbalzo lo cercano gli intraday agents sulle candele (5 e 15 minuti, 1 e 4 ore): si entra se Kronos su quella candela vede un rialzo che copre i costi con probabilità ≥ 57%; obiettivo il rialzo previsto, scadenza l'orizzonte di Kronos sulla candela (prolungato se le candele superiori vedono ancora salire), stop della candela.</li>
         <li><b>Contesto</b> legge il clima; non decide da solo: se <b>Kronos</b> anticipa un rialzo il settore debole non ferma l'ingresso, se anticipa un ribasso si aspetta.</li>
         <li><b>Custodi</b>: un investitore per ogni titolo seguito (in trend o con Kronos al rialzo), senza numero fisso; leggono Kronos, grafico, notizie (Google News e X) e contesto, e ricordano i trade passati su quel titolo. </li>
         <li><b>Capo ufficio</b>: rivede i trade chiusi di ogni agente e della squadra dei custodi (un custode da solo arriva di rado a 3 trade), loda chi vince e richiama chi perde, imponendogli una soglia minima di Kronos e voti più deboli finché i risultati non tornano buoni. Non giudica i trade chiusi dalla vecchia uscita in giornata, che la regola oggi non permette più.</li>
@@ -972,13 +972,13 @@ function makeEmployee(shirt, look = 0, suit = false) {
   const head = headG;
   const thighs = box(0.4, 0.14, 0.42, M.pants); thighs.position.set(0, 0.64, 0.17); g.add(thighs);
   const shins = box(0.36, 0.5, 0.13, M.pants); shins.position.set(0, 0.36, 0.38); g.add(shins);
-  const arms = [];
+  const arms = [], uppers = [];
   for (const sx of [-1, 1]) {
     const upper = box(0.1, 0.34, 0.1, suit ? mat(0x1f2937) : shirtM); upper.position.set(0.26 * sx, 1.0, 0.04); upper.rotation.x = -0.5; g.add(upper);
     const fore = box(0.09, 0.09, 0.34, M.skin); fore.position.set(0.24 * sx, 0.84, 0.3); g.add(fore);
-    arms.push(fore);
+    arms.push(fore); uppers.push(upper);
   }
-  g.userData = { shirtM, head, arms, torso, t: Math.random() * 10, raise: 0, stand: 0, bow: 0 };
+  g.userData = { shirtM, head, arms, uppers, torso, t: Math.random() * 10, raise: 0, stand: 0, bow: 0 };
   return g;
 }
 function makeChair() {
@@ -1312,6 +1312,14 @@ function paintScene(st) {
     u.emp.userData.shirtM.color.set(rich.length ? 0xdc2626 : 0x15803d);
     drawScreen(u.scr, 'Capo ufficio', rich.length ? `${rich.length} richiami` : 'tutti in regola', null, null);
     u.el.innerHTML = `<b>Capo ufficio</b><br><span>${rich.length ? `richiama ${esc(rich.map((v) => v.agente).join(', ')).slice(0, 40)}` : 'controlla il lavoro'}</span>`;
+    // Proposte sulle impostazioni da decidere: il capo si alza, alza la mano e sopra di lui compare un avviso.
+    const np = window.STATIC_MODE ? 0 : (st.proposteAperte || 0);
+    u.emp.userData.attenzione = np > 0;
+    if (np > 0) {
+      if (!u.avviso) { const el = document.createElement('button'); el.type = 'button'; el.className = 'lbl avviso-capo'; el.addEventListener('click', (ev) => { ev.stopPropagation(); openCard('capo'); }); u.avviso = new CSS2DObject(el); u.avviso.position.set(0, 3.3, -0.85); cd.group.add(u.avviso); }
+      u.avviso.element.textContent = `✋ ${np === 1 ? 'una proposta' : `${np} proposte`} per te`;
+      u.avviso.visible = true;
+    } else if (u.avviso) u.avviso.visible = false;
   }
   moveToCaffe(st);
   if (primaVista) { primaVista = false; requestAnimationFrame(() => requestAnimationFrame(() => $('#scene')?.classList.add('pronta'))); }
@@ -1500,13 +1508,21 @@ function animate() {
       e.arms[1].position.y = 0.84 + Math.max(0, Math.sin(e.t * 9 + 1.6)) * 0.03;
       e.head.rotation.y = Math.sin(e.t * 0.4) * 0.25;
     }
-    if (e.raise > 0) { e.arms[1].position.y = 0.84 + e.raise * 0.55; e.arms[1].position.z = 0.3 - e.raise * 0.2; e.raise = Math.max(0, e.raise - dt * 0.6); }
+    if (e.attenzione) {
+      // In piedi, braccio destro teso sopra la spalla con la mano che saluta: cerca l'attenzione dell'utente.
+      e.stand = 1;
+      const w = Math.sin(e.t * 6) * 0.25;
+      e.uppers[1].rotation.set(0, 0, -0.15 + w * 0.3); e.uppers[1].position.set(0.29, 1.39, 0.02);
+      e.arms[1].rotation.set(Math.PI / 2, 0, -0.15 + w); e.arms[1].position.set(0.32 + w * 0.08, 1.72, 0.02);
+      e.head.rotation.y = 0;
+    } else if (e.uppers[1].rotation.x !== -0.5) { e.uppers[1].rotation.set(-0.5, 0, 0); e.uppers[1].position.set(0.26, 1.0, 0.04); e.arms[1].rotation.set(0, 0, 0); e.arms[1].position.set(0.24, 0.84, 0.3); }
+    if (e.raise > 0 && !e.attenzione) { e.arms[1].position.y = 0.84 + e.raise * 0.55; e.arms[1].position.z = 0.3 - e.raise * 0.2; e.raise = Math.max(0, e.raise - dt * 0.6); }
     if (e.bow > 0) { e.head.rotation.x = e.bow * 0.5; e.bow = Math.max(0, e.bow - dt * 0.4); } else e.head.rotation.x = 0;
     const lmp = d.group.userData.lamp; if (lmp?.visible && lmp.userData.pulsa) { const k = 0.6 + 0.4 * Math.sin(now / 260); lmp.material.emissiveIntensity = 0.4 + k; lmp.scale.setScalar(0.85 + 0.3 * k); }
     const lh = d === hiDesk;
     const evid = lh || d === hoveredDesk;
     if (lh) e.stand = Math.min(1, Math.max(e.stand, 0) + dt * 4); // dall'elenco: in piedi finché il mouse resta sul nome
-    if (!d.walk) { if (e.stand > 0) { empO.position.y = e.stand * 0.35; if (!lh) e.stand = Math.max(0, e.stand - dt * 0.5); } else empO.position.y = 0; }
+    if (!d.walk) { if (e.stand > 0) { empO.position.y = e.stand * 0.35; if (!lh && !e.attenzione) e.stand = Math.max(0, e.stand - dt * 0.5); } else empO.position.y = 0; }
     e.torso.material.emissive?.setHex(lh ? 0x4a5f9a : d === hoveredDesk ? 0x333333 : 0x000000);
     d.group.userData.tag.visible = evid;
     const s = d.group.userData.scr; if (s.userData.flash > 0) { s.userData.flash = Math.max(0, s.userData.flash - dt * 0.5); if (s.userData.flash === 0 && status) paintScene(status); }
@@ -1561,6 +1577,8 @@ portrait.renderer.setPixelRatio(Math.min(2, window.devicePixelRatio)); portrait.
 portrait.scene.add(new THREE.HemisphereLight(0xffffff, 0xb8a990, 1.6)); { const l = new THREE.DirectionalLight(0xffffff, 1.4); l.position.set(2, 3, 4); portrait.scene.add(l); }
 portrait.camera.position.set(0, 1.25, 2.6); portrait.camera.lookAt(0, 1.05, 0);
 let cardKey = null; let cards = null; let cardAgente = null;
+// Il link alle proposte (scheda del capo nelle Decisioni) apre la scheda del capo ufficio nell'Ufficio.
+document.addEventListener('click', (ev) => { const a = ev.target.closest?.('[data-apri-capo]'); if (!a) return; ev.preventDefault(); location.hash = '#ufficio'; setTimeout(() => openCard('capo'), 300); });
 async function openCard(key) {
   cardKey = key; const d = desks.get(key); if (d) flyTo(d.group);
   if (!cards) { try { cards = (await (await fetch('/api/agenti/schede')).json()).schede; } catch { cards = []; } }
@@ -1628,8 +1646,9 @@ function renderCard() {
   let title, sub, body = '', name;
   if (it.kind === 'capo') {
     title = `${personaDi('capo')?.nome ?? 'Roberto'}`; sub = 'Capo ufficio: giudica i risultati e ricalibra chi sbaglia';
+    const propBox = window.STATIC_MODE ? '' : `<div id="proposte">${proposteHtml()}</div>`;
     const cal = (st.calibrazione || []).filter((r) => r.passi);
-    body = `<p>${esc(capo?.sintesi || '')}</p>${capo?.sogliaKronos !== null && capo?.sogliaKronos !== undefined ? `<p class="why">Lezione per tutti: Kronos ≥ ${pct(capo.sogliaKronos)}${capo.ingressoMigliore ? ` · ingresso migliore: ${esc(capo.ingressoMigliore)}` : ''}</p>` : ''}
+    body = `${propBox}<p>${esc(capo?.sintesi || '')}</p>${capo?.sogliaKronos !== null && capo?.sogliaKronos !== undefined ? `<p class="why">Lezione per tutti: Kronos ≥ ${pct(capo.sogliaKronos)}${capo.ingressoMigliore ? ` · ingresso migliore: ${esc(capo.ingressoMigliore)}` : ''}</p>` : ''}
       ${(st.formazione?.inFormazione || []).length ? `<h4>In sala caffè per formazione</h4>${st.formazione.inFormazione.map((x) => `<div class="why">☕ <b>${esc(keyName(x.chiave))}</b> fino alle ${hhmm(x.fino)}: ${esc(nomiNelTesto(x.motivo))}</div>`).join('')}` : ''}
       ${st.statistica ? `<h4>Apprendimento verificato</h4><div class="why">Probabilità calibrate: più giorni ${statTxt(st.statistica.probabilita.trading)}, intraday ${statTxt(st.statistica.probabilita.intraday)}. Meta-modello: ${st.statistica.meta.attivo ? `attivo (${st.statistica.meta.n} trade, Brier ${st.statistica.meta.brierModello.toFixed(3)} contro ${st.statistica.meta.brierBase.toFixed(3)})` : `non ancora (${st.statistica.meta.n} trade su 100${st.statistica.meta.brierModello !== null ? ', non migliora sui trade recenti' : ''})`}.</div>` : ''}
       ${cal.length ? `<h4>Calibrazioni in corso</h4>${cal.map((r) => `<div class="why">• <b>${esc(r.agente.startsWith('p:') ? keyName(r.agente) : agentName(r.agente))}</b>: ${esc(r.etichetta)} ${fmtCal(r)}</div>`).join('')}` : ''}
@@ -1659,6 +1678,7 @@ function renderCard() {
   cardInfo.querySelector('.x').addEventListener('click', closeCard);
   cardInfo.querySelector('[data-go="titolo"]')?.addEventListener('click', () => { openChart(it.kind === 'custode' ? it.c.simbolo : it.x.simbolo); });
   cardAgente = name || (it.kind === 'capo' ? 'motore' : null);
+  if (it.kind === 'capo' && !window.STATIC_MODE) { bindProposte($('#proposte')); if (!proposteDati || proposteDati.aperteViste !== st.proposteAperte) { loadProposte().then(() => { if (proposteDati) proposteDati.aperteViste = st.proposteAperte; }); } }
 }
 animate();
 
@@ -1838,9 +1858,9 @@ function paint(st) {
   if (!status) { $('#when').textContent = lastTick ? `ultimo giro iniziato ${hhmm(lastTick.t)}` : 'nessuno stato'; return; }
   // Proposte del capo da decidere: un numerino su Impostazioni.
   {
-    const nav = document.querySelector('.side-nav a[data-page="impostazioni"]');
+    const nav = document.querySelector('.side-nav a[data-page="ufficio"]');
     let b = nav?.querySelector('.badge');
-    if (st.proposteAperte && !window.STATIC_MODE) { if (!b) { b = document.createElement('span'); b.className = 'badge'; nav.append(b); } b.textContent = String(st.proposteAperte); b.title = 'proposte del capo ufficio da decidere'; }
+    if (st.proposteAperte && !window.STATIC_MODE) { if (!b) { b = document.createElement('span'); b.className = 'badge'; nav.append(b); } b.textContent = String(st.proposteAperte); b.title = 'proposte del capo ufficio da decidere: apri la sua scheda nell\'Ufficio'; }
     else b?.remove();
   }
   $('#when').textContent = `ultimo giro ${hhmm(status.aggiornato)} (${ago(status.aggiornato)})`;
@@ -2455,7 +2475,6 @@ function showPage() {
   if (officeOn()) { resize(); loadOfficeData(); }
   if (currentPage === 'impostazioni' && currentSub === 'chiavi') loadSettings();
   if (currentPage === 'impostazioni' && currentSub === 'generali' && !$('#schede').children.length) loadCards();
-  if (currentPage === 'impostazioni' && currentSub === 'generali') loadProposte();
   if (currentPage === 'log') loadLog();
   try { localStorage.setItem('agenti.pagina', currentPage); } catch {}
 }
@@ -2488,7 +2507,7 @@ function paintCapo(st) {
   // Chi ha meno di 3 trade chiusi non ha ancora un giudizio: una riga sola, senza ripetere lo stesso messaggio.
   const nuovi = vs.filter((v) => v.giudizio === 'nuovo'), giudicati = vs.filter((v) => v.giudizio !== 'nuovo');
   const pill = (v) => `<span class="pill ${v.giudizio === 'richiamato' ? 'down' : v.giudizio === 'ottimo' || v.giudizio === 'bene' ? 'up' : ''}">${esc(v.giudizio)}</span>`;
-  const prop = st.proposteAperte ? `<p style="margin-top:8px"><a href="#impostazioni/generali"><b>${st.proposteAperte} ${st.proposteAperte === 1 ? 'proposta' : 'proposte'} sulle impostazioni generali da decidere</b></a></p>` : '';
+  const prop = st.proposteAperte ? `<p style="margin-top:8px"><a href="#ufficio" data-apri-capo><b>✋ ${st.proposteAperte} ${st.proposteAperte === 1 ? 'proposta' : 'proposte'} del capo sulle impostazioni da decidere</b></a></p>` : '';
   $('#capo').innerHTML = `<p>${esc(c.sintesi)}</p>${prop}${giudicati.map((v) => `<div class="vote"><b>${esc(agentName(v.agente))}</b> ${pill(v)} <span class="why">${v.vinti}/${v.trade} vinti · ${usd(v.risultato)}</span><br><span class="why">${esc(v.messaggio)}</span>${v.consigli.length ? `<ul style="margin:4px 0; padding-left:18px">${v.consigli.map((x) => `<li class="why">${esc(x)}</li>`).join('')}</ul>` : ''}</div>`).join('')}${nuovi.length ? `<div class="vote"><span class="why">Ancora da giudicare (meno di 3 trade chiusi):</span><div class="row" style="margin-top:6px">${nuovi.map((v) => `<span class="pill ${cls(v.risultato)}">${esc(agentName(v.agente))} ${v.vinti}/${v.trade} · ${usd(v.risultato)}</span>`).join('')}</div></div>` : ''}`;
 }
 function paintKpi(st) {
@@ -2581,30 +2600,41 @@ $('#riavvia').addEventListener('click', async () => {
 // ---------- schede degli agenti ----------
 const fmtVal = (p, v) => p.tipo === 'percento' ? String(Math.round(v * 10000) / 100) : String(v);
 const parseVal = (p, raw) => p.tipo === 'percento' ? Number(String(raw).replace(',', '.')) / 100 : p.tipo === 'bool' ? raw : String(raw).replace(',', '.');
-// ---------- proposte del capo ufficio ----------
+// ---------- proposte del capo ufficio (nella sua scheda dell'Ufficio) ----------
 const fmtProp = (chiave, v) => /minProb|maxWeight|peso|Fiducia/.test(chiave) ? `${String(Math.round(v * 1000) / 10).replace('.', ',')}%` : String(v).replace('.', ',');
-async function loadProposte() {
-  const box = $('#proposte');
-  if (window.STATIC_MODE) { $('#proposte-card').hidden = true; return; }
-  let d;
-  try { d = await (await fetch('/api/proposte')).json(); } catch { box.innerHTML = '<p class="empty">Le proposte si vedono con il motore acceso.</p>'; return; }
+let proposteDati = null;
+function proposteHtml() {
+  const d = proposteDati;
+  if (!d) return '';
   const aperte = (d.proposte || []).filter((x) => x.stato === 'aperta');
   const decise = (d.proposte || []).filter((x) => x.stato !== 'aperta').slice(-10).reverse();
   const oss = (d.osservazioni || []).map((o) => `<li>${esc(o)}</li>`).join('');
-  box.innerHTML = `${aperte.length ? aperte.map((x) => `<div class="proposta" data-id="${esc(x.id)}">
+  return `${aperte.length ? `<h4>✋ ${aperte.length === 1 ? 'Una proposta' : `${aperte.length} proposte`} per te</h4>` : ''}${aperte.map((x) => `<div class="proposta" data-id="${esc(x.id)}">
       <div class="h"><b>${esc(x.etichetta)}</b><span class="val">${fmtProp(x.chiave, x.attuale)} → <b>${fmtProp(x.chiave, x.proposto)}</b></span></div>
       <p>${esc(x.motivo)}</p>
       <p class="why">Basata su ${x.dati.trade} operazioni chiuse · proposta ${new Date(x.creata).toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short' })}</p>
       <div class="row"><button type="button" class="btn" data-azione="accetta">Accetta</button><button type="button" class="btn ghost" data-azione="rifiuta">Rifiuta</button><span class="why msg"></span></div>
-    </div>`).join('') : '<p class="empty">Nessuna proposta da decidere. Il capo propone un cambio solo quando ha abbastanza operazioni chiuse a sostenerlo.</p>'}
-    ${oss ? `<ul class="why oss">${oss}</ul>` : ''}
-    ${decise.length ? `<details style="margin-top:10px"><summary class="why" style="cursor:pointer">Decise (${decise.length})</summary>${decise.map((x) => `<div class="vote">${esc(x.etichetta)}: ${fmtProp(x.chiave, x.attuale)} → ${fmtProp(x.chiave, x.proposto)} <span class="pill ${x.stato === 'accettata' ? 'ok' : ''}">${x.stato}</span><br><span class="why">${esc(x.motivo)}</span></div>`).join('')}</details>` : ''}`;
+    </div>`).join('')}
+    <details class="prop-storia"${aperte.length ? '' : ' open'}><summary class="why">Proposte sulle impostazioni generali${decise.length ? ` · decise ${decise.length}` : ''}</summary>
+      ${aperte.length ? '' : '<p class="why">Nessuna proposta da decidere: il capo propone un cambio solo quando ha abbastanza operazioni chiuse a sostenerlo.</p>'}
+      ${oss ? `<ul class="why oss">${oss}</ul>` : ''}
+      ${decise.map((x) => `<div class="vote">${esc(x.etichetta)}: ${fmtProp(x.chiave, x.attuale)} → ${fmtProp(x.chiave, x.proposto)} <span class="pill ${x.stato === 'accettata' ? 'ok' : ''}">${x.stato}</span><br><span class="why">${esc(x.motivo)}</span></div>`).join('')}
+    </details>`;
+}
+function bindProposte(box) {
+  if (!box) return;
   for (const el of box.querySelectorAll('.proposta')) for (const b of el.querySelectorAll('button[data-azione]')) b.addEventListener('click', async () => {
     for (const x of el.querySelectorAll('button')) x.disabled = true;
     const r = await (await fetch(`/api/proposte/${encodeURIComponent(el.dataset.id)}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ azione: b.dataset.azione }) })).json().catch(() => ({ ok: false, errore: 'richiesta non riuscita' }));
     el.querySelector('.msg').textContent = r.ok ? r.nota : `Non riuscito: ${r.errore}`;
-    if (r.ok) setTimeout(() => { loadProposte(); $('#schede').innerHTML = ''; loadCards(); }, 1200); else for (const x of el.querySelectorAll('button')) x.disabled = false;
+    if (r.ok) setTimeout(() => { loadProposte(); $('#schede').innerHTML = ''; if (status) { status.proposteAperte = Math.max(0, (status.proposteAperte || 1) - 1); paintScene(status); } }, 1500); else for (const x of el.querySelectorAll('button')) x.disabled = false;
   });
+}
+async function loadProposte() {
+  if (window.STATIC_MODE) return;
+  try { proposteDati = await (await fetch('/api/proposte')).json(); } catch { return; }
+  const box = $('#proposte');
+  if (box) { box.innerHTML = proposteHtml(); bindProposte(box); }
 }
 async function loadCards() {
   const d = await (await fetch('/api/agenti/schede')).json();
