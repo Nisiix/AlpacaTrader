@@ -5,7 +5,7 @@ import { isObject, readJson, writeJsonAtomic } from "../fsutil.ts";
 import type { JournalFile } from "../journal.ts";
 import { regolaSuperata, SQUADRA_CUSTODI } from "./capo.ts";
 import { leggiRegistro, nomeDi, personeDelTrade } from "./persone.ts";
-import { CALIBRATA, calibrato, leggiProfili } from "./profili.ts";
+import { CALIBRATA, calibrato, chiaveCalibrazione, leggiProfili } from "./profili.ts";
 
 // La calibrazione del capo ufficio: quando un agente vince meno del 51% dei suoi trade chiusi, il capo rende più
 // selettivo il suo parametro d'ingresso di un passo; quando torna a vincere almeno il 60%, lo riavvicina di un passo al
@@ -63,10 +63,11 @@ export function aggiornaCalibrazione(stateDir: string, journal: JournalFile, now
     const ag = t.contesto?.agenti ?? [];
     for (const a of ag) per.set(a, [...(per.get(a) ?? []), t]);
     if (ag.some((a) => a.startsWith("custode "))) per.set(SQUADRA_CUSTODI, [...(per.get(SQUADRA_CUSTODI) ?? []), t]);
-    for (const p of personeDelTrade(t, reg.vecchi)) if (p.startsWith("p:") && reg.staff[nomeDi(p)]) per.set(p, [...(per.get(p) ?? []), t]);
+    // Le persone si calibrano per tipo d'operazione: p:Nome sui trade di più giorni, p:Nome|intraday su quelli intraday.
+    for (const p of personeDelTrade(t, reg.vecchi)) if (p.startsWith("p:") && reg.staff[nomeDi(p)]) { const k = chiaveCalibrazione(p, t.contesto?.livelli ? "intraday" : "trading"); per.set(k, [...(per.get(k) ?? []), t]); }
   }
   for (const [agente, ts] of per) {
-    if (!CALIBRABILI[agente] && !agente.startsWith("p:")) continue;
+    if (!CALIBRABILI[agente] && !agente.startsWith("p:")) continue; // squadre e persone (p:Nome, p:Nome|intraday)
     const v = f.voci[agente] ?? { passi: 0, dal: "", motivo: "" };
     const nuovi = ts.filter((t) => !v.dal || t.chiusoIl! > v.dal);
     if (nuovi.length < c.minTrade) continue;
@@ -110,14 +111,14 @@ export function applicaCalibrazione(stateDir: string): RigaCalibrazione[] {
   // Soglie personali delle persone dello staff (trading: probabilità del dossier; intraday: probabilità di Kronos sulle
   // candele brevi): partono dalla base della persona (la sua impostazione, o quella della squadra) e valgono sul titolo su
   // cui lavora (src/agents/profili.ts). Qui solo le righe per la dashboard.
-  const reg = leggiRegistro(stateDir);
   const prof = leggiProfili(stateDir);
-  for (const [agente, v] of Object.entries(f.voci)) {
-    if (!agente.startsWith("p:") || !v.passi) continue;
-    const rep = reg.staff[nomeDi(agente)]?.reparto ?? "trading";
-    const chiave = CALIBRATA[rep].chiave;
-    const base = Number(prof.persone[agente]?.valori[chiave] ?? getPath(chiave));
-    righe.push({ agente, etichetta: paramOf(chiave)?.etichetta ?? chiave, base, attuale: calibrato(base, v.passi, rep), passi: v.passi, motivo: v.motivo, dal: v.dal });
+  for (const [voce, v] of Object.entries(f.voci)) {
+    if (!voce.startsWith("p:") || !v.passi) continue;
+    const [agente, t] = voce.split("|");
+    const tipo = t === "intraday" ? "intraday" : "trading";
+    const chiave = CALIBRATA[tipo].chiave;
+    const base = Number(prof.persone[agente!]?.valori[chiave] ?? getPath(chiave));
+    righe.push({ agente: voce, etichetta: paramOf(chiave)?.etichetta ?? chiave, base, attuale: calibrato(base, v.passi, tipo), passi: v.passi, motivo: v.motivo, dal: v.dal });
   }
   return righe;
 }

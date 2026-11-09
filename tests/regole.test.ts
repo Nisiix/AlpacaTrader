@@ -161,12 +161,12 @@ describe("persone e formazione in sala caffè", () => {
   test("le occasioni vanno alle persone libere, la più brava per prima; chi è in attesa resta in sala caffè; una posizione tiene la sua persona", async () => {
     const { assegnaPersone } = await import("../src/agents/persone.ts");
     const dir = mkdtempSync(join(tmpdir(), "staff-"));
-    await staff(dir, { Anna: { reparto: "trading", simbolo: "AAPL", dal: "2026-11-09T08:00:00Z" }, Bruno: { reparto: "trading", simbolo: null, dal: "2026-11-09T08:00:00Z" }, Carlo: { reparto: "trading", simbolo: null, dal: "2026-11-09T07:00:00Z" }, Diana: { reparto: "intraday", simbolo: null, dal: "2026-11-09T07:00:00Z" } });
+    await staff(dir, { Anna: { reparto: "trading", simbolo: "AAPL", dal: "2026-11-09T08:00:00Z" }, Bruno: { reparto: "trading", simbolo: null, dal: "2026-11-09T08:00:00Z" }, Carlo: { reparto: "trading", simbolo: null, dal: "2026-11-09T07:00:00Z" }, Diana: { reparto: "intraday", simbolo: null, dal: "2026-11-09T06:00:00Z" } });
     const a = assegnaPersone({ stateDir: dir, now: new Date("2026-11-09T11:00:00Z"), sospesi: [], punteggio: (p) => (p === "p:Bruno" ? 0.8 : 0.5), rientro: () => null,
       bisogni: { trading: [{ simbolo: "AAPL", tiene: true, voto: false }, { simbolo: "BTC/USD", tiene: false, voto: true }], intraday: [{ simbolo: "SOL/USD", tiene: false, voto: true }] } });
     expect(a.chi["c:AAPL"]).toBe("p:Anna"); // resta sulla sua posizione
     expect(a.chi["c:BTC/USD"]).toBe("p:Bruno"); // il più bravo dei liberi
-    expect(a.chi["i:SOL/USD"]).toBe("p:Diana");
+    expect(a.chi["i:SOL/USD"]).toBe("p:Diana"); // lo staff è uno: la prende chi aspetta da più tempo (anche per l'intraday)
     expect(a.reg.staff.Carlo!.simbolo).toBeNull(); // niente occasione: in sala caffè
     // Giro dopo: AAPL chiusa, BTC/USD solo «in attesa» (non è più un bisogno): Anna e Bruno tornano liberi.
     const b = assegnaPersone({ stateDir: dir, now: new Date("2026-11-09T11:05:00Z"), sospesi: [], punteggio: () => 0.5, rientro: () => null, bisogni: { trading: [], intraday: [] } });
@@ -190,13 +190,13 @@ describe("persone e formazione in sala caffè", () => {
     // Due occasioni: Bruno prende la prima; per la seconda c'è solo Anna in formazione. Kronos +2% sotto il +3% imparato
     // e alla scrivania 1 persona su un minimo di 10: rientra per necessità, forza ridotta.
     const reports: any = { custodi: { segnali: [voto("NVDA", 0.05), voto("AMZN", 0.02)] } };
-    const dimensione = AGENTS.persone.trading; AGENTS.persone.trading = 2; // staff al completo: nessuna nuova assunzione
+    const dimensione = AGENTS.persone.totale; AGENTS.persone.totale = 2; // staff al completo: nessuna nuova assunzione
     const a = assegnaPersone({ stateDir: dir, now, sospesi: ["p:Anna"], punteggio: () => 0.5, bisogni: { trading: [{ simbolo: "NVDA", tiene: false, voto: true }, { simbolo: "AMZN", tiene: false, voto: true }], intraday: [] },
       rientro: (p, desk, _rep, scrivania) => provaRientro(dir, r, p, reports.custodi.segnali.filter((s: any) => `c:${s.simbolo}` === desk), {}, scrivania, 10, now) });
     expect(a.chi["c:NVDA"]).toBe("p:Bruno");
     expect(a.chi["c:AMZN"]).toBe("p:Anna");
     expect(r.rientri["p:Anna"]).toBe("necessità");
-    AGENTS.persone.trading = dimensione;
+    AGENTS.persone.totale = dimensione;
     applicaFormazione(dir, reports, r, {}, a.chi, new Set(a.senzaPersona), now);
     expect(reports.custodi.segnali.find((s: any) => s.simbolo === "AMZN").forza).toBeCloseTo(0.8, 6);
     // Nuova formazione dopo 5 trade persi; con il minimo di persone soddisfatto (0) l'occasione debole non basta...
@@ -244,12 +244,14 @@ describe("profili personali", () => {
     const dir = mkdtempSync(join(tmpdir(), "prof-"));
     await staff(dir, { Anna: { reparto: "trading", simbolo: "AAPL", dal: "" }, Bruno: { reparto: "intraday", simbolo: "SOL/USD", dal: "" } });
     expect(salvaImpostazioni(dir, "p:Anna", { "LIMITS.trendSmaDays": 40, "AGENTS.pullback.rsiEntry": 6 }, 0.12)).toEqual({ ok: true });
-    expect(salvaImpostazioni(dir, "p:Anna", { "AGENTS.intraday.maxWeight": 0.1 }).ok).toBe(false); // non è del suo reparto
+    expect(salvaImpostazioni(dir, "p:Anna", { "AGENTS.exit.stopPct": 0.1 }).ok).toBe(false); // non è un'impostazione personale
+    expect(salvaImpostazioni(dir, "p:Anna", { "LIMITS.trendSmaDays": 40, "AGENTS.pullback.rsiEntry": 6, "AGENTS.intraday.maxWeight": 0.1 }, 0.12)).toEqual({ ok: true }); // fa anche intraday
     preparaProfili(dir);
     expect(valore("LIMITS.trendSmaDays", "AAPL")).toBe(40);
     expect(valore("LIMITS.trendSmaDays", "MSFT")).toBe(LIMITS.trendSmaDays);
     expect(impostazioniDi(dir, "p:Anna").obiettivo.attuale).toBe(0.12);
-    expect(impostazioniDi(dir, "p:Bruno").parametri.map((p) => p.chiave)).toEqual(["AGENTS.intraday.kronos.minProb", "AGENTS.intraday.maxWeight"]);
+    expect(impostazioniDi(dir, "p:Bruno").parametri.map((p) => p.chiave)).toContain("AGENTS.intraday.kronos.minProb");
+    expect(impostazioniDi(dir, "p:Bruno").parametri.map((p) => p.chiave)).toContain("LIMITS.trendSmaDays"); // ognuno ha entrambe le serie
   });
 
   test("obiettivo del giorno personale: difesa sotto metà dopo averlo toccato; il giorno dopo sale col successo, scende col fallimento", async () => {
@@ -290,7 +292,7 @@ describe("profili personali", () => {
     const dir = mkdtempSync(join(tmpdir(), "uno-"));
     await staff(dir, { Anna: { reparto: "trading", simbolo: null, dal: "" }, Elio: { reparto: "intraday", simbolo: null, dal: "" } });
     const a = assegnaPersone({ stateDir: dir, now: new Date(), sospesi: [], punteggio: () => 0.5, rientro: () => null, bisogni: { trading: [{ simbolo: "SOL/USD", tiene: false, voto: true }], intraday: [{ simbolo: "SOL/USD", tiene: true, voto: false }] } });
-    expect(a.chi).toEqual({ "i:SOL/USD": "p:Elio" });
+    expect(Object.keys(a.chi)).toEqual(["i:SOL/USD"]);
     expect(a.bloccati["c:SOL/USD"]).toContain("una sola posizione");
   });
 });

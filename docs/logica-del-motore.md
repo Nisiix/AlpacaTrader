@@ -331,22 +331,23 @@ d'opinione prima di una candela giornaliera nuova: escono solo stop e regole vin
 - **Capo ufficio** e **sala caffè** (capitolo 4), dal diario dei trade, da subito e con limiti.
 - **Gli agenti come persone** (`src/agents/persone.ts`): ogni agente ha un nome. Fissi per gli agenti generali (Roberto
   capo ufficio, Marco trend, Giulia rientro, Paolo regime, Sara orizzonte, Luca uscite, Davide presa di profitto, Elena
-  contesto, Chiara Kronos, Andrea capo degli intraday agents). I **trading agents** e gli **intraday agents** sono uno
-  staff di persone (`state/persone.json`, 20 + 8, oltre solo per seguire una posizione aperta) che non appartengono a un
-  titolo: il motore trova le occasioni con i suoi criteri e a ogni giro le assegna. Un'occasione è una posizione aperta,
-  un trading agent pronto a entrare (dossier ≥ 60%) o un voto d'acquisto; un titolo «in attesa» o in osservazione non
-  lo è. Chi lavora su un titolo ci resta finché l'occasione dura; le nuove vanno alla persona libera più brava per
-  risultati ((vinti + 1) / (trade + 2)), a parità a chi aspetta da più tempo, e a chi ha trovato il titolo con
-  l'esplorazione. Chi non ha un'occasione aspetta in sala caffè. Ogni trade salva nel diario le persone che l'hanno
-  preso (`contesto.persone`): su quelle si calcolano risultati, calibrazione personale e formazione. I due reparti
-  restano distinti perché lavorano su orizzonti e regole diversi (più giorni contro minuti e ore): sulla stessa crypto
-  ci lavora una persona sola: un titolo, una persona, una posizione (se trading e intraday lo vogliono entrambi lo tiene
-  chi ci lavora già o ha la posizione, altrimenti il trading agent). Alla scrivania solo chi è pronto a entrare o segue
-  una posizione: un titolo che il riparto mette «in attesa», un acquisto fermato dalla gabbia o un'azione fuori orario
-  rimandano la persona in sala caffè.
-- **Profili personali** (`src/agents/profili.ts`, `state/profili.json`): ogni persona ha impostazioni sue, che valgono
-  sul titolo su cui lavora. Trading agents: medie e momentum del trend, RSI, sedute e peso del rientro, soglia, media
-  del rientro ed estensione del dossier. Intraday agents: probabilità minima e peso. Più l'**obiettivo del giorno**
+  contesto, Chiara Kronos, Andrea capo degli intraday agents). Le altre persone sono uno **staff unico**
+  (`state/persone.json`, 28, oltre solo per seguire una posizione aperta): nessuna appartiene a un titolo né a un tipo di
+  operazione. Il motore trova le occasioni con i suoi criteri e a ogni giro le assegna: un'occasione è una posizione
+  aperta, un titolo pronto a entrare (dossier ≥ 60%) o un voto d'acquisto, di più giorni o intraday. Chi lavora su un
+  titolo ci resta finché l'occasione dura; le nuove vanno alla persona libera più brava in quel tipo di operazione
+  ((vinti + 1) / (trade + 2) sui suoi trade di quel tipo, se ne ha, altrimenti su tutti), a parità a chi aspetta da più
+  tempo, e a chi ha trovato il titolo con l'esplorazione. Chi non ha un'occasione aspetta in sala caffè. Ogni trade salva
+  nel diario le persone che l'hanno preso (`contesto.persone`). Le zone dell'ufficio (Trading agents, Intraday agents)
+  sono i due tipi di operazione, non due squadre: un titolo, una persona, una posizione (se più giorni e intraday lo
+  vogliono entrambi lo tiene chi ci lavora già o ha la posizione, altrimenti l'operazione di più giorni). Alla scrivania
+  solo chi è pronto a entrare o segue una posizione: un titolo «in attesa», un acquisto fermato dalla gabbia o
+  un'azione fuori orario rimandano la persona in sala caffè. Il capo ufficio resta fuori dallo staff, col suo compito.
+- **Profili personali** (`src/agents/profili.ts`, `state/profili.json`): ogni persona ha impostazioni sue, per entrambi
+  i tipi d'operazione, che valgono sul titolo su cui lavora. Più giorni: medie e momentum del trend, RSI, sedute e peso
+  del rientro, soglia, media del rientro ed estensione del dossier. Intraday: probabilità minima e peso. La
+  calibrazione del capo è separata per tipo (p:Nome sui trade di più giorni, p:Nome|intraday su quelli intraday); in
+  sala caffè si ricalibra il tipo in cui la persona ha perso. Più l'**obiettivo del giorno**
   personale (di serie 10%, +1 punto dopo un giorno in cui lo tocca, −1 dopo un giorno chiuso in perdita, tra 3% e 25%):
   guadagno dei suoi trade di oggi sul capitale che ci ha messo; toccato, continua; se torna a metà, si vendono i suoi
   trade non favorevoli (Kronos sotto la soglia di anticipo). L'obiettivo del conto non c'è più nelle Generali. Le

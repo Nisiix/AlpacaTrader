@@ -206,7 +206,7 @@ export function coffeeBreak(input: {
   for (const [n, m] of Object.entries(input.staff?.reg.staff ?? {})) {
     const p = chiavePersona(n);
     if (occupati.has(p) || taken(p)) continue;
-    presenti.push({ chiave: p, nome: n, reparto: m.reparto, perche: m.reparto === "intraday" ? "nessuna occasione intraday: aspetta in sala caffè" : "nessun titolo pronto a entrare: aspetta in sala caffè" });
+    presenti.push({ chiave: p, nome: n, perche: "nessuna occasione pronta (di più giorni o intraday): aspetta in sala caffè" });
   }
 
   // Cosa si dicono: solo cose vere, prese dai loro dati.
@@ -219,8 +219,9 @@ export function coffeeBreak(input: {
     return pool.length ? pool[(input.giro + key.length) % pool.length]! : null;
   };
   const sec = (k: string) => (k.startsWith("c:") || k.startsWith("i:") ? sectorOf(k.slice(2)) : null);
-  // Le persone libere in sala caffè, per reparto: raccontano i titoli che l'ufficio osserva.
-  const liberi = (rep: "trading" | "intraday") => presenti.filter((p) => p.reparto === rep).map((p) => p.chiave);
+  // Le persone libere in sala caffè (ognuna fa sia operazioni di più giorni sia intraday): raccontano i titoli che
+  // l'ufficio osserva, a giro.
+  const liberi = (_tipo: "trading" | "intraday") => presenti.filter((p) => p.chiave.startsWith("p:") && !p.formazione).map((p) => p.chiave);
   // 0. Chi lavora bene spiega a chi è in formazione come fa: il bagaglio che si porterà alla scrivania.
   for (const [k, x] of [...formazione].slice(0, 4)) {
     const testo = x.imparato;

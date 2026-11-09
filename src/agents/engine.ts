@@ -613,15 +613,16 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
       if (desk.startsWith("c:")) aggiungi("trading", { simbolo: desk.slice(2), tiene: false, voto: true, ...(preferite.get(desk) ? { preferita: preferite.get(desk)! } : {}) });
       else if (desk.startsWith("i:")) aggiungi("intraday", { simbolo: desk.slice(2), tiene: false, voto: true, ...(preferite.get(desk) ? { preferita: preferite.get(desk)! } : {}) });
     }
-    // Più bravo = più trade vinti (stima prudente: (vinti + 1) / (trade + 2)).
+    // Più bravo = più trade vinti in quel tipo di operazione (stima prudente: (vinti + 1) / (trade + 2)); chi non ne ha
+    // ancora di quel tipo vale per i suoi risultati in generale.
     const record = new Map<string, { n: number; v: number }>();
-    for (const t of journal.trade.filter((t) => t.stato === "chiuso")) for (const k of personeDelTrade(t, registro.vecchi)) { const g = record.get(k) ?? { n: 0, v: 0 }; g.n++; if (t.incassato - t.costo > 0) g.v++; record.set(k, g); }
+    for (const t of journal.trade.filter((t) => t.stato === "chiuso")) for (const k of personeDelTrade(t, registro.vecchi)) for (const r of [k, `${k}|${t.contesto?.livelli ? "intraday" : "trading"}`]) { const g = record.get(r) ?? { n: 0, v: 0 }; g.n++; if (t.incassato - t.costo > 0) g.v++; record.set(r, g); }
     const assegnazione = assegnaPersone({
       stateDir: deps.stateDir,
       now: startedAt,
       bisogni,
       sospesi: [...formazione.inFormazione].sort((a, b) => a.dal.localeCompare(b.dal)).map((x) => x.chiave),
-      punteggio: (p) => { const g = record.get(p); return g ? (g.v + 1) / (g.n + 2) : 0.5; },
+      punteggio: (p, tipo) => { const g = record.get(`${p}|${tipo}`) ?? record.get(p); return g ? (g.v + 1) / (g.n + 2) : 0.5; },
       rientro: (p, desk, rep, scrivania) => provaRientro(deps.stateDir, formazione, p, votiDi(desk), view.previsioni, scrivania, rep === "intraday" ? AGENTS.formazione.minIntraday : AGENTS.formazione.minOperativi, startedAt),
     });
     // Una sola posizione per titolo: su un titolo con un'operazione intraday aperta non entra nessun voto di più giorni

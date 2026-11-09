@@ -19,6 +19,11 @@ export const PERSONALI: Record<Reparto, string[]> = {
   ],
   intraday: ["AGENTS.intraday.kronos.minProb", "AGENTS.intraday.maxWeight"],
 };
+// Ogni persona ha tutte e due le serie: può prendere un'operazione di più giorni o una intraday.
+export const TUTTI_PERSONALI = [...PERSONALI.trading, ...PERSONALI.intraday];
+export const tipoDi = (chiave: string): Reparto => (PERSONALI.intraday.includes(chiave) ? "intraday" : "trading");
+// La chiave della calibrazione personale per tipo d'operazione: p:Nome (più giorni), p:Nome|intraday.
+export const chiaveCalibrazione = (p: string, tipo: Reparto) => (tipo === "intraday" ? `${p}|intraday` : p);
 // La soglia che la calibrazione del capo sposta per ogni persona (un passo = più selettiva).
 export const CALIBRATA: Record<Reparto, { chiave: string; passo: number; limite: number }> = {
   trading: { chiave: "AGENTS.custodi.minProbabilita", passo: 0.05, limite: 0.7 },
@@ -56,7 +61,7 @@ export function valore<T = number>(chiave: string, simbolo: string): T {
 function passiCalibrazione(stateDir: string): Record<string, number> {
   const r = readJson(join(stateDir, "calibrazione.json"), (v): v is { voci: Record<string, { passi: number }> } => isObject(v) && isObject(v.voci));
   const out: Record<string, number> = {};
-  if (r.kind === "ok") for (const [k, v] of Object.entries(r.value.voci)) if (k.startsWith("p:") && v.passi) out[k] = v.passi;
+  if (r.kind === "ok") for (const [k, v] of Object.entries(r.value.voci)) if (k.startsWith("p:") && v.passi) out[k] = v.passi; // p:Nome e p:Nome|intraday
   return out;
 }
 
@@ -73,19 +78,20 @@ export function calibrato(base: number, passi: number, rep: Reparto): number {
 // Le impostazioni di una persona: per ogni parametro valore di squadra, personale (a mano), calibrato e in vigore.
 export function impostazioniDi(stateDir: string, p: string) {
   const reg = leggiRegistro(stateDir);
-  const rep: Reparto = reg.staff[nomeDi(p)]?.reparto ?? "trading";
   const prof = leggiProfili(stateDir).persone[p] ?? nuovo();
-  const passi = passiCalibrazione(stateDir)[p] ?? 0;
+  const tuttiPassi = passiCalibrazione(stateDir);
   return {
-    reparto: rep,
+    reparto: reg.staff[nomeDi(p)]?.reparto ?? null,
     simbolo: reg.staff[nomeDi(p)]?.simbolo ?? null,
-    parametri: PERSONALI[rep].map((chiave) => {
+    parametri: TUTTI_PERSONALI.map((chiave) => {
       const par = paramOf(chiave)!;
+      const tipo = tipoDi(chiave);
       const squadra = getPath(chiave);
       const personale = prof.valori[chiave];
       const base = personale !== undefined ? personale : squadra;
-      const attuale = chiave === CALIBRATA[rep].chiave && passi ? calibrato(Number(base), passi, rep) : base;
-      return { ...par, squadra, personale: personale ?? null, passi: chiave === CALIBRATA[rep].chiave ? passi : 0, attuale, cambiato: personale !== undefined };
+      const passi = chiave === CALIBRATA[tipo].chiave ? (tuttiPassi[chiaveCalibrazione(p, tipo)] ?? 0) : 0;
+      const attuale = passi ? calibrato(Number(base), passi, tipo) : base;
+      return { ...par, gruppo: tipo === "intraday" ? "Operazioni intraday" : "Operazioni di più giorni", squadra, personale: personale ?? null, passi, attuale, cambiato: personale !== undefined };
     }),
     obiettivo: { attuale: prof.obiettivo, diSerie: OBIETTIVO.diSerie, min: OBIETTIVO.min, max: OBIETTIVO.max, storia: prof.storia.slice(-10), giorno: prof.giorno ?? null },
     ricalibrazioni: (prof.ricalibrazioni ?? []).slice(-5),
@@ -97,7 +103,7 @@ export function salvaImpostazioni(stateDir: string, p: string, valori: Record<st
   const reg = leggiRegistro(stateDir);
   const m = reg.staff[nomeDi(p)];
   if (!m) return { ok: false, errori: [`persona sconosciuta: ${nomeDi(p)}`] };
-  const ammessi = new Set(PERSONALI[m.reparto]);
+  const ammessi = new Set(TUTTI_PERSONALI);
   const errori: string[] = [];
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(valori)) {
@@ -132,8 +138,10 @@ export function preparaProfili(stateDir: string): void {
     if (!m.simbolo) continue;
     const p = chiavePersona(n);
     const valori: Record<string, unknown> = { ...(f.persone[p]?.valori ?? {}) };
-    const cal = CALIBRATA[m.reparto];
-    if (passi[p]) valori[cal.chiave] = calibrato(Number(valori[cal.chiave] ?? getPath(cal.chiave)), passi[p]!, m.reparto);
+    for (const tipo of ["trading", "intraday"] as Reparto[]) {
+      const cal = CALIBRATA[tipo]; const n = passi[chiaveCalibrazione(p, tipo)];
+      if (n) valori[cal.chiave] = calibrato(Number(valori[cal.chiave] ?? getPath(cal.chiave)), n, tipo);
+    }
     perSimbolo[m.simbolo] = { ...(perSimbolo[m.simbolo] ?? {}), ...valori };
   }
 }

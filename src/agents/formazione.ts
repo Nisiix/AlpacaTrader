@@ -96,12 +96,17 @@ function nelLimite(chiave: string, v: number): number {
 //   più piccole, mai fuori dai limiti della scheda.
 export function ricalibrazione(stateDir: string, k: string, mentori: string[], per: Map<string, Trade[]>, contesto: string | undefined, now: Date): { cambi: string[]; motivo: string } {
   const reg = leggiRegistro(stateDir);
-  const rep: Reparto | undefined = reg.staff[nomeDi(k)]?.reparto;
-  if (!rep) return { cambi: [], motivo: "" };
-  const chiavi = PERSONALI[rep];
-  const mio = valoriDi(stateDir, k, rep);
-  const bravi = mentori.filter((m) => m.startsWith("p:") && reg.staff[nomeDi(m)]?.reparto === rep);
-  const loro = bravi.map((m) => valoriDi(stateDir, m, rep));
+  if (!reg.staff[nomeDi(k)]) return { cambi: [], motivo: "" };
+  // Ogni persona fa sia operazioni di più giorni sia intraday: si ricalibra il tipo in cui ha perso (entrambi se ha perso
+  // in tutti e due o se non si sa).
+  const suoi = per.get(k) ?? [];
+  const persiTipo = (tipo: Reparto) => suoi.filter((t) => pnl(t) <= 0 && (t.contesto?.livelli ? "intraday" : "trading") === tipo).length;
+  const tipi = (["trading", "intraday"] as Reparto[]).filter((x) => persiTipo(x) > 0);
+  const daRivedere = tipi.length ? tipi : (["trading", "intraday"] as Reparto[]);
+  const chiavi = daRivedere.flatMap((x) => PERSONALI[x]);
+  const mio = { ...valoriDi(stateDir, k, "trading"), ...valoriDi(stateDir, k, "intraday") };
+  const bravi = mentori.filter((m) => m.startsWith("p:") && reg.staff[nomeDi(m)]);
+  const loro = bravi.map((m) => ({ ...valoriDi(stateDir, m, "trading"), ...valoriDi(stateDir, m, "intraday") }));
   const nuovi: Record<string, number> = {};
   let motivo: string;
   if (loro.length && chiavi.some((c) => loro.some((v) => v[c] !== mio[c]))) {
@@ -110,15 +115,16 @@ export function ricalibrazione(stateDir: string, k: string, mentori: string[], p
   } else {
     const sfavorevole = contesto === "sfavorevole";
     const passi = sfavorevole ? 2 : 1;
-    const persi = (per.get(k) ?? []).filter((t) => pnl(t) <= 0);
+    const persi = suoi.filter((t) => pnl(t) <= 0);
     const pezzi = [`contesto di mercato ${contesto ?? "n.d."}`];
-    if (rep === "trading") {
+    if (daRivedere.includes("trading")) {
       nuovi["AGENTS.custodi.minProbabilita"] = nelLimite("AGENTS.custodi.minProbabilita", mio["AGENTS.custodi.minProbabilita"]! + 0.05 * passi);
       const dist = persi.map((t) => t.contesto?.distanzaMedia).filter((x): x is number => typeof x === "number" && x > 0).sort((a, b) => a - b);
       if (dist.length >= 2) { const med = dist[Math.floor(dist.length / 2)]!; nuovi["AGENTS.custodi.extendedPct"] = nelLimite("AGENTS.custodi.extendedPct", Math.min(mio["AGENTS.custodi.extendedPct"]!, med * 0.8)); pezzi.push(`i suoi trade persi partivano ${Math.round(med * 100)}% sopra la media a 50`); }
       if (persi.filter((t) => entryKind(t) === "rientro sulla media a 20").length * 2 >= persi.length && persi.length) { nuovi["AGENTS.pullback.rsiEntry"] = nelLimite("AGENTS.pullback.rsiEntry", mio["AGENTS.pullback.rsiEntry"]! - passi); pezzi.push("perdeva sui rientri"); }
       nuovi["AGENTS.pullback.maxWeight"] = nelLimite("AGENTS.pullback.maxWeight", mio["AGENTS.pullback.maxWeight"]! * 0.8);
-    } else {
+    }
+    if (daRivedere.includes("intraday")) {
       nuovi["AGENTS.intraday.kronos.minProb"] = nelLimite("AGENTS.intraday.kronos.minProb", mio["AGENTS.intraday.kronos.minProb"]! + 0.025 * passi);
       nuovi["AGENTS.intraday.maxWeight"] = nelLimite("AGENTS.intraday.maxWeight", mio["AGENTS.intraday.maxWeight"]! * 0.8);
       const candele = [...new Set(persi.map((t) => t.contesto?.livelli?.candela).filter(Boolean))];
