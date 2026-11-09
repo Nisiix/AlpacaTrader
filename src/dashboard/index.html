@@ -343,6 +343,8 @@
   .tnome.blk { display:block; margin:1px 0 0; font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%; }
   .inv-card .s { min-width:0; }
   .persona { color:var(--agent); font-weight:600; }
+  .formazione { background:#fef3c7; color:#78350f; border:1px solid #fcd34d; border-radius:10px; padding:8px 10px; margin:10px 0; font-size:13px; }
+  .formazione .why { color:#92400e; }
   .office-card .scheda.compatta { padding:0; border:0; background:transparent; }
   .office-card .scheda .prm { grid-template-columns:1fr 92px; }
   .office-card h4 { margin:12px 0 4px; font-size:13px; text-transform:uppercase; letter-spacing:.04em; color:var(--ink-3); }
@@ -593,6 +595,7 @@
         <li><b>Custodi</b>: un investitore per ogni titolo seguito (in trend o con Kronos al rialzo), senza numero fisso; leggono Kronos, grafico, notizie (Google News e X) e contesto, e ricordano i trade passati su quel titolo. </li>
         <li><b>Capo ufficio</b>: rivede i trade chiusi di ogni agente e della squadra dei custodi (un custode da solo arriva di rado a 3 trade), loda chi vince e richiama chi perde, imponendogli una soglia minima di Kronos e voti più deboli finché i risultati non tornano buoni. Non giudica i trade chiusi dalla vecchia uscita in giornata, che la regola oggi non permette più.</li>
         <li><b>Esplorazione</b>: chi è in pausa non pensa solo al suo titolo. Ogni minuto gli agenti in sala caffè passano in rassegna un pezzo del radar (circa 45 azioni ed ETF liquidi fuori dall'universo, per settore) con i criteri del motore: sopra la media a 200, momentum a 12 mesi positivo, grafico in ordine e Kronos al rialzo oltre la soglia, mai una proiezione fuori misura. Chi trova un'opportunità torna alla scrivania: il titolo entra nell'universo per 3 giorni (prezzi, contesto, custode, gabbia e uscite lo trattano come gli altri) e lo scopritore lo vota a ogni giro finché regge. Al massimo 6 scoperte al giorno.</li>
+        <li><b>Formazione in sala caffè</b>: se una persona, sui trade chiusi dal suo ultimo rientro (almeno 5), vince meno del 51% e chiude in perdita, il capo ufficio la manda in sala caffè per 24 ore. Lì non apre nuovi trade (le sue posizioni restano protette da stop e regole d'uscita) e ascolta le persone che lavorano bene (almeno 51% di trade vinti e risultato positivo): ne raccoglie un bagaglio concreto, cioè la proiezione minima di Kronos da cui partivano i loro trade vinti, il tipo d'ingresso che rende di più e le candele su cui vincono. Prima delle 24 ore torna alla scrivania solo quando trova un'occasione, e solo se il capo la giudica valida col bagaglio imparato oppure se servono persone: almeno 10 trading agents alla scrivania; nella sala intraday basta 1 operatore, e può restare vuota se non c'è niente da fare. Rientra per primo chi è in sala caffè da più tempo, e porta con sé il bagaglio per tutti i suoi acquisti successivi.</li>
         <li><b>Sala caffè</b>: gli agenti senza niente da fare si scambiano quello che sanno (dossier, candele, Kronos) e le lezioni di squadra dai trade chiusi, per tipo d'ingresso, settore e forza di Kronos (almeno 3 trade). Un voto d'acquisto simile a ciò che alla squadra è andato male perde forza (fino a ×0,7); simile a ciò che ha reso ne guadagna un poco (fino a ×1,15). Kronos e le regole restano i padroni.</li>
         <li><b>Intraday</b>: ogni titolo si guarda su candele da 5 e 15 minuti, 1 ora e 4 ore e si entra su quella dove Kronos dà la probabilità di successo più alta (con medie brevi in ordine o una rottura/un rientro). La posizione si segue poi sulla candela più breve (1, 5 o 15 minuti, 1 ora): se lì Kronos vede ancora salire, oltre l'obiettivo si lascia correre con lo stop alzato; se vede un calo che azzera il guadagno si incassa; se in perdita vede un calo verso lo stop si taglia prima. Obiettivo e stop dall'ATR, chiusura entro la giornata.</li>
       </ul>
@@ -673,6 +676,8 @@ const personaDi = (k) => status?.persone?.[k] || null;
 // Il nome del titolo o della crypto accanto al codice («AAPL Apple Inc.»), dai nomi che il motore chiede ad Alpaca.
 const nomeTitolo = (sym) => status?.nomi?.[sym] || '';
 const tn = (sym, blocco = false) => { const n = nomeTitolo(sym); return n ? `<span class="tnome${blocco ? ' blk' : ''}">${esc(n)}</span>` : ''; };
+// Nei testi del motore le persone compaiono come chiavi (c:AAPL, i:ETH/USD, a:kronos): qui diventano nomi.
+const nomiNelTesto = (t) => String(t ?? '').replace(/\b([ci]):([A-Z0-9]+(?:\/[A-Z]+)?)|\ba:([a-z]+)\b/g, (m) => keyName(m));
 const conNome = (sym) => nomeTitolo(sym) ? `${sym} · ${nomeTitolo(sym)}` : sym;
 const agentName = (n) => {
   const s = String(n);
@@ -927,7 +932,7 @@ const generaliEffettivi = (st) => { const usati = new Set((journal?.trade || [])
 function paintAgentList(st) {
   const box = $('#agent-list'); if (!box) return;
   const pausa = new Set((st.caffe?.presenti || []).map((p) => p.chiave));
-  const row = (key, nome, stato) => { const d = desks.get(key); if (!d) return ''; const per = personaDi(key); if (per && !String(nome).startsWith(`${per.nome} ·`)) nome = key === 'capo' ? `${per.nome} · capo ufficio` : `${per.nome} · ${nome}`; const col = hexCss(d.group.userData.emp.userData.shirtM.color.getHex()); return `<button type="button" data-key="${esc(key)}" class="${cardKey === key || listHoverKey === key ? 'on' : ''}"><span class="sw" style="background:${col}"></span><span class="nm">${esc(nome)}${pausa.has(key) ? ' <span class="caffe">☕</span>' : ''}</span><span class="st">${esc(stato)}</span></button>`; };
+  const row = (key, nome, stato) => { const d = desks.get(key); if (!d) return ''; if ((status?.formazione?.inFormazione || []).some((x) => x.chiave === key)) stato = '☕ in formazione'; const per = personaDi(key); if (per && !String(nome).startsWith(`${per.nome} ·`)) nome = key === 'capo' ? `${per.nome} · capo ufficio` : `${per.nome} · ${nome}`; const col = hexCss(d.group.userData.emp.userData.shirtM.color.getHex()); return `<button type="button" data-key="${esc(key)}" class="${cardKey === key || listHoverKey === key ? 'on' : ''}"><span class="sw" style="background:${col}"></span><span class="nm">${esc(nome)}${pausa.has(key) ? ' <span class="caffe">☕</span>' : ''}</span><span class="st">${esc(stato)}</span></button>`; };
   const general = generaliEffettivi(st);
   const cust = st.custodi || [];
   const intra = [...desks.keys()].filter((k) => k.startsWith('i:'));
@@ -1402,7 +1407,7 @@ async function openCard(key) {
 // squadra (con la loro soglia personale calibrata dal capo); gli operatori intraday quella di Andrea.
 const schedaDi = (key) => key.startsWith('a:') ? key.slice(2) : key.startsWith('c:') ? 'custodi' : key.startsWith('i:') ? 'intraday' : null;
 async function renderAgentForm(key) {
-  const nome = schedaDi(key);
+  const nome = schedaDi(key); card.classList.remove('largo');
   try { cards = (await (await fetch('/api/agenti/schede')).json()).schede; } catch {}
   const sc = (cards || []).find((c) => c.agente === nome);
   if (key !== cardKey) return;
@@ -1425,6 +1430,7 @@ function renderCard() {
     title = `${personaDi('capo')?.nome ?? 'Roberto'}`; sub = 'Capo ufficio: giudica i risultati e ricalibra chi sbaglia';
     const cal = (st.calibrazione || []).filter((r) => r.passi);
     body = `<p>${esc(capo?.sintesi || '')}</p>${capo?.sogliaKronos !== null && capo?.sogliaKronos !== undefined ? `<p class="why">Lezione per tutti: Kronos ≥ ${pct(capo.sogliaKronos)}${capo.ingressoMigliore ? ` · ingresso migliore: ${esc(capo.ingressoMigliore)}` : ''}</p>` : ''}
+      ${(st.formazione?.inFormazione || []).length ? `<h4>In sala caffè per formazione</h4>${st.formazione.inFormazione.map((x) => `<div class="why">☕ <b>${esc(keyName(x.chiave))}</b> fino alle ${hhmm(x.fino)}: ${esc(nomiNelTesto(x.motivo))}</div>`).join('')}` : ''}
       ${cal.length ? `<h4>Calibrazioni in corso</h4>${cal.map((r) => `<div class="why">• <b>${esc(agentName(r.agente))}</b>: ${esc(r.etichetta)} ${fmtCal(r)}</div>`).join('')}` : ''}
       ${(capo?.valutazioni || []).map((v) => `<div class="vote"><b>${esc(agentName(v.agente))}</b> <span class="pill ${v.giudizio === 'richiamato' ? 'down' : v.giudizio === 'ottimo' || v.giudizio === 'bene' ? 'up' : ''}">${esc(v.giudizio)}</span> <span class="why">${v.vinti}/${v.trade} vinti · ${usd(v.risultato)}</span><br><span class="why">${esc(v.messaggio)}</span>${v.consigli.length ? `<ul>${v.consigli.map((c) => `<li class="why">${esc(c)}</li>`).join('')}</ul>` : ''}</div>`).join('') || '<p class="why">Nessun trade chiuso ancora.</p>'}`;
   } else {
@@ -1439,6 +1445,10 @@ function renderCard() {
     const righeCal = (st.calibrazione || []).filter((r) => calDi.includes(r.agente));
     if (righeCal.length) body += `<h4>Calibrazione del capo</h4>${righeCal.map((r) => `<div class="why">• ${r.agente.startsWith('custode ') ? 'Personale: ' : r.agente === 'custodi (squadra)' ? 'Squadra: ' : ''}${esc(r.etichetta)} ${fmtCal(r)}</div>`).join('')}`;
   }
+  // Formazione in sala caffè: chi è lì a imparare e chi è tornato col bagaglio dei colleghi bravi.
+  { const fz = st.formazione; const fIn = fz?.inFormazione?.find((x) => x.chiave === cardKey); const fBag = fz?.conBagaglio?.find((x) => x.chiave === cardKey);
+    if (fIn) body = `<div class="formazione">☕ <b>In sala caffè per formazione</b> fino alle ${hhmm(fIn.fino)}: niente nuovi acquisti, le sue posizioni restano protette da stop e regole d'uscita.<br><span class="why">${esc(nomiNelTesto(fIn.motivo))}</span>${fIn.imparato?.length ? `<br>Sta imparando: ${esc(fIn.imparato.join('; '))}` : ''}</div>` + body;
+    else if (fBag) body += `<h4>Bagaglio della sala caffè</h4><div class="why">${fBag.formazioni} ${fBag.formazioni === 1 ? 'formazione' : 'formazioni'}, rientrato alle ${hhmm(fBag.rientrato)}${fBag.bagaglio.mentori.length ? ` dopo aver ascoltato ${esc(fBag.bagaglio.mentori.map(keyName).join(', '))}` : ''}: ${esc(fBag.bagaglio.testo.join('; '))}.</div>`; }
   cardInfo.innerHTML = `<button type="button" class="x" aria-label="chiudi">✕</button><div class="portrait"></div><h3>${esc(title)}</h3><div class="why">${esc(sub)}</div>${body}
     <div class="row" style="margin-top:10px">${it.kind === 'custode' || it.kind === 'intraday' ? '<button type="button" class="btn" data-go="titolo">Apri il grafico</button>' : ''}</div>`;
   cardInfo.querySelector('.portrait').appendChild(portrait.renderer.domElement);
@@ -2429,7 +2439,7 @@ function describe(e) {
       : `<span class="pill ${cls(e.risultato)}">Posizione chiusa</span> <b>${esc(e.simbolo)}</b>${tn(e.simbolo)} <span class="${cls(e.risultato)}"><b>${e.pnl !== undefined ? usd(e.pnl) : ''}</b> (${pct(e.risultato)})</span> dopo ${e.giorni} giorni: ${esc(e.uscita)}`;
     case 'capo': return `<span class="pill agent">Capo ufficio</span> ${esc(e.sintesi)}${(e.richiamati || []).length ? ` <span class="down">Richiamati: ${e.richiamati.map((r) => esc(r.agente)).join(', ')}</span>` : ''}`;
     case 'allarme': return `<b>${esc(e.titolo)}</b>: ${esc(cleanErr(e.dettaglio))}`;
-    default: return esc(e.testo ?? JSON.stringify(e));
+    default: return esc(e.testo ? nomiNelTesto(e.testo) : JSON.stringify(e));
   }
 }
 // Le azioni che si ripetono identiche a ogni giro (lo stesso voto, lo stesso rifiuto «mercato chiuso») stanno su una riga:

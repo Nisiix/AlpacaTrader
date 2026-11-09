@@ -340,6 +340,16 @@ d'opinione prima di una candela giornaliera nuova: escono solo stop e regole vin
   personale per ognuno fino al 70%), fiducia minima di Kronos contro tendenza (+5 punti fino all'80%), RSI d'ingresso del
   rientro (−1 fino a 4). Al massimo 4 passi; mai sotto il valore di base della scheda, mai fuori dai limiti della scheda
   né dai principi del motore. Stato in `state/calibrazione.json`.
+- **Formazione in sala caffè** (`src/agents/formazione.ts`): una persona che, sui trade chiusi dal suo ultimo rientro
+  (almeno 5), vince meno del 51% e chiude in perdita va in sala caffè per 24 ore. Non apre nuovi trade (vendite, stop e
+  regole d'uscita restano) e ascolta chi lavora bene (almeno 51% di vinti e risultato positivo, almeno 3 trade). Torna
+  col bagaglio: proiezione minima di Kronos da cui partivano i trade vinti dei colleghi (tra la soglia di anticipo e il
+  5%), sotto la quale i suoi voti d'acquisto non valgono; tipo d'ingresso migliore; per l'intraday le candele su cui
+  vincono (fuori da quelle, taglia ×0,7). Prima della fine dei 24 h si rientra solo con un'occasione: se il capo la
+  giudica valida col bagaglio (Kronos sopra la soglia imparata, o una candela su cui i colleghi vincono), oppure se alla
+  scrivania servono persone (almeno 10 trading agents con gli agenti generali, almeno 1 operatore intraday quando c'è un'occasione; la sala intraday può restare vuota se non c'è niente da fare): allora
+  rientra per primo chi è in sala caffè da più tempo, con forza ×0,8 o taglia ×0,7 se l'occasione non passa il bagaglio.
+  Stato in `state/formazione.json`.
 - **Capitale sui vincenti**: oltre alla percentuale di trade vinti (obiettivo 51%) il diario misura la parte del capitale
   investito finita nei trade in guadagno: sopra il 50% si è investito di più dove si è vinto. La dimensione di ogni
   ingresso cresce già con la probabilità (fiducia di Kronos per i trading agents, probabilità netta per l'intraday).

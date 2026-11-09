@@ -4,6 +4,7 @@ import { entryKind, kronosOf, regolaSuperata, type CapoReport } from "./capo.ts"
 import type { CustodeStato } from "./custode.ts";
 import type { IntradayStato } from "./intraday.ts";
 import type { AgentReport, Signal } from "./types.ts";
+import type { FormazioneReport } from "./formazione.ts";
 
 // La sala caffè. Gli agenti che in questo giro non hanno niente da fare (nessuna posizione da seguire, nessun voto,
 // nessun trade da aprire) lasciano la scrivania e si siedono qui. Non chiacchierano a caso: si scambiano quello che
@@ -158,6 +159,7 @@ export function coffeeBreak(input: {
   giro: number; // per far girare gli argomenti da un giro all'altro
   primaInPausa?: Set<string>; // chi era in sala caffè al giro prima: solo loro "tornano" alla scrivania
   esploratori?: Map<string, string>; // chi sta lavorando su un titolo trovato con l'esplorazione: alla scrivania
+  formazione?: FormazioneReport; // chi è in sala caffè mandato dal capo a imparare
 }): CaffeReport {
   const { reports, held } = input;
   const presenti: Presenza[] = [];
@@ -166,7 +168,10 @@ export function coffeeBreak(input: {
   const voted = (pred: (s: Signal) => boolean) => signals.find(pred);
   const esploratori = input.esploratori ?? new Map<string, string>();
   for (const [k, why] of esploratori) operativi.push({ chiave: k, nome: k, perche: why });
-  const taken = (k: string) => esploratori.has(k);
+  // In formazione: in sala caffè qualunque cosa abbia da fare (le sue posizioni le proteggono stop e regole d'uscita).
+  const formazione = new Map((input.formazione?.inFormazione ?? []).map((x) => [x.chiave, x]));
+  for (const [k, x] of formazione) if (!esploratori.has(k)) presenti.push({ chiave: k, nome: k, perche: `in formazione fino alle ${new Date(x.fino).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Rome" })}: ascolta chi lavora bene` });
+  const taken = (k: string) => esploratori.has(k) || formazione.has(k);
 
   // Agenti generali: alla scrivania se votano o se stanno frenando il rischio (regime, contesto); altrimenti in pausa.
   for (const [n, r] of Object.entries(reports)) {
@@ -208,6 +213,12 @@ export function coffeeBreak(input: {
     return pool.length ? pool[(input.giro + key.length) % pool.length]! : null;
   };
   const sec = (k: string) => (k.startsWith("c:") || k.startsWith("i:") ? sectorOf(k.slice(2)) : null);
+  // 0. Chi lavora bene spiega a chi è in formazione come fa: il bagaglio che si porterà alla scrivania.
+  for (const [k, x] of [...formazione].slice(0, 4)) {
+    const testo = x.imparato;
+    const mentore = x.mentori[(input.giro + k.length) % Math.max(1, x.mentori.length)] ?? "capo";
+    scambi.push({ da: mentore, a: k, tema: "lezione", testo: x.mentori.length ? `Io vinco così: ${testo.length ? testo.join("; ") : "entro solo quando Kronos è netto e la probabilità è alta, ed esco presto se il trade va contro"}.` : "Studia i trade vinti della squadra: entra solo quando Kronos è netto e la probabilità è alta." });
+  }
   // 1. I custodi in pausa raccontano il loro dossier a un collega dello stesso settore.
   for (const c of custodi.filter((c) => here.includes(`c:${c.simbolo}`)).slice(0, 6)) {
     const d = c.dossier;

@@ -148,3 +148,72 @@ test("nomi dei titoli: forma breve per la dashboard", () => {
   expect(nomeBreve("SPDR S&P 500 ETF Trust")).toBe("SPDR S&P 500 ETF Trust");
   expect(nomeBreve("Alphabet Inc. Class A Common Stock")).toBe("Alphabet Inc.");
 });
+
+describe("formazione in sala caffè", () => {
+  test("chi lavora male va in sala caffè e non vota; torna con un'occasione approvata dal capo o se servono persone alla scrivania; a fine formazione col bagaglio", async () => {
+    const { aggiornaFormazione, applicaFormazione } = await import("../src/agents/formazione.ts");
+    const dir = mkdtempSync(join(tmpdir(), "form-"));
+    const t = (i: number, sym: string, agenti: string[], vinto: boolean, kronos: number) => ({ id: `f${i}`, simbolo: sym, stato: "chiuso", apertoIl: "2026-11-09T09:00:00Z", chiusoIl: `2026-11-09T10:${String(i).padStart(2, "0")}:00Z`, comprate: 1, costo: 100, vendute: 1, incassato: vinto ? 102 : 98, quantita: 0, contesto: { setup: "", momentum20: null, volGiornaliera: null, distanzaMedia: null, fiducia: null, attesa: "", perche: "Kronos anticipa", agenti, kronos } }) as any;
+    const j = { ...emptyJournal(), trade: [
+      ...Array.from({ length: 5 }, (_, i) => t(i, "AAPL", ["custode AAPL"], i === 0, 0.01)), // 1 su 5, in perdita
+      ...Array.from({ length: 4 }, (_, i) => t(10 + i, "MSFT", ["custode MSFT"], i < 3, 0.03)), // 3 su 4, in guadagno
+    ] };
+    const tutti = Array.from({ length: 12 }, (_, i) => `c:S${i}`).concat(["c:AAPL", "c:MSFT"]);
+    const now = new Date("2026-11-09T11:00:00Z");
+    const voto = (kronos: number) => ({ agente: "custode AAPL", simbolo: "AAPL", lato: "buy", forza: 1, orizzonteSedute: 5, perche: "x", kronos });
+    const r = aggiornaFormazione(dir, j, tutti, now);
+    expect(r.inFormazione.map((x) => x.chiave)).toEqual(["c:AAPL"]);
+    expect(r.inFormazione[0]!.mentori).toEqual(["c:MSFT"]);
+    // Occasione debole (Kronos +2% sotto il +3% dei colleghi bravi) con 12 persone alla scrivania: resta in sala caffè.
+    const rep: any = { custodi: { segnali: [voto(0.02), { agente: "custode AAPL", simbolo: "AAPL", lato: "sell", forza: 1, orizzonteSedute: 5, perche: "y" }] } };
+    applicaFormazione(dir, rep, r, {}, { trading: 12, intraday: 0 }, now);
+    expect(rep.custodi.segnali.map((s: any) => s.lato)).toEqual(["sell"]);
+    expect(r.inFormazione.length).toBe(1);
+    // Stessa occasione debole ma solo 9 alla scrivania: torna per necessità, con forza ridotta.
+    const r9 = aggiornaFormazione(dir, j, tutti, now);
+    const rep9: any = { custodi: { segnali: [voto(0.02)] } };
+    applicaFormazione(dir, rep9, r9, {}, { trading: 9, intraday: 5 }, now);
+    expect(rep9.custodi.segnali[0].forza).toBeCloseTo(0.8, 6);
+    expect(r9.inFormazione).toEqual([]);
+    // Nuova formazione (5 trade persi dopo il rientro), poi un'occasione valida: il capo la approva e torna subito.
+    const dopo = new Date("2026-11-09T12:00:00Z");
+    j.trade.push(...Array.from({ length: 5 }, (_, i) => ({ ...t(30 + i, "AAPL", ["custode AAPL"], false, 0.01), chiusoIl: `2026-11-09T11:3${i}:00Z` })));
+    const r2 = aggiornaFormazione(dir, j, tutti, dopo);
+    expect(r2.inFormazione.map((x) => x.chiave)).toEqual(["c:AAPL"]);
+    const rep2: any = { custodi: { segnali: [voto(0.035)] } };
+    applicaFormazione(dir, rep2, r2, {}, { trading: 12, intraday: 0 }, dopo);
+    expect(rep2.custodi.segnali.length).toBe(1);
+    expect(r2.inFormazione).toEqual([]);
+    // Col bagaglio: i voti sotto il Kronos imparato non valgono.
+    const r3 = aggiornaFormazione(dir, j, tutti, new Date("2026-11-09T12:10:00Z"));
+    expect(r3.conBagaglio.find((x) => x.chiave === "c:AAPL")!.bagaglio.kronosMin).toBeCloseTo(0.03, 6);
+    const rep3: any = { custodi: { segnali: [voto(0.02), voto(0.035)] } };
+    applicaFormazione(dir, rep3, r3, {}, { trading: 12, intraday: 0 }, new Date("2026-11-09T12:10:00Z"));
+    expect(rep3.custodi.segnali.map((s: any) => s.kronos)).toEqual([0.035]);
+  });
+  test("a fine formazione si torna alla scrivania anche senza occasioni", async () => {
+    const { aggiornaFormazione } = await import("../src/agents/formazione.ts");
+    const dir = mkdtempSync(join(tmpdir(), "form3-"));
+    const t = (i: number, vinto: boolean) => ({ id: `g${i}`, simbolo: "ETH/USD", stato: "chiuso", apertoIl: "2026-11-09T09:00:00Z", chiusoIl: `2026-11-09T10:0${i}:00Z`, comprate: 1, costo: 100, vendute: 1, incassato: vinto ? 101 : 99, quantita: 0, contesto: { setup: "", momentum20: null, volGiornaliera: null, distanzaMedia: null, fiducia: null, attesa: "", perche: "", agenti: ["intraday"], livelli: { candela: "5Min", obiettivo: 1, stop: 1 } } }) as any;
+    const j = { ...emptyJournal(), trade: Array.from({ length: 6 }, (_, i) => t(i, i === 0)) };
+    expect(aggiornaFormazione(dir, j, ["i:ETH/USD"], new Date("2026-11-09T11:00:00Z")).inFormazione.length).toBe(1);
+    const r = aggiornaFormazione(dir, j, ["i:ETH/USD"], new Date("2026-11-10T11:01:00Z"));
+    expect(r.inFormazione).toEqual([]);
+    expect(r.note[0]).toContain("formazione finita");
+  });
+  test("sala intraday: basta un operatore alla scrivania; se non c'è nessuno, chi ha un'occasione rientra per primo (zero se non c'è niente da fare)", async () => {
+    const { aggiornaFormazione, applicaFormazione } = await import("../src/agents/formazione.ts");
+    const dir = mkdtempSync(join(tmpdir(), "form4-"));
+    const t = (i: number, vinto: boolean) => ({ id: `h${i}`, simbolo: "ETH/USD", stato: "chiuso", apertoIl: "2026-11-09T09:00:00Z", chiusoIl: `2026-11-09T10:0${i}:00Z`, comprate: 1, costo: 100, vendute: 1, incassato: vinto ? 101 : 99, quantita: 0, contesto: { setup: "", momentum20: null, volGiornaliera: null, distanzaMedia: null, fiducia: null, attesa: "", perche: "", agenti: ["intraday"], livelli: { candela: "5Min", obiettivo: 1, stop: 1 } } }) as any;
+    const j = { ...emptyJournal(), trade: Array.from({ length: 6 }, (_, i) => t(i, i === 0)) };
+    const now = new Date("2026-11-09T11:00:00Z");
+    const voto = () => ({ agente: "intraday", simbolo: "ETH/USD", lato: "buy", forza: 1, orizzonteSedute: 1, intraday: true, pesoMassimo: 0.1, perche: "ETH/USD intraday su candele 15Min: x" });
+    const r = aggiornaFormazione(dir, j, ["i:ETH/USD"], now);
+    const a: any = { intraday: { segnali: [voto()] } };
+    applicaFormazione(dir, a, r, {}, { trading: 20, intraday: 1 }, now);
+    expect(a.intraday.segnali).toEqual([]);
+    const b: any = { intraday: { segnali: [voto()] } };
+    applicaFormazione(dir, b, r, {}, { trading: 20, intraday: 0 }, now);
+    expect(b.intraday.segnali[0].pesoMassimo).toBeCloseTo(0.07, 6);
+  });
+});

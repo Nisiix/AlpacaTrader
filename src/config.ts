@@ -232,6 +232,12 @@ export const AGENTS = {
   // Calibrazione del capo ufficio (src/agents/calibrazione.ts): sotto `obiettivo` di vittorie su almeno `minTrade` trade
   // chiusi un agente diventa più selettivo di un passo (al massimo `maxPassi`); da `buono` in su torna di un passo.
   calibrazione: { enabled: true, minTrade: 5, obiettivo: 0.51, buono: 0.6, maxPassi: 4 },
+  // Formazione in sala caffè: chi, sugli ultimi trade chiusi dal suo rientro (almeno minTrade), vince meno di `obiettivo`
+  // e chiude in perdita va in sala caffè per `ore` ore a imparare da chi lavora bene; alla scrivania restano sempre
+  // almeno `minOperativi` trading agents (e agenti generali) e almeno `minIntraday` operatori della sala intraday quando
+  // c'è un'occasione (zero se non c'è niente da fare): se mancano, chi è in sala caffè e trova un'occasione rientra, per
+  // primo chi c'è da più tempo.
+  formazione: { enabled: true, minTrade: 5, obiettivo: 0.51, ore: 24, minOperativi: 10, minIntraday: 1 },
   // Evidenza combinata del dossier (Kronos, grafico, notizie, contesto) minima per un ingresso nuovo di più giorni:
   // sopra la media a 200 e, più alta, sotto la 200 (contro tendenza).
   evidenza: { min: 0.5, minContro: 0.6 },

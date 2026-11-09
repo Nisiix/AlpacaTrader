@@ -34,6 +34,7 @@ import { simboliIntraday } from "./posizioni.ts";
 import type { Cervello, RigaCervello } from "./cervello.ts";
 import { BIBLIOTECA, type Principio } from "./biblioteca.ts";
 import { aggiornaCalibrazione, applicaCalibrazione, type RigaCalibrazione } from "./calibrazione.ts";
+import { aggiornaFormazione, allaScrivania, applicaFormazione, type FormazioneReport } from "./formazione.ts";
 import { persone, type Persona } from "./persone.ts";
 import { nomiTitoli } from "../nomi-titoli.ts";
 import { plausibile } from "./fiducia.ts";
@@ -122,6 +123,8 @@ export interface AgentsStatus {
   biblioteca?: { principi: Principio[] };
   // Gli agenti come persone (nome e ruolo), per chiave dell'ufficio: 'capo', 'a:trend', 'c:AAPL', 'i:BTC/USD'.
   persone?: Record<string, Persona>;
+  // Chi è in sala caffè per formazione e chi è tornato alla scrivania col bagaglio dei colleghi bravi.
+  formazione?: FormazioneReport;
   // I nomi dei titoli e delle crypto (Apple, Bitcoin...), per mostrarli accanto ai codici.
   nomi?: Record<string, string>;
   // La calibrazione del capo ufficio: per agente il parametro d'ingresso, il valore di base e quello calibrato.
@@ -565,6 +568,17 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
       log.info(n);
       bus.emit("nota", { testo: n });
     }
+    // Formazione: chi lavora male va in sala caffè a imparare da chi lavora bene e torna col bagaglio (minimo 10 alla scrivania).
+    const personeGiro = [
+      ...Object.values(reports).flatMap((r) => r.custodi ?? []).map((c) => `c:${c.simbolo}`),
+      ...Object.values(reports).flatMap((r) => r.intraday ?? []).map((x) => `i:${x.simbolo}`),
+      ...Object.entries(reports).filter(([n, r]) => n !== "custodi" && n !== "intraday" && r.segnali.length).map(([n]) => `a:${n}`),
+    ];
+    const formazione = aggiornaFormazione(deps.stateDir, journal, [...new Set(personeGiro)], startedAt);
+    for (const n of [...formazione.note, ...applicaFormazione(deps.stateDir, reports, formazione, view.previsioni, allaScrivania(reports, new Set(view.positions.map((p) => p.symbol)), new Set(formazione.inFormazione.map((x) => x.chiave))), startedAt)]) {
+      log.info(n);
+      bus.emit("nota", { testo: n });
+    }
     // Sala caffè: le lezioni di squadra dal diario correggono, con limiti, i voti d'acquisto che somigliano a quello che
     // alla squadra è andato male (o bene).
     const lezioni = teamLessons(journal);
@@ -723,7 +737,8 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
       analisi: { questoGiro: analisi, ultima: cache.ultimaAnalisi ?? null, prossima: cache.ultimaAnalisi ? new Date(Date.parse(cache.ultimaAnalisi) + AGENTS.analisiMinuti * 60_000).toISOString() : null, ogniMinuti: AGENTS.analisiMinuti },
       capo,
       fonti: fonti ? { paura: fonti.paura, funding: Object.fromEntries(AGENTS.universe.filter((u) => fonti!.funding[u] !== undefined).map((u) => [u, fonti!.funding[u]!])), errori: fonti.errori } : undefined,
-      caffe: coffeeBreak({ now: deps.now(), reports, held: new Set([...positions.map((p) => p.symbol), ...cage.orders.filter((o) => o.side === "buy").map((o) => o.symbol)]), previsioni: view.previsioni, scartate, lezioni, capo, applicati: applicatiCaffe, giro: (cache.giriCaffe = (cache.giriCaffe ?? 0) + 1), primaInPausa: new Set((cache.caffePresenti ?? "").split(",").filter(Boolean)), esploratori: scout.esploratori }),
+      caffe: coffeeBreak({ now: deps.now(), reports, held: new Set([...positions.map((p) => p.symbol), ...cage.orders.filter((o) => o.side === "buy").map((o) => o.symbol)]), previsioni: view.previsioni, scartate, lezioni, capo, applicati: applicatiCaffe, giro: (cache.giriCaffe = (cache.giriCaffe ?? 0) + 1), primaInPausa: new Set((cache.caffePresenti ?? "").split(",").filter(Boolean)), esploratori: scout.esploratori, formazione }),
+      formazione,
     };
     // Esplorazione: con qualcuno in pausa si passa in rassegna un pezzo del radar (anche tra un giro e l'altro, ogni minuto).
     await exploreRound(deps, cache, today, espl, status.caffe!, (m) => log.info(m), (m) => log.warn(m));
