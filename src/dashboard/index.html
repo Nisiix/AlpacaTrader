@@ -343,6 +343,15 @@
   .tnome.blk { display:block; margin:1px 0 0; font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%; }
   .inv-card .s { min-width:0; }
   .persona { color:var(--agent); font-weight:600; }
+  /* Card dei trading agents: intestazione sempre su due righe (persona, codice e probabilità; poi il nome del titolo su
+     una riga sola, accorciato se lungo), stato in alto a destra: tutte le card restano allineate. */
+  .ta-grid > button { display:flex; flex-direction:column; justify-content:flex-start; align-items:stretch; text-align:left; }
+  .ta-head { display:grid; grid-template-columns:minmax(0, 1fr) auto; gap:8px; align-items:start; }
+  .ta-id { min-width:0; }
+  .ta-sym, .ta-nome { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; line-height:1.35; }
+  .ta-nome { color:var(--ink-3); font-size:12.5px; min-height:1.35em; }
+  .ta-nome .persona { font-size:12.5px; }
+  .ta-stato { white-space:nowrap; justify-self:end; }
   .formazione { background:#fef3c7; color:#78350f; border:1px solid #fcd34d; border-radius:10px; padding:8px 10px; margin:10px 0; font-size:13px; }
   .formazione .why { color:#92400e; }
   .office-card .scheda.compatta { padding:0; border:0; background:transparent; }
@@ -1716,7 +1725,7 @@ function paintCustodi(st) {
   $('#ta-filtro').innerHTML = [['tutti', `Tutti (${list.length})`], ...['posizione', 'pronto', 'osserva'].map((k) => [k, `<span class="sw" style="background:${hex(k)}"></span>${CAT_INFO[k].nome} (${per[k].length})`])].map(([k, t]) => `<button type="button" data-k="${k}" aria-pressed="${taFiltro === k}">${t}</button>`).join('');
   for (const b of $('#ta-filtro').querySelectorAll('button')) b.addEventListener('click', () => { taFiltro = b.dataset.k; try { localStorage.setItem('agenti.ta.filtro', taFiltro); } catch {} paintCustodi(status); });
   if (!list.length) { $('#custodi').innerHTML = '<p class="empty">Nessun trading agent attivo: ne nasce uno per ogni titolo in trend o in portafoglio.</p>'; return; }
-  const card = (c) => { const p = c.dossier ? Math.round(c.dossier.probabilita * 100) : null; const pos = (st.posizioni || []).find((x) => x.simbolo === c.simbolo); return `<button type="button" data-sym="${esc(c.simbolo)}"><div class="row" style="justify-content:space-between"><span>${personaDi(`c:${c.simbolo}`) ? `<span class="persona">${esc(personaDi(`c:${c.simbolo}`).nome)}</span> · ` : ''}<b>${esc(c.simbolo)}</b>${tn(c.simbolo)}${p !== null ? ` <b class="${p >= 60 ? 'up' : p < 45 ? 'down' : ''}">${p}%</b>` : ''}</span>${pos ? `<span class="${cls(pos.variazione)}">${pct(pos.variazione)}</span>` : `<span class="pill ${CATEGORIA(c) === 'pronto' ? 'up' : c.fase === 'attende' ? 'warn' : ''}">${CATEGORIA(c) === 'pronto' ? 'pronto a entrare' : c.fase === 'attende' ? 'in attesa' : 'osserva'}</span>`}</div><div class="why" style="margin-top:4px">${esc(c.dossier?.prossimaAzione || c.stato)}</div></button>`; };
+  const card = (c) => { const p = c.dossier ? Math.round(c.dossier.probabilita * 100) : null; const pos = (st.posizioni || []).find((x) => x.simbolo === c.simbolo); const per = personaDi(`c:${c.simbolo}`); return `<button type="button" data-sym="${esc(c.simbolo)}"><div class="ta-head"><div class="ta-id"><div class="ta-sym"><b>${esc(c.simbolo)}</b>${p !== null ? ` <b class="${p >= 60 ? 'up' : p < 45 ? 'down' : ''}">${p}%</b>` : ''}</div><div class="ta-nome" title="${esc([per?.nome, nomeTitolo(c.simbolo)].filter(Boolean).join(' · '))}">${per ? `<span class="persona">${esc(per.nome)}</span>${nomeTitolo(c.simbolo) ? ' · ' : ''}` : ''}${esc(nomeTitolo(c.simbolo)) || (per ? '' : '&nbsp;')}</div></div>${pos ? `<span class="ta-stato ${cls(pos.variazione)}">${pct(pos.variazione)}</span>` : `<span class="ta-stato pill ${CATEGORIA(c) === 'pronto' ? 'up' : c.fase === 'attende' ? 'warn' : ''}">${CATEGORIA(c) === 'pronto' ? 'pronto a entrare' : c.fase === 'attende' ? 'in attesa' : 'osserva'}</span>`}</div><div class="why" style="margin-top:4px">${esc(c.dossier?.prossimaAzione || c.stato)}</div></button>`; };
   const gruppi = (taFiltro === 'tutti' ? ['posizione', 'pronto', 'osserva'] : [taFiltro]).filter((k) => per[k].length);
   $('#custodi').innerHTML = gruppi.length ? gruppi.map((k) => `<h3 class="ta-h"><span class="sw" style="background:${hex(k)}"></span>${CAT_INFO[k].nome} <span class="why">${per[k].length}</span></h3><div class="custode-list ta-grid">${per[k].map(card).join('')}</div>`).join('') : '<p class="empty">Nessun trading agent in questo stato.</p>';
   for (const b of $('#custodi').querySelectorAll('button')) b.addEventListener('click', () => { openChart(b.dataset.sym); });
