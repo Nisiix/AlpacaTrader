@@ -115,7 +115,7 @@ export interface AgentsStatus {
   // Il cervello delle previsioni: per tipo (giorno, candela intraday) e modello, quante previsioni valutate, quota di
   // direzioni giuste, resa media seguendole e peso di adesso nella previsione combinata.
   cervello?: { righe: RigaCervello[]; inAttesa: number };
-  // La biblioteca degli agenti: i principi dei libri di trading tradotti in regole, e la perdita del mese (regola del 6%).
+  // La biblioteca degli agenti: i principi dei libri di trading tradotti in regole.
   biblioteca?: { principi: Principio[] };
 }
 
