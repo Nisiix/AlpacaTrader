@@ -129,6 +129,14 @@
   #scene canvas { touch-action:none; }
   .scene-wrap { display:grid; grid-template-columns:minmax(0, 1fr) 270px; align-items:start; --scene-h:max(480px, calc(100vh - 240px)); }
   .scene-wrap #scene { height:var(--scene-h); }
+  /* Caricamento: la mappa compare quando ognuno è già al suo posto. */
+  #scene canvas, #scene .scene-nav, #scene .lbl, #scene .scene-help { transition:opacity .35s ease; }
+  #scene:not(.pronta) canvas, #scene:not(.pronta) .scene-nav, #scene:not(.pronta) .scene-help, #scene:not(.pronta) .lbl { opacity:0; }
+  .scene-loading { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; gap:10px; color:var(--ink-2); font-size:14px; z-index:6; background:var(--card-2); transition:opacity .35s ease; }
+  #scene.pronta .scene-loading { opacity:0; pointer-events:none; }
+  .scene-loading .spin { width:18px; height:18px; border:2px solid var(--line); border-top-color:var(--agent); border-radius:50%; animation:giro .8s linear infinite; }
+  @keyframes giro { to { transform:rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .scene-loading .spin { animation:none; } }
   .agent-list { border-left:1px solid var(--line); background:var(--card); height:var(--scene-h); overflow:auto; padding:8px 8px 12px; }
   .agent-list h4 { margin:12px 6px 4px; font-size:12px; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-3); display:flex; justify-content:space-between; }
   .agent-list button { display:grid; grid-template-columns:12px 1fr auto; gap:8px; align-items:center; width:100%; text-align:left; font:inherit; font-size:14px; background:transparent; border:0; border-radius:8px; padding:6px 8px; color:var(--ink); cursor:pointer; }
@@ -436,7 +444,7 @@
     <div class="title-row"><h1 class="page-title">Ufficio</h1></div>
       <details class="scene" id="scene-box" open>
       <summary>Ufficio degli agenti <span class="hint">trading agents: <b style="color:#16a34a">verde</b> in posizione (rosso se in uscita) · <b style="color:#2563eb">blu</b> pronto a entrare, luce che pulsa · <b style="color:#94a3b8">grigio</b> in sala caffè · arancione intraday agents · chi non ha un'occasione aspetta in sala caffè</span></summary>
-      <div class="scene-wrap"><div id="scene"></div><aside class="agent-list" id="agent-list" aria-label="agenti dell'ufficio"></aside></div>
+      <div class="scene-wrap"><div id="scene"><div class="scene-loading" role="status"><span class="spin"></span>Preparo l'ufficio…</div></div><aside class="agent-list" id="agent-list" aria-label="agenti dell'ufficio"></aside></div>
       <p class="legend" hidden>In fondo la <b>lavagna dei risultati</b> (clic per aprirla) e gli agenti generali che hanno votato almeno un trade; poi i <b>Custodi</b>, una scrivania per titolo seguito, con la camicia del colore della fase (blu pronto, verde in posizione, rosso in uscita, grigio in attesa) e lo schermo con prezzo e andamento; infine la <b>Sala intraday</b> (arancione). A destra, oltre la porta, la <b>Sala caffè</b>: chi in questo giro non ha niente da fare si siede ai tavolini e scambia con i colleghi dati veri (dossier, candele, proiezioni di Kronos, lezioni dei trade chiusi); appena ha un trade da aprire o una posizione da seguire torna alla scrivania. Chi vota alza la mano, chi compra o vende si alza e lo schermo lampeggia. Mouse sopra per leggere, clic per aprire. A destra l'elenco degli agenti: passando sopra un nome il suo avatar si alza in piedi e la postazione si illumina; il clic apre la scheda.</p>
     </details>
     <nav class="tabs" id="uff-tabs" role="tablist" aria-label="sezioni dell'ufficio">
@@ -592,7 +600,7 @@
         <li><b>Ufficio</b>: la mappa 3D con gli agenti alle loro postazioni (la lavagna dei risultati, che si apre con un clic, il capo nella stanza di vetro, gli agenti generali solo se hanno votato almeno un trade, Trading agents, Intraday agents, Sala caffè). Alla scrivania c'è solo chi ha preso un'occasione: una posizione aperta, un titolo pronto a entrare o un ingresso votato; tutti gli altri, anche chi segue un titolo «in attesa», aspettano in sala caffè e la loro scrivania non c'è. La camicia dice la fase: blu pronto, verde in posizione, rosso in uscita, arancione intraday, grigio in sala caffè. A destra l'elenco degli agenti: passando sopra un nome l'avatar si alza e la postazione si illumina; il clic apre la scheda (situazione, ragionamento, giudizio del capo, impostazioni). Sotto, a schede: <b>Decisioni</b> (punteggio per titolo e voti), <b>Trading agents</b>, <b>Esplorazione</b> e <b>Sala caffè</b> (lezioni di squadra).</li>
         <li><b>Investimenti</b>: le card dei titoli e delle crypto in portafoglio (valore, guadagno, carico e prezzo, peso, da quanto è aperta, obiettivo e stop dell'intraday) e quelle in osservazione (custodi, voti, attese); più in basso il radar. Il clic su una card apre il <b>grafico</b> (TradingView Lightweight Charts: rotella per lo zoom, trascina per scorrere, mirino con apertura, massimo, minimo e chiusura) con la proiezione dei modelli e il cono di probabilità (fasce 50% e 80%, probabilità di finire sopra o sotto il prezzo di adesso), medie, carico, stop, obiettivo e frecce delle operazioni. Il time frame si sceglie sopra il grafico: 1m, 5m, 15m, 1h, 4h, 1G; le candele brevi si aggiornano da sole (1 e 5 minuti ogni 15 secondi). «Analisi investimento» apre verdetto, voti e dossier del custode; nessun ordine parte dalla pagina. Sotto: operazioni intraday, simulazioni e la tabella delle posizioni.</li>
         <li><b>Log operazioni</b>: gli acquisti e le vendite eseguiti negli ultimi 7 giorni, giorno per giorno, con ricerca per titolo, agente o motivo e filtri per tipo e periodo; per ogni vendita il risultato e quanto è stata tenuta la posizione. Clic su una riga per il grafico.</li>
-        <li><b>Gli agenti sono persone</b>: ognuno ha un nome (Marco il trend, Giulia il rientro, Chiara Kronos, Andrea il capo degli intraday agents, Roberto il capo ufficio…). Le altre persone sono uno <b>staff unico</b>: nessuna appartiene a un titolo né a un tipo di operazione. Il motore trova le occasioni con i suoi criteri e ognuna la prende la persona libera più brava in quel tipo di operazione (a parità, chi aspetta da più tempo): oggi una persona può seguire un trade di più giorni (<b>Trading agents</b>) e domani uno intraday (<b>Intraday agents</b>), e impara da tutti e due. Una persona resta sul suo titolo finché c'è la posizione o l'ingresso; poi torna in sala caffè. Le due zone dell'ufficio sono i due tipi di operazione, con regole diverse: più giorni (dossier, Kronos a 5 sedute, stop di più giorni) e intraday (candele brevi, obiettivo e stop stretti, costi); ma su un titolo lavora una persona sola e c'è una sola posizione alla volta. Ogni persona ha <b>impostazioni sue</b> per entrambi i tipi (trend, rientro e soglia del dossier per le operazioni di più giorni; probabilità e peso per quelle intraday; il capo le calibra separatamente) e il suo <b>obiettivo del giorno</b> (di serie 10%: +1 punto dopo un giorno in cui lo tocca, −1 dopo un giorno in perdita; se dopo averlo toccato il guadagno dei suoi trade torna a metà, vende i suoi trade non favorevoli). Si cambiano nella sua scheda; il capo le calibra dai risultati, e chi va in sala caffè le ricalibra imparando da chi lavora bene (o, se sono tutte uguali, dai dati di mercato e dai suoi trade persi). Kronos è uguale per tutti. Il capo ufficio giudica le persone, sui trade che hanno preso e sulle loro sessioni, non i titoli. Il clic su una persona nell'Ufficio apre la sua scheda con <b>le sue impostazioni</b>, modificabili (valgono dal giro successivo). Quando un agente vince meno del 51% dei trade chiusi (almeno 5), il <b>capo ufficio lo ricalibra</b>: il suo parametro d'ingresso diventa più selettivo di un passo (mai oltre i limiti e mai sotto il valore di base); quando torna a vincere almeno il 60% si riavvicina alla base. Ogni trading agent ha anche una soglia personale.</li>
+        <li><b>Gli agenti sono persone</b>: ognuno ha un nome (Marco il trend, Giulia il rientro, Chiara Kronos, Andrea il capo degli intraday agents, Roberto il capo ufficio…). Le altre persone sono uno <b>staff unico</b> di 20 (pochi, così ognuno accumula esperienza): nessuna appartiene a un titolo né a un tipo di operazione. Il motore trova le occasioni con i suoi criteri e ognuna la prende la persona libera più brava in quel tipo di operazione (a parità, chi aspetta da più tempo): oggi una persona può seguire un trade di più giorni (<b>Trading agents</b>) e domani uno intraday (<b>Intraday agents</b>), e impara da tutti e due. Una persona resta sul suo titolo finché c'è la posizione o l'ingresso; poi torna in sala caffè. Le due zone dell'ufficio sono i due tipi di operazione, con regole diverse: più giorni (dossier, Kronos a 5 sedute, stop di più giorni) e intraday (candele brevi, obiettivo e stop stretti, costi); ma su un titolo lavora una persona sola e c'è una sola posizione alla volta. Ogni persona ha <b>impostazioni sue</b> per entrambi i tipi (trend, rientro e soglia del dossier per le operazioni di più giorni; probabilità e peso per quelle intraday; il capo le calibra separatamente) e il suo <b>obiettivo del giorno</b> (di serie 10%: +1 punto dopo un giorno in cui lo tocca, −1 dopo un giorno in perdita; se dopo averlo toccato il guadagno dei suoi trade torna a metà, vende i suoi trade non favorevoli). Si cambiano nella sua scheda; il capo le calibra dai risultati, e chi va in sala caffè le ricalibra imparando da chi lavora bene (o, se sono tutte uguali, dai dati di mercato e dai suoi trade persi). Kronos è uguale per tutti. Il capo ufficio giudica le persone, sui trade che hanno preso e sulle loro sessioni, non i titoli. Il clic su una persona nell'Ufficio apre la sua scheda con <b>le sue impostazioni</b>, modificabili (valgono dal giro successivo). Quando un agente vince meno del 51% dei trade chiusi (almeno 5), il <b>capo ufficio lo ricalibra</b>: il suo parametro d'ingresso diventa più selettivo di un passo (mai oltre i limiti e mai sotto il valore di base); quando torna a vincere almeno il 60% si riavvicina alla base. Ogni trading agent ha anche una soglia personale.</li>
         <li><b>Impostazioni</b>: <b>Generali</b> (le regole comuni del profilo di investimento e della piattaforma, come peso massimo per titolo, obiettivo del giorno, stop, pagina pubblica su GitHub) e le <b>chiavi</b> di Alpaca, Telegram e X con il riavvio del motore.</li>
         <li><b>Guida</b>: questa pagina.</li>
         <li><b>Pagina pubblica</b>: con «Pagina pubblica su GitHub Pages» nella scheda Motore e gabbia, il PC pubblica ogni N minuti un'istantanea in sola lettura, da aprire anche dal telefono. È visibile a chiunque abbia il link; chiavi e modifiche restano solo sulla dashboard del PC.</li>
@@ -945,7 +953,7 @@ const generaliEffettivi = (st) => { const usati = new Set((journal?.trade || [])
 function paintAgentList(st) {
   const box = $('#agent-list'); if (!box) return;
   const pausa = new Set((st.caffe?.presenti || []).map((p) => p.chiave));
-  const row = (key, nome, stato) => { const d = desks.get(key); if (!d) return ''; if ((status?.formazione?.inFormazione || []).some((x) => x.chiave === key)) stato = '☕ in formazione'; const per = key.startsWith('p:') ? null : personaDi(key); if (key.startsWith('p:') && !String(nome).startsWith(`${personaDi(key)?.nome} ·`)) nome = `${personaDi(key)?.nome ?? key.slice(2)} · ${nome}`; if (per && !String(nome).startsWith(`${per.nome} ·`)) nome = key === 'capo' ? `${per.nome} · capo ufficio` : `${per.nome} · ${nome}`; const col = hexCss(d.group.userData.emp.userData.shirtM.color.getHex()); return `<button type="button" data-key="${esc(key)}" class="${cardKey === key || listHoverKey === key ? 'on' : ''}"><span class="sw" style="background:${col}"></span><span class="nm">${esc(nome)}${pausa.has(key) ? ' <span class="caffe">☕</span>' : ''}</span><span class="st">${esc(stato)}</span></button>`; };
+  const row = (key, nome, stato) => { const d = desks.get(key); if (!d) return ''; if ((status?.formazione?.inFormazione || []).some((x) => x.chiave === key)) stato = '☕ in formazione'; const per = key.startsWith('p:') ? null : personaDi(key); if (key.startsWith('p:') && nome !== personaDi(key)?.nome && !String(nome).startsWith(`${personaDi(key)?.nome} ·`)) nome = `${personaDi(key)?.nome ?? key.slice(2)} · ${nome}`; if (per && !String(nome).startsWith(`${per.nome} ·`)) nome = key === 'capo' ? `${per.nome} · capo ufficio` : `${per.nome} · ${nome}`; const col = hexCss(d.group.userData.emp.userData.shirtM.color.getHex()); return `<button type="button" data-key="${esc(key)}" class="${cardKey === key || listHoverKey === key ? 'on' : ''}"><span class="sw" style="background:${col}"></span><span class="nm">${esc(nome)}${pausa.has(key) ? ' <span class="caffe">☕</span>' : ''}</span><span class="st">${esc(stato)}</span></button>`; };
   const general = generaliEffettivi(st);
   const lav = [...desks.entries()].filter(([, d]) => d.group.visible && (d.info?.kind === 'custode' || d.info?.kind === 'intraday'));
   const tr = lav.filter(([, d]) => d.info.kind === 'custode'); const intra = lav.filter(([, d]) => d.info.kind === 'intraday');
@@ -1123,7 +1131,11 @@ const STATO_OSSERVA = (c) => (status?.inAttesa || []).some((w) => w.simbolo === 
 const CAT_INFO = { posizione: { nome: 'In posizione', colore: 0x16a34a }, pronto: { nome: 'Pronti a entrare', colore: 0x2563eb }, osserva: { nome: 'In osservazione', colore: 0x94a3b8 } };
 const ROLE = { trend: 'trend', rientro: 'rientro', regime: 'clima di mercato', orizzonte: 'orizzonte', uscite: 'uscite e stop', contesto: 'contesto economico', profitto: 'presa di profitto', kronos: 'previsioni Kronos' };
 
+// Primo disegno: la mappa si mostra solo quando ognuno è già al suo posto (scrivania o sala caffè), senza camminate
+// iniziali; nel frattempo un caricamento. Serve anche il diario (per sapere quali agenti generali hanno una scrivania).
+let primaVista = true;
 function paintScene(st) {
+  if (primaVista && !journal) { loadOfficeData(); return; }
   // Una scrivania per ogni persona al lavoro (posizione aperta, pronta a entrare, voto d'acquisto); chi non ha
   // un'occasione, anche se il suo titolo è «in attesa», sta in sala caffè e la sua scrivania non c'è.
   const general = generaliEffettivi(st);
@@ -1152,7 +1164,7 @@ function paintScene(st) {
     }
     for (const [k, p] of pos) { let d = desks.get(k); if (!d) { d = { group: makeDesk(k, k === 'capo') }; scene.add(d.group); desks.set(k, d); } d.group.position.copy(p); d.group.visible = true; }
     // Chi è libero e non ha ancora un avatar entra dalla porta della sala caffè.
-    for (const it of liberi) if (!desks.has(it.key)) { const d = { group: makeDesk(it.key, false) }; d.group.visible = false; d.group.position.set(caffeDoor.x - 1, 0, caffeDoor.z); scene.add(d.group); desks.set(it.key, d); }
+    for (const it of liberi) if (!desks.has(it.key)) { const d = { group: makeDesk(it.key, false), nuovo: primaVista }; d.group.visible = false; d.group.position.set(caffeDoor.x - 1, 0, caffeDoor.z); scene.add(d.group); desks.set(it.key, d); }
     if (!lastLayoutKey) fitCamera();
     lastLayoutKey = keys;
   }
@@ -1193,6 +1205,7 @@ function paintScene(st) {
     u.el.innerHTML = `<b>Capo ufficio</b><br><span>${rich.length ? `richiama ${esc(rich.map((v) => v.agente).join(', ')).slice(0, 40)}` : 'controlla il lavoro'}</span>`;
   }
   moveToCaffe(st);
+  if (primaVista) { primaVista = false; requestAnimationFrame(() => requestAnimationFrame(() => $('#scene')?.classList.add('pronta'))); }
   // Nessuna anteprima del titolo sugli schermi senza nessuno alla scrivania.
   for (const d of desks.values()) if ((d.away || d.walk) && d.group.visible && d.info?.kind !== 'capo') drawScreen(d.group.userData.scr, '', '', null, null);
   drawBoard(st, journal);
@@ -1243,7 +1256,11 @@ function moveToCaffe(st) {
     if (k === 'capo') continue;
     const emp = d.group.userData.emp;
     const go = want.has(k) && seats[d.seatIdx];
-    if (go && !d.away) {
+    if (go && !d.away && (primaVista || !d.group.visible && !d.walk && d.nuovo)) {
+      // Al primo disegno (o per chi entra ora nello staff) direttamente seduto in sala caffè.
+      scene.attach(emp); d.away = true; d.nuovo = false;
+      const s_ = seats[d.seatIdx]; emp.position.set(s_.pos.x, 0, s_.pos.z); emp.rotation.y = s_.rot; d.chair = s_;
+    } else if (go && !d.away) {
       scene.attach(emp); d.away = true;
       const s_ = seats[d.seatIdx]; walkTo(d, s_.pos, s_.rot, true);
       d.chair = s_;

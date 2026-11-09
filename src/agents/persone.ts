@@ -157,6 +157,16 @@ export function assegnaPersone(input: {
     chi[desk] = chiavePersona(nome);
     cambiato = true;
   }
+  // Lo staff resta di AGENTS.persone.totale persone: se è più grande (registri vecchi), escono le persone libere con i
+  // risultati peggiori (mai chi segue un titolo o è in formazione). Il loro storico resta nel diario.
+  const fuori = Object.entries(reg.staff).filter(([n, m]) => m.simbolo === null && !sospesi.has(chiavePersona(n)))
+    .sort((a, b) => Math.max(input.punteggio(chiavePersona(a[0]), "trading"), input.punteggio(chiavePersona(a[0]), "intraday")) - Math.max(input.punteggio(chiavePersona(b[0]), "trading"), input.punteggio(chiavePersona(b[0]), "intraday")) || b[1].dal.localeCompare(a[1].dal));
+  while (Object.keys(reg.staff).length > AGENTS.persone.totale && fuori.length) {
+    const [n] = fuori.shift()!;
+    delete reg.staff[n];
+    note.push(`${n} lascia lo staff: il team resta di ${AGENTS.persone.totale} persone, restano le più brave`);
+    cambiato = true;
+  }
   if (cambiato) scrivi(input.stateDir, reg);
   return { chi, senzaPersona, bloccati, note, reg };
 }

@@ -332,7 +332,7 @@ d'opinione prima di una candela giornaliera nuova: escono solo stop e regole vin
 - **Gli agenti come persone** (`src/agents/persone.ts`): ogni agente ha un nome. Fissi per gli agenti generali (Roberto
   capo ufficio, Marco trend, Giulia rientro, Paolo regime, Sara orizzonte, Luca uscite, Davide presa di profitto, Elena
   contesto, Chiara Kronos, Andrea capo degli intraday agents). Le altre persone sono uno **staff unico**
-  (`state/persone.json`, 28, oltre solo per seguire una posizione aperta): nessuna appartiene a un titolo né a un tipo di
+  (`state/persone.json`, un team di 20, oltre solo per seguire una posizione aperta; se il registro è più grande escono le persone libere con i risultati peggiori): nessuna appartiene a un titolo né a un tipo di
   operazione. Il motore trova le occasioni con i suoi criteri e a ogni giro le assegna: un'occasione è una posizione
   aperta, un titolo pronto a entrare (dossier ≥ 60%) o un voto d'acquisto, di più giorni o intraday. Chi lavora su un
   titolo ci resta finché l'occasione dura; le nuove vanno alla persona libera più brava in quel tipo di operazione
