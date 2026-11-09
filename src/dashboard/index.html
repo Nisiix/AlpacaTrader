@@ -424,7 +424,7 @@
 
   <!-- Ufficio: la mappa 3D con gli agenti e, sotto, la squadra in forma schematica. -->
   <div class="page" data-page="ufficio">
-    <div class="title-row"><h1 class="page-title">Ufficio</h1><div class="row" style="gap:8px"><button type="button" class="btn ghost" id="apri-lavagna">Lavagna dei risultati</button><button type="button" class="btn ghost" id="modifica-agenti">Modifica comportamento agenti</button></div></div>
+    <div class="title-row"><h1 class="page-title">Ufficio</h1><div class="row" style="gap:8px"><button type="button" class="btn ghost" id="apri-lavagna">Lavagna dei risultati</button></div></div>
       <details class="scene" id="scene-box" open>
       <summary>Ufficio degli agenti <span class="hint">trading agents: <b style="color:#16a34a">verde</b> in posizione (rosso se in uscita) · <b style="color:#2563eb">blu</b> pronto a entrare, luce che pulsa · <b style="color:#94a3b8">grigio</b> in osservazione o in attesa · arancione intraday</span></summary>
       <div class="scene-wrap"><div id="scene"></div><aside class="agent-list" id="agent-list" aria-label="agenti dell'ufficio"></aside></div>
@@ -1391,8 +1391,6 @@ portrait.renderer.setPixelRatio(Math.min(2, window.devicePixelRatio)); portrait.
 portrait.scene.add(new THREE.HemisphereLight(0xffffff, 0xb8a990, 1.6)); { const l = new THREE.DirectionalLight(0xffffff, 1.4); l.position.set(2, 3, 4); portrait.scene.add(l); }
 portrait.camera.position.set(0, 1.25, 2.6); portrait.camera.lookAt(0, 1.05, 0);
 let cardKey = null; let cards = null; let cardAgente = null;
-// «Modifica comportamento agenti», sopra la mappa: con una persona aperta porta alle sue impostazioni, altrimenti alle Generali.
-$('#modifica-agenti').addEventListener('click', () => { if (cardKey && cardForm.firstChild) { cardForm.scrollIntoView({ behavior: 'smooth', block: 'start' }); return; } location.hash = 'impostazioni/generali'; });
 async function openCard(key) {
   cardKey = key; const d = desks.get(key); if (d) flyTo(d.group);
   if (!cards) { try { cards = (await (await fetch('/api/agenti/schede')).json()).schede; } catch { cards = []; } }
