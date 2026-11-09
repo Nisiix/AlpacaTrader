@@ -383,14 +383,15 @@ describe("uscite (regole vincolanti)", () => {
   const pos = (symbol: string, avg: number, price: number) => ({ symbol, qty: 10, avgEntryPrice: avg, currentPrice: price, marketValue: price * 10 });
   const openTrade = (simbolo: string, massimo?: number) => ({ id: simbolo, simbolo, stato: "aperto" as const, apertoIl: "2026-09-01T14:00:00Z", comprate: 10, costo: 1000, vendute: 0, incassato: 0, quantita: 10, contesto: null, massimo });
 
-  test("difesa del guadagno del giorno: toccato l'obiettivo e tornati al pavimento si vendono solo i trade non favorevoli; il picco resta dopo un riavvio", async () => {
+  test("difesa del guadagno della persona: toccato il suo obiettivo e tornata a metà si vendono solo i suoi trade non favorevoli; il picco resta dopo un riavvio", async () => {
     const j = emptyJournal();
     j.trade.push(openTrade("AAPL"), openTrade("MSFT"));
     const v = view({ positions: [pos("AAPL", 100, 102), pos("MSFT", 100, 101)], journal: j, previsioni: { AAPL: -0.004, MSFT: 0.03 } });
     v.prices.AAPL = 102; v.prices.MSFT = 101;
     const ex = new ExitAgent(AGENTS.exit);
     expect(ex.observe(v).segnali.filter((x) => /difesa/.test(x.perche))).toEqual([]);
-    const difesa = ex.observe({ ...v, giornata: { pnlPct: 0.049, picco: 0.11, obiettivoRaggiunto: true, difesa: true, perditaOltre: false } });
+    // La persona che lavora su AAPL e MSFT ha toccato il suo obiettivo ed è tornata sotto metà.
+    const difesa = ex.observe({ ...v, difesaPersonale: { AAPL: "Anna ha toccato il suo obiettivo", MSFT: "Anna ha toccato il suo obiettivo" } });
     const vendite = difesa.segnali.filter((x) => /difesa del guadagno/.test(x.perche));
     expect(vendite.map((x) => x.simbolo)).toEqual(["AAPL"]); // MSFT: Kronos +3%, resta
     const { registraPicco } = await import("../src/agents/engine.ts");
@@ -849,11 +850,11 @@ describe("capo ufficio", () => {
     const { review, applyGuidance } = await import("../src/agents/capo.ts");
     const j = emptyJournal();
     const add = (sym: string, agenti: string[], r: number, kronos: number, i: number) => j.trade.push({ id: `k${i}`, simbolo: sym, stato: "chiuso", apertoIl: `2026-10-${String(i + 1).padStart(2, "0")}T14:00:00Z`, comprate: 1, costo: 100, vendute: 1, incassato: 100 * (1 + r), quantita: 0, contesto: { setup: "", momentum20: null, volGiornaliera: null, distanzaMedia: null, fiducia: null, attesa: "", perche: "vicino alla media a 20", agenti, kronos }, chiusoIl: `2026-10-${String(i + 1).padStart(2, "0")}T18:00:00Z`, prezzoIngresso: 100, prezzoUscita: 100 * (1 + r), risultato: r, giorni: 2, motivoUscita: r < 0 ? "stop su Alpaca" : "trend" });
-    // "custode SOL/USD" vince con Kronos alto; "trend" perde con Kronos basso.
-    [0.04, 0.03, 0.05, 0.02].forEach((r, i) => add("SOL/USD", ["custode SOL/USD"], r, 0.03, i));
+    // Sara (trading agent su SOL/USD) vince con Kronos alto; "trend" perde con Kronos basso.
+    [0.04, 0.03, 0.05, 0.02].forEach((r, i) => { add("SOL/USD", ["custode SOL/USD"], r, 0.03, i); j.trade.at(-1)!.contesto!.persone = ["p:Sara"]; });
     [-0.03, -0.02, 0.01, -0.04].forEach((r, i) => add("NVDA", ["trend"], r, 0.002, i + 10));
     const rep = review(j, new Date("2026-11-08T12:00:00Z"));
-    const sol = rep.valutazioni.find((v) => v.agente === "custode SOL/USD")!;
+    const sol = rep.valutazioni.find((v) => v.agente === "p:Sara")!;
     const tr = rep.valutazioni.find((v) => v.agente === "trend")!;
     expect(sol.giudizio).toBe("ottimo");
     expect(tr.giudizio).toBe("richiamato");

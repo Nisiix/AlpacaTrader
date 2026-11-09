@@ -34,8 +34,9 @@ import { simboliIntraday } from "./posizioni.ts";
 import type { Cervello, RigaCervello } from "./cervello.ts";
 import { BIBLIOTECA, type Principio } from "./biblioteca.ts";
 import { aggiornaCalibrazione, applicaCalibrazione, type RigaCalibrazione } from "./calibrazione.ts";
+import { giornataPersone, preparaProfili, type GiornataPersona } from "./profili.ts";
 import { aggiornaFormazione, applicaFormazione, postazioneDelVoto, provaRientro, type FormazioneReport } from "./formazione.ts";
-import { assegnaPersone, chiavePersona, leggiRegistro, persone, personeDelTrade, type Bisogno, type Persona } from "./persone.ts";
+import { assegnaPersone, chiavePersona, leggiRegistro, persone, personeDelTrade, rilascia, type Bisogno, type Persona } from "./persone.ts";
 import { nomiTitoli } from "../nomi-titoli.ts";
 import { plausibile } from "./fiducia.ts";
 import { refreshEarnings, type EarningsFetcher } from "../earnings.ts";
@@ -125,6 +126,8 @@ export interface AgentsStatus {
   persone?: Record<string, Persona>;
   // Chi è in sala caffè per formazione e chi è tornato alla scrivania col bagaglio dei colleghi bravi.
   formazione?: FormazioneReport;
+  // La giornata di ogni persona: guadagno sul capitale dei suoi trade di oggi, obiettivo personale, difesa.
+  giornataPersone?: Record<string, GiornataPersona>;
   // I nomi dei titoli e delle crypto (Apple, Bitcoin...), per mostrarli accanto ai codici.
   nomi?: Record<string, string>;
   // La calibrazione del capo ufficio: per agente il parametro d'ingresso, il valore di base e quello calibrato.
@@ -164,6 +167,7 @@ export interface EngineCache {
   capoSintesi?: string;
   giriCaffe?: number;
   caffePresenti?: string;
+  difeseAvvisate?: string[];
   inTick?: boolean;
   exploring?: boolean;
   scartateNota?: string;
@@ -367,6 +371,7 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
     for (const e of settings.errori) log.warn(`impostazioni agenti: ${e}`);
     // Poi la calibrazione del capo ufficio sopra le impostazioni delle schede (solo verso ingressi più selettivi, nei limiti).
     const calibrazione = applicaCalibrazione(deps.stateDir);
+    preparaProfili(deps.stateDir); // le impostazioni di ogni persona sul titolo su cui lavora
     // 2. L'universo crypto del giorno, poi Alpaca.
     await loadUniverse(deps, cache, today, (m) => {
       log.info(m);
@@ -454,8 +459,9 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
     const pnlPct = snap.account.lastEquity > 0 ? snap.account.equity / snap.account.lastEquity - 1 : 0;
     const picco = registraPicco(deps.stateDir, today, pnlPct);
     const d = AGENTS.daily;
-    const obiettivoRaggiunto = d.enabled && d.targetPct > 0 && picco >= d.targetPct;
-    const giornata = { pnlPct, picco, obiettivoRaggiunto, difesa: obiettivoRaggiunto && d.pavimentoPct > 0 && pnlPct <= d.pavimentoPct, perditaOltre: d.enabled && d.maxLossPct > 0 && pnlPct <= -d.maxLossPct };
+    // L'obiettivo del giorno è di ogni persona (src/agents/profili.ts): qui resta solo la perdita massima del conto.
+    const obiettivoRaggiunto = false;
+    const giornata = { pnlPct, picco, obiettivoRaggiunto, difesa: false, perditaOltre: d.enabled && d.maxLossPct > 0 && pnlPct <= -d.maxLossPct };
     const pc = (x: number) => `${(x * 100).toFixed(2)}%`;
     if (obiettivoRaggiunto && cache.giornataAvvisata !== `${today}-obiettivo` && cache.giornataAvvisata !== `${today}-difesa`) {
       cache.giornataAvvisata = `${today}-obiettivo`;
@@ -522,7 +528,17 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
     const analisi = !cache.ultimaAnalisi || startedAt.getTime() - Date.parse(cache.ultimaAnalisi) >= AGENTS.analisiMinuti * 60_000 - 30_000;
     if (analisi) cache.ultimaAnalisi = startedAt.toISOString();
     const cashImpegnato = snap.recentOrders.filter((o) => isOpenOrder(o) && !isProtectiveStop(o) && o.side === "buy").reduce((a, o) => a + (o.qty - o.filledQty) * (snap.prices[o.symbol] ?? 0), 0);
-    const view: AgentView = { today, now: startedAt, prices: snap.prices, closes, indicators, positions: snap.positions, account: snap.account, cashImpegnato, analisi, journal, previsioni, previsioniKronos: previsioni, percorsi, mercatoAperto: snap.clock.isOpen, chiusuraBorsa: snap.clock.nextClose, finestraIngressi: stockEntryOpen(snap.clock, startedAt), giornata, fonti };
+    // La giornata di ogni persona: il suo obiettivo del giorno e, se dopo averlo toccato torna sotto metà, la difesa dei
+    // suoi trade. Al cambio di giorno l'obiettivo si aggiusta con l'esito di ieri.
+    const giornataP = giornataPersone(deps.stateDir, journal, snap.prices, today, (iso) => romeTime(new Date(iso)).date);
+    for (const n of giornataP.note) { log.info(n); bus.emit("nota", { testo: n }); }
+    for (const [sym, motivo] of Object.entries(giornataP.difesa)) {
+      const chiave = `${today}-difesa-${motivo.split(" ")[0]}`;
+      if (cache.difeseAvvisate?.includes(chiave)) continue;
+      (cache.difeseAvvisate ??= []).push(chiave);
+      await alarm("Difesa del guadagno di una persona", `${motivo}: si vendono i suoi trade non favorevoli (${sym}${Object.entries(giornataP.difesa).filter(([s2, m]) => s2 !== sym && m === motivo).map(([s2]) => `, ${s2}`).join("")})`);
+    }
+    const view: AgentView = { today, now: startedAt, difesaPersonale: giornataP.difesa, prices: snap.prices, closes, indicators, positions: snap.positions, account: snap.account, cashImpegnato, analisi, journal, previsioni, previsioniKronos: previsioni, percorsi, mercatoAperto: snap.clock.isOpen, chiusuraBorsa: snap.clock.nextClose, finestraIngressi: stockEntryOpen(snap.clock, startedAt), giornata, fonti };
     const reports: Record<string, AgentReport> = {};
     const agentStatus: AgentsStatus["agenti"] = {};
     // Il contesto economico si valuta per primo: decide dove si aspetta e di quali proiezioni fidarsi.
@@ -563,24 +579,24 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
     }
     for (const r of Object.values(reports)) for (const sg of r.segnali) if (sg.perche.startsWith("esplorazione dalla sala caffè")) bus.emit("segnale", { ...sg });
     // Il capo ufficio: rivede i risultati di ciascun agente sul diario e applica i suoi richiami ai voti di oggi.
-    const capo = review(journal, startedAt);
-    for (const n of applyGuidance(reports, capo, view.previsioni)) {
-      log.info(n);
-      bus.emit("nota", { testo: n });
-    }
+    // Il capo ufficio giudica le persone sui trade che hanno preso (i suoi richiami si applicano dopo l'assegnazione).
+    const capo = review(journal, startedAt, leggiRegistro(deps.stateDir).vecchi);
     // Le persone. Formazione: chi lavora male va in sala caffè a imparare da chi lavora bene. Poi le occasioni del giro
     // (posizioni aperte, trading agents pronti a entrare, voti d'acquisto) vanno alle persone libere dello staff, le
     // più brave per risultati; chi non ha un'occasione (anche chi è «in attesa») resta in sala caffè.
     const registro = leggiRegistro(deps.stateDir);
     const generaliAttivi = Object.entries(reports).filter(([n, r]) => n !== "custodi" && n !== "intraday" && r.segnali.length).map(([n]) => `a:${n}`);
-    const formazione = aggiornaFormazione(deps.stateDir, journal, [...Object.keys(registro.staff).map(chiavePersona), ...generaliAttivi], startedAt, registro.vecchi);
+    const formazione = aggiornaFormazione(deps.stateDir, journal, [...Object.keys(registro.staff).map(chiavePersona), ...generaliAttivi], startedAt, registro.vecchi, view.contesto?.generale);
     const votiDi = (desk: string) => Object.values(reports).flatMap((r) => r.segnali).filter((s) => s.lato === "buy" && !s.vincolante && postazioneDelVoto(s) === desk);
     const custodiGiro = Object.values(reports).flatMap((r) => r.custodi ?? []);
     const intradayGiro = Object.values(reports).flatMap((r) => r.intraday ?? []);
     const inIntraday = new Set(intradayGiro.filter((x) => x.fase === "in posizione").map((x) => x.simbolo));
     const preferite = new Map(attive(espl, today).map((s) => [`${s.agente === "intraday" ? "i" : "c"}:${s.simbolo}`, s.scopritore]));
     const bisogni: Record<"trading" | "intraday", Bisogno[]> = { trading: [], intraday: [] };
-    const aggiungi = (rep: "trading" | "intraday", b: Bisogno) => { const x = bisogni[rep].find((y) => y.simbolo === b.simbolo); if (x) { x.tiene ||= b.tiene; x.voto ||= b.voto; } else bisogni[rep].push(b); };
+    // Un'azione si può comprare solo nella finestra degli ingressi: fuori, chi la vorrebbe resta in sala caffè (resta
+    // alla scrivania solo chi segue una posizione aperta).
+    const entrabile = (sym: string) => isCrypto(sym) || view.finestraIngressi !== false;
+    const aggiungi = (rep: "trading" | "intraday", b: Bisogno) => { if (!b.tiene && !entrabile(b.simbolo)) return; const x = bisogni[rep].find((y) => y.simbolo === b.simbolo); if (x) { x.tiene ||= b.tiene; x.voto ||= b.voto; } else bisogni[rep].push(b); };
     for (const c of custodiGiro) {
       const tiene = (c.fase === "in posizione" || c.fase === "in uscita") && !inIntraday.has(c.simbolo);
       const pronto = c.fase === "pronto" && (c.dossier?.probabilita ?? 0) >= 0.595;
@@ -590,6 +606,10 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
     for (const s of Object.values(reports).flatMap((r) => r.segnali)) {
       if (s.lato !== "buy" || s.vincolante) continue;
       const desk = postazioneDelVoto(s);
+      // Un voto su un titolo il cui trading agent non è pronto (in attesa, in osservazione) non porta nessuno alla scrivania.
+      const cust = custodiGiro.find((c) => c.simbolo === desk.slice(2));
+      if (desk.startsWith("c:") && cust && cust.fase !== "pronto" && cust.fase !== "in posizione" && cust.fase !== "in uscita") continue;
+      if (desk.startsWith("c:") && cust?.fase === "pronto" && (cust.dossier?.probabilita ?? 0) < 0.595) continue;
       if (desk.startsWith("c:")) aggiungi("trading", { simbolo: desk.slice(2), tiene: false, voto: true, ...(preferite.get(desk) ? { preferita: preferite.get(desk)! } : {}) });
       else if (desk.startsWith("i:")) aggiungi("intraday", { simbolo: desk.slice(2), tiene: false, voto: true, ...(preferite.get(desk) ? { preferita: preferite.get(desk)! } : {}) });
     }
@@ -604,7 +624,24 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
       punteggio: (p) => { const g = record.get(p); return g ? (g.v + 1) / (g.n + 2) : 0.5; },
       rientro: (p, desk, rep, scrivania) => provaRientro(deps.stateDir, formazione, p, votiDi(desk), view.previsioni, scrivania, rep === "intraday" ? AGENTS.formazione.minIntraday : AGENTS.formazione.minOperativi, startedAt),
     });
-    for (const n of [...formazione.note, ...assegnazione.note.map((n) => `ufficio: ${n}`), ...applicaFormazione(deps.stateDir, reports, formazione, view.previsioni, assegnazione.chi, new Set(assegnazione.senzaPersona), startedAt)]) {
+    // Una sola posizione per titolo: su un titolo con un'operazione intraday aperta non entra nessun voto di più giorni
+    // (neanche degli agenti generali), e viceversa (i voti intraday li ferma già l'assegnazione).
+    const posizioniAperte = new Set(view.positions.filter((p) => p.qty > 0).map((p) => p.symbol));
+    for (const r of Object.values(reports)) r.segnali = r.segnali.filter((s) => {
+      if (s.lato === "buy" && !s.vincolante && s.intraday && posizioniAperte.has(s.simbolo) && !inIntraday.has(s.simbolo)) {
+        assegnazione.note.push(`voto intraday su ${s.simbolo} non vale: c'è già una posizione di più giorni, una sola posizione per titolo`);
+        return false;
+      }
+      if (s.lato !== "buy" || s.vincolante || s.intraday || !inIntraday.has(s.simbolo)) return true;
+      assegnazione.note.push(`voto di ${s.agente} su ${s.simbolo} non vale: c'è già un'operazione intraday aperta, una sola posizione per titolo`);
+      return false;
+    });
+    for (const n of [...formazione.note, ...assegnazione.note.map((n) => `ufficio: ${n}`), ...applicaFormazione(deps.stateDir, reports, formazione, view.previsioni, assegnazione.chi, new Set(assegnazione.senzaPersona), startedAt, assegnazione.bloccati)]) {
+      log.info(n);
+      bus.emit("nota", { testo: n });
+    }
+    // I richiami del capo valgono per la persona che prende il voto (o per l'agente generale che l'ha dato).
+    for (const n of applyGuidance(reports, capo, view.previsioni, (s) => { const d = postazioneDelVoto(s); return d.startsWith("a:") ? d.slice(2) : assegnazione.chi[d]; })) {
       log.info(n);
       bus.emit("nota", { testo: n });
     }
@@ -624,11 +661,15 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
     const alloc = allocate(view, reports, weights);
     // Un titolo votato ma in attesa (contesto, Kronos al ribasso) non è un ordine rifiutato: nessuna quantità, evento a sé.
     for (const w of alloc.inAttesa) bus.emit("attesa", { simbolo: w.simbolo, motivo: w.motivo });
+    // Chi aveva preso un titolo che il riparto mette «in attesa» torna in sala caffè (resta chi segue una posizione).
+    for (const n of rilascia(deps.stateDir, assegnazione, new Set(alloc.inAttesa.map((w) => w.simbolo)), new Set(view.positions.filter((p) => p.qty > 0).map((p) => p.symbol)), startedAt)) { log.info(`ufficio: ${n}`); bus.emit("nota", { testo: `ufficio: ${n}` }); }
     bus.emit("allocazione", { rischio: alloc.rischio, pesi: weights, punteggi: alloc.punteggi, proposte: alloc.proposte, inAttesa: alloc.inAttesa });
 
     // 5. Gabbia: gli acquisti solo nella finestra di ingresso, le vendite e gli stop sempre a mercato aperto.
     const entry = stockEntryOpen(snap.clock, startedAt);
     const cage = applyCage({ today, marketOpen: snap.clock.isOpen, account: snap.account, positions: snap.positions, prices: snap.prices, closes, recentOrders: snap.recentOrders, lessons: lessonsNow, buyBlock, proposals: alloc.proposte, previsioni: view.previsioni, apertiOggi: openedToday(view), intradayAperti: simboliIntraday(journal) });
+    // Un acquisto fermato dalla gabbia non apre nulla: chi l'aveva preso torna in sala caffè.
+    for (const n of rilascia(deps.stateDir, assegnazione, new Set(cage.rejected.filter((r) => r.side === "buy").map((r) => r.symbol)), new Set(view.positions.filter((p) => p.qty > 0).map((p) => p.symbol)), startedAt)) { log.info(`ufficio: ${n.replace("è in attesa", "acquisto fermato dalle regole")}`); }
     for (const x of cage.rejected) {
       log.warn(`rifiutato ${x.side} ${x.qty} ${x.symbol} [${x.source}]: ${x.reason}`);
       bus.emit("rifiuto", { simbolo: x.symbol, lato: x.side, quantita: x.qty, origine: x.source, motivo: x.reason });
@@ -765,6 +806,7 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
       calibrazione,
       universo: { titoli: AGENTS.universe.filter((s) => !isCrypto(s)), crypto: AGENTS.universe.filter(isCrypto), fonteCrypto: cache.universeInfo?.fonte ?? null, aggiornatoCrypto: cache.universeInfo?.aggiornato ?? null },
       kronos: { stato: deps.kronosStato?.() ?? (deps.forecaster ? "attivo" : "non configurato"), proiezioniDel: cache.previsioni?.giorno ?? null, simboli: Object.keys(cache.previsioni?.data ?? {}).length, scartate },
+      giornataPersone: giornataP.perPersona,
       giornata: { pnlPct, obiettivoPct: AGENTS.daily.targetPct, pavimentoPct: AGENTS.daily.pavimentoPct, picco: giornata.picco, perditaMaxPct: AGENTS.daily.maxLossPct, obiettivoRaggiunto: giornata.obiettivoRaggiunto, difesa: giornata.difesa, perditaOltre: giornata.perditaOltre },
       simulazioni,
       analisi: { questoGiro: analisi, ultima: cache.ultimaAnalisi ?? null, prossima: cache.ultimaAnalisi ? new Date(Date.parse(cache.ultimaAnalisi) + AGENTS.analisiMinuti * 60_000).toISOString() : null, ogniMinuti: AGENTS.analisiMinuti },

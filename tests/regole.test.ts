@@ -130,7 +130,10 @@ describe("calibrazione del capo ufficio", () => {
     expect(AGENTS.intraday.kronos.minProb).toBeCloseTo(base + 0.025, 6);
     expect(righe.find((r) => r.agente === "intraday")!.passi).toBe(1);
     // Il trading agent di AAPL (1 su 5) ha la sua soglia personale, sopra quella della squadra (anch'essa salita: 1 su 5).
-    expect(AGENTS.custodi.minProbabilitaPer.AAPL).toBeGreaterThan(AGENTS.custodi.minProbabilita);
+    const { preparaProfili, valore } = await import("../src/agents/profili.ts");
+    preparaProfili(dir);
+    expect(valore("AGENTS.custodi.minProbabilita", "AAPL")).toBeGreaterThan(AGENTS.custodi.minProbabilita);
+    expect(valore("AGENTS.custodi.minProbabilita", "MSFT")).toBe(AGENTS.custodi.minProbabilita);
     // Gli stessi trade non contano due volte: senza trade nuovi niente altro passo.
     expect(aggiornaCalibrazione(dir, j, new Date("2026-11-09T12:00:00Z"))).toEqual([]);
     // Cinque trade nuovi tutti vinti: un passo indietro, verso la base.
@@ -139,7 +142,6 @@ describe("calibrazione del capo ufficio", () => {
     applyAgentSettings(dir); applicaCalibrazione(dir);
     expect(AGENTS.intraday.kronos.minProb).toBeCloseTo(base, 6);
     applyAgentSettings(dir);
-    AGENTS.custodi.minProbabilitaPer = {};
   });
 });
 
@@ -232,5 +234,63 @@ describe("persone e formazione in sala caffè", () => {
     const r = aggiornaFormazione(dir, j, ["p:Diana"], now);
     expect(provaRientro(dir, r, "p:Diana", [v], {}, 1, 1, now)).toBeNull(); // un collega è già alla scrivania
     expect(provaRientro(dir, r, "p:Diana", [v], {}, 0, 1, now)).toContain("almeno 1 persona");
+  });
+});
+
+describe("profili personali", () => {
+  const staff = (dir: string, membri: Record<string, any>) => Bun.write(join(dir, "persone.json"), JSON.stringify({ versione: 2, staff: membri, vecchi: {} }));
+  test("le impostazioni della persona valgono sul titolo su cui lavora; gli altri titoli restano di serie", async () => {
+    const { preparaProfili, salvaImpostazioni, valore, impostazioniDi } = await import("../src/agents/profili.ts");
+    const dir = mkdtempSync(join(tmpdir(), "prof-"));
+    await staff(dir, { Anna: { reparto: "trading", simbolo: "AAPL", dal: "" }, Bruno: { reparto: "intraday", simbolo: "SOL/USD", dal: "" } });
+    expect(salvaImpostazioni(dir, "p:Anna", { "LIMITS.trendSmaDays": 40, "AGENTS.pullback.rsiEntry": 6 }, 0.12)).toEqual({ ok: true });
+    expect(salvaImpostazioni(dir, "p:Anna", { "AGENTS.intraday.maxWeight": 0.1 }).ok).toBe(false); // non è del suo reparto
+    preparaProfili(dir);
+    expect(valore("LIMITS.trendSmaDays", "AAPL")).toBe(40);
+    expect(valore("LIMITS.trendSmaDays", "MSFT")).toBe(LIMITS.trendSmaDays);
+    expect(impostazioniDi(dir, "p:Anna").obiettivo.attuale).toBe(0.12);
+    expect(impostazioniDi(dir, "p:Bruno").parametri.map((p) => p.chiave)).toEqual(["AGENTS.intraday.kronos.minProb", "AGENTS.intraday.maxWeight"]);
+  });
+
+  test("obiettivo del giorno personale: difesa sotto metà dopo averlo toccato; il giorno dopo sale col successo, scende col fallimento", async () => {
+    const { giornataPersone, impostazioniDi } = await import("../src/agents/profili.ts");
+    const dir = mkdtempSync(join(tmpdir(), "obj-"));
+    await staff(dir, { Anna: { reparto: "trading", simbolo: "AAPL", dal: "" } });
+    const t = { id: "a", simbolo: "AAPL", stato: "aperto", apertoIl: "2026-11-09T09:00:00Z", comprate: 1, costo: 100, vendute: 0, incassato: 0, quantita: 1, contesto: { setup: "", momentum20: null, volGiornaliera: null, distanzaMedia: null, fiducia: null, attesa: "", perche: "", persone: ["p:Anna"] } } as any;
+    const j = { ...emptyJournal(), trade: [t] };
+    const g = (iso: string) => iso.slice(0, 10);
+    expect(giornataPersone(dir, j, { AAPL: 111 }, "2026-11-09", g).perPersona["p:Anna"]!.raggiunto).toBe(true); // +11% ≥ 10%
+    const d = giornataPersone(dir, j, { AAPL: 104 }, "2026-11-09", g);
+    expect(d.difesa.AAPL).toContain("Anna");
+    giornataPersone(dir, j, { AAPL: 104 }, "2026-11-10", g);
+    expect(impostazioniDi(dir, "p:Anna").obiettivo.attuale).toBeCloseTo(0.11, 6); // successo: +1 punto
+    giornataPersone(dir, j, { AAPL: 95 }, "2026-11-10", g);
+    giornataPersone(dir, j, { AAPL: 95 }, "2026-11-11", g);
+    expect(impostazioniDi(dir, "p:Anna").obiettivo.attuale).toBeCloseTo(0.1, 6); // fallimento: −1 punto
+  });
+
+  test("in sala caffè ci si ricalibra: verso le impostazioni dei bravi, o sui dati se sono tutte uguali", async () => {
+    const { ricalibrazione } = await import("../src/agents/formazione.ts");
+    const { salvaImpostazioni, impostazioniDi } = await import("../src/agents/profili.ts");
+    const dir = mkdtempSync(join(tmpdir(), "ric-"));
+    await staff(dir, { Anna: { reparto: "trading", simbolo: null, dal: "" }, Bruno: { reparto: "trading", simbolo: null, dal: "" } });
+    // Tutti uguali: ricalibrazione sui dati, più selettiva (contesto sfavorevole: due passi).
+    const r1 = ricalibrazione(dir, "p:Anna", ["p:Bruno"], new Map(), "sfavorevole", new Date());
+    expect(r1.motivo).toContain("sui dati");
+    expect(impostazioniDi(dir, "p:Anna").parametri.find((p) => p.chiave === "AGENTS.custodi.minProbabilita")!.attuale).toBeCloseTo(AGENTS.custodi.minProbabilita + 0.1, 6);
+    // Bruno (bravo) ha una media breve di 30: Anna si avvicina a metà strada.
+    salvaImpostazioni(dir, "p:Bruno", { "LIMITS.trendSmaDays": 30 });
+    const r2 = ricalibrazione(dir, "p:Anna", ["p:Bruno"], new Map(), "neutro", new Date());
+    expect(r2.motivo).toContain("Bruno");
+    expect(impostazioniDi(dir, "p:Anna").parametri.find((p) => p.chiave === "LIMITS.trendSmaDays")!.attuale).toBe(Math.round(LIMITS.trendSmaDays + (30 - LIMITS.trendSmaDays) / 2));
+  });
+
+  test("un titolo, una persona: se trading e intraday lo vogliono entrambi, lo tiene chi ha la posizione", async () => {
+    const { assegnaPersone } = await import("../src/agents/persone.ts");
+    const dir = mkdtempSync(join(tmpdir(), "uno-"));
+    await staff(dir, { Anna: { reparto: "trading", simbolo: null, dal: "" }, Elio: { reparto: "intraday", simbolo: null, dal: "" } });
+    const a = assegnaPersone({ stateDir: dir, now: new Date(), sospesi: [], punteggio: () => 0.5, rientro: () => null, bisogni: { trading: [{ simbolo: "SOL/USD", tiene: false, voto: true }], intraday: [{ simbolo: "SOL/USD", tiene: true, voto: false }] } });
+    expect(a.chi).toEqual({ "i:SOL/USD": "p:Elio" });
+    expect(a.bloccati["c:SOL/USD"]).toContain("una sola posizione");
   });
 });

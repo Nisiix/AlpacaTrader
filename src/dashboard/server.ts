@@ -5,6 +5,7 @@ import { barsPath, forecastsPath, statusPath, type Valutazione } from "../agents
 import { readJson, isObject } from "../fsutil.ts";
 import { ROOT } from "../deps.ts";
 import { maskedSettings, testSettings, writeSecretsFile } from "../settings.ts";
+import { impostazioniDi, salvaImpostazioni } from "../agents/profili.ts";
 import { agentCardsWithValues, saveAgentSettings } from "../agent-settings.ts";
 
 // Dashboard locale: una pagina (3D + pannelli) servita da Bun, stato da agents-status.json, eventi dal registro
@@ -126,6 +127,14 @@ export function startDashboard(o: DashboardOptions) {
         const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
         const r = saveAgentSettings(o.stateDir, body);
         return Response.json(r.ok ? { ok: true, salvati: r.salvati, nota: "Impostazioni salvate: valgono dal prossimo giro del motore." } : { ok: false, errori: r.errori }, { status: r.ok ? 200 : 400 });
+      }
+      // Le impostazioni personali di una persona dello staff (p:Nome): lettura e salvataggio.
+      const mPers = /^\/api\/persone\/([^/]+)$/.exec(url.pathname);
+      if (mPers && req.method === "GET") return Response.json(impostazioniDi(o.stateDir, `p:${decodeURIComponent(mPers[1]!)}`));
+      if (mPers && req.method === "POST") {
+        const body = (await req.json().catch(() => ({}))) as { valori?: Record<string, unknown>; obiettivo?: unknown };
+        const r = salvaImpostazioni(o.stateDir, `p:${decodeURIComponent(mPers[1]!)}`, body.valori ?? {}, body.obiettivo);
+        return Response.json(r.ok ? { ok: true, nota: "Impostazioni personali salvate: valgono dal prossimo giro del motore." } : r, { status: r.ok ? 200 : 400 });
       }
       if (url.pathname === "/api/journal") {
         const p = join(o.stateDir, "journal.json");

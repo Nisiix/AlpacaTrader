@@ -202,11 +202,13 @@ export class AlpacaBroker implements Broker {
     // Abbastanza indietro da coprire `count` candele anche con notti e fine settimana (titoli: ~6,5 ore al giorno).
     const spanMin = minutes * count * (minutes >= 240 ? 4 : 3) + 3 * 1440;
     const start = new Date(Date.now() - spanMin * 60_000).toISOString();
+    // Le crypto sono aperte sempre: basta poco più di `count` candele (meno dati, nessuna pagina persa).
+    const startCrypto = new Date(Date.now() - (minutes * count * 1.5 + 2 * minutes) * 60_000).toISOString();
     const now = Date.now();
     const closedBefore = (t: string) => Date.parse(t) + minutes * 60_000 <= now; // candela finita
     const fetchAll = async (path: string) => {
       let token = "";
-      for (let page = 0; page < 10; page++) {
+      for (let page = 0; page < 40; page++) {
         const data = await this.request(MARKET_DATA_URL, `${path}${token ? `&page_token=${encodeURIComponent(token)}` : ""}`);
         for (const [sym, bars] of Object.entries<any[]>(data?.bars ?? {})) (out[sym] ??= []).push(...bars.filter((b) => closedBefore(String(b.t))).map((b) => ({ t: String(b.t), open: Number(b.o), high: Number(b.h), low: Number(b.l), close: Number(b.c), volume: Number(b.v ?? 0) })));
         token = data?.next_page_token ?? "";
@@ -215,8 +217,11 @@ export class AlpacaBroker implements Broker {
     };
     const stocks = symbols.filter((s) => !isCrypto(s));
     const crypto = symbols.filter(isCrypto);
-    if (stocks.length) await fetchAll(`/v2/stocks/bars?timeframe=${encodeURIComponent(timeframe)}&adjustment=all&feed=iex&limit=10000&start=${start}&symbols=${stocks.map(encodeURIComponent).join(",")}`);
-    if (crypto.length) await fetchAll(`/v1beta3/crypto/us/bars?timeframe=${encodeURIComponent(timeframe)}&limit=10000&start=${start}&symbols=${crypto.map(encodeURIComponent).join(",")}`);
+    // A gruppi di pochi simboli: Alpaca restituisce le candele un simbolo dopo l'altro, e con tanti simboli le ultime pagine
+    // (gli ultimi in ordine alfabetico: SHIB, SOL, UNI, XRP...) restavano fuori, con «candele insufficienti».
+    const gruppi = (xs: string[], n = 6) => Array.from({ length: Math.ceil(xs.length / n) }, (_, i) => xs.slice(i * n, i * n + n));
+    for (const g of gruppi(stocks)) await fetchAll(`/v2/stocks/bars?timeframe=${encodeURIComponent(timeframe)}&adjustment=all&feed=iex&limit=10000&start=${start}&symbols=${g.map(encodeURIComponent).join(",")}`);
+    for (const g of gruppi(crypto)) await fetchAll(`/v1beta3/crypto/us/bars?timeframe=${encodeURIComponent(timeframe)}&limit=10000&start=${startCrypto}&symbols=${g.map(encodeURIComponent).join(",")}`);
     for (const sym of Object.keys(out)) out[sym] = out[sym]!.sort((a, b) => a.t.localeCompare(b.t)).slice(-count);
     return out;
   }

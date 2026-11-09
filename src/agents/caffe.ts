@@ -275,7 +275,7 @@ export function coffeeBreak(input: {
     const msg = [
       cp.sogliaKronos !== null ? `si vince di più con Kronos ≥ ${pct(cp.sogliaKronos)}` : "",
       cp.ingressoMigliore ? `l'ingresso che rende di più è «${cp.ingressoMigliore}»` : "",
-      ...cp.valutazioni.filter((v) => v.giudizio === "richiamato").map((v) => `${v.agente} è richiamato: ${v.consigli[0] ?? v.messaggio}`),
+      ...cp.valutazioni.filter((v) => v.giudizio === "richiamato").map((v) => `${v.agente.startsWith("p:") ? v.agente.slice(2) : v.agente} è richiamato: ${v.consigli[0] ?? v.messaggio}`),
     ].filter(Boolean);
     if (msg.length) scambi.push({ da: "capo", a: null, tema: "capo", testo: `A tutti: ${msg.join("; ")}.` });
   }

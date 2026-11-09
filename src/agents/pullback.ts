@@ -2,6 +2,7 @@ import { AGENTS, LIMITS, isCrypto } from "../config.ts";
 import { rsi, sma } from "../indicators.ts";
 import { addTradingDays } from "../slots.ts";
 import { type Agent, type AgentReport, type AgentView, type Signal } from "./types.ts";
+import { valore } from "./profili.ts";
 
 // Rientro = mean reversion di Connors, come comparto separato a breve orizzonte: compra un titolo sopra la media a 200
 // quando l'RSI(2) scende sotto 10 (ipervenduto di breve), con taglia piccola; esce quando l'RSI(2) torna sopra 70 o
@@ -15,7 +16,9 @@ export class PullbackAgent implements Agent {
 
   observe(v: AgentView): AgentReport {
     const segnali: Signal[] = [];
-    const { rsiDays, rsiEntry, rsiExit, maxHoldSessions, maxWeight } = AGENTS.pullback;
+    // Soglie RSI, sedute e peso sono quelle della persona che lavora sul titolo (il suo profilo), altrimenti di serie.
+    const { rsiDays } = AGENTS.pullback;
+    const per = (s: string) => ({ rsiEntry: valore("AGENTS.pullback.rsiEntry", s), rsiExit: valore("AGENTS.pullback.rsiExit", s), maxHoldSessions: valore("AGENTS.pullback.maxHoldSessions", s), maxWeight: valore("AGENTS.pullback.maxWeight", s) });
     const held = new Set(v.positions.filter((p) => p.qty > 0).map((p) => p.symbol));
     for (const s of AGENTS.universe) {
       if (held.has(s)) continue;
@@ -24,6 +27,7 @@ export class PullbackAgent implements Agent {
       const m200 = sma(c, LIMITS.longSmaDays);
       const price = v.prices[s] ?? c[c.length - 1]!;
       const r = rsi(conAdesso(c, price, v, s), rsiDays);
+      const { rsiEntry, maxHoldSessions, maxWeight } = per(s);
       if (m200 === null || r === null || price <= m200 || r >= rsiEntry) continue;
       segnali.push({ agente: this.name, simbolo: s, lato: "buy", forza: 0.7, orizzonteSedute: maxHoldSessions, pesoMassimo: maxWeight, perche: `RSI(${rsiDays}) a ${r.toFixed(0)} sopra la media a 200: ipervenduto di breve, rientro con taglia ridotta` });
     }
@@ -35,6 +39,7 @@ export class PullbackAgent implements Agent {
       const c = v.closes[t.simbolo];
       const price = v.prices[t.simbolo] ?? c?.[c.length - 1];
       const r = c && price ? rsi(conAdesso(c, price, v, t.simbolo), rsiDays) : null;
+      const { rsiExit, maxHoldSessions } = per(t.simbolo);
       const due = addTradingDays(t.apertoIl.slice(0, 10), maxHoldSessions);
       if (r !== null && r >= rsiExit) segnali.push({ agente: this.name, simbolo: t.simbolo, lato: "sell", forza: 1, orizzonteSedute: 0, vincolante: true, perche: `RSI(${rsiDays}) a ${r.toFixed(0)}: il rientro ha fatto il suo lavoro` });
       else if (v.today >= due) segnali.push({ agente: this.name, simbolo: t.simbolo, lato: "sell", forza: 1, orizzonteSedute: 0, vincolante: true, perche: `${maxHoldSessions} sedute dal rientro senza RSI sopra ${rsiExit}: si esce` });

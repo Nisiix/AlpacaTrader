@@ -4,6 +4,7 @@ import { stopPctFor } from "../stops.ts";
 import { controTendenza, pesoControTendenza } from "./fiducia.ts";
 import { crowdAdjustment } from "./fonti.ts";
 import { clamp01, type Agent, type AgentReport, type AgentView, type Signal } from "./types.ts";
+import { valore } from "./profili.ts";
 
 // I custodi: un investitore per ogni crypto che il motore segue. Ognuno guarda un solo titolo e ragiona come un
 // professionista dentro le regole del motore: una tesi (perché il titolo merita attenzione), un piano (quando e come
@@ -283,7 +284,7 @@ export class CustodiAgent implements Agent {
       c.dossier = await this.study(c, v, v.closes[c.simbolo], st.livelli.prezzo, st.fase, st.livelli);
       st.dossier = c.dossier;
       // Sotto la probabilità minima (della squadra o personale, calibrata dal capo ufficio) niente voto d'acquisto.
-      const minP = AGENTS.custodi.minProbabilitaPer?.[c.simbolo] ?? AGENTS.custodi.minProbabilita;
+      const minP = valore("AGENTS.custodi.minProbabilita", c.simbolo);
       if (c.dossier.probabilita < minP) for (let i = mine.length - 1; i >= 0; i--) if (mine[i]!.lato === "buy") mine.splice(i, 1);
       // Il dossier modula la forza del voto d'ingresso (mai le uscite, che sono regole): 50% → invariata, 80% → +30%, 30% → -20%.
       for (const sg of mine) {
@@ -308,7 +309,7 @@ export class CustodiAgent implements Agent {
     const s = c.simbolo;
     const closes = v.closes[s];
     const price = v.prices[s] ?? closes?.at(-1) ?? null;
-    const m20 = closes ? sma(closes, AGENTS.custodi.pullbackSmaDays) : null;
+    const m20 = closes ? sma(closes, valore("AGENTS.custodi.pullbackSmaDays", s)) : null;
     const m50 = closes ? sma(closes, LIMITS.trendSmaDays) : null;
     const m200 = closes ? sma(closes, LIMITS.longSmaDays) : null;
     const mom3 = closes ? momentum(closes, AGENTS.cryptoMomentumDays) : null;
@@ -358,9 +359,9 @@ export class CustodiAgent implements Agent {
     }
     const spinta = fc !== undefined && fc >= AGENTS.kronos.anticipaSoglia ? 1.15 : 1;
     // Candidata: ingresso migliore vicino alla media a 20 giorni; troppo lontano dalla 50 si aspetta un rientro.
-    if (dist50 !== null && dist50 > AGENTS.custodi.extendedPct) {
+    if (dist50 !== null && dist50 > valore("AGENTS.custodi.extendedPct", s)) {
       segnali.push({ agente, simbolo: s, lato: "buy", forza: 0.25, orizzonteSedute: horizon, perche: `${s} in trend ma ${pct(dist50)} sopra la media a ${LIMITS.trendSmaDays} giorni: ingresso solo a taglia ridotta, meglio aspettare un rientro` });
-      return { ...base, fase: "osserva", piano: `Aspettare un rientro verso la media a ${AGENTS.custodi.pullbackSmaDays} giorni (${num(m20)}): il prezzo è ${pct(dist50)} sopra la ${LIMITS.trendSmaDays}, troppo esteso per entrare pieno.`, stato: `Candidata dal ${c.dalle}, non in portafoglio.` };
+      return { ...base, fase: "osserva", piano: `Aspettare un rientro verso la media a ${valore("AGENTS.custodi.pullbackSmaDays", s)} giorni (${num(m20)}): il prezzo è ${pct(dist50)} sopra la ${LIMITS.trendSmaDays}, troppo esteso per entrare pieno.`, stato: `Candidata dal ${c.dalle}, non in portafoglio.` };
     }
     const nearPullback = m20 !== null && price !== null && price <= m20 * 1.02;
     const forza = Math.min(1, (nearPullback ? 0.8 : 0.6) * spinta);

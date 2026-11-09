@@ -73,6 +73,7 @@ export interface Bisogno {
 export interface Assegnazione {
   chi: Record<string, string>; // c:SYM / i:SYM → p:Nome
   senzaPersona: string[]; // c:SYM / i:SYM con un voto ma nessuna persona disponibile
+  bloccati: Record<string, string>; // c:SYM / i:SYM: il titolo è già di una persona dell'altro reparto (motivo)
   note: string[];
   reg: Registro;
 }
@@ -103,9 +104,23 @@ export function assegnaPersone(input: {
     cambiato = true;
     return nome;
   };
+  // Un titolo, una persona, una posizione: se trading e intraday lo vogliono entrambi, lo tiene chi ci lavora già, poi chi
+  // ha la posizione aperta, altrimenti il trading agent (più giorni). L'altro reparto non lo tocca.
+  const bloccati: Record<string, string> = {};
+  const bisogniDi: Record<Reparto, Bisogno[]> = { trading: [...input.bisogni.trading], intraday: [...input.bisogni.intraday] };
+  for (const bi of input.bisogni.intraday) {
+    const bt = input.bisogni.trading.find((b) => b.simbolo === bi.simbolo);
+    if (!bt) continue;
+    const chiI = Object.entries(reg.staff).find(([n, m]) => m.reparto === "intraday" && m.simbolo === bi.simbolo && !sospesi.has(chiavePersona(n)))?.[0];
+    const chiT = Object.entries(reg.staff).find(([n, m]) => m.reparto === "trading" && m.simbolo === bi.simbolo && !sospesi.has(chiavePersona(n)))?.[0];
+    const vinceIntraday = chiI ? true : chiT ? false : bi.tiene && !bt.tiene;
+    const [perde, rep, chi] = vinceIntraday ? [bt, "trading" as Reparto, chiI] : [bi, "intraday" as Reparto, chiT];
+    bisogniDi[rep] = bisogniDi[rep].filter((b) => b !== perde);
+    if (perde.voto || perde.tiene) bloccati[`${rep === "trading" ? "c:" : "i:"}${bi.simbolo}`] = `${bi.simbolo} è già ${chi ? `di ${chi}` : "dell'altro reparto"} (${vinceIntraday ? "intraday" : "trading"}): una sola persona e una sola posizione per titolo`;
+  }
   for (const reparto of ["trading", "intraday"] as Reparto[]) {
     const pref = reparto === "trading" ? "c:" : "i:";
-    const bisogni = [...input.bisogni[reparto]].sort((a, b) => Number(b.tiene) - Number(a.tiene) || Number(b.voto) - Number(a.voto));
+    const bisogni = [...bisogniDi[reparto]].sort((a, b) => Number(b.tiene) - Number(a.tiene) || Number(b.voto) - Number(a.voto));
     const servono = new Set(bisogni.map((b) => b.simbolo));
     // Chi è in formazione lascia la scrivania; chi lavora su un titolo che non ha più bisogno di lui torna libero.
     for (const [n, m] of Object.entries(reg.staff)) {
@@ -142,7 +157,7 @@ export function assegnaPersone(input: {
     }
   }
   if (cambiato) scrivi(input.stateDir, reg);
-  return { chi, senzaPersona, note, reg };
+  return { chi, senzaPersona, bloccati, note, reg };
 }
 
 // Le persone per la dashboard: agenti generali (a:nome), staff (p:Nome) con reparto e titolo, e per comodità anche le
@@ -154,4 +169,21 @@ export function persone(reg: Registro, chi: Record<string, string>): Record<stri
   }
   for (const [desk, p] of Object.entries(chi)) out[desk] = { ...out[p]!, ruolo: desk.startsWith("c:") ? `Trading agent su ${desk.slice(2)}` : `Intraday agent su ${desk.slice(2)}` };
   return out;
+}
+
+// Dopo il riparto: chi aveva preso un titolo che il motore mette «in attesa» (e senza posizione aperta) torna in sala
+// caffè. Alla scrivania resta solo chi è davvero pronto a entrare o segue una posizione.
+export function rilascia(stateDir: string, a: Assegnazione, simboli: Set<string>, tenuti: Set<string>, now: Date): string[] {
+  const note: string[] = [];
+  let cambiato = false;
+  for (const [desk, p] of Object.entries(a.chi)) {
+    const sym = desk.slice(2);
+    if (!simboli.has(sym) || tenuti.has(sym)) continue;
+    const m = a.reg.staff[nomeDi(p)];
+    if (m && m.simbolo === sym) { m.simbolo = null; m.dal = now.toISOString(); cambiato = true; }
+    delete a.chi[desk];
+    note.push(`${nomeDi(p)} torna in sala caffè: ${sym} è in attesa`);
+  }
+  if (cambiato) scrivi(stateDir, a.reg);
+  return note;
 }

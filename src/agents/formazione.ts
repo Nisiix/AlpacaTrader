@@ -4,7 +4,9 @@ import { isObject, readJson, writeJsonAtomic } from "../fsutil.ts";
 import type { JournalFile, Trade } from "../journal.ts";
 import { entryKind, kronosOf, regolaSuperata } from "./capo.ts";
 import type { AgentReport, Signal } from "./types.ts";
-import { nomeDi, personeDelTrade } from "./persone.ts";
+import { leggiRegistro, nomeDi, personeDelTrade, type Reparto } from "./persone.ts";
+import { PERSONALI, ricalibraPersona, valoriDi } from "./profili.ts";
+import { paramOf } from "../agent-settings.ts";
 
 // La formazione in sala caffè. Quando il capo ufficio giudica che una persona lavora male (sui trade chiusi dal suo
 // ultimo rientro, almeno `minTrade`: vince meno del 51% e chiude in perdita), la manda in sala caffè per `ore` ore: non
@@ -76,8 +78,57 @@ function bagaglioDa(mentori: string[], per: Map<string, Trade[]>, tutti: Trade[]
   return { mentori, kronosMin, ingresso, candele, testo };
 }
 
+// Un valore dentro i limiti della scheda, arrotondato come il parametro.
+function nelLimite(chiave: string, v: number): number {
+  const par = paramOf(chiave);
+  let x = v;
+  if (par?.min !== undefined) x = Math.max(par.min, x);
+  if (par?.max !== undefined) x = Math.min(par.max, x);
+  return par?.tipo === "intero" ? Math.round(x) : Math.round(x * 10000) / 10000;
+}
+
+// La ricalibrazione di chi va in sala caffè: rivede le sue impostazioni personali per vincere di più.
+// - Se i colleghi che lavorano bene (stesso reparto) hanno impostazioni diverse, si avvicina a metà strada alla loro media.
+// - Se sono tutte uguali (primi giri), si ricalibra sui dati: contesto di mercato, i suoi trade persi (quanto era esteso
+//   il prezzo dalla media, che tipo d'ingresso) e le lezioni della squadra; sempre verso ingressi più selettivi e taglie
+//   più piccole, mai fuori dai limiti della scheda.
+export function ricalibrazione(stateDir: string, k: string, mentori: string[], per: Map<string, Trade[]>, contesto: string | undefined, now: Date): { cambi: string[]; motivo: string } {
+  const reg = leggiRegistro(stateDir);
+  const rep: Reparto | undefined = reg.staff[nomeDi(k)]?.reparto;
+  if (!rep) return { cambi: [], motivo: "" };
+  const chiavi = PERSONALI[rep];
+  const mio = valoriDi(stateDir, k, rep);
+  const bravi = mentori.filter((m) => m.startsWith("p:") && reg.staff[nomeDi(m)]?.reparto === rep);
+  const loro = bravi.map((m) => valoriDi(stateDir, m, rep));
+  const nuovi: Record<string, number> = {};
+  let motivo: string;
+  if (loro.length && chiavi.some((c) => loro.some((v) => v[c] !== mio[c]))) {
+    for (const c of chiavi) { const media = loro.reduce((a, v) => a + v[c]!, 0) / loro.length; nuovi[c] = nelLimite(c, mio[c]! + (media - mio[c]!) / 2); }
+    motivo = `impara dalle impostazioni di chi lavora bene (${bravi.map(nomeDi).join(", ")}): a metà strada verso le loro`;
+  } else {
+    const sfavorevole = contesto === "sfavorevole";
+    const passi = sfavorevole ? 2 : 1;
+    const persi = (per.get(k) ?? []).filter((t) => pnl(t) <= 0);
+    const pezzi = [`contesto di mercato ${contesto ?? "n.d."}`];
+    if (rep === "trading") {
+      nuovi["AGENTS.custodi.minProbabilita"] = nelLimite("AGENTS.custodi.minProbabilita", mio["AGENTS.custodi.minProbabilita"]! + 0.05 * passi);
+      const dist = persi.map((t) => t.contesto?.distanzaMedia).filter((x): x is number => typeof x === "number" && x > 0).sort((a, b) => a - b);
+      if (dist.length >= 2) { const med = dist[Math.floor(dist.length / 2)]!; nuovi["AGENTS.custodi.extendedPct"] = nelLimite("AGENTS.custodi.extendedPct", Math.min(mio["AGENTS.custodi.extendedPct"]!, med * 0.8)); pezzi.push(`i suoi trade persi partivano ${Math.round(med * 100)}% sopra la media a 50`); }
+      if (persi.filter((t) => entryKind(t) === "rientro sulla media a 20").length * 2 >= persi.length && persi.length) { nuovi["AGENTS.pullback.rsiEntry"] = nelLimite("AGENTS.pullback.rsiEntry", mio["AGENTS.pullback.rsiEntry"]! - passi); pezzi.push("perdeva sui rientri"); }
+      nuovi["AGENTS.pullback.maxWeight"] = nelLimite("AGENTS.pullback.maxWeight", mio["AGENTS.pullback.maxWeight"]! * 0.8);
+    } else {
+      nuovi["AGENTS.intraday.kronos.minProb"] = nelLimite("AGENTS.intraday.kronos.minProb", mio["AGENTS.intraday.kronos.minProb"]! + 0.025 * passi);
+      nuovi["AGENTS.intraday.maxWeight"] = nelLimite("AGENTS.intraday.maxWeight", mio["AGENTS.intraday.maxWeight"]! * 0.8);
+      const candele = [...new Set(persi.map((t) => t.contesto?.livelli?.candela).filter(Boolean))];
+      if (candele.length) pezzi.push(`perdeva sulle candele ${candele.join(", ")}`);
+    }
+    motivo = `nessun collega bravo con impostazioni diverse: ricalibrato sui dati (${pezzi.join("; ")}) verso ingressi più selettivi e taglie più piccole`;
+  }
+  return { cambi: ricalibraPersona(stateDir, k, nuovi, motivo, now), motivo };
+}
+
 // Aggiorna chi va in formazione e chi torna (una volta per giro). `presenti`: le persone di questo giro.
-export function aggiornaFormazione(stateDir: string, journal: JournalFile, presenti: string[], now: Date, vecchi: Record<string, string> = {}): FormazioneReport {
+export function aggiornaFormazione(stateDir: string, journal: JournalFile, presenti: string[], now: Date, vecchi: Record<string, string> = {}, contesto?: string): FormazioneReport {
   const c = AGENTS.formazione;
   const f = leggi(stateDir);
   const note: string[] = [];
@@ -111,6 +162,8 @@ export function aggiornaFormazione(stateDir: string, journal: JournalFile, prese
     const mentori = bravi.filter((b) => b !== k).slice(0, 5);
     const fino = new Date(now.getTime() + c.ore * 3600_000).toISOString();
     f.voci[k] = { stato: "in formazione", dal: now.toISOString(), fino, motivo: `${vinti} vinti su ${nuovi.length} (${Math.round((vinti / nuovi.length) * 100)}%), ${ris.toFixed(2)} $: lavora male, in sala caffè a imparare${mentori.length ? ` da ${mentori.map(nomeDi).join(", ")}` : " dai trade vinti della squadra"}`, bagaglio: bagaglioDa(mentori, per, chiusi), formazioni: (v?.formazioni ?? 0) + 1 };
+    const rc = ricalibrazione(stateDir, k, mentori, per, contesto, now);
+    if (rc.cambi.length) { f.voci[k]!.motivo += `; si ricalibra: ${rc.cambi.join(", ")}`; note.push(`formazione: ${nomeDi(k)} ${rc.motivo}: ${rc.cambi.join(", ")}`); }
     note.push(`capo ufficio: ${nomeDi(k)} in sala caffè fino alle ${fino.slice(11, 16)} UTC, ${f.voci[k]!.motivo}`);
     cambiato = true;
   }
@@ -166,7 +219,7 @@ export function provaRientro(stateDir: string, r: FormazioneReport, k: string, v
 // postazioni con un voto ma nessuna persona disponibile (il voto non vale). Gli agenti generali in formazione rientrano
 // solo con un'occasione approvata dal capo. Chi è tornato col bagaglio lo usa; chi è rientrato per necessità con
 // un'occasione che non passa il bagaglio entra con forza ×0,8 o taglia ×0,7. Vendite e regole vincolanti non si toccano.
-export function applicaFormazione(stateDir: string, reports: Record<string, AgentReport>, r: FormazioneReport, previsioni: Record<string, number> | undefined, chi: Record<string, string>, senzaPersona: Set<string>, now: Date): string[] {
+export function applicaFormazione(stateDir: string, reports: Record<string, AgentReport>, r: FormazioneReport, previsioni: Record<string, number> | undefined, chi: Record<string, string>, senzaPersona: Set<string>, now: Date, bloccati: Record<string, string> = {}): string[] {
   const note: string[] = [];
   const sospesi = new Set(r.inFormazione.map((x) => x.chiave));
   // Agenti generali in formazione con un'occasione: il capo la giudica col bagaglio.
@@ -180,6 +233,7 @@ export function applicaFormazione(stateDir: string, reports: Record<string, Agen
     for (const s of rep.segnali) {
       if (s.lato !== "buy" || s.vincolante) { kept.push(s); continue; }
       const desk = postazioneDelVoto(s);
+      if (bloccati[desk]) { note.push(`ufficio: voto d'acquisto su ${s.simbolo} non vale, ${bloccati[desk]}`); continue; }
       if (senzaPersona.has(desk)) { note.push(`ufficio: voto d'acquisto su ${s.simbolo} senza una persona libera (tutte occupate o in formazione)`); continue; }
       const k = desk.startsWith("a:") ? desk : chi[desk];
       if (!k) { kept.push(s); continue; }

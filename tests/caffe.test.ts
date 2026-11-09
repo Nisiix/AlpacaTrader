@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { applyLessons, coffeeBreak, teamLessons } from "../src/agents/caffe.ts";
 import { explore, readEsplorazione, scoutVotes, technicalGate } from "../src/agents/esplorazione.ts";
 import { AGENTS } from "../src/config.ts";
-import { SQUADRA_CUSTODI, applyGuidance, kronosOf, regolaSuperata, review } from "../src/agents/capo.ts";
+import { applyGuidance, kronosOf, regolaSuperata, review } from "../src/agents/capo.ts";
 import type { CustodeStato } from "../src/agents/custode.ts";
 import type { AgentReport } from "../src/agents/types.ts";
 import { emptyJournal, type JournalFile, type Trade } from "../src/journal.ts";
@@ -36,20 +36,21 @@ describe("capo ufficio", () => {
     expect(r.sintesi).toContain("dalla vecchia uscita in giornata");
   });
 
-  test("la squadra dei custodi si giudica insieme: con 3 trade persi (uno per custode) scatta il richiamo e vale per tutti i custodi", () => {
-    const ts = ["SOL/USD", "LTC/USD", "AVAX/USD"].map((s, i) => trade(i, s, -0.02, [`custode ${s}`], `custode ${s}: rialzo anticipato da Kronos`, { kronos: 0.012 }));
+  test("il capo giudica le persone, non i titoli: chi perde su tre titoli diversi è richiamato, e il richiamo vale dove lavora", () => {
+    const ts = ["SOL/USD", "LTC/USD", "AVAX/USD"].map((s, i) => ({ ...trade(i, s, -0.02, [`custode ${s}`], `custode ${s}: rialzo anticipato da Kronos`, { kronos: 0.012 }), contesto: { ...trade(i, s, -0.02, [`custode ${s}`], `custode ${s}: rialzo anticipato da Kronos`, { kronos: 0.012 }).contesto!, persone: ["p:Anna"] } }));
     const r = review(journalOf(ts), new Date("2026-11-08T17:00:00Z"));
-    const sq = r.valutazioni.find((v) => v.agente === SQUADRA_CUSTODI)!;
-    expect(sq.giudizio).toBe("richiamato");
-    expect(r.valutazioni.find((v) => v.agente === "custode SOL/USD")!.giudizio).toBe("nuovo");
-    // Un custode nuovo (DOT) eredita il richiamo della squadra: voto sotto la soglia scartato, sopra con forza ridotta.
+    expect(r.valutazioni.map((v) => v.agente)).toEqual(["p:Anna"]);
+    expect(r.valutazioni[0]!.giudizio).toBe("richiamato");
+    expect(r.valutazioni[0]!.sessioni).toEqual({ positive: 0, negative: 3 });
+    // Anna ora lavora su DOT/USD: il suo voto sotto la soglia è scartato. Bruno su ADA/USD non è richiamato.
     const reports: Record<string, AgentReport> = { custodi: { segnali: [
       { agente: "custode DOT/USD", simbolo: "DOT/USD", lato: "buy", forza: 1, orizzonteSedute: 5, kronos: 0.004, perche: "x" },
-      { agente: "custode ADA/USD", simbolo: "ADA/USD", lato: "buy", forza: 1, orizzonteSedute: 5, kronos: 0.04, perche: "y" },
+      { agente: "custode ADA/USD", simbolo: "ADA/USD", lato: "buy", forza: 1, orizzonteSedute: 5, kronos: 0.004, perche: "y" },
     ] } };
-    const note = applyGuidance(reports, r, undefined);
+    const chi: Record<string, string> = { "DOT/USD": "p:Anna", "ADA/USD": "p:Bruno" };
+    const note = applyGuidance(reports, r, undefined, (s) => chi[s.simbolo]);
     expect(note[0]).toContain("custode DOT/USD");
-    expect(reports.custodi!.segnali.map((s) => [s.simbolo, s.forza])).toEqual([["ADA/USD", 0.6]]);
+    expect(reports.custodi!.segnali.map((s) => [s.simbolo, s.forza])).toEqual([["ADA/USD", 1]]);
   });
 });
 

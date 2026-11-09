@@ -59,6 +59,9 @@ export interface AgentView {
   // Giornata: guadagno dal patrimonio di ieri e stato dell'obiettivo giornaliero (raggiunto → si incassa, niente nuovi ingressi).
   // obiettivoRaggiunto: oggi il guadagno ha toccato l'obiettivo; difesa: poi è tornato al pavimento (si vendono i trade non favorevoli).
   giornata?: { pnlPct: number; obiettivoRaggiunto: boolean; perditaOltre: boolean; difesa?: boolean; picco?: number };
+  // Difesa del guadagno per persona: titolo → motivo (la persona che ci lavora ha toccato il suo obiettivo del giorno ed
+  // è tornata sotto metà): i suoi trade non favorevoli si vendono.
+  difesaPersonale?: Record<string, string>;
   // Fonti esterne (Fear & Greed delle crypto, funding dei perpetui): contorno per contesto e dossier.
   fonti?: FontiDati;
 }

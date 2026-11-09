@@ -227,8 +227,8 @@ export const AGENTS = {
   // con tesi, piano e rischio dichiarati, dentro le stesse regole del motore.
   // Custodi senza numero fisso: uno per ogni titolo o crypto in trend (maxCandidates è solo una sicurezza).
   // minProbabilita: sotto questa probabilità favorevole del dossier il trading agent non vota l'acquisto (è il suo stesso
-  // consiglio «restare fuori»); il capo ufficio può alzarla per la squadra e per il singolo (minProbabilitaPer).
-  custodi: { enabled: true, maxCandidates: 100, pullbackSmaDays: 20, extendedPct: 0.15, keepIdleTicks: 12, minProbabilita: 0.45, minProbabilitaPer: {} as Record<string, number> },
+  // consiglio «restare fuori»); il capo ufficio può alzarla per la squadra e per la singola persona (src/agents/profili.ts).
+  custodi: { enabled: true, maxCandidates: 100, pullbackSmaDays: 20, extendedPct: 0.15, keepIdleTicks: 12, minProbabilita: 0.45 },
   // Calibrazione del capo ufficio (src/agents/calibrazione.ts): sotto `obiettivo` di vittorie su almeno `minTrade` trade
   // chiusi un agente diventa più selettivo di un passo (al massimo `maxPassi`); da `buono` in su torna di un passo.
   calibrazione: { enabled: true, minTrade: 5, obiettivo: 0.51, buono: 0.6, maxPassi: 4 },
@@ -277,7 +277,7 @@ export const AGENTS = {
     // modello (succede sui prezzi minuscoli, es. 0,000005 $) e non si usa, come le giornaliere fuori misura.
     // minProbSenzaGrafico: con le medie brevi della candela non in ordine (né rottura né rientro) decide Kronos da solo,
     // ma serve una probabilità più alta e la taglia si dimezza (un'inversione anticipata, non un trend già visibile).
-    kronos: { orizzontiMin: [15, 30, 60, 120, 240, 480] as number[], maxCandele: 20, perGiro: 40, minProb: 0.55, minProbSenzaGrafico: 0.65, zMax: 4 },
+    kronos: { orizzontiMin: [15, 30, 60, 120, 240, 480] as number[], maxCandele: 20, perGiro: 60, minProb: 0.55, minProbSenzaGrafico: 0.65, zMax: 4 },
     // Scelta della candela: la probabilità che conta è quella di un guadagno NETTO dei costi di andata e ritorno, Φ(z) con
     // z = (rialzo previsto − costi) / (volatilità delle candele × √candele), moltiplicato per l'affidabilità misurata della
     // candela dal cervello: quota di direzioni giuste di Kronos su quella candela, avvicinata a `prior` con il peso di `forza`

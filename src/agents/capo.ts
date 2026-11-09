@@ -2,10 +2,12 @@ import { AGENTS } from "../config.ts";
 import { romeTime } from "../slots.ts";
 import type { JournalFile, Trade } from "../journal.ts";
 import type { AgentReport, Signal } from "./types.ts";
+import { personeDelTrade } from "./persone.ts";
 
 // Il capo ufficio: conosce la logica del motore e controlla il lavoro degli altri agenti sui trade chiusi del diario.
-// Per ogni agente (generali e custodi) calcola vinti, persi, risultato medio e la proiezione di Kronos che aveva al
-// momento dell'ingresso. Chi lavora bene viene lodato; chi lavora male viene richiamato e riceve consigli concreti
+// Giudica le persone, non i titoli: ogni trading agent e intraday agent (p:Nome) sui trade che ha preso lui, e gli agenti
+// generali (trend, rientro, kronos...) sui trade che hanno votato. Per ognuno: vinti, persi, risultato medio, la
+// proiezione di Kronos che aveva all'ingresso e come sono andate le sue sessioni (giorni chiusi in guadagno o in perdita). Chi lavora bene viene lodato; chi lavora male viene richiamato e riceve consigli concreti
 // presi da chi ha avuto successo: la soglia di Kronos sotto la quale non entrare, il tipo d'ingresso che ha reso, la
 // taglia. I consigli diventano vincolanti per l'agente richiamato (i suoi voti d'acquisto sotto la soglia di Kronos
 // consigliata non valgono, la forza degli altri si riduce) finché i risultati non tornano buoni. Mai ordini propri.
@@ -27,6 +29,8 @@ export interface Valutazione {
   // Regole che il capo impone finché il richiamo resta: soglia minima di Kronos per comprare e forza dei voti.
   kronosMin: number | null;
   forza: number;
+  // Le sue sessioni di trading (giorni in cui ha chiuso trade): quante in guadagno e quante in perdita.
+  sessioni?: { positive: number; negative: number };
 }
 
 export interface CapoReport {
@@ -44,6 +48,7 @@ export interface CapoReport {
 // Nome della squadra dei custodi nei giudizi: un custode segue un titolo solo e raramente arriva a 3 trade, la squadra sì.
 export const SQUADRA_CUSTODI = "custodi (squadra)";
 
+const nome = (k: string) => (k.startsWith("p:") ? k.slice(2) : k);
 const mean = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
 const pct = (x: number | null, d = 1) => (x === null ? "n.d." : `${x >= 0 ? "+" : ""}${(x * 100).toFixed(d)}%`);
 const pnlOf = (t: Trade) => (t.incassato ?? 0) - (t.costo ?? 0);
@@ -75,17 +80,15 @@ export function bestKronosThreshold(trades: Trade[]): number | null {
   return best ? best.s : null;
 }
 
-export function review(journal: JournalFile, now: Date): CapoReport {
+// La chiave del giudizio: la persona (p:Nome) o il nome dell'agente generale (trend, kronos...).
+export const chiaviGiudizio = (t: Trade, vecchi: Record<string, string> = {}) => personeDelTrade(t, vecchi).map((k) => (k.startsWith("a:") ? k.slice(2) : k));
+
+export function review(journal: JournalFile, now: Date, vecchi: Record<string, string> = {}): CapoReport {
   const all = journal.trade.filter((t) => t.stato === "chiuso" && t.risultato !== undefined);
   const closed = all.filter((t) => !regolaSuperata(t));
   const esclusi = all.length - closed.length;
   const byAgent = new Map<string, Trade[]>();
-  for (const t of closed) {
-    const ag = t.contesto?.agenti?.length ? t.contesto.agenti : [];
-    for (const a of ag) byAgent.set(a, [...(byAgent.get(a) ?? []), t]);
-    // La squadra dei custodi si giudica anche insieme: le regole del richiamo valgono per tutti i custodi.
-    if (ag.some((a) => a.startsWith("custode "))) byAgent.set(SQUADRA_CUSTODI, [...(byAgent.get(SQUADRA_CUSTODI) ?? []), t]);
-  }
+  for (const t of closed) for (const a of chiaviGiudizio(t, vecchi)) byAgent.set(a, [...(byAgent.get(a) ?? []), t]);
   const winners = closed.filter((t) => (t.risultato ?? 0) > 0);
   const sogliaKronos = bestKronosThreshold(closed);
   const kinds = new Map<string, number[]>();
@@ -101,6 +104,10 @@ export function review(journal: JournalFile, now: Date): CapoReport {
     const percVinti = n ? vinti / n : null;
     const kv = mean(ts.filter((t) => (t.risultato ?? 0) > 0 && kronosOf(t) !== null).map((t) => kronosOf(t)!));
     const kp = mean(ts.filter((t) => (t.risultato ?? 0) <= 0 && kronosOf(t) !== null).map((t) => kronosOf(t)!));
+    // Le sue sessioni: per giorno di chiusura (ora di Roma), risultato in dollari.
+    const perGiorno = new Map<string, number>();
+    for (const t of ts) { const g = romeTime(new Date(t.chiusoIl ?? t.apertoIl)).date; perGiorno.set(g, (perGiorno.get(g) ?? 0) + pnlOf(t)); }
+    const sessioni = { positive: [...perGiorno.values()].filter((x) => x > 0).length, negative: [...perGiorno.values()].filter((x) => x <= 0).length };
     const consigli: string[] = [];
     let giudizio: Giudizio;
     let messaggio: string;
@@ -127,7 +134,9 @@ export function review(journal: JournalFile, now: Date): CapoReport {
       if (lessThanHalfStop >= 2) consigli.push(`${lessThanHalfStop} uscite dallo stop: evita gli ingressi troppo lontani dalla media a 20, aspetta il rientro.`);
     }
     if (giudizio !== "richiamato" && giudizio !== "nuovo" && kv !== null) consigli.push(`I tuoi trade vinti partivano da Kronos ${pct(kv)} in media: tieni quella soglia.`);
-    valutazioni.push({ agente, trade: n, vinti, persi: n - vinti, percVinti, media, risultato: ts.reduce((a, t) => a + pnlOf(t), 0), kronosVinti: kv, kronosPersi: kp, giudizio, messaggio, consigli, kronosMin, forza });
+    if (perGiorno.size >= 2) messaggio += ` Sessioni: ${sessioni.positive} in guadagno, ${sessioni.negative} in perdita.`;
+    if (giudizio === "da seguire" && sessioni.negative > sessioni.positive) consigli.push(`Più sessioni in perdita che in guadagno: meno ingressi, solo i più netti.`);
+    valutazioni.push({ agente, trade: n, vinti, persi: n - vinti, percVinti, media, risultato: ts.reduce((a, t) => a + pnlOf(t), 0), kronosVinti: kv, kronosPersi: kp, giudizio, messaggio, consigli, kronosMin, forza, sessioni });
   }
   valutazioni.sort((a, b) => b.risultato - a.risultato);
   const migliori = valutazioni.filter((v) => v.giudizio === "ottimo" || v.giudizio === "bene").slice(0, 3).map((v) => v.agente);
@@ -136,22 +145,22 @@ export function review(journal: JournalFile, now: Date): CapoReport {
   const nota = esclusi ? ` (${esclusi} ${esclusi === 1 ? "trade chiuso" : "trade chiusi"} dalla vecchia uscita in giornata non ${esclusi === 1 ? "conta" : "contano"})` : "";
   const sintesi = !closed.length
     ? `Nessun trade chiuso da giudicare${nota}: osservo, i giudizi arrivano con i primi risultati.`
-    : `${closed.length} trade chiusi${nota}, ${totWin} vinti (${Math.round((totWin / closed.length) * 100)}%).${migliori.length ? ` Migliori: ${migliori.join(", ")}.` : ""}${richiamati.length ? ` Richiamati: ${richiamati.map((v) => v.agente).join(", ")}.` : " Nessun richiamo."}${sogliaKronos !== null ? ` Lezione per tutti: con Kronos ≥ ${pct(sogliaKronos)} si è vinto di più.` : ""}`;
+    : `${closed.length} trade chiusi${nota}, ${totWin} vinti (${Math.round((totWin / closed.length) * 100)}%).${migliori.length ? ` Migliori: ${migliori.map(nome).join(", ")}.` : ""}${richiamati.length ? ` Richiamati: ${richiamati.map((v) => nome(v.agente)).join(", ")}.` : " Nessun richiamo."}${sogliaKronos !== null ? ` Lezione per tutti: con Kronos ≥ ${pct(sogliaKronos)} si è vinto di più.` : ""}`;
   return { aggiornato: now.toISOString(), sintesi, migliori, valutazioni, sogliaKronos, ingressoMigliore, esclusi };
 }
 
 // Applica i richiami ai voti: per gli agenti richiamati i voti d'acquisto sotto la soglia di Kronos non valgono e gli altri
 // pesano meno. Le vendite non si toccano. Restituisce le note da mostrare.
-export function applyGuidance(reports: Record<string, AgentReport>, capo: CapoReport, previsioni: Record<string, number> | undefined): string[] {
+// `chiDelVoto`: la persona che prende il voto (p:Nome) o il nome dell'agente generale.
+export function applyGuidance(reports: Record<string, AgentReport>, capo: CapoReport, previsioni: Record<string, number> | undefined, chiDelVoto: (s: Signal) => string | undefined = (s) => s.agente): string[] {
   const rules = new Map(capo.valutazioni.filter((v) => v.giudizio === "richiamato").map((v) => [v.agente, v]));
   if (!rules.size) return [];
   const note: string[] = [];
   for (const r of Object.values(reports)) {
     const kept: Signal[] = [];
     for (const s of r.segnali) {
-      // Un custode senza giudizio proprio segue il richiamo della squadra dei custodi, se c'è.
-      const own = rules.get(s.agente);
-      const rule = own ?? (s.agente.startsWith("custode ") ? rules.get(SQUADRA_CUSTODI) : undefined);
+      const chi = chiDelVoto(s);
+      const rule = chi ? rules.get(chi) : undefined;
       if (!rule || s.lato !== "buy" || s.vincolante) {
         kept.push(s);
         continue;

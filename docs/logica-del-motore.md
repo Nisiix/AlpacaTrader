@@ -340,7 +340,21 @@ d'opinione prima di una candela giornaliera nuova: escono solo stop e regole vin
   l'esplorazione. Chi non ha un'occasione aspetta in sala caffè. Ogni trade salva nel diario le persone che l'hanno
   preso (`contesto.persone`): su quelle si calcolano risultati, calibrazione personale e formazione. I due reparti
   restano distinti perché lavorano su orizzonti e regole diversi (più giorni contro minuti e ore): sulla stessa crypto
-  possono esserci un trade di più giorni e uno intraday.
+  ci lavora una persona sola: un titolo, una persona, una posizione (se trading e intraday lo vogliono entrambi lo tiene
+  chi ci lavora già o ha la posizione, altrimenti il trading agent). Alla scrivania solo chi è pronto a entrare o segue
+  una posizione: un titolo che il riparto mette «in attesa», un acquisto fermato dalla gabbia o un'azione fuori orario
+  rimandano la persona in sala caffè.
+- **Profili personali** (`src/agents/profili.ts`, `state/profili.json`): ogni persona ha impostazioni sue, che valgono
+  sul titolo su cui lavora. Trading agents: medie e momentum del trend, RSI, sedute e peso del rientro, soglia, media
+  del rientro ed estensione del dossier. Intraday agents: probabilità minima e peso. Più l'**obiettivo del giorno**
+  personale (di serie 10%, +1 punto dopo un giorno in cui lo tocca, −1 dopo un giorno chiuso in perdita, tra 3% e 25%):
+  guadagno dei suoi trade di oggi sul capitale che ci ha messo; toccato, continua; se torna a metà, si vendono i suoi
+  trade non favorevoli (Kronos sotto la soglia di anticipo). L'obiettivo del conto non c'è più nelle Generali. Le
+  impostazioni si cambiano nella scheda della persona; il capo calibra la sua soglia d'ingresso; la sala caffè la
+  ricalibra (sotto). Kronos è uguale per tutti.
+- **Capo ufficio per persona** (`src/agents/capo.ts`): giudica ogni persona sui trade che ha preso e sulle sue sessioni
+  (giorni chiusi in guadagno o in perdita), e gli agenti generali sui trade che hanno votato; i richiami valgono per la
+  persona che prende il voto, ovunque lavori.
 - **Calibrazione del capo** (`src/agents/calibrazione.ts`): quando un agente vince meno del 51% dei suoi trade chiusi
   (almeno 5, contati dall'ultima correzione) il capo rende più selettivo di un passo il suo parametro d'ingresso; quando
   torna sopra il 60% lo riavvicina di un passo al valore di base. Parametri: probabilità minima intraday (+2,5 punti a
@@ -357,6 +371,10 @@ d'opinione prima di una candela giornaliera nuova: escono solo stop e regole vin
   giudica valida col bagaglio (Kronos sopra la soglia imparata, o una candela su cui i colleghi vincono), oppure se alla
   scrivania servono persone (almeno 10 trading agents con gli agenti generali, almeno 1 operatore intraday quando c'è un'occasione; la sala intraday può restare vuota se non c'è niente da fare): allora
   rientra per primo chi è in sala caffè da più tempo, con forza ×0,8 o taglia ×0,7 se l'occasione non passa il bagaglio.
+  Entrando in sala caffè la persona **ricalibra le sue impostazioni**: se i colleghi bravi del suo reparto le hanno
+  diverse, va a metà strada verso la loro media; se sono tutte uguali (primi giri), si ricalibra sui dati (contesto di
+  mercato, quanto erano estesi i suoi trade persi, che tipo d'ingresso perdeva) verso ingressi più selettivi e taglie più
+  piccole, sempre dentro i limiti della scheda.
   Stato in `state/formazione.json`.
 - **Capitale sui vincenti**: oltre alla percentuale di trade vinti (obiettivo 51%) il diario misura la parte del capitale
   investito finita nei trade in guadagno: sopra il 50% si è investito di più dove si è vinto. La dimensione di ogni

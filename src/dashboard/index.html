@@ -583,7 +583,7 @@
         <li><b>Ufficio</b>: la mappa 3D con gli agenti alle loro postazioni (la lavagna dei risultati, che si apre con un clic, il capo nella stanza di vetro, gli agenti generali solo se hanno votato almeno un trade, Trading agents, Intraday agents, Sala caffè). Alla scrivania c'è solo chi ha preso un'occasione: una posizione aperta, un titolo pronto a entrare o un ingresso votato; tutti gli altri, anche chi segue un titolo «in attesa», aspettano in sala caffè e la loro scrivania non c'è. La camicia dice la fase: blu pronto, verde in posizione, rosso in uscita, arancione intraday, grigio in sala caffè. A destra l'elenco degli agenti: passando sopra un nome l'avatar si alza e la postazione si illumina; il clic apre la scheda (situazione, ragionamento, giudizio del capo, impostazioni). Sotto, a schede: <b>Decisioni</b> (punteggio per titolo e voti), <b>Trading agents</b>, <b>Esplorazione</b> e <b>Sala caffè</b> (lezioni di squadra).</li>
         <li><b>Investimenti</b>: le card dei titoli e delle crypto in portafoglio (valore, guadagno, carico e prezzo, peso, da quanto è aperta, obiettivo e stop dell'intraday) e quelle in osservazione (custodi, voti, attese); più in basso il radar. Il clic su una card apre il <b>grafico</b> (TradingView Lightweight Charts: rotella per lo zoom, trascina per scorrere, mirino con apertura, massimo, minimo e chiusura) con la proiezione dei modelli e il cono di probabilità (fasce 50% e 80%, probabilità di finire sopra o sotto il prezzo di adesso), medie, carico, stop, obiettivo e frecce delle operazioni. Il time frame si sceglie sopra il grafico: 1m, 5m, 15m, 1h, 4h, 1G; le candele brevi si aggiornano da sole (1 e 5 minuti ogni 15 secondi). «Analisi investimento» apre verdetto, voti e dossier del custode; «Chiedi agli agenti adesso» fa una valutazione a secco: nessun ordine parte dalla pagina. Sotto: operazioni intraday, simulazioni e la tabella delle posizioni.</li>
         <li><b>Log operazioni</b>: gli acquisti e le vendite eseguiti negli ultimi 7 giorni, giorno per giorno, con ricerca per titolo, agente o motivo e filtri per tipo e periodo; per ogni vendita il risultato e quanto è stata tenuta la posizione. Clic su una riga per il grafico.</li>
-        <li><b>Gli agenti sono persone</b>: ognuno ha un nome (Marco il trend, Giulia il rientro, Chiara Kronos, Andrea il capo degli intraday agents, Roberto il capo ufficio…). I <b>trading agents</b> e gli <b>intraday agents</b> sono uno staff di persone che non appartengono a un titolo: il motore trova le occasioni con i suoi criteri e ogni occasione la prende la persona libera più brava per risultati (a parità, chi aspetta da più tempo). Una persona resta sul suo titolo finché c'è la posizione o l'ingresso; poi torna in sala caffè. I due reparti restano distinti perché lavorano su orizzonti diversi: i trading agents su più giorni (dossier, Kronos a 5 sedute, stop di più giorni), gli intraday agents su minuti e ore (candele brevi, obiettivo e stop stretti, costi); sulla stessa crypto possono esserci un'operazione di più giorni e una intraday, con regole e risultati separati. Il clic su una persona nell'Ufficio apre la sua scheda con <b>le sue impostazioni</b>, modificabili (valgono dal giro successivo). Quando un agente vince meno del 51% dei trade chiusi (almeno 5), il <b>capo ufficio lo ricalibra</b>: il suo parametro d'ingresso diventa più selettivo di un passo (mai oltre i limiti e mai sotto il valore di base); quando torna a vincere almeno il 60% si riavvicina alla base. Ogni trading agent ha anche una soglia personale.</li>
+        <li><b>Gli agenti sono persone</b>: ognuno ha un nome (Marco il trend, Giulia il rientro, Chiara Kronos, Andrea il capo degli intraday agents, Roberto il capo ufficio…). I <b>trading agents</b> e gli <b>intraday agents</b> sono uno staff di persone che non appartengono a un titolo: il motore trova le occasioni con i suoi criteri e ogni occasione la prende la persona libera più brava per risultati (a parità, chi aspetta da più tempo). Una persona resta sul suo titolo finché c'è la posizione o l'ingresso; poi torna in sala caffè. I due reparti restano distinti perché lavorano su orizzonti diversi: i trading agents su più giorni (dossier, Kronos a 5 sedute, stop di più giorni), gli intraday agents su minuti e ore (candele brevi, obiettivo e stop stretti, costi); ma su un titolo lavora una persona sola e c'è una sola posizione alla volta. Ogni persona ha <b>impostazioni sue</b> (trend, rientro, soglia del dossier per i trading agents; probabilità e peso per gli intraday agents) e il suo <b>obiettivo del giorno</b> (di serie 10%: +1 punto dopo un giorno in cui lo tocca, −1 dopo un giorno in perdita; se dopo averlo toccato il guadagno dei suoi trade torna a metà, vende i suoi trade non favorevoli). Si cambiano nella sua scheda; il capo le calibra dai risultati, e chi va in sala caffè le ricalibra imparando da chi lavora bene (o, se sono tutte uguali, dai dati di mercato e dai suoi trade persi). Kronos è uguale per tutti. Il capo ufficio giudica le persone, sui trade che hanno preso e sulle loro sessioni, non i titoli. Il clic su una persona nell'Ufficio apre la sua scheda con <b>le sue impostazioni</b>, modificabili (valgono dal giro successivo). Quando un agente vince meno del 51% dei trade chiusi (almeno 5), il <b>capo ufficio lo ricalibra</b>: il suo parametro d'ingresso diventa più selettivo di un passo (mai oltre i limiti e mai sotto il valore di base); quando torna a vincere almeno il 60% si riavvicina alla base. Ogni trading agent ha anche una soglia personale.</li>
         <li><b>Impostazioni</b>: <b>Generali</b> (le regole comuni del profilo di investimento e della piattaforma, come peso massimo per titolo, obiettivo del giorno, stop, pagina pubblica su GitHub) e le <b>chiavi</b> di Alpaca, Telegram e X con il riavvio del motore.</li>
         <li><b>Guida</b>: questa pagina.</li>
         <li><b>Pagina pubblica</b>: con «Pagina pubblica su GitHub Pages» nella scheda Motore e gabbia, il PC pubblica ogni N minuti un'istantanea in sola lettura, da aprire anche dal telefono. È visibile a chiunque abbia il link; chiavi e modifiche restano solo sulla dashboard del PC.</li>
@@ -683,6 +683,7 @@ const staffDi = (st) => Object.entries(st?.persone || {}).filter(([k]) => k.star
 const postazioneDi = (per) => per?.simbolo ? `${per.reparto === 'intraday' ? 'i' : 'c'}:${per.simbolo}` : null;
 const conNome = (sym) => nomeTitolo(sym) ? `${sym} · ${nomeTitolo(sym)}` : sym;
 const agentName = (n) => {
+  if (String(n).startsWith('p:')) return personaDi(n)?.nome ?? String(n).slice(2);
   const s = String(n);
   if (s.startsWith('custode ')) { const p = personaDi(`c:${s.slice(8)}`); return p ? `${p.nome} · ${s.slice(8)}` : `Trading agent ${s.slice(8)}`; }
   if (s === 'custodi (squadra)') return 'Trading agents (squadra)';
@@ -1295,13 +1296,16 @@ function bubble(d, text, color, life = 2500, html = false) {
 }
 const bubbles = [];
 function sceneEvent(e) {
-  if (e.tipo === 'segnale') { const d = deskFor(e); if (d) { d.group.userData.emp.userData.raise = 1; bubble(d, e.lato === 'buy' ? 'compra!' : 'vendi!', e.lato === 'buy' ? '#15803d' : '#b91c1c'); } }
+  // Un voto è solo una mano alzata; «compra!» e «venduto» si vedono solo quando l'ordine è eseguito e la posizione si
+  // apre o si chiude davvero.
+  if (e.tipo === 'segnale') { const d = deskFor(e); if (d) d.group.userData.emp.userData.raise = 1; }
+  if (e.tipo === 'trade') { const d = deskFor({ simbolo: e.simbolo }); if (d) { d.group.userData.emp.userData.stand = 1; if (e.stato === 'aperto') bubble(d, `compra! ${e.simbolo}`, '#15803d', 4000); else bubble(d, `venduto ${e.simbolo}${e.pnl !== undefined ? ` ${usd(e.pnl)}` : ''}`, (e.pnl ?? 0) >= 0 ? '#15803d' : '#b91c1c', 4000); } }
   if (e.tipo === 'ordine' && e.esito === 'inviato') { for (const d of desks.values()) if (d.info?.c?.simbolo === e.simbolo || d.info?.x?.simbolo === e.simbolo) { d.group.userData.emp.userData.stand = 1; const s = d.group.userData.scr; s.userData.flash = 1; s.userData.flashColor = e.lato === 'buy' ? '#14532d' : '#7f1d1d'; bubble(d, `${e.lato === 'buy' ? 'COMPRATO' : 'VENDUTO'} ${e.simbolo}`, e.lato === 'buy' ? '#15803d' : '#b91c1c'); } }
   if (e.tipo === 'rifiuto') { const d = deskFor(e); if (d) bubble(d, 'fermato dalle regole', '#a16207'); }
   if (e.tipo === 'esplorazione') for (const n of e.nuove || []) { const d = deskFor({ agente: n.agente.startsWith('custode ') ? n.agente : n.agente === 'intraday' ? undefined : n.agente, simbolo: n.simbolo }); if (d) { d.group.userData.emp.userData.stand = 1; bubble(d, `ho trovato ${n.simbolo}!`, '#15803d', 4000); } }
   if (e.tipo === 'capo') {
-    const cd = desks.get('capo'); if (cd) { cd.group.userData.emp.userData.stand = 1; bubble(cd, (e.richiamati || []).length ? `Richiamo a ${e.richiamati.map((r) => r.agente).join(', ')}!` : 'Bravi tutti!', (e.richiamati || []).length ? '#b91c1c' : '#15803d'); }
-    for (const r of e.richiamati || []) { const d = desks.get(`a:${r.agente}`) || (r.agente.startsWith('custode ') ? deskFor({ agente: r.agente }) : null); if (d) { d.group.userData.emp.userData.bow = 1; bubble(d, 'ricevuto, capo', '#334155'); } }
+    const cd = desks.get('capo'); if (cd) { cd.group.userData.emp.userData.stand = 1; bubble(cd, (e.richiamati || []).length ? `Richiamo a ${e.richiamati.map((r) => r.agente.startsWith('p:') ? (personaDi(r.agente)?.nome ?? r.agente.slice(2)) : agentName(r.agente)).join(', ')}!` : 'Bravi tutti!', (e.richiamati || []).length ? '#b91c1c' : '#15803d'); }
+    for (const r of e.richiamati || []) { const d = desks.get(r.agente) || desks.get(`a:${r.agente}`); if (d) { d.group.userData.emp.userData.bow = 1; bubble(d, 'ricevuto, capo', '#334155'); } }
   }
 }
 
@@ -1431,7 +1435,38 @@ async function openCard(key) {
 // La scheda delle impostazioni di chi è stato aperto: gli agenti generali hanno la loro; i trading agents quella della
 // squadra (con la loro soglia personale calibrata dal capo); gli operatori intraday quella di Andrea.
 const schedaDi = (key) => key.startsWith('a:') ? key.slice(2) : key.startsWith('p:') ? (personaDi(key)?.reparto === 'intraday' ? 'intraday' : 'custodi') : key.startsWith('c:') ? 'custodi' : key.startsWith('i:') ? 'intraday' : null;
+// Le impostazioni di una persona dello staff: sue, a sé stanti (partono da quelle di serie; le cambi qui, il capo le
+// calibra, la sala caffè le ricalibra). Kronos resta quello generale.
+async function renderPersonaForm(key) {
+  let d = null;
+  try { d = await (await fetch(`/api/persone/${encodeURIComponent(key.slice(2))}`)).json(); } catch {}
+  if (key !== cardKey) return;
+  const nome = personaDi(key)?.nome ?? key.slice(2);
+  if (!d?.parametri) { cardForm.innerHTML = `<h4>Impostazioni di ${esc(nome)}</h4><p class="why">Le impostazioni personali si vedono e si cambiano dalla dashboard sul PC.</p>`; return; }
+  const ob = d.obiettivo; const g = ob.giorno;
+  const esiti = (ob.storia || []).slice(-5).map((x) => `${x.data.slice(5)} ${x.esito === 'successo' ? '✓' : x.esito === 'fallimento' ? '✗' : '='} ${(x.pct * 100).toFixed(1)}%`).join(' · ');
+  const campo = (p) => { const base = p.personale ?? p.squadra; return `<label class="prm ${p.cambiato ? 'cambiato' : ''}" title="di serie: ${esc(fmtVal(p, p.squadra))}"><span>${esc(p.etichetta)}${p.tipo === 'percento' ? ' (%)' : ''}<small>${esc(p.descrizione)}${p.passi ? ` In vigore ${esc(fmtVal(p, p.attuale))}${p.tipo === 'percento' ? '%' : ''}: calibrata dal capo (${p.passi} ${p.passi === 1 ? 'passo' : 'passi'}).` : ''}${p.cambiato ? ` Di serie: ${esc(fmtVal(p, p.squadra))}${p.tipo === 'percento' ? '%' : ''}.` : ''}</small></span><input name="${esc(p.chiave)}" data-tipo="${p.tipo}" value="${esc(fmtVal(p, base))}" type="number" step="${p.tipo === 'intero' ? 1 : p.tipo === 'percento' ? 0.01 : (p.passo ?? 0.01)}" ${p.min !== undefined ? `min="${p.tipo === 'percento' ? p.min * 100 : p.min}"` : ''} ${p.max !== undefined ? `max="${p.tipo === 'percento' ? p.max * 100 : p.max}"` : ''}></label>`; };
+  cardForm.innerHTML = `<h4 id="impostazioni-agente">Impostazioni di ${esc(nome)}</h4><p class="why">Sono sue, a sé stanti: partono da quelle di serie, le cambi qui, il capo le calibra dai risultati e la sala caffè le ricalibra quando lavora male. Valgono sul titolo su cui lavora; Kronos è uguale per tutti.</p>
+    <form class="scheda compatta" id="form-persona">
+      <label class="prm ${Math.abs(ob.attuale - ob.diSerie) > 1e-9 ? 'cambiato' : ''}"><span>Obiettivo del giorno (%)<small>Di serie ${Math.round(ob.diSerie * 100)}%: +1 punto dopo un giorno in cui lo tocca, −1 dopo un giorno chiuso in perdita (tra ${Math.round(ob.min * 100)}% e ${Math.round(ob.max * 100)}%). Toccato, continua a investire; se il guadagno dei suoi trade torna a metà vende quelli non favorevoli.${g ? ` Oggi ${(g.pct * 100).toFixed(1)}%, massimo ${(g.picco * 100).toFixed(1)}%.` : ''}${esiti ? ` Ultimi giorni: ${esc(esiti)}.` : ''}</small></span><input name="obiettivo" type="number" step="0.5" min="${ob.min * 100}" max="${ob.max * 100}" value="${Math.round(ob.attuale * 1000) / 10}"></label>
+      ${d.parametri.map(campo).join('')}
+      ${(d.ricalibrazioni || []).length ? `<details><summary>Ricalibrazioni in sala caffè (${d.ricalibrazioni.length})</summary>${d.ricalibrazioni.map((r) => `<div class="why" style="margin-top:6px">${esc(new Date(r.quando).toLocaleDateString('it-IT'))}: ${esc(conPersone(r.motivo))}<br>${esc(r.cambi.join(' · '))}</div>`).join('')}</details>` : ''}
+      <div class="row" style="justify-content:space-between"><button type="button" class="btn ghost reset">Di serie</button><button type="submit" class="btn">Salva</button></div><div class="msg"></div>
+    </form>`;
+  const f = cardForm.querySelector('#form-persona');
+  if (window.STATIC_MODE) { for (const el of f.querySelectorAll('input')) el.disabled = true; f.querySelector('.row')?.remove(); return; }
+  const invia = async (corpo, ok) => {
+    const r = await fetch(`/api/persone/${encodeURIComponent(key.slice(2))}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(corpo) });
+    const x = await r.json(); f.querySelector('.msg').textContent = x.ok ? ok : `Non salvato: ${x.errori.join('; ')}`;
+    if (x.ok) setTimeout(() => renderPersonaForm(key), 1200);
+  };
+  f.addEventListener('submit', (e) => { e.preventDefault(); const valori = {}; for (const p of d.parametri) valori[p.chiave] = parseVal(p, f.elements[p.chiave].value); invia({ valori, obiettivo: Number(String(f.elements.obiettivo.value).replace(',', '.')) / 100 }, 'Impostazioni personali salvate: valgono dal prossimo giro.'); });
+  f.querySelector('.reset').addEventListener('click', () => invia({ valori: {}, obiettivo: ob.diSerie }, 'Riportate ai valori di serie.'));
+  card.classList.add('largo');
+}
 async function renderAgentForm(key) {
+  if (key.startsWith('p:')) return renderPersonaForm(key);
+  if (key === 'a:trend' || key === 'a:rientro') { cardForm.innerHTML = `<h4>Impostazioni</h4><p class="why">Le regole di ${key === 'a:trend' ? 'trend' : 'rientro'} sono personali: ogni trading agent ha le sue, nella sua scheda. ${esc(personaDi(key)?.nome ?? '')} le applica sul titolo con quelle della persona che ci lavora; sui titoli senza persona valgono quelle di serie.</p>`; return; }
   const nome = schedaDi(key); card.classList.remove('largo');
   try { cards = (await (await fetch('/api/agenti/schede')).json()).schede; } catch {}
   const sc = (cards || []).find((c) => c.agente === nome);
@@ -1462,8 +1497,8 @@ function renderCard() {
     let who;
     if (it.kind === 'agente') { name = it.n; who = it.n; const a = st.agenti?.[it.n] || {}; title = personaDi(`a:${it.n}`)?.nome ?? agentName(it.n); sub = personaDi(`a:${it.n}`)?.ruolo ?? (ROLE[it.n] || ''); body = `<h4>Ultimo giro</h4><dl class="kv"><dt>Segnali</dt><dd>${a.errore ? `<span class="down">${esc(a.errore)}</span>` : a.segnali ?? 0}</dd></dl>${a.note?.length ? `<ul>${a.note.slice(0, 6).map((n) => `<li class="why">${esc(String(n).slice(0, 220))}</li>`).join('')}</ul>` : ''}`; }
     else if (it.kind === 'persona') { name = it.per.reparto === 'intraday' ? 'intraday' : 'custodi'; who = cardKey; title = it.per.nome; sub = `${it.per.reparto === 'intraday' ? 'Intraday agent' : 'Trading agent'} · in sala caffè`; body = `<h4>Adesso</h4><p class="why">${esc((st.caffe?.presenti || []).find((p) => p.chiave === cardKey)?.perche || 'in sala caffè')}. Prende la prossima occasione che il motore trova, se è il più bravo tra i liberi.</p>`; }
-    else if (it.kind === 'custode') { name = 'custodi'; who = `custode ${it.c.simbolo}`; const c = it.c; title = it.per?.nome ?? `Trading agent di ${c.simbolo}`; sub = `Trading agent di ${conNome(c.simbolo)} · ${FASI[c.fase] || c.fase}`; body = `<h4>Situazione</h4><dl class="kv">${c.dossier ? `<dt>Favorevole</dt><dd><b class="${c.dossier.probabilita >= 0.6 ? 'up' : c.dossier.probabilita < 0.45 ? 'down' : ''}">${Math.round(c.dossier.probabilita * 100)}%</b></dd><dt>Prossima azione</dt><dd>${esc(c.dossier.prossimaAzione)}</dd>` : ''}<dt>Fase</dt><dd>${esc(FASI[c.fase] || c.fase)}</dd></dl><h4>Ragionamento</h4><dl class="kv"><dt>Tesi</dt><dd>${esc(c.tesi)}</dd><dt>Piano</dt><dd>${esc(c.piano)}</dd><dt>Rischio</dt><dd>${esc(c.rischio)}</dd>${c.dossier?.memoria?.trade ? `<dt>Memoria</dt><dd>${esc(c.dossier.memoria.lezione)}</dd>` : ''}</dl>`; }
-    else { name = 'intraday'; who = 'intraday'; const x = it.x; title = it.per?.nome ?? `Intraday agent ${x.simbolo}`; sub = `Intraday agent su ${conNome(x.simbolo)} · candele ${x.candela} · ${x.fase}`; body = `<h4>Operazione</h4><dl class="kv"><dt>Candela</dt><dd>${esc(x.candela)}${x.orizzonte ? ` · orizzonte ${esc(x.orizzonte)}` : ''}</dd><dt>Fase</dt><dd>${esc(x.fase)}</dd>${x.obiettivo ? `<dt>Ingresso</dt><dd>${px(x.ingresso)}</dd><dt>Obiettivo</dt><dd class="up">${px(x.obiettivo)}</dd><dt>Stop</dt><dd class="down">${px(x.stop)}</dd>` : ''}${x.controllo ? `<dt>Controllo</dt><dd>${esc(x.controllo)}</dd>` : ''}</dl><h4>Perché</h4><p class="why">${esc(x.motivo)}</p>`; }
+    else if (it.kind === 'custode') { name = 'custodi'; who = cardKey; const c = it.c; title = it.per?.nome ?? `Trading agent di ${c.simbolo}`; sub = `Trading agent di ${conNome(c.simbolo)} · ${FASI[c.fase] || c.fase}`; body = `<h4>Situazione</h4><dl class="kv">${c.dossier ? `<dt>Favorevole</dt><dd><b class="${c.dossier.probabilita >= 0.6 ? 'up' : c.dossier.probabilita < 0.45 ? 'down' : ''}">${Math.round(c.dossier.probabilita * 100)}%</b></dd><dt>Prossima azione</dt><dd>${esc(c.dossier.prossimaAzione)}</dd>` : ''}<dt>Fase</dt><dd>${esc(FASI[c.fase] || c.fase)}</dd></dl><h4>Ragionamento</h4><dl class="kv"><dt>Tesi</dt><dd>${esc(c.tesi)}</dd><dt>Piano</dt><dd>${esc(c.piano)}</dd><dt>Rischio</dt><dd>${esc(c.rischio)}</dd>${c.dossier?.memoria?.trade ? `<dt>Memoria</dt><dd>${esc(c.dossier.memoria.lezione)}</dd>` : ''}</dl>`; }
+    else { name = 'intraday'; who = cardKey; const x = it.x; title = it.per?.nome ?? `Intraday agent ${x.simbolo}`; sub = `Intraday agent su ${conNome(x.simbolo)} · candele ${x.candela} · ${x.fase}`; body = `<h4>Operazione</h4><dl class="kv"><dt>Candela</dt><dd>${esc(x.candela)}${x.orizzonte ? ` · orizzonte ${esc(x.orizzonte)}` : ''}</dd><dt>Fase</dt><dd>${esc(x.fase)}</dd>${x.obiettivo ? `<dt>Ingresso</dt><dd>${px(x.ingresso)}</dd><dt>Obiettivo</dt><dd class="up">${px(x.obiettivo)}</dd><dt>Stop</dt><dd class="down">${px(x.stop)}</dd>` : ''}${x.controllo ? `<dt>Controllo</dt><dd>${esc(x.controllo)}</dd>` : ''}</dl><h4>Perché</h4><p class="why">${esc(x.motivo)}</p>`; }
     const v = val(who);
     if (v) body += `<h4>Giudizio del capo</h4><div class="vote" style="margin-top:0"><b>Giudizio:</b> <span class="pill ${v.giudizio === 'richiamato' ? 'down' : v.giudizio === 'ottimo' || v.giudizio === 'bene' ? 'up' : ''}">${esc(v.giudizio)}</span> <span class="why">${v.vinti}/${v.trade} vinti · ${usd(v.risultato)}</span><br><span class="why">${esc(v.messaggio)}</span>${v.consigli.length ? `<ul>${v.consigli.map((c) => `<li class="why">${esc(c)}</li>`).join('')}</ul>` : ''}</div>`;
     // Calibrazione del capo ufficio per questo agente (e per il trading agent, la sua soglia personale).
@@ -1535,9 +1570,10 @@ function sayState() {
     if (rest.length) { fix.hidden = false; fix.textContent = rest.join(' · '); }
     return;
   }
-  if (status.giornata?.difesa) {
+  const inDifesa = Object.entries(status.giornataPersone || {}).filter(([, g]) => g.difesa);
+  if (inDifesa.length) {
     say.className = 'say warn';
-    say.textContent = `Difesa del guadagno: oggi il conto ha toccato ${pct(status.giornata.picco)} ed è tornato a ${pct(status.giornata.pnlPct)}; gli agenti vendono i trade non favorevoli.`;
+    say.textContent = `Difesa del guadagno: ${inDifesa.map(([k, g]) => `${personaDi(k)?.nome ?? k.slice(2)} ha toccato il suo obiettivo (${pct(g.picco)} ≥ ${pct(g.obiettivo)}) ed è a ${pct(g.pct)}`).join('; ')}: vendono i loro trade non favorevoli.`;
     return;
   }
   if (status.acquistiBloccati) {
@@ -2397,7 +2433,8 @@ async function loadCards() {
   const d = await (await fetch('/api/agenti/schede')).json();
   // Le regole comuni: il motore e gli agenti generali che non hanno una scrivania nell'ufficio (quelli effettivi le hanno
   // anche nella loro scheda di persona).
-  renderSchede($('#schede'), d.schede.filter((c) => c.agente === 'motore' || (!['custodi', 'intraday'].includes(c.agente) && !desks.has(`a:${c.agente}`))), loadCards, false);
+  // Trend e rientro sono impostazioni personali (nella scheda di ogni trading agent), non generali.
+  renderSchede($('#schede'), d.schede.filter((c) => c.agente === 'motore' || (!['custodi', 'intraday', 'trend', 'rientro'].includes(c.agente) && !desks.has(`a:${c.agente}`))), loadCards, false);
 }
 // Le schede come moduli: valori attuali, «Di serie», «Salva». Usata dalle Generali e dalla scheda di ogni agente.
 function renderSchede(box, schede, dopo, compatta) {
