@@ -294,6 +294,9 @@ export const AGENTS = {
   // Crypto: gli acquisti si fanno con ordini limite appena sotto il prezzo (ordiniLimite), che restano nel book e pagano
   // la commissione maker (0,15%) invece della taker (0,25%); le vendite restano a mercato (taker). Andata e ritorno
   // 0,40% invece di 0,50%. Un limite non eseguito entro scadenzaMinuti si cancella: al giro dopo si rivaluta.
+  // Esecuzione: prima di inviare un acquisto il prezzo si rilegge; salito oltre maxRialzo dal prezzo su cui si è deciso,
+  // non si compra (il giro dura un paio di minuti, l'occasione può essere passata).
+  esecuzione: { maxRialzo: 0.003 },
   costi: { cryptoAndataRitorno: 0.004, azioniAndataRitorno: 0.0005, margineCosti: 2, ordiniLimite: { crypto: true, sotto: 0.0005, scadenzaMinuti: 10 } },
   minNuova: { pct: 0.002, usd: 100 },
   // Esplorazione: gli agenti in sala caffè passano in rassegna il radar (RADAR_SECTORS e le crypto rimaste fuori dal

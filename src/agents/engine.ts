@@ -84,7 +84,9 @@ export interface AgentsStatus {
   prezzi: Record<string, number>;
   rischio: number;
   pesi: Record<string, number>;
-  agenti: Record<string, { segnali: number; note: string[]; errore?: string }>;
+  agenti: Record<string, { segnali: number; note: string[]; errore?: string; ms?: number }>;
+  // Quanto è durato il giro e quanto ci ha messo ogni fase (millisecondi): serve a capire il ritardo tra candela e ordine.
+  tempi?: Record<string, number>;
   segnali: Signal[];
   punteggi: Score[];
   ordini: { id: string; simbolo: string; lato: string; quantita: number; esito: string; perche: string }[];
@@ -346,6 +348,8 @@ export interface TickResult {
 // diario e registro, scrive lo stato per la dashboard. Ogni passo lascia un evento nel registro.
 export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache()): Promise<TickResult> {
   const startedAt = deps.now();
+  const t0Reale = Date.now();
+  const tempi: Record<string, number> = {};
   const rt = romeTime(startedAt);
   const today = rt.date;
   const giro = `agenti-${today}-${String(Math.floor(rt.minutes / 60)).padStart(2, "0")}${String(rt.minutes % 60).padStart(2, "0")}`;
@@ -517,6 +521,7 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
       bus.emit("nota", { testo: n });
     }
 
+    tempi.dati = Date.now() - t0Reale;
     // 4. Il massimo visto da ogni trade aperto (per lo stop che segue il profitto), poi le proiezioni, poi gli agenti.
     for (const t of journal.trade) {
       if (t.stato !== "aperto") continue;
@@ -578,9 +583,10 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
     await Promise.all(
       deps.agents.map(async (a) => {
         try {
+          const t0 = Date.now();
           const r = await a.observe(view);
           reports[a.name] = r;
-          agentStatus[a.name] = { segnali: r.segnali.length, note: r.note ?? [] };
+          agentStatus[a.name] = { segnali: r.segnali.length, note: r.note ?? [], ms: Date.now() - t0 };
           bus.emit("agente", { agente: a.name, segnali: r.segnali.length, rischio: r.rischio ?? null, note: r.note ?? [] });
           for (const s of r.segnali) bus.emit("segnale", { ...s });
           if (r.rischio !== undefined) bus.emit("rischio", { agente: a.name, rischio: r.rischio, note: r.note ?? [] });
@@ -591,6 +597,7 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
         }
       }),
     );
+    tempi.agenti = Date.now() - t0Reale;
     // Esplorazione: chi ha trovato un titolo in sala caffè lo vota finché l'opportunità regge (poi capo, lezioni, gabbia).
     const scout = scoutVotes(espl, view, reports);
     for (const n of scout.note) {
@@ -794,10 +801,23 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
     // 6. Invio.
     lock.intended = cage.orders.map((o) => ({ clientOrderId: clientOrderId(runIdFor(o.side), o.symbol, o.side), symbol: o.symbol, side: o.side, qty: o.qty }));
     const outcomes: ExecOutcome[] = [];
+    // Prima di comprare il prezzo si rilegge: il giro dura qualche minuto e il prezzo può essere scappato. Se è salito
+    // oltre esecuzione.maxRialzo dal prezzo su cui si è deciso, l'occasione è passata: non si compra (si rivaluta al giro
+    // dopo); se è sceso o è fermo, il limite si mette sul prezzo di adesso.
+    const acquisti = cage.orders.filter((o) => o.side === "buy" && o.source === "modello");
+    let freschi: Record<string, number> = {};
+    if (acquisti.length) { try { freschi = await deps.broker.getLatestPrices(acquisti.map((o) => o.symbol)); } catch {} }
     for (const plan of cage.orders) {
-      // Crypto in acquisto: ordine limite appena sotto il prezzo (commissione maker invece di taker).
+      const p0 = snap.prices[plan.symbol], p1 = freschi[plan.symbol] ?? p0;
+      if (plan.side === "buy" && plan.source === "modello" && p0 && p1 && p1 > p0 * (1 + AGENTS.esecuzione.maxRialzo)) {
+        const m = `${plan.symbol}: acquisto non inviato, il prezzo è salito da ${p0} a ${p1} (+${((p1 / p0 - 1) * 100).toFixed(2)}%) durante il giro: l'occasione si rivaluta al giro dopo`;
+        log.info(m);
+        bus.emit("nota", { testo: m });
+        continue;
+      }
+      // Crypto in acquisto: ordine limite appena sotto il prezzo di adesso (commissione maker invece di taker).
       const ol = AGENTS.costi.ordiniLimite;
-      if (ol.crypto && plan.side === "buy" && plan.source === "modello" && isCrypto(plan.symbol) && snap.prices[plan.symbol]) plan.limitPrice = snap.prices[plan.symbol]! * (1 - ol.sotto);
+      if (ol.crypto && plan.side === "buy" && plan.source === "modello" && isCrypto(plan.symbol) && p1) plan.limitPrice = p1 * (1 - ol.sotto);
       const out = await sendOne(deps.broker, runIdFor(plan.side), plan, log, deps.sleep);
       outcomes.push(out);
       bus.emit("ordine", { id: out.id, simbolo: plan.symbol, lato: plan.side, quantita: plan.qty, origine: plan.source, esito: out.kind, stato: "order" in out ? out.order.status : undefined, errore: "error" in out ? out.error : undefined, perche: plan.why });
@@ -815,6 +835,7 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
       if (l) learned.push(l);
     }
 
+    tempi.ordini = Date.now() - t0Reale;
     // 7. Stop su Alpaca, diario, lezioni.
     let stops: StopsReport | null = null;
     let positions = snap.positions;
@@ -862,7 +883,9 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
       } catch {}
     }
     const bm = compareWithBenchmarks(deps.stateDir, today, account.equity, snap.prices.SPY, snap.prices.TLT);
+    tempi.totale = Date.now() - t0Reale;
     const status: AgentsStatus = {
+      tempi,
       versione: 1,
       aggiornato: deps.now().toISOString(),
       giro,
