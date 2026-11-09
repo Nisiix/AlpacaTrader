@@ -62,7 +62,7 @@ describe("intraday nel motore vero: candele da 5 minuti, Kronos, ordini", () => 
     env.clock.t += 5 * 60_000;
     env.setFake((s) => (s.prices["BTC/USD"] = entrata * 1.016));
     const r2 = await runTick(deps, cache);
-    expect(r2.status_file!.analisi!.questoGiro).toBe(false);
+    expect(r2.status_file!.analisi!.questoGiro).toBe(AGENTS.analisiMinuti <= 5); // con l'analisi ogni 5 minuti, ogni giro ne ha una
     const vendita = r2.status_file!.ordini.find((o) => o.simbolo === "BTC/USD" && o.lato === "sell");
     expect(vendita?.esito).toStartWith("inviato");
     expect(vendita!.perche).toContain("obiettivo raggiunto");

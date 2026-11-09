@@ -8,6 +8,7 @@ import { addTradingDays } from "../slots.ts";
 import type { Agent, AgentReport, AgentView, Signal } from "./types.ts";
 import { valore } from "./profili.ts";
 import { calibraP } from "./statistica.ts";
+import { isObject, readJson, writeJsonAtomic } from "../fsutil.ts";
 import type { LivelliIntraday } from "../journal.ts";
 
 // L'agente intraday: operazioni che nascono e muoiono nella stessa giornata, solo nel verso del trend giornaliero.
@@ -199,7 +200,15 @@ export class IntradayAgent implements Agent {
     private fetchBars: BarFetcher,
     private forecast: IntradayForecast | null = null,
     private affidabilita: AffidabilitaCandela | null = null,
-  ) {}
+    // File in cui tenere le proiezioni di Kronos sulle candele: dopo un riavvio si riparte da quelle ancora valide
+    // (stessa candela), invece di restare «in attesa della proiezione» per qualche analisi.
+    private cacheFile: string | null = null,
+  ) {
+    if (cacheFile) {
+      const r = readJson(cacheFile, (x): x is Record<string, { chiave: string; path: number[] }> => isObject(x));
+      if (r.kind === "ok") for (const [k, val] of Object.entries(r.value)) this.kCache.set(k, val);
+    }
+  }
 
   async observe(v: AgentView): Promise<AgentReport> {
     const c = AGENTS.intraday;
@@ -288,6 +297,7 @@ export class IntradayAgent implements Agent {
             const n = profondita(tf);
             const r = await this.forecast(Object.fromEntries(need.map((s) => [s, barsOf(s, tf)!])), tfMinutes(tf), n);
             for (const s of need) if (r[s] !== undefined) this.kCache.set(`${s}|${tf}`, { chiave: keyOf(s), path: Array.isArray(r[s]) ? (r[s] as number[]) : Array.from({ length: n }, () => r[s] as number) });
+            if (this.cacheFile) { try { writeJsonAtomic(this.cacheFile, Object.fromEntries(this.kCache)); } catch {} }
           } catch (e) {
             note.push(`Kronos intraday non disponibile (${tf}): ${(e as Error).message}`);
           }

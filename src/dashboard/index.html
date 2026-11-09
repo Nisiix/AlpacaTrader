@@ -119,7 +119,6 @@
   .office-card .portrait { width:150px; height:170px; margin:0 auto; background:linear-gradient(#eef2f7,#dfe5ec); border-radius:12px; overflow:hidden; }
   .office-card .x { position:absolute; top:8px; right:8px; border:0; background:var(--card-2); border-radius:999px; width:28px; height:28px; cursor:pointer; color:var(--ink); }
   .office-card td { padding:4px 4px; font-size:13px; } .office-card .agent-c { color:var(--agent); font-weight:600; }
-  @media (max-width: 700px) { .office-card, .office-card.largo { left:8px; right:8px; width:auto; top:auto; bottom:8px; max-height:58%; } .office-card .portrait { width:110px; height:120px; } }
   .scene-nav { position:absolute; top:10px; left:10px; right:10px; display:flex; gap:6px; z-index:4; overflow-x:auto; scrollbar-width:none; pointer-events:auto; }
   .scene-nav::-webkit-scrollbar { display:none; }
   .scene-nav button { flex:0 0 auto; font:inherit; font-size:13px; padding:6px 12px; border-radius:999px; border:1px solid rgba(0,0,0,.08); background:rgba(255,255,255,.92); color:#1f2937; cursor:pointer; box-shadow:0 2px 6px rgba(0,0,0,.08); }
@@ -147,6 +146,37 @@
   .agent-list .nm { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .agent-list .caffe { color:var(--warn); font-size:11px; }
   @media (max-width: 860px) { .scene-wrap { grid-template-columns:1fr; } .scene-wrap { --scene-h:70vh; } .agent-list { border-left:0; border-top:1px solid var(--line); height:auto; max-height:320px; } }
+  .list-toggle { display:none; }
+  /* Telefono: la mappa occupa lo schermo senza esagerare, l'elenco degli agenti si apre a richiesta, la scheda
+     dell'agente diventa un pannello che sale dal basso (resta visibile anche se la pagina è scorsa). */
+  @media (max-width: 700px) {
+    details.scene summary { flex-direction:column; align-items:flex-start; gap:4px; padding:12px 14px; font-size:16px; }
+    details.scene summary span.hint { font-size:12px; line-height:1.45; }
+    .scene-wrap { --scene-h:max(360px, 62svh); }
+    #scene { height:var(--scene-h); }
+    .scene-nav { top:8px; left:8px; right:8px; gap:5px; }
+    .scene-nav button { font-size:12px; padding:5px 10px; }
+    .scene-nav button[data-zoom] { width:32px; }
+    .scene-help { left:8px; right:8px; bottom:8px; font-size:11px; white-space:normal; text-align:center; border-radius:10px; line-height:1.35; }
+    .lbl.dept-lbl { font-size:11px; padding:3px 7px; }
+    .lbl.desk-lbl { font-size:10px; }
+    .list-toggle { display:flex; justify-content:space-between; align-items:center; width:100%; font:inherit; font-size:14px; font-weight:600; color:var(--ink); background:var(--card); border:0; border-top:1px solid var(--line); padding:12px 14px; cursor:pointer; }
+    .list-toggle::after { content:'▾'; color:var(--ink-3); margin-left:8px; transition:transform .2s ease; }
+    .list-toggle[aria-expanded="true"]::after { transform:rotate(180deg); }
+    .list-toggle .n { margin-left:auto; color:var(--ink-3); font-weight:500; font-size:13px; }
+    .agent-list { display:none; max-height:none; border-top:0; padding-top:0; }
+    .agent-list.aperta { display:block; }
+    .agent-list button { padding:9px 8px; }
+    .office-card, .office-card.largo { position:fixed; left:0; right:0; bottom:0; top:auto; width:auto; max-height:80svh; border-radius:18px 18px 0 0; border-bottom:0; z-index:40; box-shadow:0 -10px 40px rgba(0,0,0,.25); padding-bottom:env(safe-area-inset-bottom); }
+    .office-card::before { content:''; display:block; width:40px; height:4px; border-radius:4px; background:var(--line); margin:8px auto 0; flex:0 0 auto; }
+    .office-card .x { width:36px; height:36px; top:10px; right:10px; font-size:16px; }
+    .office-card .corpo { padding:10px 12px 18px 14px; }
+    .office-card .portrait { width:110px; height:120px; }
+    .office-card .portrait canvas { width:110px !important; height:120px !important; object-fit:contain; }
+    nav.tabs { flex-wrap:nowrap; overflow-x:auto; overflow-y:hidden; scrollbar-width:none; -webkit-overflow-scrolling:touch; }
+    nav.tabs::-webkit-scrollbar { display:none; }
+    nav.tabs button { flex:0 0 auto; padding:9px 12px; white-space:nowrap; }
+  }
   /* Telefono: menu a schede scorrevole, niente scorrimento orizzontale della pagina, tabelle scorrevoli dentro la card. */
   main > *, .cols > *, .stack > *, .title-grid > * { min-width:0; }
   @media (max-width: 700px) {
@@ -163,7 +193,6 @@
     .card td.why, .card td .why { white-space:normal; min-width:180px; }
     .chip-group .glab { min-width:0; width:100%; }
     #chart { height:300px; }
-    #scene { height:70vh; }
     .schede { grid-template-columns:1fr; }
     /* Elenchi sul telefono: ogni riga diventa una scheda con le etichette */
     .card table.stack-sm { display:block; white-space:normal; overflow:visible; }
@@ -378,7 +407,7 @@
   .log-row:hover { background:var(--card-2); }
   .log-row .q { color:var(--ink-2); }
   .log-row .r { text-align:right; white-space:nowrap; }
-  @media (max-width: 700px) { .log-row { grid-template-columns:44px 1fr auto; } .log-row .op { display:none; } .log-row .why { grid-column:1 / -1; } }
+  @media (max-width: 700px) { .log-row { grid-template-columns:72px minmax(0, 1fr) auto; grid-template-areas:'t s r' 'o m m'; gap:4px 10px; } .log-row > .t { grid-area:t; } .log-row > .op { grid-area:o; align-self:start; } .log-row > .op .pill { font-size:11px; padding:1px 7px; } .log-row > .s { grid-area:s; min-width:0; overflow-wrap:anywhere; } .log-row > .m { grid-area:m; } .log-row > .r { grid-area:r; } }
   @media (prefers-reduced-motion: reduce) { * { transition:none !important; } }
 </style>
 <script src="./vendor/lightweight-charts.js"></script>
@@ -409,7 +438,7 @@
     <p class="fix" id="fix" hidden></p>
     <div class="money" id="money" hidden>
       <div><div class="lab">Patrimonio totale</div><div class="big" id="k-eq">–</div></div>
-      <div><div class="lab">Oggi</div><div class="val" id="k-day">–</div></div>
+      <div><div class="lab">Oggi</div><div class="val" id="k-day">–</div><div class="why" id="k-obiettivo"></div></div>
       <div><div class="lab">Investito</div><div class="val" id="k-inv">–</div><div class="sub" id="k-inv-sub"></div></div>
       <div><div class="lab">Liquidità</div><div class="val" id="k-cash">–</div></div>
       <div><div class="lab">Sulle posizioni aperte</div><div class="val" id="k-unr">–</div></div>
@@ -444,7 +473,7 @@
     <div class="title-row"><h1 class="page-title">Ufficio</h1></div>
       <details class="scene" id="scene-box" open>
       <summary>Ufficio degli agenti <span class="hint">trading agents: <b style="color:#16a34a">verde</b> in posizione (rosso se in uscita) · <b style="color:#2563eb">blu</b> pronto a entrare, luce che pulsa · <b style="color:#94a3b8">grigio</b> in sala caffè · arancione intraday agents · chi non ha un'occasione aspetta in sala caffè</span></summary>
-      <div class="scene-wrap"><div id="scene"><div class="scene-loading" role="status"><span class="spin"></span>Preparo l'ufficio…</div></div><aside class="agent-list" id="agent-list" aria-label="agenti dell'ufficio"></aside></div>
+      <div class="scene-wrap"><div id="scene"><div class="scene-loading" role="status"><span class="spin"></span>Preparo l'ufficio…</div></div><button type="button" class="list-toggle" id="agent-list-toggle" aria-expanded="false" aria-controls="agent-list"><span>Elenco degli agenti</span><span class="n"></span></button><aside class="agent-list" id="agent-list" aria-label="agenti dell'ufficio"></aside></div>
       <p class="legend" hidden>In fondo la <b>lavagna dei risultati</b> (clic per aprirla) e gli agenti generali che hanno votato almeno un trade; poi i <b>Custodi</b>, una scrivania per titolo seguito, con la camicia del colore della fase (blu pronto, verde in posizione, rosso in uscita, grigio in attesa) e lo schermo con prezzo e andamento; infine la <b>Sala intraday</b> (arancione). A destra, oltre la porta, la <b>Sala caffè</b>: chi in questo giro non ha niente da fare si siede ai tavolini e scambia con i colleghi dati veri (dossier, candele, proiezioni di Kronos, lezioni dei trade chiusi); appena ha un trade da aprire o una posizione da seguire torna alla scrivania. Chi vota alza la mano, chi compra o vende si alza e lo schermo lampeggia. Mouse sopra per leggere, clic per aprire. A destra l'elenco degli agenti: passando sopra un nome il suo avatar si alza in piedi e la postazione si illumina; il clic apre la scheda.</p>
     </details>
     <nav class="tabs" id="uff-tabs" role="tablist" aria-label="sezioni dell'ufficio">
@@ -968,6 +997,7 @@ function paintAgentList(st) {
     <h4>In sala caffè <span>${liberi.length}</span></h4>${liberi.map(([key, per]) => row(key, per.nome, 'libero')).join('') || '<p class="empty" style="padding:4px 8px">nessuno</p>'}`;
   // Si riscrive solo se cambia qualcosa: il nome sotto il mouse resta lo stesso elemento.
   if (box.dataset.html !== html) { box.innerHTML = html; box.dataset.html = html; }
+  const n = box.querySelectorAll('button[data-key]').length, tg = $('#agent-list-toggle .n'); if (tg) tg.textContent = String(n);
 }
 // Un solo gestore per tutto l'elenco (le voci si riscrivono quando cambia lo stato).
 {
@@ -979,6 +1009,8 @@ function paintAgentList(st) {
   box.addEventListener('focusin', (ev) => { const k = keyOf(ev); if (k) set(k); });
   box.addEventListener('focusout', () => set(null));
   box.addEventListener('click', (ev) => { const k = keyOf(ev); if (k) openCard(k); });
+  const tg = $('#agent-list-toggle');
+  tg?.addEventListener('click', () => { const on = !box.classList.contains('aperta'); box.classList.toggle('aperta', on); tg.setAttribute('aria-expanded', String(on)); });
 }
 const deptLabels = [];
 function deptLabel(text, x, z) { const el = document.createElement('div'); el.className = 'lbl dept-lbl'; el.textContent = text; const o = new CSS2DObject(el); o.position.set(x, 2.6, z); scene.add(o); deptLabels.push(o); }
@@ -1626,6 +1658,8 @@ function paintMoney(st) {
   $('#k-eq').textContent = money(c.patrimonio);
   const dayPct = c.patrimonio - c.pnlGiorno > 0 ? c.pnlGiorno / (c.patrimonio - c.pnlGiorno) : null;
   $('#k-day').textContent = `${usd(c.pnlGiorno)}${dayPct !== null ? ` (${pct(dayPct)})` : ''}${st.giornata?.obiettivoRaggiunto ? ` · obiettivo toccato (${pct(st.giornata.picco)}), difesa a ${pct(st.giornata.pavimentoPct)}` : ''}`; $('#k-day').className = `val ${cls(c.pnlGiorno)}`;
+  // Obiettivo del conto: almeno il 3% al giorno; altrimenti settimana in positivo (in negativo: modalità recupero).
+  { const w = st.settimana; const ob = w?.obiettivoGiorno ?? 0.03; $('#k-obiettivo').innerHTML = w ? `obiettivo ${pct(ob)} al giorno${dayPct !== null ? ` (${dayPct >= ob ? 'raggiunto' : `mancano ${pct(Math.max(0, ob - dayPct))}`})` : ''} · settimana <span class="${cls(w.pct)}">${pct(w.pct)}</span>, media <span class="${cls(w.mediaGiorno)}">${pct(w.mediaGiorno)}</span> al giorno${w.recupero ? ' · <b class="down">in recupero</b>: taglie dimezzate e solo occasioni più nette' : ''}` : ''; }
   $('#k-cash').textContent = money(c.contanti);
   const pos = st.posizioni || [];
   const inv = pos.reduce((a, p) => a + Math.abs(p.valore || 0), 0);
@@ -2284,7 +2318,7 @@ function paintLog() {
     const g = romeDate(o.t);
     if (g !== giorno) { giorno = g; html += `<div class="log-day">${new Date(`${g}T12:00:00`).toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' })}</div>`; }
     const ora = new Date(o.t).toLocaleTimeString('it-IT', { timeZone: 'Europe/Rome', hour: '2-digit', minute: '2-digit' });
-    html += `<div class="log-row" data-sym="${esc(o.simbolo)}" title="apri il grafico"><time class="why">${ora}</time><span class="op"><span class="pill ${o.lato === 'buy' ? 'up' : 'down'}">${o.lato === 'buy' ? 'Acquisto' : 'Vendita'}</span></span><span><b>${esc(o.simbolo)}</b>${tn(o.simbolo)}<br><span class="q">${qty(o.q)} a ${px(o.prezzo)}</span></span><span class="why">${esc(o.perche)}${o.dur ? ` · tenuta ${o.dur}` : ''}</span><span class="r">${o.lato === 'sell' ? `<b class="${cls(o.pnl)}">${usd(o.pnl)}</b><br><span class="why">${pct(o.ris)}</span>` : `<span class="why">${money(o.q * o.prezzo)}</span>`}</span></div>`;
+    html += `<div class="log-row" data-sym="${esc(o.simbolo)}" title="apri il grafico"><time class="why t">${ora}</time><span class="op"><span class="pill ${o.lato === 'buy' ? 'up' : 'down'}">${o.lato === 'buy' ? 'Acquisto' : 'Vendita'}</span></span><span class="s"><b>${esc(o.simbolo)}</b>${tn(o.simbolo)}<br><span class="q">${qty(o.q)} a ${px(o.prezzo)}</span></span><span class="why m">${esc(o.perche)}${o.dur ? ` · tenuta ${o.dur}` : ''}</span><span class="r">${o.lato === 'sell' ? `<b class="${cls(o.pnl)}">${usd(o.pnl)}</b><br><span class="why">${pct(o.ris)}</span>` : `<span class="why">${money(o.q * o.prezzo)}</span>`}</span></div>`;
   }
   $('#log').innerHTML = html;
   for (const r of $('#log').querySelectorAll('.log-row')) r.addEventListener('click', () => openChart(r.dataset.sym));
