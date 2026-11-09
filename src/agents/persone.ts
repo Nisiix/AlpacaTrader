@@ -138,13 +138,13 @@ export function assegnaPersone(input: {
     const desk = `${pref(tipo)}${b.simbolo}`;
     if (chi[desk]) continue;
     const scrivania = Object.values(reg.staff).filter((m) => m.reparto === tipo && m.simbolo !== null).length;
-    // Lo staff conta anche chi è in formazione: chi va in sala caffè non viene sostituito da un nuovo assunto.
+    // Il team è fisso: conta anche chi è in sala caffè (in pausa o in formazione), nessuno esce e nessuno lo sostituisce.
     const staffTotale = Object.keys(reg.staff).length;
     let nome: string | null = null;
     const l = liberi(tipo);
     if (b.preferita && l.includes(nomeDi(b.preferita))) nome = nomeDi(b.preferita);
     else if (l.length) nome = l[0]!;
-    else if (b.tiene || staffTotale < AGENTS.persone.totale) nome = assumi(tipo);
+    else if (staffTotale < AGENTS.persone.totale) nome = assumi(tipo); // il team si completa fino a 20, mai oltre
     else if (b.voto) {
       // Nessuno libero: può rientrare chi è in formazione, se il capo lo consente (da chi è lì da più tempo).
       for (const p of input.sospesi.filter((p) => reg.staff[nomeDi(p)])) {
@@ -155,16 +155,6 @@ export function assegnaPersone(input: {
     if (!nome) { if (b.voto) senzaPersona.push(desk); continue; }
     reg.staff[nome] = { reparto: tipo, simbolo: b.simbolo, dal: now };
     chi[desk] = chiavePersona(nome);
-    cambiato = true;
-  }
-  // Lo staff resta di AGENTS.persone.totale persone: se è più grande (registri vecchi), escono le persone libere con i
-  // risultati peggiori (mai chi segue un titolo o è in formazione). Il loro storico resta nel diario.
-  const fuori = Object.entries(reg.staff).filter(([n, m]) => m.simbolo === null && !sospesi.has(chiavePersona(n)))
-    .sort((a, b) => Math.max(input.punteggio(chiavePersona(a[0]), "trading"), input.punteggio(chiavePersona(a[0]), "intraday")) - Math.max(input.punteggio(chiavePersona(b[0]), "trading"), input.punteggio(chiavePersona(b[0]), "intraday")) || b[1].dal.localeCompare(a[1].dal));
-  while (Object.keys(reg.staff).length > AGENTS.persone.totale && fuori.length) {
-    const [n] = fuori.shift()!;
-    delete reg.staff[n];
-    note.push(`${n} lascia lo staff: il team resta di ${AGENTS.persone.totale} persone, restano le più brave`);
     cambiato = true;
   }
   if (cambiato) scrivi(input.stateDir, reg);

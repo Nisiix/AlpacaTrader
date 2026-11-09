@@ -297,15 +297,14 @@ describe("profili personali", () => {
   });
 });
 
-test("il team resta di 20 persone: escono le libere con i risultati peggiori, mai chi lavora", async () => {
+test("il team è fisso a 20: nessuno esce; con tutti occupati una nuova occasione resta senza persona", async () => {
   const { assegnaPersone } = await import("../src/agents/persone.ts");
   const dir = mkdtempSync(join(tmpdir(), "team-"));
   const staff: Record<string, any> = {};
-  for (let i = 0; i < 25; i++) staff[`P${i}`] = { reparto: "trading", simbolo: i === 0 ? "AAPL" : null, dal: "2026-11-09T08:00:00Z" };
+  for (let i = 0; i < 20; i++) staff[`P${i}`] = { reparto: "trading", simbolo: `S${i}`, dal: "2026-11-09T08:00:00Z" };
   await Bun.write(join(dir, "persone.json"), JSON.stringify({ versione: 2, staff, vecchi: {} }));
-  const a = assegnaPersone({ stateDir: dir, now: new Date(), sospesi: [], punteggio: (p) => (p === "p:P1" ? 0.9 : p === "p:P2" ? 0.1 : 0.5), rientro: () => null, bisogni: { trading: [{ simbolo: "AAPL", tiene: true, voto: false }], intraday: [] } });
+  const bisogni = { trading: [...Array.from({ length: 20 }, (_, i) => ({ simbolo: `S${i}`, tiene: true, voto: false })), { simbolo: "NEW", tiene: false, voto: true }], intraday: [] };
+  const a = assegnaPersone({ stateDir: dir, now: new Date(), sospesi: [], punteggio: () => 0.5, rientro: () => null, bisogni });
   expect(Object.keys(a.reg.staff).length).toBe(20);
-  expect(a.reg.staff.P0).toBeDefined(); // lavora su AAPL
-  expect(a.reg.staff.P1).toBeDefined(); // il più bravo
-  expect(a.reg.staff.P2).toBeUndefined(); // il peggiore esce
+  expect(a.senzaPersona).toEqual(["c:NEW"]);
 });
