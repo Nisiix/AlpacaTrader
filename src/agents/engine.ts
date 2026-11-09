@@ -130,6 +130,8 @@ export interface AgentsStatus {
   formazione?: FormazioneReport;
   // La giornata di ogni persona: guadagno sul capitale dei suoi trade di oggi, obiettivo personale, difesa.
   giornataPersone?: Record<string, GiornataPersona>;
+  // Il motore punta all'intraday: gli ingressi nuovi li decidono le candele; i dossier dei trading agents fanno da contesto.
+  puntaIntraday?: boolean;
   // Calibrazione delle probabilità e meta-modello: campione, attivi o no, Brier score sulla prova fuori campione.
   statistica?: { probabilita: Record<string, StatoCalibrazione>; meta: StatoMeta };
   // I nomi dei titoli e delle crypto (Apple, Bitcoin...), per mostrarli accanto ai codici.
@@ -885,6 +887,7 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
       universo: { titoli: AGENTS.universe.filter((s) => !isCrypto(s)), crypto: AGENTS.universe.filter(isCrypto), fonteCrypto: cache.universeInfo?.fonte ?? null, aggiornatoCrypto: cache.universeInfo?.aggiornato ?? null },
       kronos: { stato: deps.kronosStato?.() ?? (deps.forecaster ? "attivo" : "non configurato"), proiezioniDel: cache.previsioni?.giorno ?? null, simboli: Object.keys(cache.previsioni?.data ?? {}).length, scartate },
       giornataPersone: giornataP.perPersona,
+      puntaIntraday: AGENTS.puntaIntraday,
       statistica,
       giornata: { pnlPct, obiettivoPct: AGENTS.daily.targetPct, pavimentoPct: AGENTS.daily.pavimentoPct, picco: giornata.picco, perditaMaxPct: AGENTS.daily.maxLossPct, obiettivoRaggiunto: giornata.obiettivoRaggiunto, difesa: giornata.difesa, perditaOltre: giornata.perditaOltre },
       simulazioni,

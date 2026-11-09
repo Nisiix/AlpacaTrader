@@ -483,6 +483,7 @@
       <button type="button" role="tab" data-tab="caffe">Sala caffè</button>
     </nav>
     <section class="card tabpanel" role="tabpanel" data-tab="agents">
+      <p class="why" id="ta-nota" style="margin:0 0 10px"></p>
       <div class="filters" id="ta-filtro" role="group" aria-label="stato dei trading agents" style="margin-bottom:12px"></div>
       <div id="custodi"></div>
     </section>
@@ -1164,7 +1165,7 @@ const FASE_SHIRT = { pronto: 0x2563eb, 'in posizione': 0x16a34a, 'in uscita': 0x
 const CATEGORIA = (c) => c.fase === 'in posizione' || c.fase === 'in uscita' ? 'posizione' : status?.persone?.[`c:${c.simbolo}`] ? 'pronto' : 'osserva';
 // La probabilità minima del dossier per entrare (AGENTS.custodi.minProbabilita di serie; il capo la calibra per persona).
 const SOGLIA_PRONTO = 57;
-const STATO_OSSERVA = (c) => (status?.inAttesa || []).some((w) => w.simbolo === c.simbolo) || c.fase === 'attende' ? ['warn', 'in attesa'] : c.fase === 'pronto' && Math.round((c.dossier?.probabilita ?? 0) * 100) >= SOGLIA_PRONTO && !c.simbolo.includes('/') ? ['', 'pronta all\'apertura'] : ['', 'osserva'];
+const STATO_OSSERVA = (c) => (status?.inAttesa || []).some((w) => w.simbolo === c.simbolo) || c.fase === 'attende' ? ['warn', 'in attesa'] : !status?.puntaIntraday && c.fase === 'pronto' && Math.round((c.dossier?.probabilita ?? 0) * 100) >= SOGLIA_PRONTO && !c.simbolo.includes('/') ? ['', 'pronta all\'apertura'] : ['', status?.puntaIntraday ? 'contesto' : 'osserva'];
 const CAT_INFO = { posizione: { nome: 'In posizione', colore: 0x16a34a }, pronto: { nome: 'Pronti a entrare', colore: 0x2563eb }, osserva: { nome: 'In osservazione', colore: 0x94a3b8 } };
 const ROLE = { trend: 'trend', rientro: 'rientro', regime: 'clima di mercato', orizzonte: 'orizzonte', uscite: 'uscite e stop', contesto: 'contesto economico', profitto: 'presa di profitto', kronos: 'previsioni Kronos' };
 
@@ -1782,6 +1783,10 @@ function paintCustodi(st) {
   const per = { posizione: [], pronto: [], osserva: [] };
   for (const c of list) per[CATEGORIA(c)].push(c);
   const hex = (k) => `#${CAT_INFO[k].colore.toString(16).padStart(6, '0')}`;
+  // Le card sono titoli seguiti, non persone: il team (20) sta alla scrivania solo quando c'è un'occasione.
+  const team = Object.keys(st.persone || {}).filter((k) => k.startsWith('p:')).length || 20;
+  const alLavoro = new Set(Object.entries(st.persone || {}).filter(([k]) => k.startsWith('c:') || k.startsWith('i:')).map(([, x]) => x.nome)).size;
+  $('#ta-nota').innerHTML = `${list.length} titoli seguiti (ognuno con il suo dossier), non persone: delle ${team} persone del team ${alLavoro ? `${alLavoro} ${alLavoro === 1 ? 'è' : 'sono'} alla scrivania` : 'nessuna è alla scrivania'}, le altre aspettano un'occasione in sala caffè.${st.puntaIntraday ? ' Il motore punta all\'intraday: questi dossier fanno da contesto, gli ingressi li decidono le candele (Intraday agents).' : ''}`;
   $('#ta-filtro').innerHTML = [['tutti', `Tutti (${list.length})`], ...['posizione', 'pronto', 'osserva'].map((k) => [k, `<span class="sw" style="background:${hex(k)}"></span>${CAT_INFO[k].nome} (${per[k].length})`])].map(([k, t]) => `<button type="button" data-k="${k}" aria-pressed="${taFiltro === k}">${t}</button>`).join('');
   for (const b of $('#ta-filtro').querySelectorAll('button')) b.addEventListener('click', () => { taFiltro = b.dataset.k; try { localStorage.setItem('agenti.ta.filtro', taFiltro); } catch {} paintCustodi(status); });
   if (!list.length) { $('#custodi').innerHTML = '<p class="empty">Nessun trading agent attivo: ne nasce uno per ogni titolo in trend o in portafoglio.</p>'; return; }
