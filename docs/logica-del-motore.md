@@ -177,18 +177,34 @@ l'opportunità regge. Si chiude quando è comprato (lo segue il suo custode), qu
    intraday** (sua taglia, suo obiettivo e stop, chiusura in giornata o promozione), invece di perdere l'occasione.
 3. **Taglia**: al massimo il **10% del conto** per titolo, meno se il titolo è nervoso (valore × volatilità giornaliera ≤
    0,25% del conto) × rischio ammesso × **fiducia in Kronos** (50% → 40% della taglia, ≥ 80% → piena) × evidenza (al
-   minimo metà); sotto la media a 200 ancora × 0,5, mai oltre il 5%.
+   minimo metà) × la **scaletta delle medie** (sotto).
 4. **Riparto del capitale**: nessun numero fisso di titoli o di agenti. Se i contanti (meno l'1% di riserva e meno gli
    ordini d'acquisto ancora aperti) non bastano, si dividono in proporzione alla **qualità** (fiducia × evidenza ×
    punteggio), rispettando il **35% per settore** in ordine di punteggio. Una posizione nuova vale la pena da 0,2% del
    conto e 100 $; un'aggiunta da 2%.
 5. Gli acquisti si decidono solo nei giri con **analisi d'ingresso** (ogni 5 minuti); le vendite in ogni giro.
 
+### La scaletta delle medie (prudenza)
+
+Si investe anche sotto le medie giornaliere, con taglie via via più piccole (la 200 conta più della 50;
+`AGENTS.prudenzaMedie`, `livelloMedie` in `src/agents/fiducia.ts`):
+
+| Prezzo | Più giorni | Intraday (candele 5 min - 4 ore) |
+|---|---|---|
+| sopra la 50 e la 200 | ×1 | ×1 |
+| sotto la 50, sopra la 200 | ×0,75 (serve Kronos ≥ +1%) | ×0,85 |
+| sopra la 50, sotto la 200 | ×0,5 (contro tendenza) | ×0,75 |
+| sotto la 50 e la 200 | ×0,4 (contro tendenza) | ×0,65 |
+
+Sotto la 50 (downtrend) si **preferisce il timeframe breve**: se sul titolo c'è anche un voto intraday che da solo
+basta, si entra come trade intraday invece che di più giorni. Sotto la 200 resta il tetto del 5% del conto.
+
 ### Il rimbalzo di breve (media a 50 facoltativa)
 
 La media a 50 giorni non è più un requisito assoluto. Se un titolo o una crypto è sotto la 50 (anche sotto la 200) e
-nell'ultimo giorno è **sceso nettamente** (oltre il 3% per le azioni, il 5% per le crypto, o 1,5 volte la sua
-volatilità giornaliera; la giornata conclusa o quella in corso: `caloNetto` in `src/agents/fiducia.ts`), il rimbalzo
+ha avuto un **calo netto improvviso** (nell'ultimo giorno oltre il 3% per le azioni, il 5% per le crypto, o 1,5 volte la
+sua volatilità giornaliera; negli ultimi 3 giorni oltre 1,5 volte quella soglia; o nelle ultime 8 ore dal massimo
+sulle candele da 1 ora: `caloNetto` in `src/agents/fiducia.ts`), il rimbalzo
 lo cercano gli **intraday agents**, e tutto si decide **sulle candele**, non a sedute o a giorni:
 
 - Kronos proietta le candele da 5 e 15 minuti, 1 e 4 ore (le azioni 1 e 4 ore); si sceglie la candela e l'orizzonte

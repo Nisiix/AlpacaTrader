@@ -263,7 +263,14 @@ export const AGENTS = {
   // temporaneo che copre i costi con probabilità ≥ minFiducia, anche con le medie brevi non ancora in ordine; obiettivo
   // il rialzo previsto, scadenza l'orizzonte di Kronos su quella candela (prolungabile se le candele superiori vedono
   // ancora rialzo), stop della candela.
-  rimbalzo: { enabled: true, caloMin: { stocks: 0.03, crypto: 0.05 }, caloVol: 1.5, minFiducia: 0.57 },
+  // Il calo può essere anche di qualche giorno (giorni, soglia × fattoreGiorni) o delle ultime ore (dal massimo delle
+  // ultime `ore` candele da 1 ora).
+  rimbalzo: { enabled: true, caloMin: { stocks: 0.03, crypto: 0.05 }, caloVol: 1.5, minFiducia: 0.57, giorni: 3, fattoreGiorni: 1.5, ore: 8 },
+  // Scaletta della prudenza secondo le medie giornaliere (la 200 conta più della 50): si investe anche sotto le medie,
+  // con taglie via via più piccole. Più giorni: sopra entrambe piena, sotto la 50 ×0,75, sotto la 200 ×0,5, sotto
+  // entrambe ×0,4. Intraday (candele 5 min - 4 ore): 1, 0,85, 0,75, 0,65. Sotto la 50 si preferisce il timeframe
+  // breve: se c'è anche un voto intraday che da solo basta, si entra intraday invece che di più giorni.
+  prudenzaMedie: { piuGiorni: { sopra: 1, sotto50: 0.75, sotto200: 0.5, sottoEntrambe: 0.4 }, intraday: { sopra: 1, sotto50: 0.85, sotto200: 0.75, sottoEntrambe: 0.65 } },
   // Contanti che restano sempre liberi (quota del patrimonio): il riparto del capitale divide il resto.
   riservaContanti: 0.01,
   // Costi di andata e ritorno su Alpaca: crypto 0,25% per lato (taker, livello base: percentuale, nessuna quota fissa);

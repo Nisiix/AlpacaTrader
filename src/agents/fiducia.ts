@@ -32,19 +32,41 @@ export function controTendenza(closes: number[] | undefined, fc: number | undefi
   return { ok: true, p, motivo: `Kronos ${fc >= 0 ? "+" : ""}${(fc * 100).toFixed(1)}% con probabilità di successo ${pp}` };
 }
 
-// Rimbalzo di breve (media a 50 facoltativa): prezzo sotto la media a 50 giorni e calo netto nell'ultimo giorno (la
-// giornata conclusa o quella in corso, oltre caloMin o caloVol × volatilità giornaliera). È solo la premessa: se e
-// quando entrare, l'obiettivo e la durata li decidono le candele brevi e Kronos su quelle candele (sala intraday).
-export function caloNetto(simbolo: string, closes: number[] | undefined, price: number | null | undefined): { ok: boolean; calo: number | null; soglia: number | null } {
+// Dove sta il prezzo rispetto alle medie giornaliere a 50 e 200: la scaletta della prudenza (AGENTS.prudenzaMedie).
+export type LivelloMedie = "sopra" | "sotto50" | "sotto200" | "sottoEntrambe";
+export function livelloMedie(closes: number[] | undefined, price: number | null | undefined): { livello: LivelloMedie; etichetta: string } | null {
+  if (!closes || price === null || price === undefined || price <= 0) return null;
+  const m50 = sma(closes, LIMITS.trendSmaDays), m200 = sma(closes, LIMITS.longSmaDays);
+  if (m50 === null || m200 === null) return null;
+  const s50 = price < m50, s200 = price <= m200;
+  const livello: LivelloMedie = s50 && s200 ? "sottoEntrambe" : s200 ? "sotto200" : s50 ? "sotto50" : "sopra";
+  const etichetta = { sopra: `sopra le medie a ${LIMITS.trendSmaDays} e ${LIMITS.longSmaDays}`, sotto50: `sotto la media a ${LIMITS.trendSmaDays} (sopra la ${LIMITS.longSmaDays})`, sotto200: `sotto la media a ${LIMITS.longSmaDays} (sopra la ${LIMITS.trendSmaDays})`, sottoEntrambe: `sotto le medie a ${LIMITS.trendSmaDays} e ${LIMITS.longSmaDays}` }[livello];
+  return { livello, etichetta };
+}
+
+// Rimbalzo di breve (media a 50 facoltativa): prezzo sotto la media a 50 giorni e un calo netto improvviso: nell'ultimo
+// giorno (la giornata conclusa o quella in corso, oltre caloMin o caloVol × volatilità giornaliera), negli ultimi
+// `giorni` giorni (soglia × fattoreGiorni) o nelle ultime `ore` ore (dal massimo delle candele da 1 ora, se ci sono).
+// È solo la premessa: se e quando entrare, l'obiettivo e la durata li decidono le candele brevi e Kronos su quelle
+// candele (intraday agents).
+export function caloNetto(simbolo: string, closes: number[] | undefined, price: number | null | undefined, orarie?: number[]): { ok: boolean; calo: number | null; soglia: number | null; quando: string | null } {
   const r = AGENTS.rimbalzo;
-  if (!r.enabled || !closes || closes.length < LIMITS.trendSmaDays + 2 || price === null || price === undefined || price <= 0) return { ok: false, calo: null, soglia: null };
+  const no = { ok: false, calo: null, soglia: null, quando: null };
+  if (!r.enabled || !closes || closes.length < LIMITS.trendSmaDays + r.giorni + 1 || price === null || price === undefined || price <= 0) return no;
   const m50 = sma(closes, LIMITS.trendSmaDays);
-  if (m50 === null || price >= m50) return { ok: false, calo: null, soglia: null };
+  if (m50 === null || price >= m50) return no;
   const ieri = closes.at(-1)!, prima = closes.at(-2)!;
-  const calo = Math.min(prima > 0 ? ieri / prima - 1 : 0, ieri > 0 ? price / ieri - 1 : 0);
   const vol = dailyVol(closes, LIMITS.volLookbackDays) ?? LIMITS.fallbackDailyVol;
   const soglia = Math.max(isCrypto(simbolo) ? r.caloMin.crypto : r.caloMin.stocks, r.caloVol * vol);
-  return { ok: calo <= -soglia, calo, soglia };
+  const giorno = Math.min(prima > 0 ? ieri / prima - 1 : 0, ieri > 0 ? price / ieri - 1 : 0);
+  if (giorno <= -soglia) return { ok: true, calo: giorno, soglia, quando: "nell'ultimo giorno" };
+  const base = closes.at(-1 - r.giorni)!;
+  const giorni = base > 0 ? price / base - 1 : 0;
+  if (giorni <= -soglia * r.fattoreGiorni) return { ok: true, calo: giorni, soglia: soglia * r.fattoreGiorni, quando: `negli ultimi ${r.giorni} giorni` };
+  const alto = orarie?.length ? Math.max(...orarie.slice(-r.ore)) : null;
+  const ore = alto && alto > 0 ? price / alto - 1 : 0;
+  if (ore <= -soglia) return { ok: true, calo: ore, soglia, quando: `nelle ultime ${r.ore} ore` };
+  return { ok: false, calo: giorno, soglia, quando: null };
 }
 
 export const sotto200 = (closes: number[] | undefined, price: number | undefined) => {

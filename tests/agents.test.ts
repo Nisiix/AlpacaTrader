@@ -19,7 +19,7 @@ import { TrendAgent } from "../src/agents/trend.ts";
 import type { Agent, AgentView } from "../src/agents/types.ts";
 import { evaluateBreaker } from "../src/breaker.ts";
 import { applyCage } from "../src/cage.ts";
-import { caloNetto, controTendenza } from "../src/agents/fiducia.ts";
+import { caloNetto, controTendenza, livelloMedie } from "../src/agents/fiducia.ts";
 import { FAKE_VOL, syntheticCloses } from "../src/broker/fake.ts";
 import { AGENTS, LIMITS, UNIVERSE, enableCrypto, setCryptoUniverse } from "../src/config.ts";
 import { stopPctFor } from "../src/stops.ts";
@@ -1073,6 +1073,27 @@ describe("rimbalzo di breve: la premessa giornaliera (sotto la 50 dopo un calo n
     expect(caloNetto("NVDA", piatta, piatta.at(-1)!).ok).toBe(false);
     expect(caloNetto("BTC/USD", c, c.at(-1)!).ok).toBe(true); // crypto: oltre il 5%
     expect(caloNetto("NVDA", salitaDi(100), 120).ok).toBe(false); // sopra la 50 vale il trend
+  });
+  test("calo improvviso anche negli ultimi giorni o nelle ultime ore (candele da 1 ora)", () => {
+    const c = Array.from({ length: 245 }, (_, i) => 100 * (1 + 0.01 * Math.sin(i / 3)));
+    for (let i = 1; i <= 14; i++) c.push(100 * (1 - 0.006 * i));
+    const giorni = [...c, c.at(-1)! * 0.98, c.at(-1)! * 0.96, c.at(-1)! * 0.94]; // -2% al giorno: -6% in 3 giorni
+    const r = caloNetto("NVDA", giorni, giorni.at(-1)!);
+    expect(r.ok).toBe(true);
+    expect(r.quando).toBe("negli ultimi 3 giorni");
+    const p = c.at(-1)!;
+    const ore = Array.from({ length: 12 }, (_, i) => (i < 6 ? p * 1.04 : p)); // -3,8% dal massimo delle ultime 8 ore
+    expect(caloNetto("NVDA", [...c, p], p * 0.999, ore).quando).toBe("nelle ultime 8 ore");
+    expect(caloNetto("NVDA", [...c, p], p * 0.999).ok).toBe(false);
+  });
+  test("scaletta delle medie: sopra entrambe, sotto la 50, sotto la 200, sotto entrambe", () => {
+    const su = salitaDi(100);
+    expect(livelloMedie(su, su.at(-1)! * 1.01)!.livello).toBe("sopra");
+    const m50 = su.slice(-50).reduce((a, x) => a + x, 0) / 50, m200 = su.slice(-200).reduce((a, x) => a + x, 0) / 200;
+    expect(livelloMedie(su, (m50 + m200) / 2)!.livello).toBe(m200 < m50 ? "sotto50" : "sotto200");
+    expect(livelloMedie(su, Math.min(m50, m200) * 0.9)!.livello).toBe("sottoEntrambe");
+    expect(AGENTS.prudenzaMedie.piuGiorni.sotto50).toBeGreaterThan(AGENTS.prudenzaMedie.piuGiorni.sotto200);
+    expect(AGENTS.prudenzaMedie.piuGiorni.sotto200).toBeGreaterThan(AGENTS.prudenzaMedie.piuGiorni.sottoEntrambe);
   });
 });
 

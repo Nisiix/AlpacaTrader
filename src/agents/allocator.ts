@@ -1,6 +1,6 @@
 import type { ProposedOrder } from "../ordini.ts";
 import { maxWeightFor } from "../cage.ts";
-import { pesoControTendenza, sotto200 } from "./fiducia.ts";
+import { livelloMedie, pesoControTendenza, sotto200 } from "./fiducia.ts";
 import { AGENTS, CRYPTO_MIN_NOTIONAL, LIMITS, isCrypto, sectorOf } from "../config.ts";
 import { dailyVol } from "../indicators.ts";
 import { romeTime } from "../slots.ts";
@@ -192,6 +192,17 @@ export function allocate(view: AgentView, reports: Record<string, AgentReport>, 
     const p = held.get(sc.simbolo);
     // Le attese che valgono solo per un ingresso di più giorni. Se scattano su un punteggio misto e la parte intraday da
     // sola supera la soglia, si entra come trade intraday (taglia e uscite dell'intraday) invece di lasciar perdere l'occasione.
+    // Sotto la media a 50 (downtrend) si preferisce il timeframe breve: se sul titolo c'è anche un voto intraday che da
+    // solo basta, si entra come trade intraday (candele da 5 minuti a 4 ore) invece che di più giorni.
+    if (!p && !sc.intraday) {
+      const liv = livelloMedie(view.closes[sc.simbolo], price);
+      const alt = liv && liv.livello !== "sopra" && liv.livello !== "sotto200" ? soloParteIntraday(sc) : null;
+      if (alt && alt.punteggio >= AGENTS.buyScore) {
+        alt.perche = [...alt.perche, `ufficio: ${liv!.etichetta}: si preferisce il timeframe breve, entra solo la parte intraday`];
+        punteggi[punteggi.indexOf(sc)] = alt;
+        sc = alt;
+      }
+    }
     const attesa = p || sc.intraday ? null : attesaPiuGiorni(sc, price);
     if (attesa) {
       const alt = soloParteIntraday(sc);
@@ -230,7 +241,11 @@ export function allocate(view: AgentView, reports: Record<string, AgentReport>, 
     if (ev !== null) w *= Math.max(0.5, Math.min(1, 0.5 + ((ev - minEv) / Math.max(0.05, 0.8 - minEv)) * 0.5));
     // Sotto la media a 200 (contro tendenza) sempre più prudente che sopra: a parità di fiducia ed evidenza la taglia si
     // moltiplica per la quota contro tendenza (metà di serie) e non supera mai quella quota del peso massimo.
-    if (contro) w = Math.min(w * AGENTS.kronos.controTendenza.pesoFattore, pesoControTendenza());
+    // Scaletta della prudenza secondo le medie (più giorni): sopra entrambe piena, sotto la 50 ×0,75, sotto la 200 ×0,5,
+    // sotto entrambe ×0,4; sotto la 200 mai oltre il peso massimo contro tendenza.
+    const liv = sc.intraday ? null : livelloMedie(view.closes[sc.simbolo], price);
+    if (liv) w *= AGENTS.prudenzaMedie.piuGiorni[liv.livello];
+    if (contro) w = Math.min(w, pesoControTendenza());
     if (!p) slots--;
     wanted.push({ sc, w, p });
   }
