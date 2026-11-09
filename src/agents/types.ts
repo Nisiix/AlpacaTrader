@@ -57,7 +57,8 @@ export interface AgentView {
   chiusuraBorsa?: string;
   finestraIngressi?: boolean;
   // Giornata: guadagno dal patrimonio di ieri e stato dell'obiettivo giornaliero (raggiunto → si incassa, niente nuovi ingressi).
-  giornata?: { pnlPct: number; obiettivoRaggiunto: boolean; perditaOltre: boolean };
+  // obiettivoRaggiunto: oggi il guadagno ha toccato l'obiettivo; difesa: poi è tornato al pavimento (si vendono i trade non favorevoli).
+  giornata?: { pnlPct: number; obiettivoRaggiunto: boolean; perditaOltre: boolean; difesa?: boolean; picco?: number };
   // Fonti esterne (Fear & Greed delle crypto, funding dei perpetui): contorno per contesto e dossier.
   fonti?: FontiDati;
 }

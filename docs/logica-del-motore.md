@@ -305,9 +305,12 @@ d'opinione prima di una candela giornaliera nuova: escono solo stop e regole vin
 
 ## 8. Limiti del giorno e sicurezze
 
-- **Limite di guadagno del giorno**: raggiunto il +10% del patrimonio rispetto alla chiusura di ieri, niente acquisti veri
-  fino a domani: gli agenti continuano **in simulazione** (operazioni virtuali misurate) e l'intraday incassa. Nessun
-  limite alla perdita del giorno: proteggono stop e uscite.
+- **Obiettivo del giorno con difesa del guadagno**: toccato il +10% del patrimonio rispetto alla chiusura di ieri, gli
+  agenti **continuano a investire** (un giorno buono non si ferma). Se poi il guadagno del giorno torna al **+5%**, scatta
+  la difesa: si vendono i trade **non favorevoli** (posizioni di più giorni con Kronos a 5 sedute sotto +1%; intraday
+  quando né la candela breve né quelle superiori vedono ancora salire); quelli favorevoli restano. Il massimo del giorno
+  è salvato in `state/giornata.json`, quindi vale anche dopo un riavvio. Nessun limite alla perdita del giorno:
+  proteggono stop e uscite.
 - **Interruttore** (−5% dal massimo): spento di serie, attivabile dalle impostazioni come freno d'emergenza.
 - **Niente medie al ribasso (Livermore)**: nessuna aggiunta a una posizione in perdita.
 - **Prezzi degli ordini con i decimali giusti**: azioni 2 (4 sotto il dollaro), crypto 4 cifre significative fino a 9

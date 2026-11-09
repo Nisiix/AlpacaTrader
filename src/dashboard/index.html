@@ -537,7 +537,7 @@
         <li><b>Avvio.</b> Doppio clic su <code>avvia-bot.cmd</code>: il motore fa un giro ogni 5 minuti e questa pagina si aggiorna da sola. Per ripartire da zero: <code>chiudi-posizioni.cmd</code> (vende tutto, toglie gli stop), poi riavvia.</li>
       </ol>
       <h3>2. Cosa fa il motore a ogni giro</h3>
-      <p>Rinnova l'universo (titoli fissi + crypto della top 100 negoziabili su Alpaca), legge conto e prezzi, scarica le candele giornaliere, chiede a Kronos le proiezioni (una volta al giorno), valuta il contesto, fa votare gli agenti, somma i voti, passa dalla gabbia delle regole, invia gli ordini ammessi, mette gli stop su Alpaca, aggiorna diario e stato. La gabbia ammette acquisti di titoli solo a borsa aperta e di crypto sempre; nessun numero fisso di posizioni, al massimo il 10% del patrimonio per titolo, meno quando la proiezione di Kronos è incerta. Kronos è il segnale principale; contesto e notizie fanno da contorno. Raggiunto il +10% nella giornata, gli agenti continuano solo in simulazione fino al giorno dopo. Una posizione comprata oggi non si vende per un voto d'opinione nella candela successiva: escono solo stop e regole vincolanti. Dettagli in <code>docs/logica-del-motore.md</code>.</p>
+      <p>Rinnova l'universo (titoli fissi + crypto della top 100 negoziabili su Alpaca), legge conto e prezzi, scarica le candele giornaliere, chiede a Kronos le proiezioni (una volta al giorno), valuta il contesto, fa votare gli agenti, somma i voti, passa dalla gabbia delle regole, invia gli ordini ammessi, mette gli stop su Alpaca, aggiorna diario e stato. La gabbia ammette acquisti di titoli solo a borsa aperta e di crypto sempre; nessun numero fisso di posizioni, al massimo il 10% del patrimonio per titolo, meno quando la proiezione di Kronos è incerta. Kronos è il segnale principale; contesto e notizie fanno da contorno. Toccato il +10% nella giornata gli agenti continuano a investire; se il guadagno del giorno torna al +5% vendono i trade che Kronos non vede più salire. Una posizione comprata oggi non si vende per un voto d'opinione nella candela successiva: escono solo stop e regole vincolanti. Dettagli in <code>docs/logica-del-motore.md</code>.</p>
       <h3>3. Le pagine</h3>
       <p>Il menu è a sinistra (sul telefono si apre con ☰).</p>
       <ul>
@@ -1369,9 +1369,9 @@ function sayState() {
     if (rest.length) { fix.hidden = false; fix.textContent = rest.join(' · '); }
     return;
   }
-  if (status.giornata?.obiettivoRaggiunto) {
-    say.className = 'say';
-    say.textContent = `Obiettivo del giorno raggiunto (${pct(status.giornata.pnlPct)}): per oggi gli agenti continuano in simulazione, si riparte domani.`;
+  if (status.giornata?.difesa) {
+    say.className = 'say warn';
+    say.textContent = `Difesa del guadagno: oggi il conto ha toccato ${pct(status.giornata.picco)} ed è tornato a ${pct(status.giornata.pnlPct)}; gli agenti vendono i trade non favorevoli.`;
     return;
   }
   if (status.acquistiBloccati) {
@@ -1388,7 +1388,7 @@ function paintMoney(st) {
   if (!c) return;
   $('#k-eq').textContent = money(c.patrimonio);
   const dayPct = c.patrimonio - c.pnlGiorno > 0 ? c.pnlGiorno / (c.patrimonio - c.pnlGiorno) : null;
-  $('#k-day').textContent = `${usd(c.pnlGiorno)}${dayPct !== null ? ` (${pct(dayPct)})` : ''}${st.giornata && st.giornata.obiettivoPct > 0 ? ` · tetto ${pct(st.giornata.obiettivoPct)}` : ''}`; $('#k-day').className = `val ${cls(c.pnlGiorno)}`;
+  $('#k-day').textContent = `${usd(c.pnlGiorno)}${dayPct !== null ? ` (${pct(dayPct)})` : ''}${st.giornata?.obiettivoRaggiunto ? ` · obiettivo toccato (${pct(st.giornata.picco)}), difesa a ${pct(st.giornata.pavimentoPct)}` : ''}`; $('#k-day').className = `val ${cls(c.pnlGiorno)}`;
   $('#k-cash').textContent = money(c.contanti);
   const pos = st.posizioni || [];
   const inv = pos.reduce((a, p) => a + Math.abs(p.valore || 0), 0);
@@ -2118,7 +2118,7 @@ function paintIntraday(st) {
 }
 function paintSimulazioni(st) {
   const list = st.simulazioni || [];
-  $('#sim-card').hidden = !list.length && !st.giornata?.obiettivoRaggiunto;
+  $('#sim-card').hidden = !list.length;
   if (!list.length) { $('#simulazioni').innerHTML = '<p class="empty">Nessuna simulazione ancora: gli agenti osservano e votano, gli acquisti che proporrebbero compaiono qui.</p>'; return; }
   const tot = list.reduce((a, x) => a + (x.virtuale ?? 0), 0);
   $('#simulazioni').innerHTML = `<p class="why" style="margin-bottom:8px">Esito virtuale complessivo <b class="${cls(tot)}">${usd(tot)}</b> su ${list.length} operazioni simulate (nessun ordine inviato).</p><table class="stack-sm"><thead><tr><th>Titolo</th><th class="n">Quantità</th><th class="n">Prezzo simulato</th><th class="n">Ora</th><th class="n">Virtuale</th><th>Agenti</th></tr></thead><tbody>${list.map((x) => `<tr><td><b>${esc(x.simbolo)}</b><br><span class="why">${hhmm(x.quando)}</span></td><td class="n" data-l="Quantità">${qty(x.quantita)}</td><td class="n" data-l="Prezzo simulato">${px(x.prezzo)}</td><td class="n" data-l="Ora">${x.prezzoOra !== null ? px(x.prezzoOra) : '–'}</td><td class="n ${cls(x.virtuale ?? 0)}" data-l="Virtuale">${x.virtuale !== null ? `${usd(x.virtuale)}<br><span class="why">${pct(x.risultato)}</span>` : '–'}</td><td class="why" data-l="Agenti">${(x.agenti || []).map(agentName).join(', ')}</td></tr>`).join('')}</tbody></table>`;

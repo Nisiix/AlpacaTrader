@@ -73,6 +73,12 @@ export class ExitAgent implements Agent {
       if (soloIntraday(v.journal, p.symbol)) continue;
       // Per uscire vale anche la proiezione che il contesto non considera affidabile per entrare (riduce il rischio).
       const fcUscita = v.previsioniKronos?.[p.symbol] ?? forecast;
+      // Difesa del guadagno del giorno: toccato l'obiettivo, il conto è tornato al pavimento. Chi non è favorevole (Kronos
+      // a 5 sedute sotto la soglia di rialzo) si vende; chi lo è resta.
+      if (v.giornata?.difesa && !(fcUscita !== undefined && fcUscita >= AGENTS.kronos.anticipaSoglia)) {
+        sell(`difesa del guadagno del giorno: il conto è tornato a ${pct(v.giornata.pnlPct)} dopo aver toccato ${pct(v.giornata.picco ?? AGENTS.daily.targetPct)}, e su ${p.symbol} Kronos non vede rialzo (${fcUscita === undefined ? "n.d." : pct(fcUscita)}): si vende a ${pct(gain)}`);
+        continue;
+      }
       // Trimestrale in arrivo: decisione sull'ultima seduta utile, da guadagno o perdita, salto atteso e Kronos.
       const conti = uscitaTrimestrale(v, p.symbol, gain, fcUscita, trade ? trade.quantita < trade.comprate - 1e-9 : false);
       if (conti) {

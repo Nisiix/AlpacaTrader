@@ -100,7 +100,7 @@ export interface AgentsStatus {
   intraday: IntradayStato[];
   universo: { titoli: string[]; crypto: string[]; fonteCrypto: string | null; aggiornatoCrypto: string | null };
   kronos: { stato: string; proiezioniDel: string | null; simboli: number; scartate?: string[] };
-  giornata: { pnlPct: number; obiettivoPct: number; perditaMaxPct: number; obiettivoRaggiunto: boolean; perditaOltre: boolean };
+  giornata: { pnlPct: number; obiettivoPct: number; pavimentoPct: number; picco: number; perditaMaxPct: number; obiettivoRaggiunto: boolean; difesa: boolean; perditaOltre: boolean };
   // Operazioni simulate di oggi (dopo il tetto del giorno), con l'esito virtuale ai prezzi correnti.
   simulazioni: Simulazione[];
   // Il capo ufficio: sintesi, migliori, giudizio e consigli per ogni agente.
@@ -165,6 +165,17 @@ export const forecastsPath = (stateDir: string) => join(stateDir, "previsioni.js
 
 // Le proiezioni oltre ±maxAbs sono rumore del modello (un −46% in 5 sedute non è una previsione): il motore le toglie
 // per tutti gli agenti, la gabbia e il contesto, non solo per l'agente Kronos. Restano nel file e sul grafico, segnate.
+// Il massimo guadagno del giorno toccato finora (ora di Roma), in state/giornata.json: la difesa del guadagno vale anche
+// dopo un riavvio del motore.
+export function registraPicco(stateDir: string, today: string, pnlPct: number): number {
+  const p = join(stateDir, "giornata.json");
+  const r = readJson(p, (v): v is { data: string; picco: number } => isObject(v) && typeof v.data === "string" && typeof v.picco === "number");
+  const prima = r.kind === "ok" && r.value.data === today ? r.value.picco : -Infinity;
+  const picco = Math.max(prima, pnlPct);
+  if (picco !== prima) writeJsonAtomic(p, { data: today, picco });
+  return picco;
+}
+
 export function usableForecasts(p: Record<string, number> | undefined, closes?: Record<string, number[]>): { usabili: Record<string, number> | undefined; scartate: string[] } {
   if (!p) return { usabili: undefined, scartate: [] };
   const usabili: Record<string, number> = {};
@@ -423,18 +434,25 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
       buyBlock = ev.buyBlock;
       if (ev.newlyTripped) await alarm("Interruttore scattato", `${ev.newlyTripped}. Acquisti fermi per ${LIMITS.breakerRearmSessions} giorni di borsa; vendite e stop restano attivi.`);
     }
-    // Obiettivo giornaliero: patrimonio contro la chiusura di ieri. Raggiunto → niente nuovi acquisti fino a domani e
-    // l'intraday incassa; perdita oltre la soglia → niente nuovi acquisti (gli stop proteggono il resto).
+    // Obiettivo del giorno: patrimonio contro la chiusura di ieri, con il massimo toccato oggi (salvato: vale anche dopo un
+    // riavvio). Toccato l'obiettivo si continua a investire; se il guadagno torna al pavimento, scatta la difesa: gli agenti
+    // vendono i trade non favorevoli. Perdita oltre la soglia (se impostata) → niente nuovi acquisti.
     const pnlPct = snap.account.lastEquity > 0 ? snap.account.equity / snap.account.lastEquity - 1 : 0;
-    const giornata = { pnlPct, obiettivoRaggiunto: AGENTS.daily.enabled && AGENTS.daily.targetPct > 0 && pnlPct >= AGENTS.daily.targetPct, perditaOltre: AGENTS.daily.enabled && AGENTS.daily.maxLossPct > 0 && pnlPct <= -AGENTS.daily.maxLossPct };
-    if (!buyBlock && giornata.obiettivoRaggiunto) {
-      buyBlock = `obiettivo giornaliero raggiunto (${(pnlPct * 100).toFixed(2)}% ≥ ${(AGENTS.daily.targetPct * 100).toFixed(1)}%): per oggi niente nuovi acquisti, gli agenti continuano in simulazione; si riparte domani`;
-      if (cache.giornataAvvisata !== `${today}-obiettivo`) {
-        cache.giornataAvvisata = `${today}-obiettivo`;
-        const r = await deps.notifier.send(deps.redactor.apply(`🎯 Agenti · ${buyBlock}`));
-        if (!r.ok) log.error(`Telegram non ha ricevuto l'avviso: ${r.error}`);
-      }
-    } else if (!buyBlock && giornata.perditaOltre) {
+    const picco = registraPicco(deps.stateDir, today, pnlPct);
+    const d = AGENTS.daily;
+    const obiettivoRaggiunto = d.enabled && d.targetPct > 0 && picco >= d.targetPct;
+    const giornata = { pnlPct, picco, obiettivoRaggiunto, difesa: obiettivoRaggiunto && d.pavimentoPct > 0 && pnlPct <= d.pavimentoPct, perditaOltre: d.enabled && d.maxLossPct > 0 && pnlPct <= -d.maxLossPct };
+    const pc = (x: number) => `${(x * 100).toFixed(2)}%`;
+    if (obiettivoRaggiunto && cache.giornataAvvisata !== `${today}-obiettivo` && cache.giornataAvvisata !== `${today}-difesa`) {
+      cache.giornataAvvisata = `${today}-obiettivo`;
+      const r = await deps.notifier.send(deps.redactor.apply(`🎯 Agenti · obiettivo del giorno raggiunto (${pc(picco)} ≥ ${pc(d.targetPct)}): si continua a investire; se il guadagno del giorno torna al ${pc(d.pavimentoPct)} si vendono i trade non favorevoli`));
+      if (!r.ok) log.error(`Telegram non ha ricevuto l'avviso: ${r.error}`);
+    }
+    if (giornata.difesa && cache.giornataAvvisata !== `${today}-difesa`) {
+      cache.giornataAvvisata = `${today}-difesa`;
+      await alarm("Difesa del guadagno del giorno", `il guadagno del giorno è tornato a ${pc(pnlPct)} dopo aver toccato ${pc(picco)}: gli agenti vendono i trade non favorevoli`);
+    }
+    if (!buyBlock && giornata.perditaOltre) {
       buyBlock = `perdita del giorno oltre la soglia (${(pnlPct * 100).toFixed(2)}% ≤ -${(AGENTS.daily.maxLossPct * 100).toFixed(1)}%): niente nuovi acquisti fino a domani`;
       if (cache.giornataAvvisata !== `${today}-perdita`) {
         cache.giornataAvvisata = `${today}-perdita`;
@@ -545,17 +563,6 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
     const entry = stockEntryOpen(snap.clock, startedAt);
     const cage = applyCage({ today, marketOpen: snap.clock.isOpen, account: snap.account, positions: snap.positions, prices: snap.prices, closes, recentOrders: snap.recentOrders, lessons: lessonsNow, buyBlock, proposals: alloc.proposte, previsioni: view.previsioni, apertiOggi: openedToday(view), intradayAperti: simboliIntraday(journal) });
     for (const x of cage.rejected) {
-      // Obiettivo del giorno raggiunto: l'acquisto che si sarebbe fatto diventa una simulazione (si segue e si misura).
-      if (giornata.obiettivoRaggiunto && x.side === "buy" && /obiettivo giornaliero/.test(x.reason)) {
-        const price = snap.prices[x.symbol];
-        if (price) {
-          const sc = alloc.punteggi.find((p) => p.simbolo === x.symbol);
-          simulations.add(deps.stateDir, today, { id: `${giro}-${x.symbol}`, simbolo: x.symbol, quantita: x.qty, prezzo: price, quando: startedAt.toISOString(), agenti: sc?.agenti ?? [], perche: sc?.perche.join(" · ") ?? "" });
-          bus.emit("simulazione", { simbolo: x.symbol, lato: "buy", quantita: x.qty, prezzo: price, agenti: sc?.agenti ?? [], motivo: "obiettivo del giorno raggiunto: operazione simulata, non inviata" });
-          log.info(`simulazione: comprerebbe ${x.qty} ${x.symbol} a ${price}`);
-        }
-        continue;
-      }
       log.warn(`rifiutato ${x.side} ${x.qty} ${x.symbol} [${x.source}]: ${x.reason}`);
       bus.emit("rifiuto", { simbolo: x.symbol, lato: x.side, quantita: x.qty, origine: x.source, motivo: x.reason });
     }
@@ -684,7 +691,7 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
       intraday: Object.values(reports).flatMap((r) => r.intraday ?? []),
       universo: { titoli: AGENTS.universe.filter((s) => !isCrypto(s)), crypto: AGENTS.universe.filter(isCrypto), fonteCrypto: cache.universeInfo?.fonte ?? null, aggiornatoCrypto: cache.universeInfo?.aggiornato ?? null },
       kronos: { stato: deps.kronosStato?.() ?? (deps.forecaster ? "attivo" : "non configurato"), proiezioniDel: cache.previsioni?.giorno ?? null, simboli: Object.keys(cache.previsioni?.data ?? {}).length, scartate },
-      giornata: { pnlPct, obiettivoPct: AGENTS.daily.targetPct, perditaMaxPct: AGENTS.daily.maxLossPct, obiettivoRaggiunto: giornata.obiettivoRaggiunto, perditaOltre: giornata.perditaOltre },
+      giornata: { pnlPct, obiettivoPct: AGENTS.daily.targetPct, pavimentoPct: AGENTS.daily.pavimentoPct, picco: giornata.picco, perditaMaxPct: AGENTS.daily.maxLossPct, obiettivoRaggiunto: giornata.obiettivoRaggiunto, difesa: giornata.difesa, perditaOltre: giornata.perditaOltre },
       simulazioni,
       analisi: { questoGiro: analisi, ultima: cache.ultimaAnalisi ?? null, prossima: cache.ultimaAnalisi ? new Date(Date.parse(cache.ultimaAnalisi) + AGENTS.analisiMinuti * 60_000).toISOString() : null, ogniMinuti: AGENTS.analisiMinuti },
       capo,

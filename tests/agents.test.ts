@@ -323,7 +323,7 @@ describe("motore", () => {
   });
 
   test("il riepilogo elenca il profitto e la perdita di ogni vendita del giorno, il totale e il conto per agente", () => {
-    const base = { versione: 1 as const, aggiornato: "2026-09-24T20:10:00.000Z", giro: "g", mercatoAperto: false, finestraIngressi: false, conto: null, posizioni: [], prezzi: {}, rischio: 1, pesi: {}, agenti: {}, segnali: [], punteggi: [], ordini: [], rifiuti: [], contesto: null, inAttesa: [], stopSuAlpaca: null, acquistiBloccati: null, lezioniAttive: [], allarmi: [], diario: { stato: "x", statistiche: { trade: 0, vinti: 0, percVinti: null, mediaVincita: null, mediaPerdita: null, attesa: null, campione: "nessuno" as const } }, confronto: null, ultimoRiepilogo: null, tradeChiusiOggi: [], custodi: [], intraday: [], universo: { titoli: [], crypto: [], fonteCrypto: null, aggiornatoCrypto: null }, kronos: { stato: "non configurato", proiezioniDel: null, simboli: 0 }, giornata: { pnlPct: 0, obiettivoPct: 0.01, perditaMaxPct: 0.02, obiettivoRaggiunto: false, perditaOltre: false }, simulazioni: [] , capo: { aggiornato: "", sintesi: "", migliori: [], valutazioni: [], sogliaKronos: null, ingressoMigliore: null } };
+    const base = { versione: 1 as const, aggiornato: "2026-09-24T20:10:00.000Z", giro: "g", mercatoAperto: false, finestraIngressi: false, conto: null, posizioni: [], prezzi: {}, rischio: 1, pesi: {}, agenti: {}, segnali: [], punteggi: [], ordini: [], rifiuti: [], contesto: null, inAttesa: [], stopSuAlpaca: null, acquistiBloccati: null, lezioniAttive: [], allarmi: [], diario: { stato: "x", statistiche: { trade: 0, vinti: 0, percVinti: null, mediaVincita: null, mediaPerdita: null, attesa: null, campione: "nessuno" as const } }, confronto: null, ultimoRiepilogo: null, tradeChiusiOggi: [], custodi: [], intraday: [], universo: { titoli: [], crypto: [], fonteCrypto: null, aggiornatoCrypto: null }, kronos: { stato: "non configurato", proiezioniDel: null, simboli: 0 }, giornata: { pnlPct: 0, obiettivoPct: 0.01, pavimentoPct: 0.005, picco: 0, perditaMaxPct: 0.02, obiettivoRaggiunto: false, difesa: false, perditaOltre: false }, simulazioni: [] , capo: { aggiornato: "", sintesi: "", migliori: [], valutazioni: [], sogliaKronos: null, ingressoMigliore: null } };
     const st: AgentsStatus = {
       ...base,
       pnlOggi: {
@@ -382,6 +382,26 @@ describe("dashboard", () => {
 describe("uscite (regole vincolanti)", () => {
   const pos = (symbol: string, avg: number, price: number) => ({ symbol, qty: 10, avgEntryPrice: avg, currentPrice: price, marketValue: price * 10 });
   const openTrade = (simbolo: string, massimo?: number) => ({ id: simbolo, simbolo, stato: "aperto" as const, apertoIl: "2026-09-01T14:00:00Z", comprate: 10, costo: 1000, vendute: 0, incassato: 0, quantita: 10, contesto: null, massimo });
+
+  test("difesa del guadagno del giorno: toccato l'obiettivo e tornati al pavimento si vendono solo i trade non favorevoli; il picco resta dopo un riavvio", async () => {
+    const j = emptyJournal();
+    j.trade.push(openTrade("AAPL"), openTrade("MSFT"));
+    const v = view({ positions: [pos("AAPL", 100, 102), pos("MSFT", 100, 101)], journal: j, previsioni: { AAPL: -0.004, MSFT: 0.03 } });
+    v.prices.AAPL = 102; v.prices.MSFT = 101;
+    const ex = new ExitAgent(AGENTS.exit);
+    expect(ex.observe(v).segnali.filter((x) => /difesa/.test(x.perche))).toEqual([]);
+    const difesa = ex.observe({ ...v, giornata: { pnlPct: 0.049, picco: 0.11, obiettivoRaggiunto: true, difesa: true, perditaOltre: false } });
+    const vendite = difesa.segnali.filter((x) => /difesa del guadagno/.test(x.perche));
+    expect(vendite.map((x) => x.simbolo)).toEqual(["AAPL"]); // MSFT: Kronos +3%, resta
+    const { registraPicco } = await import("../src/agents/engine.ts");
+    const { mkdtempSync } = await import("node:fs");
+    const { tmpdir } = await import("node:os");
+    const { join } = await import("node:path");
+    const dir = mkdtempSync(join(tmpdir(), "picco-"));
+    expect(registraPicco(dir, "2026-11-09", 0.11)).toBe(0.11);
+    expect(registraPicco(dir, "2026-11-09", 0.05)).toBe(0.11);
+    expect(registraPicco(dir, "2026-11-10", 0.01)).toBe(0.01);
+  });
 
   const OLD = { ...AGENTS.exit, mode: "obiettivo" as const, stopMode: "fisso" as const };
 

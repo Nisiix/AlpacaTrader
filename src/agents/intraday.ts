@@ -236,7 +236,7 @@ export class IntradayAgent implements Agent {
     const candidates: string[] = [];
     for (const s of AGENTS.universe) {
       if (v.analisi === false) break; // la scansione delle candidate si fa nell'analisi d'ingresso, ogni AGENTS.analisiMinuti
-      if (v.giornata?.obiettivoRaggiunto || v.giornata?.perditaOltre) break; // oggi basta così
+      if (v.giornata?.perditaOltre) break; // oltre la perdita massima del giorno (se impostata) niente ingressi
       if (held.has(s) || this.entrateOggi.get(s) === v.today) continue;
       if (!inWindow(s)) continue;
       if (!v.closes[s] || !v.prices[s]) continue;
@@ -421,7 +421,7 @@ export class IntradayAgent implements Agent {
         op.stop = Math.max(op.stop, op.ingresso * (1 + margine), price - (price - op.ingresso) / 2);
       } else if (price >= op.obiettivo) motivo = `obiettivo raggiunto: ${num(price)} ≥ ${num(op.obiettivo)} (${pct(gain)} dall'ingresso)${kl !== undefined ? `; sulle candele ${lo} Kronos non vede altro rialzo` : ""}`;
       if (!motivo) {
-        if (v.giornata?.obiettivoRaggiunto && price > op.ingresso) motivo = `obiettivo giornaliero del conto raggiunto: si incassa (${pct(gain)})`;
+        if (v.giornata?.difesa && !corre) motivo = `difesa del guadagno del giorno: il conto è tornato a ${pct(v.giornata.pnlPct)} dopo aver toccato ${pct(v.giornata.picco ?? AGENTS.daily.targetPct)} e Kronos non vede più salire: si vende a ${pct(gain)}`;
         else if (price <= op.stop) motivo = `stop intraday: ${num(price)} ≤ ${num(op.stop)} (${pct(gain)})`;
         else if (mustClose(s)) {
           const prom = promuovibile(v, s, gain);

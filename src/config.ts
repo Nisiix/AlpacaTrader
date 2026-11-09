@@ -115,10 +115,12 @@ export const AGENTS = {
   // fino a domani e le operazioni intraday incassano; oltre la perdita massima del giorno niente nuovi acquisti (le
   // posizioni restano protette dagli stop). I profitti restano nel conto e le taglie sono percentuali del patrimonio
   // corrente: il guadagno di oggi si reinveste da solo domani.
-  // Tetto generale del giorno (scelta dell'utente): raggiunto il +10% sul patrimonio di ieri gli agenti non investono più
-  // per oggi; continuano a girare in simulazione (le operazioni che avrebbero fatto, con esito virtuale, in
-  // state/simulazioni/) per imparare, e si riparte domani con i criteri del motore. Nessun tetto alla perdita (0).
-  daily: { enabled: true, targetPct: 0.1, maxLossPct: 0 },
+  // Obiettivo del giorno con difesa del guadagno (scelta dell'utente): raggiunto il +10% sul patrimonio di ieri gli agenti
+  // continuano a investire (Livermore: non si ferma un giorno buono); se però il guadagno del giorno torna al +5%
+  // (pavimentoPct), i trade non favorevoli si vendono per difendere quel guadagno: per le posizioni di più giorni Kronos a
+  // 5 sedute sotto la soglia di rialzo, per l'intraday né la candela breve né quelle superiori vedono ancora salire.
+  // Nessun tetto alla perdita (0).
+  daily: { enabled: true, targetPct: 0.1, pavimentoPct: 0.05, maxLossPct: 0 },
   // Pagina pubblica su GitHub Pages: istantanea in sola lettura spinta sul ramo gh-pages ogni everyMinutes minuti.
   // Spenta di serie: la pagina è visibile a chiunque abbia il link (conto, posizioni, operazioni). remote vuoto = origin.
   pages: { enabled: false, everyMinutes: 10, branch: "gh-pages", remote: "" },
