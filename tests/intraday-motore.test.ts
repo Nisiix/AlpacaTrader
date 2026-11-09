@@ -214,4 +214,41 @@ describe("intraday nel motore vero: candele da 5 minuti, Kronos, ordini", () => 
     expect(st.obiettivo).toBe(77_500);
     expect(r.segnali.filter((x) => x.lato === "sell")).toEqual([]);
   });
+
+  test("un acquisto eseguito entra nel diario prima delle decisioni del giro dopo: l'operazione intraday non viene venduta dalle regole di più giorni", async () => {
+    setCryptoUniverse(["BTC/USD"]);
+    const start = new Date("2026-09-27T21:00:00+02:00");
+    const env = makeEnv(start);
+    env.setFake((s) => { s.prices["BTC/USD"] = 76_000; s.intraday = { "BTC/USD": { "5Min": salitaA5Minuti(76_000, start) } }; });
+    const kronos = async (b: Record<string, IntradayBar[]>, step: number, h: number) => Object.fromEntries(Object.keys(b).map((x) => [x, step === 5 ? Array.from({ length: h }, (_, i) => Math.min(0.015, 0.005 * (i + 1))) : Array.from({ length: h }, () => 0)]));
+    const intraday = new IntradayAgent((s, tf, n) => env.broker.getIntradayBars(s, tf, n), kronos);
+    const { ExitAgent } = await import("../src/agents/exits.ts");
+    const d = env.deps();
+    // Kronos a 5 sedute netto al ribasso: per una posizione di più giorni l'agente uscite venderebbe subito.
+    const forecaster = async (symbols: string[]) => Object.fromEntries(symbols.map((x) => [x, { rendimentoPrevisto: -0.03, percorso: [-0.01, -0.02, -0.03], ultimaChiusura: null }]));
+    const deps: EngineDeps = { broker: d.broker, notifier: d.notifier, stateDir: d.stateDir, logsDir: d.logsDir, redactor: d.redactor, now: d.now, sleep: d.sleep, agents: [intraday, new ExitAgent(AGENTS.exit)], bus: new EventBus(d.stateDir, d.now), echo: false, forecaster };
+    const cache = emptyCache();
+    const r1 = await runTick(deps, cache);
+    expect(r1.status_file!.ordini.find((o) => o.simbolo === "BTC/USD" && o.lato === "buy")?.esito).toStartWith("inviato");
+    // Come su Alpaca: l'ordine si esegue qualche secondo dopo la fine del giro, quindi il diario non ha ancora il trade.
+    const { readJournal, writeJournal } = await import("../src/journal.ts");
+    const j = readJournal(d.stateDir, new Date(env.clock.t)).file;
+    j.trade = j.trade.filter((t) => t.simbolo !== "BTC/USD"); j.ordiniVisti = [];
+    writeJournal(d.stateDir, j);
+    env.clock.t += 5 * 60_000;
+    const r2 = await runTick(deps, cache);
+    expect(r2.status_file!.ordini.filter((o) => o.simbolo === "BTC/USD" && o.lato === "sell")).toEqual([]);
+    expect(env.broker.load().positions["BTC/USD"]).toBeDefined();
+  });
+
+  test("obiettivo 51% di vittorie: se sulle candele da 5 minuti si vince meno, per entrare lì serve più probabilità (le altre candele restano aperte)", async () => {
+    setCryptoUniverse(["BTC/USD"]);
+    const now = new Date("2026-09-27T21:00:00+02:00");
+    const bars = salitaA5Minuti(76_000, now);
+    const chiuso = (i: number, vinto: boolean) => ({ id: `t${i}`, simbolo: "ETH/USD", stato: "chiuso", apertoIl: "2026-09-27T10:00:00Z", chiusoIl: new Date(Date.parse("2026-09-27T10:00:00Z") + i * 60_000).toISOString(), comprate: 1, costo: 100, vendute: 1, incassato: vinto ? 101 : 99, quantita: 0, contesto: { setup: "", momentum20: null, volGiornaliera: null, distanzaMedia: null, fiducia: null, attesa: "", perche: "", agenti: ["intraday"], livelli: { candela: "5Min", obiettivo: 1, stop: 1 } } }) as any;
+    const journal: JournalFile = { ...emptyJournal(), trade: Array.from({ length: 10 }, (_, i) => chiuso(i, i < 3)) };
+    const v = { today: "2026-09-27", now, prices: { "BTC/USD": 76_000 }, closes: { "BTC/USD": syntheticCloses(76_000, 0.02, 260) }, indicators: {}, positions: [], account: { equity: 100_000, lastEquity: 100_000, cash: 100_000, status: "ACTIVE" }, journal, mercatoAperto: false } as unknown as AgentView;
+    const r = await new IntradayAgent(async (syms) => Object.fromEntries(syms.map((x) => [x, bars])), async (b, step, h) => Object.fromEntries(Object.keys(b).map((x) => [x, Array.from({ length: h }, (_, i) => (step === 5 ? Math.min(0.015, 0.005 * (i + 1)) : 0))]))).observe(v);
+    expect(r.note.some((n) => n.includes("candele 5Min: 3 vinti su 10 (30%)") && n.includes("+10 punti"))).toBe(true);
+  });
 });

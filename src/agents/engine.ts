@@ -463,6 +463,15 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
     const jr = readJournal(deps.stateDir, startedAt);
     const journal = jr.file;
     if (jr.problem) await alarm("Diario dei trade illeggibile", jr.problem);
+    // Le esecuzioni dal giro scorso entrano nel diario prima che agenti, allocatore e gabbia decidano. Prima entravano solo
+    // a fine giro: al giro dopo un acquisto appena eseguito non risultava «aperto oggi» né intraday, e l'uscita di trend o
+    // la proiezione a 5 sedute lo vendevano dopo 5 minuti (14 dei 15 trade chiusi del primo conto).
+    {
+      const primi = applyFills(journal, snap.recentOrders);
+      for (const t of primi.opened) bus.emit("trade", { stato: "aperto", simbolo: t.simbolo, quantita: t.comprate, prezzo: t.costo / t.comprate, agenti: t.contesto?.agenti ?? [] });
+      for (const t of primi.closed) bus.emit("trade", { stato: "chiuso", simbolo: t.simbolo, risultato: t.risultato ?? 0, pnl: t.incassato - t.costo, giorni: t.giorni ?? 0, uscita: t.motivoUscita ?? "sconosciuto", agenti: t.contesto?.agenti ?? [] });
+      if (primi.opened.length || primi.closed.length) writeJournal(deps.stateDir, journal);
+    }
 
     // 4. Il massimo visto da ogni trade aperto (per lo stop che segue il profitto), poi le proiezioni, poi gli agenti.
     for (const t of journal.trade) {

@@ -274,6 +274,13 @@ export const AGENTS = {
     serieNegativa: { perdite: 3, fattore: 0.5 },
     // Scaduto l'orizzonte scelto (× questo fattore) senza obiettivo e senza rialzo ancora probabile, si chiude.
     scadenzaOrizzonte: 1.5,
+    // Pareggio: quando il guadagno arriva a `quota` della strada verso l'obiettivo (e almeno a 2 volte il margine dei
+    // costi), lo stop sale sopra il carico (carico + metà margine): un trade già in guadagno non chiude più in perdita.
+    pareggio: { enabled: true, quota: 0.6 },
+    // Percentuale di vittorie per candela (obiettivo dell'utente: almeno 51%): sugli ultimi `ultimi` trade intraday chiusi
+    // di quella candela (minimo `minimo`), sotto `obiettivo` la probabilità richiesta per entrare sale di `passo`, sotto
+    // `obiettivo` − 0,11 di 2 passi. Le altre candele restano aperte: gli ingressi continuano, si spostano dove si vince.
+    vittorie: { obiettivo: 0.51, ultimi: 20, minimo: 8, passo: 0.05 },
     // Le candele su cui si cerca l'ingresso: con Kronos si sceglie quella con la probabilità di successo più alta.
     candele: ["5Min", "15Min", "1Hour", "4Hour"] as string[],
     // Obiettivo: con Kronos è il rialzo che Kronos prevede sull'orizzonte scelto (minuti o ore), mai sotto questo minimo,

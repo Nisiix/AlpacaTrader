@@ -705,10 +705,13 @@ describe("intraday", () => {
     // Allo stop vende.
     const r3 = await a.observe(view({ closes, prices: { ...prices, "BTC/USD": st.stop! - 1 }, now: day("2026-09-22", "17:35"), today: "2026-09-22", positions: pos }));
     expect(r3.segnali.find((x) => x.lato === "sell")!.perche).toContain("stop intraday");
-    // Crypto: nessun orario di chiusura, ma dopo la durata massima (12 ore) si chiude comunque.
-    const r4a = await a.observe(view({ closes, prices: { ...prices, "BTC/USD": 76_500 }, now: day("2026-09-22", "23:40"), today: "2026-09-22", positions: pos }));
+    // Il prezzo è già arrivato all'obiettivo: lo stop è salito in pareggio (carico + metà margine dei costi), quindi da
+    // qui il trade non chiude in perdita. Crypto: nessun orario di chiusura, ma dopo la durata massima (12 ore) si chiude.
+    const stPareggio = r3.intraday!.find((x) => x.simbolo === "BTC/USD")!;
+    expect(stPareggio.stop!).toBeGreaterThan(76_450);
+    const r4a = await a.observe(view({ closes, prices: { ...prices, "BTC/USD": 76_800 }, now: day("2026-09-22", "23:40"), today: "2026-09-22", positions: pos }));
     expect(r4a.segnali.filter((x) => x.lato === "sell" && x.simbolo === "BTC/USD")).toEqual([]);
-    const r4 = await a.observe(view({ closes, prices: { ...prices, "BTC/USD": 76_500 }, now: day("2026-09-23", "04:40"), today: "2026-09-23", positions: pos }));
+    const r4 = await a.observe(view({ closes, prices: { ...prices, "BTC/USD": 76_800 }, now: day("2026-09-23", "04:40"), today: "2026-09-23", positions: pos }));
     expect(r4.segnali.find((x) => x.lato === "sell")!.perche).toContain("durata massima");
     // Senza ordine eseguito il voto non blocca il titolo: al giro dopo si riprova (un voto scartato dall'allocatore non lo ferma).
     const fresh = new IntradayAgent(async (syms) => Object.fromEntries(syms.filter((x) => bars[x]).map((x) => [x, bars[x]!])));

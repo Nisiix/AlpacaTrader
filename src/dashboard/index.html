@@ -404,19 +404,19 @@
       <p class="legend" hidden>In fondo la <b>Direzione</b> (gli agenti generali) davanti alla <b>lavagna dei risultati</b>; poi i <b>Custodi</b>, una scrivania per titolo seguito, con la camicia del colore della fase (blu pronto, verde in posizione, rosso in uscita, grigio in attesa) e lo schermo con prezzo e andamento; infine la <b>Sala intraday</b> (arancione). A destra, oltre la porta, la <b>Sala caffè</b>: chi in questo giro non ha niente da fare si siede ai tavolini e scambia con i colleghi dati veri (dossier, candele, proiezioni di Kronos, lezioni dei trade chiusi); appena ha un trade da aprire o una posizione da seguire torna alla scrivania. Chi vota alza la mano, chi compra o vende si alza e lo schermo lampeggia. Mouse sopra per leggere, clic per aprire. A destra l'elenco degli agenti: passando sopra un nome il suo avatar si alza in piedi e la postazione si illumina; il clic apre la scheda.</p>
     </details>
     <nav class="tabs" id="uff-tabs" role="tablist" aria-label="sezioni dell'ufficio">
-      <button type="button" role="tab" data-tab="decisioni">Decisioni</button>
       <button type="button" role="tab" data-tab="agents">Trading agents</button>
+      <button type="button" role="tab" data-tab="decisioni">Decisioni</button>
       <button type="button" role="tab" data-tab="esplorazione">Esplorazione</button>
       <button type="button" role="tab" data-tab="caffe">Sala caffè</button>
     </nav>
+    <section class="card tabpanel" role="tabpanel" data-tab="agents">
+      <div class="filters" id="ta-filtro" role="group" aria-label="stato dei trading agents" style="margin-bottom:12px"></div>
+      <div id="custodi"></div>
+    </section>
     <section class="card tabpanel" role="tabpanel" data-tab="decisioni">
       <p class="why" style="margin-bottom:10px">Punteggio per titolo nell'ultimo giro: da +0,5 si compra, da −0,5 si vende.</p>
       <div id="scores"></div>
       <details style="margin-top:12px"><summary class="why" style="cursor:pointer">I voti con il motivo</summary><div id="votes" style="margin-top:8px"></div></details>
-    </section>
-    <section class="card tabpanel" role="tabpanel" data-tab="agents">
-      <div class="filters" id="ta-filtro" role="group" aria-label="stato dei trading agents" style="margin-bottom:12px"></div>
-      <div id="custodi"></div>
     </section>
     <section class="card tabpanel" role="tabpanel" data-tab="esplorazione">
       <div id="esplorazione"></div>
@@ -2034,9 +2034,9 @@ setInterval(() => { if (currentPage === 'dashboard') loadPeriodo(); }, 120_000);
 // ---------- ufficio: schede sotto la scena ----------
 {
   const tabs = [...document.querySelectorAll('#uff-tabs button')];
-  let cur = 'decisioni'; try { cur = localStorage.getItem('agenti.uff.tab') || cur; } catch {}
+  let cur = 'agents'; try { cur = localStorage.getItem('agenti.uff.tab') || cur; } catch {}
   const show = (t) => {
-    cur = tabs.some((b) => b.dataset.tab === t) ? t : 'decisioni';
+    cur = tabs.some((b) => b.dataset.tab === t) ? t : 'agents';
     for (const b of tabs) b.setAttribute('aria-selected', String(b.dataset.tab === cur));
     for (const p of document.querySelectorAll('.tabpanel')) p.hidden = p.dataset.tab !== cur;
     try { localStorage.setItem('agenti.uff.tab', cur); } catch {}
@@ -2072,7 +2072,7 @@ function paintLog() {
   const vendite = ops.filter((o) => o.lato === 'sell');
   const pnl = vendite.reduce((a, o) => a + (o.pnl || 0), 0);
   const vinte = vendite.filter((o) => (o.pnl || 0) > 0).length;
-  $('#log-sommario').innerHTML = ops.length ? `${ops.length} operazioni · ${ops.length - vendite.length} acquisti, ${vendite.length} vendite${vendite.length ? ` · risultato delle vendite <b class="${cls(pnl)}">${usd(pnl)}</b> (${vinte} in guadagno)` : ''}` : '';
+  $('#log-sommario').innerHTML = ops.length ? `${ops.length} operazioni · ${ops.length - vendite.length} acquisti, ${vendite.length} vendite${vendite.length ? ` · risultato delle vendite <b class="${cls(pnl)}">${usd(pnl)}</b> · vittorie <b class="${vinte / vendite.length >= 0.51 ? 'up' : 'down'}">${Math.round((vinte / vendite.length) * 100)}%</b> (${vinte} su ${vendite.length}, obiettivo 51%)` : ''}` : '';
   if (!ops.length) { $('#log').innerHTML = `<p class="empty">Nessuna operazione${q ? ` per «${esc(q)}»` : ''} ${logGiorni === 1 ? 'oggi' : `negli ultimi ${logGiorni} giorni`}.</p>`; return; }
   let html = '', giorno = '';
   for (const o of ops.slice(0, 500)) {
@@ -2178,6 +2178,7 @@ function paintKpi(st) {
   $('#dash-kpi').innerHTML = [
     tile('Posizioni aperte', String(pos.length), `${crypto} crypto, ${pos.length - crypto} azioni · investito ${eq ? Math.round((investito / eq) * 100) : 0}% del conto`, '#investimenti'),
     tile('Operazioni di oggi', `${pl.acquisti.length} acquisti · ${pl.vendite.length} vendite`, `incassato <span class="${cls(pl.realizzato)}">${usd(pl.realizzato)}</span>, sulle aperte <span class="${cls(pl.nonRealizzato)}">${usd(pl.nonRealizzato)}</span>`, '#investimenti'),
+    tile('Vittorie', st.diario?.statistiche?.trade ? `<span class="${st.diario.statistiche.vinti / st.diario.statistiche.trade >= 0.51 ? 'up' : 'down'}">${Math.round((st.diario.statistiche.vinti / st.diario.statistiche.trade) * 100)}%</span>` : '–', st.diario?.statistiche?.trade ? `${st.diario.statistiche.vinti} trade chiusi in guadagno su ${st.diario.statistiche.trade} · obiettivo 51%` : 'nessun trade chiuso ancora · obiettivo 51%', '#log'),
     tile('Contesto', esc(st.contesto?.generale || 'n.d.'), `${fg ? `Fear & Greed ${fg.valore} (${esc(fg.classe)}) · ` : ''}rischio ammesso ${Math.round((st.rischio ?? 1) * 100)}%`),
     tile('Kronos', st.kronos ? `${st.kronos.simboli} proiezioni` : 'n.d.', esc(st.kronos?.stato || '')),
     tile('Agenti', `${(st.caffe?.operativi || []).length} al lavoro · ${(st.caffe?.presenti || []).length} in pausa`, `${(st.custodi || []).length} custodi · ${(st.intraday || []).filter((x) => x.fase === 'in posizione').length} operazioni intraday aperte${st.analisi ? ` · analisi d'ingresso ogni ${st.analisi.ogniMinuti} min${st.analisi.prossima ? `, prossima alle ${hhmm(st.analisi.prossima)}` : ''}` : ''}`, '#ufficio'),

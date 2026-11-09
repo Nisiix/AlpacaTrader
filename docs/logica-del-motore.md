@@ -255,6 +255,8 @@ Kronos sull'orizzonte d'ingresso, e sulle **candele superiori** (1 ora, 4 ore):
   perdite di pochi minuti dentro un movimento che continua sulle ore. Un trade nato breve diventa di trend se a metà
   strada le candele superiori iniziano a vedere il rialzo continuare (lo stop resta dov'è);
 - se le candele superiori **girano al ribasso**, il trade torna alle regole brevi qui sotto;
+- **pareggio**: arrivato al 60% della strada verso l'obiettivo (e almeno a 2 volte il margine dei costi), lo stop sale
+  sopra il carico: un trade già in guadagno non chiude più in perdita;
 - **all'obiettivo**: se Kronos vede ancora salire (candela breve ≥ 60% o candele superiori a favore) **si lascia correre**
   e lo stop sale sopra il carico; se no si incassa;
 - Kronos vede un calo che azzererebbe il guadagno → **protezione del profitto**, si incassa;
@@ -317,6 +319,9 @@ d'opinione prima di una candela giornaliera nuova: escono solo stop e regole vin
   decimali (lo stop di PEPE a 0,0000045 non diventa più 0).
 - **Ordini**: un ID per giro (un nuovo tentativo non si duplica; Alpaca rifiuta l'ID già usato), verifica dopo un timeout,
   stop tolto prima di una vendita, quantità crypto troncate al milionesimo, briciole senza stop.
+- **Esecuzioni nel diario a inizio giro**: un acquisto eseguito tra un giro e l'altro entra nel diario prima che agenti e
+  gabbia decidano, così è subito «aperto oggi» e, se intraday, segue solo le sue regole. Prima entrava a fine giro e le
+  regole di più giorni (uscita di trend, proiezione a 5 sedute) lo vendevano dopo 5 minuti.
 - **Un solo processo** sullo stato (`state/run.lock`). Dopo un riavvio il motore riparte da `state/`.
 
 ---
@@ -324,6 +329,9 @@ d'opinione prima di una candela giornaliera nuova: escono solo stop e regole vin
 ## 9. Cosa impara il motore
 
 - **Capo ufficio** e **sala caffè** (capitolo 4), dal diario dei trade, da subito e con limiti.
+- **Vittorie per candela** (obiettivo: almeno il 51% di trade chiusi in guadagno): sugli ultimi 20 trade intraday chiusi
+  di ogni candela (almeno 8), se si vince meno del 51% per entrare su quella candela servono 5 punti di probabilità in
+  più (10 sotto il 40%). Gli ingressi non si fermano: si spostano sulle candele dove si vince.
 - **Cervello delle previsioni**: quanto vale ogni modello, per il giornaliero e per ogni candela.
 - **Memoria per titolo** dei custodi.
 - **Registro degli errori**: solo sicurezza (dopo uno stop, dopo due rifiuti di Alpaca).
