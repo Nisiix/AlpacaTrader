@@ -239,6 +239,11 @@
   .custode-list { display:grid; gap:10px; }
   .custode-list button { text-align:left; font:inherit; background:var(--card-2); border:1px solid var(--line); border-radius:10px; padding:10px 12px; color:var(--ink); cursor:pointer; }
   .custode-list button:hover { border-color:var(--agent); }
+  .ta-grid { grid-template-columns:repeat(auto-fill, minmax(260px, 1fr)); }
+  .ta-h { display:flex; align-items:center; gap:8px; font-size:15px; margin:16px 0 8px; }
+  .ta-h:first-child { margin-top:0; }
+  .sw { display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:6px; vertical-align:middle; }
+  #ta-filtro button { display:inline-flex; align-items:center; }
   .form { display:grid; gap:12px; max-width:520px; }
   .form label { display:grid; gap:4px; font-size:14px; color:var(--ink-2); }
   .form input, .form select { font:inherit; padding:9px 11px; border-radius:10px; border:1px solid var(--line); background:var(--card-2); color:var(--ink); }
@@ -269,6 +274,8 @@
   .side-nav a:focus-visible { outline:2px solid var(--agent); outline-offset:2px; }
   .side-foot { margin-top:auto; padding:8px; color:var(--ink-3); font-size:13px; }
   main { max-width:1280px; width:100%; margin:0 auto; padding:24px 24px 48px; display:block; }
+  .title-row { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:16px; flex-wrap:wrap; }
+  .title-row .page-title { margin:0; }
   .page-title { font-size:24px; font-weight:700; color:var(--ink); margin:0 0 16px; letter-spacing:-.02em; }
   .page > section + section, .page > section + details, .page > details + section, .page > .cols + section, .page > section + .cols { margin-top:16px; }
   .mobile-bar { display:none; }
@@ -390,9 +397,9 @@
 
   <!-- Ufficio: la mappa 3D con gli agenti e, sotto, la squadra in forma schematica. -->
   <div class="page" data-page="ufficio">
-    <h1 class="page-title">Ufficio</h1>
+    <div class="title-row"><h1 class="page-title">Ufficio</h1><button type="button" class="btn ghost" id="modifica-agenti">Modifica comportamento agenti</button></div>
       <details class="scene" id="scene-box" open>
-      <summary>Ufficio degli agenti <span class="hint">camicia: blu pronto · verde in posizione · rosso in uscita · grigio in attesa · arancione intraday</span></summary>
+      <summary>Ufficio degli agenti <span class="hint">trading agents: <b style="color:#16a34a">verde</b> in posizione (rosso se in uscita) · <b style="color:#2563eb">blu</b> pronto a entrare, luce che pulsa · <b style="color:#94a3b8">grigio</b> in osservazione o in attesa · arancione intraday</span></summary>
       <div class="scene-wrap"><div id="scene"></div><aside class="agent-list" id="agent-list" aria-label="agenti dell'ufficio"></aside></div>
       <p class="legend" hidden>In fondo la <b>Direzione</b> (gli agenti generali) davanti alla <b>lavagna dei risultati</b>; poi i <b>Custodi</b>, una scrivania per titolo seguito, con la camicia del colore della fase (blu pronto, verde in posizione, rosso in uscita, grigio in attesa) e lo schermo con prezzo e andamento; infine la <b>Sala intraday</b> (arancione). A destra, oltre la porta, la <b>Sala caffè</b>: chi in questo giro non ha niente da fare si siede ai tavolini e scambia con i colleghi dati veri (dossier, candele, proiezioni di Kronos, lezioni dei trade chiusi); appena ha un trade da aprire o una posizione da seguire torna alla scrivania. Chi vota alza la mano, chi compra o vende si alza e lo schermo lampeggia. Mouse sopra per leggere, clic per aprire. A destra l'elenco degli agenti: passando sopra un nome il suo avatar si alza in piedi e la postazione si illumina; il clic apre la scheda.</p>
     </details>
@@ -408,8 +415,8 @@
       <details style="margin-top:12px"><summary class="why" style="cursor:pointer">I voti con il motivo</summary><div id="votes" style="margin-top:8px"></div></details>
     </section>
     <section class="card tabpanel" role="tabpanel" data-tab="agents">
-      <p class="why" style="margin-bottom:10px">Un trading agent per titolo seguito: probabilità favorevole e prossima mossa. Clic per il grafico.</p>
-      <div class="custode-list" id="custodi"></div>
+      <div class="filters" id="ta-filtro" role="group" aria-label="stato dei trading agents" style="margin-bottom:12px"></div>
+      <div id="custodi"></div>
     </section>
     <section class="card tabpanel" role="tabpanel" data-tab="esplorazione">
       <div id="esplorazione"></div>
@@ -823,7 +830,12 @@ function makeDesk(key, big = false) {
   // nell'ambiente niente scritte sovrapposte.
   const el = document.createElement('div'); el.className = 'lbl desk-lbl';
   const tag = new CSS2DObject(el); tag.position.set(0, 2.05, -0.6); tag.visible = false; g.add(tag);
-  g.userData = { scr, emp, el, tag };
+  // Pedana colorata sotto la postazione e luce sopra lo schermo: lo stato del trading agent si vede da lontano.
+  const plate = new THREE.Mesh(new THREE.PlaneGeometry(1.9, 2.1), new THREE.MeshBasicMaterial({ color: 0x94a3b8, transparent: true, opacity: 0.0, depthWrite: false }));
+  plate.rotation.x = -Math.PI / 2; plate.position.set(0, 0.012, -0.25); plate.visible = false; g.add(plate);
+  const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.09, 16, 12), new THREE.MeshStandardMaterial({ color: 0x94a3b8, emissive: 0x94a3b8, emissiveIntensity: 0.9 }));
+  lamp.position.set(0, 1.72, 0.22); lamp.visible = false; g.add(lamp);
+  g.userData = { scr, emp, el, tag, plate, lamp };
   return g;
 }
 
@@ -843,7 +855,7 @@ function paintAgentList(st) {
   const intra = [...desks.keys()].filter((k) => k.startsWith('i:'));
   const capo = st.capo; const rich = (capo?.valutazioni || []).filter((v) => v.giudizio === 'richiamato').length;
   const html = `<h4>Direzione <span>${general.length + 1}</span></h4>${row('capo', 'Capo ufficio', rich ? `${rich} richiami` : 'in regola')}${general.map((n) => { const a = st.agenti[n]; return row(`a:${n}`, agentName(n), a.errore ? 'errore' : `${a.segnali} segnali`); }).join('')}
-    <h4>Custodi <span>${cust.length}</span></h4>${cust.map((c) => row(`c:${c.simbolo}`, c.simbolo, `${c.dossier ? `${Math.round(c.dossier.probabilita * 100)}% · ` : ''}${FASI[c.fase] || c.fase}`)).join('') || '<p class="empty" style="padding:4px 8px">nessuno</p>'}
+    ${['posizione', 'pronto', 'osserva'].map((k) => { const g = cust.filter((c) => CATEGORIA(c) === k); return g.length ? `<h4>Trading agents · ${CAT_INFO[k].nome.toLowerCase()} <span>${g.length}</span></h4>${g.map((c) => row(`c:${c.simbolo}`, c.simbolo, `${c.dossier ? `${Math.round(c.dossier.probabilita * 100)}%` : ''}${c.fase === 'in uscita' ? ' · in uscita' : c.fase === 'attende' ? ' · in attesa' : ''}`)).join('')}` : ''; }).join('') || '<h4>Trading agents</h4><p class="empty" style="padding:4px 8px">nessuno</p>'}
     <h4>Sala intraday <span>${intra.length}</span></h4>${intra.map((k) => { const x = desks.get(k)?.info?.x; return x ? row(k, x.simbolo, `${x.candela} · ${x.fase === 'in posizione' ? 'in posizione' : x.ingresso !== null ? 'ingresso votato' : 'cerca'}`) : ''; }).join('') || '<p class="empty" style="padding:4px 8px">nessuno</p>'}
     ${pausa.size ? `<p class="why" style="padding:8px">☕ ${pausa.size} in pausa in sala caffè</p>` : ''}`;
   // Si riscrive solo se cambia qualcosa: il nome sotto il mouse resta lo stesso elemento.
@@ -1001,7 +1013,13 @@ function fitCamera() {
 }
 
 const histOf = (sym) => (window.__bars?.[sym] || []).slice(-30);
-const FASE_SHIRT = { pronto: 0x2a55c7, 'in posizione': 0x16a34a, 'in uscita': 0xdc2626, attende: 0x94a3b8, osserva: 0x60a5fa };
+const FASE_SHIRT = { pronto: 0x2563eb, 'in posizione': 0x16a34a, 'in uscita': 0xdc2626, attende: 0x94a3b8, osserva: 0x94a3b8 };
+// Tre stati dei trading agents, distinti a colpo d'occhio nell'ufficio e nell'elenco: in posizione (verde; rosso se sta
+// uscendo), pronto a entrare (blu, luce che pulsa), in osservazione o in attesa (grigio).
+// «Pronto» solo se il trading agent è candidato e il suo dossier dice di entrare (≥ 60% favorevole); un candidato che
+// aspetta una conferma o resta fuori è ancora in osservazione.
+const CATEGORIA = (c) => c.fase === 'in posizione' || c.fase === 'in uscita' ? 'posizione' : c.fase === 'pronto' && Math.round((c.dossier?.probabilita ?? 0) * 100) >= 60 ? 'pronto' : 'osserva';
+const CAT_INFO = { posizione: { nome: 'In posizione', colore: 0x16a34a }, pronto: { nome: 'Pronti a entrare', colore: 0x2563eb }, osserva: { nome: 'In osservazione', colore: 0x94a3b8 } };
 const ROLE = { trend: 'trend', rientro: 'rientro', regime: 'clima di mercato', orizzonte: 'orizzonte', uscite: 'uscite e stop', contesto: 'contesto economico', profitto: 'presa di profitto', kronos: 'previsioni Kronos' };
 
 function paintScene(st) {
@@ -1032,7 +1050,10 @@ function paintScene(st) {
       u.el.innerHTML = `<b>${esc(agentName(it.n))}</b>`;
     } else if (it.kind === 'custode') {
       const c = it.c; const p = held.get(c.simbolo); const prob = c.dossier ? Math.round(c.dossier.probabilita * 100) : null;
-      u.emp.userData.shirtM.color.set(FASE_SHIRT[c.fase] ?? 0x60a5fa);
+      const cat = CATEGORIA(c); const col = c.fase === 'in uscita' ? 0xdc2626 : CAT_INFO[cat].colore;
+      u.emp.userData.shirtM.color.set(col);
+      u.plate.visible = true; u.plate.material.color.setHex(col); u.plate.material.opacity = cat === 'osserva' ? 0.18 : 0.42;
+      u.lamp.visible = cat !== 'osserva'; u.lamp.material.color.setHex(col); u.lamp.material.emissive.setHex(col); u.lamp.userData.pulsa = cat === 'pronto';
       drawScreen(u.scr, c.simbolo, `${px(st.prezzi?.[c.simbolo])}${prob !== null ? ` · ${prob}%` : ''}`, p ? p.variazione : null, histOf(c.simbolo).map((b) => b.close));
       u.el.innerHTML = `<b>${esc(c.simbolo)}</b>${prob !== null ? ` <span>${prob}%</span>` : ''}`;
     } else {
@@ -1227,6 +1248,7 @@ function animate() {
     }
     if (e.raise > 0) { e.arms[1].position.y = 0.84 + e.raise * 0.55; e.arms[1].position.z = 0.3 - e.raise * 0.2; e.raise = Math.max(0, e.raise - dt * 0.6); }
     if (e.bow > 0) { e.head.rotation.x = e.bow * 0.5; e.bow = Math.max(0, e.bow - dt * 0.4); } else e.head.rotation.x = 0;
+    const lmp = d.group.userData.lamp; if (lmp?.visible && lmp.userData.pulsa) { const k = 0.6 + 0.4 * Math.sin(now / 260); lmp.material.emissiveIntensity = 0.4 + k; lmp.scale.setScalar(0.85 + 0.3 * k); }
     const lh = d === hiDesk;
     const evid = lh || d === hoveredDesk;
     if (lh) e.stand = Math.min(1, Math.max(e.stand, 0) + dt * 4); // dall'elenco: in piedi finché il mouse resta sul nome
@@ -1279,7 +1301,9 @@ const portrait = { on: false, renderer: new THREE.WebGLRenderer({ antialias: tru
 portrait.renderer.setPixelRatio(Math.min(2, window.devicePixelRatio)); portrait.renderer.setSize(150, 170);
 portrait.scene.add(new THREE.HemisphereLight(0xffffff, 0xb8a990, 1.6)); { const l = new THREE.DirectionalLight(0xffffff, 1.4); l.position.set(2, 3, 4); portrait.scene.add(l); }
 portrait.camera.position.set(0, 1.25, 2.6); portrait.camera.lookAt(0, 1.05, 0);
-let cardKey = null; let cards = null;
+let cardKey = null; let cards = null; let cardAgente = null;
+// «Modifica comportamento agenti», sopra la mappa: porta alle schede degli agenti (a quella dell'agente aperto, se c'è).
+$('#modifica-agenti').addEventListener('click', () => { const nome = cardKey ? cardAgente : null; location.hash = 'impostazioni/agenti'; if (nome) setTimeout(() => document.querySelector(`#schede form[data-agente="${nome}"]`)?.scrollIntoView({ behavior: 'smooth' }), 400); });
 async function openCard(key) {
   cardKey = key; const d = desks.get(key); if (d) flyTo(d.group);
   if (!cards) { try { cards = (await (await fetch('/api/agenti/schede')).json()).schede; } catch { cards = []; } }
@@ -1309,14 +1333,14 @@ function renderCard() {
     const v = val(who);
     if (v) body += `<h4>Giudizio del capo</h4><div class="vote" style="margin-top:0"><b>Giudizio:</b> <span class="pill ${v.giudizio === 'richiamato' ? 'down' : v.giudizio === 'ottimo' || v.giudizio === 'bene' ? 'up' : ''}">${esc(v.giudizio)}</span> <span class="why">${v.vinti}/${v.trade} vinti · ${usd(v.risultato)}</span><br><span class="why">${esc(v.messaggio)}</span>${v.consigli.length ? `<ul>${v.consigli.map((c) => `<li class="why">${esc(c)}</li>`).join('')}</ul>` : ''}</div>`;
     const sc = sched(name);
-    if (sc) body += `<h4>Impostazioni</h4><details open><summary>${sc.parametri.length} parametri</summary><p class="why">${esc(sc.come)}</p><table>${sc.parametri.map((p) => `<tr><td class="why">${esc(p.etichetta)}</td><td class="n ${p.cambiato ? 'agent-c' : ''}">${esc(fmtP(p))}</td></tr>`).join('')}</table></details>`;
+    if (sc) body += `<h4>Impostazioni</h4><details><summary>${sc.parametri.length} parametri</summary><p class="why">${esc(sc.come)}</p><table>${sc.parametri.map((p) => `<tr><td class="why">${esc(p.etichetta)}</td><td class="n ${p.cambiato ? 'agent-c' : ''}">${esc(fmtP(p))}</td></tr>`).join('')}</table></details>`;
   }
   card.innerHTML = `<button type="button" class="x" aria-label="chiudi">✕</button><div class="portrait"></div><h3>${esc(title)}</h3><div class="why">${esc(sub)}</div>${body}
-    <div class="row" style="margin-top:10px">${it.kind === 'custode' || it.kind === 'intraday' ? '<button type="button" class="btn" data-go="titolo">Apri il grafico</button>' : ''}${name || it.kind === 'capo' ? '<button type="button" class="btn ghost" data-go="schede">Modifica le impostazioni</button>' : ''}</div>`;
+    <div class="row" style="margin-top:10px">${it.kind === 'custode' || it.kind === 'intraday' ? '<button type="button" class="btn" data-go="titolo">Apri il grafico</button>' : ''}</div>`;
   card.querySelector('.portrait').appendChild(portrait.renderer.domElement);
   card.querySelector('.x').addEventListener('click', closeCard);
   card.querySelector('[data-go="titolo"]')?.addEventListener('click', () => { openChart(it.kind === 'custode' ? it.c.simbolo : it.x.simbolo); });
-  card.querySelector('[data-go="schede"]')?.addEventListener('click', () => { location.hash = 'impostazioni/agenti'; setTimeout(() => document.querySelector(`#schede form[data-agente="${name || 'motore'}"]`)?.scrollIntoView({ behavior: 'smooth' }), 400); });
+  cardAgente = name || (it.kind === 'capo' ? 'motore' : null);
 }
 animate();
 
@@ -1504,10 +1528,19 @@ async function loadStatus() {
 // ---------- scheda per titolo ----------
 const FASI = { osserva: 'osserva', pronto: 'pronto a entrare', 'in posizione': 'in posizione', 'in uscita': 'in uscita', attende: 'in attesa' };
 const faseCls = (f) => f === 'in posizione' || f === 'pronto' ? 'up' : f === 'in uscita' ? 'down' : f === 'attende' ? 'warn' : '';
+let taFiltro = 'tutti';
+try { taFiltro = localStorage.getItem('agenti.ta.filtro') || 'tutti'; } catch {}
 function paintCustodi(st) {
   const list = st.custodi || [];
-  $('#custodi').innerHTML = list.length ? list.map((c) => { const p = c.dossier ? Math.round(c.dossier.probabilita * 100) : null; return `<button type="button" data-sym="${esc(c.simbolo)}"><div class="row" style="justify-content:space-between"><span><b>${esc(c.simbolo)}</b>${p !== null ? ` <b class="${p >= 60 ? 'up' : p < 45 ? 'down' : ''}">${p}%</b>` : ''}</span><span class="pill ${faseCls(c.fase)}">${FASI[c.fase] || esc(c.fase)}</span></div><div class="why" style="margin-top:4px">${esc(c.dossier?.prossimaAzione || c.stato)}</div></button>`; }).join('')
-    : `<p class="empty">Nessun custode attivo: nasce uno per ogni crypto in trend (sopra le medie, slancio a 3 e 12 mesi positivo) o in portafoglio. ${st.universo?.crypto?.length ? `Universo di oggi: ${st.universo.crypto.length} coppie${st.universo.fonteCrypto ? ` (${esc(st.universo.fonteCrypto)})` : ''}.` : ''}</p>`;
+  const per = { posizione: [], pronto: [], osserva: [] };
+  for (const c of list) per[CATEGORIA(c)].push(c);
+  const hex = (k) => `#${CAT_INFO[k].colore.toString(16).padStart(6, '0')}`;
+  $('#ta-filtro').innerHTML = [['tutti', `Tutti (${list.length})`], ...['posizione', 'pronto', 'osserva'].map((k) => [k, `<span class="sw" style="background:${hex(k)}"></span>${CAT_INFO[k].nome} (${per[k].length})`])].map(([k, t]) => `<button type="button" data-k="${k}" aria-pressed="${taFiltro === k}">${t}</button>`).join('');
+  for (const b of $('#ta-filtro').querySelectorAll('button')) b.addEventListener('click', () => { taFiltro = b.dataset.k; try { localStorage.setItem('agenti.ta.filtro', taFiltro); } catch {} paintCustodi(status); });
+  if (!list.length) { $('#custodi').innerHTML = '<p class="empty">Nessun trading agent attivo: ne nasce uno per ogni titolo in trend o in portafoglio.</p>'; return; }
+  const card = (c) => { const p = c.dossier ? Math.round(c.dossier.probabilita * 100) : null; const pos = (st.posizioni || []).find((x) => x.simbolo === c.simbolo); return `<button type="button" data-sym="${esc(c.simbolo)}"><div class="row" style="justify-content:space-between"><span><b>${esc(c.simbolo)}</b>${p !== null ? ` <b class="${p >= 60 ? 'up' : p < 45 ? 'down' : ''}">${p}%</b>` : ''}</span>${pos ? `<span class="${cls(pos.variazione)}">${pct(pos.variazione)}</span>` : `<span class="pill ${CATEGORIA(c) === 'pronto' ? 'up' : c.fase === 'attende' ? 'warn' : ''}">${CATEGORIA(c) === 'pronto' ? 'pronto a entrare' : c.fase === 'attende' ? 'in attesa' : 'osserva'}</span>`}</div><div class="why" style="margin-top:4px">${esc(c.dossier?.prossimaAzione || c.stato)}</div></button>`; };
+  const gruppi = (taFiltro === 'tutti' ? ['posizione', 'pronto', 'osserva'] : [taFiltro]).filter((k) => per[k].length);
+  $('#custodi').innerHTML = gruppi.length ? gruppi.map((k) => `<h3 class="ta-h"><span class="sw" style="background:${hex(k)}"></span>${CAT_INFO[k].nome} <span class="why">${per[k].length}</span></h3><div class="custode-list ta-grid">${per[k].map(card).join('')}</div>`).join('') : '<p class="empty">Nessun trading agent in questo stato.</p>';
   for (const b of $('#custodi').querySelectorAll('button')) b.addEventListener('click', () => { openChart(b.dataset.sym); });
 }
 
