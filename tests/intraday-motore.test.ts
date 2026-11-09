@@ -24,7 +24,9 @@ function salitaA5Minuti(fine: number, finoA: Date, n = 120): IntradayBar[] {
     const o = i ? out[i - 1]!.close : c;
     out.push({ t: new Date(end - (k + 1) * 300_000).toISOString(), open: o, high: Math.max(o, c) * 1.001, low: Math.min(o, c) * 0.999, close: c, volume: 1_000 });
   }
-  return out;
+  // L'ultima chiusura è esattamente `fine` (il prezzo di adesso nei test): le proiezioni di Kronos partono da lì.
+  const k = fine / out[out.length - 1]!.close;
+  return out.map((b) => ({ ...b, open: b.open * k, high: b.high * k, low: b.low * k, close: b.close * k }));
 }
 
 describe("intraday nel motore vero: candele da 5 minuti, Kronos, ordini", () => {
@@ -219,7 +221,8 @@ describe("intraday nel motore vero: candele da 5 minuti, Kronos, ordini", () => 
     const t0 = new Date("2026-09-27T21:00:00+02:00");
     const bars = salitaA5Minuti(76_000, t0);
     let ora = (h: number) => Array.from({ length: h }, (_, i) => Math.min(0.018, 0.00225 * (i + 1)));
-    const agente = new IntradayAgent(async (syms) => Object.fromEntries(syms.map((x) => [x, bars])), async (b, step, h) => Object.fromEntries(Object.keys(b).map((x) => [x, step === 5 ? Array.from({ length: h }, (_, i) => Math.min(0.015, 0.005 * (i + 1))) : step === 60 ? ora(h) : step === 1 ? Array.from({ length: h }, () => -0.004) : Array.from({ length: h }, () => 0)])));
+    const agente = new IntradayAgent(async (syms) => Object.fromEntries(syms.map((x) => [x, bars])), async (b, step, h) => Object.fromEntries(Object.keys(b).map((x) => [x, step === 5 ? Array.from({ length: h }, (_, i) => Math.min(0.015, 0.005 * (i + 1))) : step === 60 ? ora(h) : step === 1 ? Array.from({ length: h }, () => -0.004) : Array.from({ length: h }, () => 0)])), () => ({ fattore: 1, quota: 0.55, campione: 120, giusti: 0.56, resa: 0.001 }));
+    // Kronos misurato anche sulla candela da 1 minuto: lì si segue la posizione (controllo).
     const base = { today: "2026-09-27", closes: { "BTC/USD": syntheticCloses(76_000, 0.02, 260) }, indicators: {}, account: { equity: 100_000, lastEquity: 100_000, cash: 100_000, status: "ACTIVE" }, mercatoAperto: false };
     const r1 = await agente.observe({ ...base, now: t0, prices: { "BTC/USD": 76_000 }, positions: [], journal: emptyJournal() } as unknown as AgentView);
     expect(r1.segnali.find((x) => x.lato === "buy")!.perche).toContain("trade di trend");

@@ -49,6 +49,9 @@ export interface LivelliIntraday {
   riporti?: number;
   rinnovo?: string;
   riportoGiorno?: string;
+  // La proiezione di Kronos con cui si è entrati («candela|ora dell'ultima candela chiusa»): un rientro sulla stessa
+  // candela aspetta una proiezione nuova (quella vecchia ha già fatto il suo trade).
+  previsione?: string;
 }
 
 export interface Intent {

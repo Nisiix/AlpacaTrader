@@ -25,7 +25,9 @@ function salita(fine: number, finoA: Date, passo = 300_000, n = 120): IntradayBa
     const o = i ? out[i - 1]!.close : c;
     out.push({ t: new Date(end - (k + 1) * passo).toISOString(), open: o, high: Math.max(o, c) * 1.001, low: Math.min(o, c) * 0.999, close: c, volume: 1_000 });
   }
-  return out;
+  // L'ultima chiusura è esattamente `fine` (il prezzo di adesso nei test): le proiezioni di Kronos partono da lì.
+  const k = fine / out[out.length - 1]!.close;
+  return out.map((b) => ({ ...b, open: b.open * k, high: b.high * k, low: b.low * k, close: b.close * k }));
 }
 const now = new Date("2026-09-27T21:00:00+02:00"); // domenica sera: solo crypto
 const passoDi: Record<string, number> = { "5Min": 300_000, "15Min": 900_000, "1Hour": 3_600_000, "4Hour": 14_400_000 };

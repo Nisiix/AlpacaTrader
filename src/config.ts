@@ -322,7 +322,11 @@ export const AGENTS = {
   // finito il radar si ricomincia da capo (i prezzi cambiano, Kronos si chiede una volta al giorno per titolo). Un titolo che supera i criteri del motore (sopra la
   // media a 200, grafico in ordine, Kronos al rialzo oltre la soglia) entra nell'universo per giorniValida giorni; chi
   // l'ha trovato torna alla scrivania e lo vota. maxScoperte: quante scoperte nuove al giorno, al massimo.
-  esplorazione: { enabled: true, everyMinutes: 1, perGiro: 6, maxScoperte: 100, giorniValida: 3, minTecnica: 0.5 },
+  // Con il motore che punta all'intraday (puntaIntraday) i criteri sono quelli dell'intraday: il titolo deve muoversi
+  // abbastanza in una giornata da coprire i costi più volte (volatilità giornaliera a 20 giorni ≥ intraday.volMin) e
+  // Kronos a 5 sedute non deve vedere un calo netto; il resto (se, quando e su che candela entrare) lo decidono gli
+  // intraday agents sulle candele. Niente voti di più giorni, e una scoperta con un voto intraday non si lascia.
+  esplorazione: { enabled: true, everyMinutes: 1, perGiro: 6, maxScoperte: 100, giorniValida: 3, minTecnica: 0.5, intraday: { volMin: { azioni: 0.015, crypto: 0.03 } } },
   // Intraday (agente "intraday"): operazioni che si aprono e chiudono nella stessa giornata. Titoli e crypto usano le
   // stesse candele (5 min, 15 min, 1 ora, 4 ore): di ognuna si usa solo quella che sta nel tempo rimasto (una candela da
   // 4 ore per le azioni solo nelle prime ore di seduta). Con Kronos si sceglie la coppia candela + orizzonte (da 15 minuti
@@ -348,12 +352,17 @@ export const AGENTS = {
     // candela dal cervello: quota di direzioni giuste di Kronos su quella candela, avvicinata a `prior` con il peso di `forza`
     // previsioni finte (un campione piccolo conta poco). Fattore = (quota − 50%) / (prior − 50%), tra 0 e `max`: una candela
     // su cui Kronos indovina come una moneta non fa entrare, una su cui indovina più del previsto pesa di più.
-    affidabilita: { prior: 0.55, forza: 100, max: 1.5 },
+    // minClasse: con almeno tante previsioni verificate di una classe (azioni o crypto) su una candela valgono le sue,
+    // altrimenti quelle complessive.
+    affidabilita: { prior: 0.55, forza: 100, max: 1.5, minClasse: 150 },
     // Con i singoli percorsi di Kronos (il sidecar li manda): la probabilità è la quota di percorsi che chiudono sopra i
     // costi senza toccare lo stop, avvicinata a 50% secondo l'affidabilità della candela: 0,5 + fattore × (quota − 0,5).
     // Lo stop è il minimo che i percorsi peggiori toccano (il `quantileStop` dei minimi: l'80% dei percorsi resta sopra),
     // tra lo stop minimo e quello dell'ATR. Senza percorsi valgono Φ(z) e lo stop dell'ATR.
-    percorsi: { minCampioni: 8, quantileStop: 0.2 },
+    // prudenza: i percorsi di Kronos misurano solo l'incertezza che Kronos vede, non quella sul modello: la quota si
+    // avvicina ancora a 50% (× prudenza) finché la calibrazione sui trade veri non la corregge. Il primo giorno, stimate
+    // 69-78%, vinti 3 su 6.
+    percorsi: { minCampioni: 8, quantileStop: 0.2, prudenza: 0.5 },
     // Selezione prima di Kronos (meno titoli, più qualità): una coppia titolo-candela si proietta solo se in quel tempo il
     // prezzo si muove abbastanza da coprire i costi (volatilità sull'orizzonte più lungo ≥ movimentoMin × due volte i
     // costi); poi, per ogni candela, al massimo perCandela proiezioni nuove a giro: prima rotture e rientri, poi medie brevi

@@ -21,8 +21,11 @@ export interface Valutazione {
   percVinti: number | null;
   media: number | null; // risultato medio per trade (frazione)
   risultato: number; // $ totali
-  kronosVinti: number | null; // proiezione media all'ingresso dei trade vinti
+  kronosVinti: number | null; // proiezione media all'ingresso dei trade vinti (solo trade di più giorni: Kronos a 5 sedute)
   kronosPersi: number | null;
+  // Per i trade intraday il metro è la probabilità con cui si è entrati (Kronos sulle candele), non Kronos a 5 sedute.
+  probVinti?: number | null;
+  probPersi?: number | null;
   giudizio: Giudizio;
   messaggio: string; // cosa gli dice il capo
   consigli: string[];
@@ -40,6 +43,8 @@ export interface CapoReport {
   valutazioni: Valutazione[];
   // Lezione comune dai trade vincenti di tutti: da quale proiezione di Kronos in su si è vinto più spesso.
   sogliaKronos: number | null;
+  // La stessa lezione per l'intraday: da quale probabilità d'ingresso in su si è vinto di più (almeno LEZIONE_MIN trade).
+  sogliaProbabilita?: number | null;
   ingressoMigliore: string | null;
   // Trade chiusi da una regola che non esiste più (venduti il giorno stesso dall'uscita di trend): non giudicano nessuno.
   esclusi?: number;
@@ -64,14 +69,37 @@ export const regolaSuperata = (t: Trade) =>
   !!t.chiusoIl && romeTime(new Date(t.apertoIl)).date === romeTime(new Date(t.chiusoIl)).date && /uscita di trend/i.test(t.motivoUscita ?? "");
 export const entryKind = (t: Pick<Trade, "contesto">) => (/rientro|vicino alla media/i.test(t.contesto?.perche ?? "") ? "rientro sulla media a 20" : /rottura/i.test(t.contesto?.perche ?? "") ? "rottura dei massimi" : /Kronos anticipa/i.test(t.contesto?.perche ?? "") ? "rialzo anticipato da Kronos" : "trend");
 
-// La soglia di Kronos che separa meglio vinti e persi tra tutti i trade chiusi (almeno 6 con proiezione).
+// Una «lezione per tutti» si trae solo da abbastanza trade: con meno è rumore (il primo giorno, da 6 trade, «con Kronos
+// ≥ +0,0% si è vinto di più»).
+export const LEZIONE_MIN = 20;
+export const intradayTrade = (t: Pick<Trade, "contesto">) => t.contesto?.tipo === "intraday" || (!t.contesto?.tipo && !!t.contesto?.livelli);
+const probOf = (t: Pick<Trade, "contesto">) => (typeof t.contesto?.misure?.probabilita === "number" ? t.contesto.misure.probabilita : null);
+
+// La soglia di Kronos (a 5 sedute) che separa meglio vinti e persi tra i trade di più giorni chiusi: per gli intraday
+// conta un'altra cosa (bestProbThreshold).
 export function bestKronosThreshold(trades: Trade[]): number | null {
-  const withK = trades.filter((t) => kronosOf(t) !== null);
-  if (withK.length < 6) return null;
+  const withK = trades.filter((t) => !intradayTrade(t) && kronosOf(t) !== null);
+  if (withK.length < LEZIONE_MIN) return null;
   let best: { s: number; score: number } | null = null;
   for (const s of [0, 0.005, 0.01, 0.015, 0.02, 0.03, 0.04, 0.05]) {
     const kept = withK.filter((t) => kronosOf(t)! >= s);
     if (kept.length < 3) continue;
+    const win = kept.filter((t) => (t.risultato ?? 0) > 0).length / kept.length;
+    const avg = mean(kept.map((t) => t.risultato ?? 0))!;
+    const score = avg * Math.sqrt(kept.length) + win * 0.001;
+    if (!best || score > best.score) best = { s, score };
+  }
+  return best ? best.s : null;
+}
+
+// La probabilità d'ingresso (Kronos sulle candele) che separa meglio vinti e persi tra i trade intraday chiusi.
+export function bestProbThreshold(trades: Trade[]): number | null {
+  const withP = trades.filter((t) => intradayTrade(t) && probOf(t) !== null);
+  if (withP.length < LEZIONE_MIN) return null;
+  let best: { s: number; score: number } | null = null;
+  for (const s of [0.55, 0.57, 0.6, 0.62, 0.65, 0.7, 0.75]) {
+    const kept = withP.filter((t) => probOf(t)! >= s);
+    if (kept.length < 5) continue;
     const win = kept.filter((t) => (t.risultato ?? 0) > 0).length / kept.length;
     const avg = mean(kept.map((t) => t.risultato ?? 0))!;
     const score = avg * Math.sqrt(kept.length) + win * 0.001;
@@ -91,6 +119,7 @@ export function review(journal: JournalFile, now: Date, vecchi: Record<string, s
   for (const t of closed) for (const a of chiaviGiudizio(t, vecchi)) byAgent.set(a, [...(byAgent.get(a) ?? []), t]);
   const winners = closed.filter((t) => (t.risultato ?? 0) > 0);
   const sogliaKronos = bestKronosThreshold(closed);
+  const sogliaProbabilita = bestProbThreshold(closed);
   const kinds = new Map<string, number[]>();
   for (const t of closed) kinds.set(entryKind(t), [...(kinds.get(entryKind(t)) ?? []), t.risultato ?? 0]);
   const bestKind = [...kinds].filter(([, r]) => r.length >= 2).sort((a, b) => mean(b[1])! - mean(a[1])!)[0];
@@ -102,8 +131,12 @@ export function review(journal: JournalFile, now: Date, vecchi: Record<string, s
     const n = ts.length;
     const media = mean(res);
     const percVinti = n ? vinti / n : null;
-    const kv = mean(ts.filter((t) => (t.risultato ?? 0) > 0 && kronosOf(t) !== null).map((t) => kronosOf(t)!));
-    const kp = mean(ts.filter((t) => (t.risultato ?? 0) <= 0 && kronosOf(t) !== null).map((t) => kronosOf(t)!));
+    // Kronos a 5 sedute solo per i trade di più giorni; per gli intraday la probabilità d'ingresso.
+    const kv = mean(ts.filter((t) => !intradayTrade(t) && (t.risultato ?? 0) > 0 && kronosOf(t) !== null).map((t) => kronosOf(t)!));
+    const kp = mean(ts.filter((t) => !intradayTrade(t) && (t.risultato ?? 0) <= 0 && kronosOf(t) !== null).map((t) => kronosOf(t)!));
+    const pv = mean(ts.filter((t) => intradayTrade(t) && (t.risultato ?? 0) > 0 && probOf(t) !== null).map((t) => probOf(t)!));
+    const pp = mean(ts.filter((t) => intradayTrade(t) && (t.risultato ?? 0) <= 0 && probOf(t) !== null).map((t) => probOf(t)!));
+    const soloIntraday = ts.every(intradayTrade);
     // Le sue sessioni: per giorno di chiusura (ora di Roma), risultato in dollari.
     const perGiorno = new Map<string, number>();
     for (const t of ts) { const g = romeTime(new Date(t.chiusoIl ?? t.apertoIl)).date; perGiorno.set(g, (perGiorno.get(g) ?? 0) + pnlOf(t)); }
@@ -128,7 +161,8 @@ export function review(journal: JournalFile, now: Date, vecchi: Record<string, s
     } else if ((media ?? 0) > 0) {
       giudizio = "da seguire";
       messaggio = `In attivo (${pct(media, 2)} a trade${pfTxt}) ma vinci solo ${Math.round((percVinti ?? 0) * 100)}% delle volte: seleziona meglio gli ingressi.`;
-      if (sogliaKronos !== null) consigli.push(`Entra solo con Kronos ≥ ${pct(sogliaKronos)}: è la soglia da cui i trade di tutti hanno reso di più.`);
+      if (soloIntraday && sogliaProbabilita !== null) consigli.push(`Entra solo con probabilità ≥ ${Math.round(sogliaProbabilita * 100)}%: è la soglia da cui i trade intraday di tutti hanno reso di più.`);
+      else if (!soloIntraday && sogliaKronos !== null) consigli.push(`Entra solo con Kronos ≥ ${pct(sogliaKronos)}: è la soglia da cui i trade di tutti hanno reso di più.`);
     } else if ((percVinti ?? 0) >= 0.51) {
       giudizio = "da seguire";
       messaggio = `Vinci spesso (${Math.round((percVinti ?? 0) * 100)}%) ma il guadagno medio è ${pct(media, 2)} a trade${pfTxt}: gli incassi sono troppo piccoli rispetto alle perdite. Lascia correre di più i trade buoni o taglia prima quelli cattivi.`;
@@ -137,15 +171,17 @@ export function review(journal: JournalFile, now: Date, vecchi: Record<string, s
       messaggio = `Richiamo: ${vinti} vinti su ${n}, risultato medio ${pct(media, 2)}. Così non va: da ora entri solo quando Kronos è netto e con forza ridotta, finché i risultati non migliorano.`;
       kronosMin = Math.max(AGENTS.kronos.anticipaSoglia, sogliaKronos ?? 0, kv !== null ? Math.min(kv, 0.05) : 0);
       forza = 0.6;
-      consigli.push(`Soglia minima di Kronos per comprare: ${pct(kronosMin)} (i tuoi trade vinti partivano in media da ${pct(kv)}, i persi da ${pct(kp)}).`);
+      if (soloIntraday) consigli.push(`Taglia ridotta finché i risultati non migliorano${pv !== null || pp !== null ? ` (i tuoi trade vinti partivano in media da una probabilità del ${pv !== null ? Math.round(pv * 100) : "n.d."}%, i persi del ${pp !== null ? Math.round(pp * 100) : "n.d."}%)` : ""}${sogliaProbabilita !== null ? `; entra solo con probabilità ≥ ${Math.round(sogliaProbabilita * 100)}%` : ""}.`);
+      else consigli.push(`Soglia minima di Kronos per comprare: ${pct(kronosMin)} (i tuoi trade vinti partivano in media da ${pct(kv)}, i persi da ${pct(kp)}).`);
       if (ingressoMigliore) consigli.push(`Preferisci l'ingresso «${ingressoMigliore}»: è quello che ha reso di più nell'ufficio.`);
       const lessThanHalfStop = ts.filter((t) => /stop/i.test(t.motivoUscita ?? "")).length;
       if (lessThanHalfStop >= 2) consigli.push(`${lessThanHalfStop} uscite dallo stop: evita gli ingressi troppo lontani dalla media a 20, aspetta il rientro.`);
     }
     if (giudizio !== "richiamato" && giudizio !== "nuovo" && kv !== null) consigli.push(`I tuoi trade vinti partivano da Kronos ${pct(kv)} in media: tieni quella soglia.`);
+    if (giudizio !== "richiamato" && giudizio !== "nuovo" && pv !== null) consigli.push(`I tuoi trade intraday vinti partivano da una probabilità del ${Math.round(pv * 100)}% in media.`);
     if (perGiorno.size >= 2) messaggio += ` Sessioni: ${sessioni.positive} in guadagno, ${sessioni.negative} in perdita.`;
     if (giudizio === "da seguire" && sessioni.negative > sessioni.positive) consigli.push(`Più sessioni in perdita che in guadagno: meno ingressi, solo i più netti.`);
-    valutazioni.push({ agente, trade: n, vinti, persi: n - vinti, percVinti, media, risultato: ts.reduce((a, t) => a + pnlOf(t), 0), kronosVinti: kv, kronosPersi: kp, giudizio, messaggio, consigli, kronosMin, forza, sessioni });
+    valutazioni.push({ agente, trade: n, vinti, persi: n - vinti, percVinti, media, risultato: ts.reduce((a, t) => a + pnlOf(t), 0), kronosVinti: kv, kronosPersi: kp, probVinti: pv, probPersi: pp, giudizio, messaggio, consigli, kronosMin, forza, sessioni });
   }
   valutazioni.sort((a, b) => b.risultato - a.risultato);
   const migliori = valutazioni.filter((v) => v.giudizio === "ottimo" || v.giudizio === "bene").slice(0, 3).map((v) => v.agente);
@@ -154,8 +190,8 @@ export function review(journal: JournalFile, now: Date, vecchi: Record<string, s
   const nota = esclusi ? ` (${esclusi} ${esclusi === 1 ? "trade chiuso" : "trade chiusi"} dalla vecchia uscita in giornata non ${esclusi === 1 ? "conta" : "contano"})` : "";
   const sintesi = !closed.length
     ? `Nessun trade chiuso da giudicare${nota}: osservo, i giudizi arrivano con i primi risultati.`
-    : `${closed.length} trade chiusi${nota}, ${totWin} vinti (${Math.round((totWin / closed.length) * 100)}%).${migliori.length ? ` Migliori: ${migliori.map(nome).join(", ")}.` : ""}${richiamati.length ? ` Richiamati: ${richiamati.map((v) => nome(v.agente)).join(", ")}.` : " Nessun richiamo."}${sogliaKronos !== null ? ` Lezione per tutti: con Kronos ≥ ${pct(sogliaKronos)} si è vinto di più.` : ""}`;
-  return { aggiornato: now.toISOString(), sintesi, migliori, valutazioni, sogliaKronos, ingressoMigliore, esclusi };
+    : `${closed.length} trade chiusi${nota}, ${totWin} vinti (${Math.round((totWin / closed.length) * 100)}%).${migliori.length ? ` Migliori: ${migliori.map(nome).join(", ")}.` : ""}${richiamati.length ? ` Richiamati: ${richiamati.map((v) => nome(v.agente)).join(", ")}.` : " Nessun richiamo."}${sogliaKronos !== null ? ` Lezione per tutti: con Kronos ≥ ${pct(sogliaKronos)} si è vinto di più.` : ""}${sogliaProbabilita !== null ? ` Lezione intraday: con probabilità d'ingresso ≥ ${Math.round(sogliaProbabilita * 100)}% si è vinto di più.` : ""}`;
+  return { aggiornato: now.toISOString(), sintesi, migliori, valutazioni, sogliaKronos, sogliaProbabilita, ingressoMigliore, esclusi };
 }
 
 // Applica i richiami ai voti: per gli agenti richiamati i voti d'acquisto sotto la soglia di Kronos non valgono e gli altri

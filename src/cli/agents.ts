@@ -77,7 +77,7 @@ try {
   // sulle candele brevi (se il sidecar c'è) con le medie brevi; il grafico più lungo pesa solo sulla taglia.
   if (AGENTS.intraday.enabled) {
     const kf = kronos ? previsioniIntradayCombinate(intradayForecaster(kronos), cervello, deps.now) : null;
-    agents.push(new IntradayAgent((s, tf, n) => deps.broker.getIntradayBars(s, tf, n), kf ? async (b, step, h) => Object.fromEntries(Object.entries(await kf(b, step, h)).map(([k, v]) => [k, { path: v.percorso.length ? v.percorso : [v.rendimentoPrevisto], ...(v.campioni ? { campioni: v.campioni } : {}) }])) : null, kf ? (step) => cervello.affidabilitaTipo(tipoIntraday(step)) : null, join(deps.stateDir, "kronos-intraday.json")));
+    agents.push(new IntradayAgent((s, tf, n) => deps.broker.getIntradayBars(s, tf, n), kf ? async (b, step, h) => Object.fromEntries(Object.entries(await kf(b, step, h)).map(([k, v]) => [k, { path: v.percorso.length ? v.percorso : [v.rendimentoPrevisto], ...(v.campioni ? { campioni: v.campioni } : {}) }])) : null, kf ? (step, s) => cervello.affidabilitaPer(tipoIntraday(step), s) : null, join(deps.stateDir, "kronos-intraday.json")));
   }
   const cache = emptyCache();
   const engine: EngineDeps = {

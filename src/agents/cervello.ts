@@ -92,11 +92,15 @@ export class Cervello {
       }
       const vero = p / x.base - 1;
       if (Math.abs(vero) >= PIATTO && x.prev !== 0) {
-        const k = `${x.tipo}|${x.m}`;
-        const st = (this.f.stat[k] ??= { n: 0, giusti: 0, segno: 0 });
-        st.n++;
-        if (Math.sign(vero) === Math.sign(x.prev)) st.giusti++;
-        st.segno += Math.sign(x.prev) * vero;
+        // Le previsioni intraday contano anche per classe (azioni o crypto): i costi sono 8 volte diversi e il vantaggio
+        // di Kronos pure; il conto complessivo resta per i pesi tra i modelli e come riserva finché la classe ne ha poche.
+        const chiavi = [`${x.tipo}|${x.m}`, ...(x.tipo.startsWith("intraday-") ? [`${x.tipo}-${classeDi(x.s)}|${x.m}`] : [])];
+        for (const k of chiavi) {
+          const st = (this.f.stat[k] ??= { n: 0, giusti: 0, segno: 0 });
+          st.n++;
+          if (Math.sign(vero) === Math.sign(x.prev)) st.giusti++;
+          st.segno += Math.sign(x.prev) * vero;
+        }
         contate++;
       }
     }
@@ -171,6 +175,17 @@ export class Cervello {
     return { fattore, quota, campione: n, giusti: n ? st!.giusti / n : null, resa: n ? st!.segno / n : null };
   }
 
+  // La stessa per un simbolo: le misure della sua classe (azioni o crypto) quando ne ha almeno minClasse, altrimenti
+  // quelle complessive della candela.
+  affidabilitaPer(tipo: string, simbolo: string | undefined, modello = "kronos") {
+    if (simbolo) {
+      const cl = this.affidabilitaTipo(`${tipo}-${classeDi(simbolo)}`, modello);
+      if (cl.campione >= AGENTS.intraday.affidabilita.minClasse) return { ...cl, classe: classeDi(simbolo) };
+    }
+    return this.affidabilitaTipo(tipo, modello);
+  }
+
+
   // Per la dashboard: una riga per tipo e modello con campione, direzione giusta, resa e peso di adesso.
   stato(): { righe: RigaCervello[]; inAttesa: number } {
     const perTipo = new Map<string, Set<string>>();
@@ -196,6 +211,8 @@ export class Cervello {
 export const scadenzaGiorno = (now: Date) => new Date(now.getTime() + Math.ceil((AGENTS.kronos.horizon * 7) / 5) * 86_400_000);
 export const scadenzaIntraday = (ultimaCandela: string, stepMinutes: number, n: number) => new Date(Date.parse(ultimaCandela) + (n + 1) * stepMinutes * 60_000);
 export const tipoIntraday = (stepMinutes: number) => `intraday-${stepMinutes}m`;
+// Classe di un simbolo per le misure intraday separate: «crypto» (BTC/USD) o «azioni».
+export const classeDi = (simbolo: string) => (simbolo.includes("/") ? "crypto" : "azioni");
 
 // Le previsioni giornaliere passano dal cervello: si registra la previsione di ogni modello e si restituisce il percorso
 // combinato (il motore non vede differenze: un percorso, un rendimento previsto).

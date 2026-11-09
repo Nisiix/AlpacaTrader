@@ -183,7 +183,10 @@ export function coffeeBreak(input: {
   for (const [n, r] of Object.entries(reports)) {
     if (n === "custodi" || n === "intraday" || taken(`a:${n}`)) continue;
     const v = r.segnali[0];
-    if (v) operativi.push({ chiave: `a:${n}`, nome: n, perche: `vota ${v.lato === "buy" ? "acquisto" : "vendita"} ${v.simbolo}` });
+    // Con il motore che punta all'intraday un voto d'acquisto di più giorni non apre nulla: l'agente fa da contesto
+    // (dossier, clima), e in ufficio si dice così, invece di farlo sembrare al lavoro su un ingresso.
+    if (v && AGENTS.puntaIntraday && v.lato === "buy" && !v.intraday && !v.vincolante) operativi.push({ chiave: `a:${n}`, nome: n, perche: `contesto: vede un acquisto di più giorni su ${v.simbolo} (non apre posizioni: il motore punta all'intraday)` });
+    else if (v) operativi.push({ chiave: `a:${n}`, nome: n, perche: `vota ${v.lato === "buy" ? "acquisto" : "vendita"} ${v.simbolo}` });
     else if (r.rischio !== undefined && r.rischio < 1) operativi.push({ chiave: `a:${n}`, nome: n, perche: `tiene il rischio a ${Math.round(r.rischio * 100)}%` });
     else presenti.push({ chiave: `a:${n}`, nome: n, perche: "nessun voto in questo giro" });
   }
@@ -277,6 +280,7 @@ export function coffeeBreak(input: {
     const cp = input.capo;
     const msg = [
       cp.sogliaKronos !== null ? `si vince di più con Kronos ≥ ${pct(cp.sogliaKronos)}` : "",
+      cp.sogliaProbabilita !== null && cp.sogliaProbabilita !== undefined ? `negli intraday si vince di più con probabilità ≥ ${Math.round(cp.sogliaProbabilita * 100)}%` : "",
       cp.ingressoMigliore ? `l'ingresso che rende di più è «${cp.ingressoMigliore}»` : "",
       ...cp.valutazioni.filter((v) => v.giudizio === "richiamato").map((v) => `${v.agente.startsWith("p:") ? v.agente.slice(2) : v.agente} è richiamato: ${v.consigli[0] ?? v.messaggio}`),
     ].filter(Boolean);

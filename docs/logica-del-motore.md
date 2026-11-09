@@ -162,6 +162,15 @@ l'opportunità regge. Si chiude quando è comprato (lo segue il suo custode), qu
 
 ## 5. Entrare: dal voto all'ordine
 
+
+Con il motore che punta all'intraday l'esplorazione usa i criteri dell'intraday: il titolo deve muoversi abbastanza in
+una giornata (volatilità a 20 giorni ≥ 1,5% per le azioni, 3% per le crypto) e Kronos a 5 sedute non deve vedere un
+calo netto. Non vota acquisti di più giorni: il titolo entra nell'universo per 3 giorni e lo valutano gli intraday agents
+sulle candele. Si lascia solo con un calo netto di Kronos, e mai nel giro in cui gli intraday agents l'hanno votato.
+
+Il **capo ufficio** giudica le persone intraday sulla probabilità d'ingresso (non su Kronos a 5 sedute) e trae una
+«lezione per tutti» solo da almeno 20 trade. In ufficio gli agenti dei trade di più giorni (trend, Kronos a 5 sedute…)
+risultano «contesto»: con il motore intraday i loro voti d'acquisto non aprono posizioni.
 ### L'allocatore
 
 1. **Somma i voti** pesati per titolo (tutti gli agenti con peso 1; richiami e lezioni li hanno già corretti). Da +0,5
@@ -274,6 +283,20 @@ sedute, uscita di trend) non riguardano questi trade.
   perdita si ferma dove deve. Se il prezzo è già sotto lo stop dell'operazione (l'agente vende in quel giro) resta lo
   stop normale; un'operazione promossa a più giorni torna allo stop dei più giorni. Uno stop su Alpaca scatta anche su
   un calo di pochi secondi tra un giro e l'altro: è la protezione vera, non quella vista ogni 5 minuti.
+- **Proiezione riportata al prezzo di adesso**: Kronos sulle candele parte dalla chiusura dell'ultima candela, ma si usa
+  per tutta la candela (fino a 1 o 4 ore). Rialzo previsto, percorsi, probabilità e stop si ricalcolano rispetto al
+  prezzo di adesso: un rialzo già fatto non si conta due volte. E un rientro sulla stessa candela con la stessa
+  proiezione di un trade di oggi già chiuso aspetta la candela nuova (il primo giorno NVDA era rientrato due volte con la
+  proiezione delle 18:00, dopo che il primo trade aveva già preso il rialzo previsto).
+- **Uscite sulla candela con vantaggio**: una posizione si segue sulla candela più breve (es. 15 minuti per un trade su
+  1 ora) solo se lì Kronos ha almeno 40 previsioni verificate e un vantaggio misurato, e per le azioni solo sulle loro
+  candele; altrimenti sulla candela dell'operazione. Anche per tenere, incassare o tagliare la probabilità viene dai
+  percorsi. Prima le uscite le decidevano le 15 minuti, escluse dagli ingressi perché non rendono.
+- **Prudenza sui percorsi** (`intraday.percorsi.prudenza` 0,5): i percorsi misurano solo l'incertezza che Kronos vede;
+  la probabilità si avvicina ancora a 50% (12 percorsi su 16 → 62%, non 74%) finché la calibrazione sui trade veri non
+  la corregge. Lo stesso vale per il riporto al giorno dopo.
+- **Misure per classe**: il cervello conta le previsioni intraday anche separate per azioni e crypto; con almeno 150 di
+  una classe su una candela valgono le sue (i costi delle crypto sono 8 volte quelli delle azioni).
 - **Meno titoli, più qualità** (`intraday.selezione`): una coppia titolo-candela si proietta solo se il prezzo si muove
   abbastanza da coprire due volte i costi sull'orizzonte più lungo (es. BTC a 5 minuti no: ±0,5% in un'ora contro lo
   0,8% che serve); poi per ogni candela al massimo 8 (5 min), 10 (15 min), 16 (1 ora) proiezioni nuove a giro, prima

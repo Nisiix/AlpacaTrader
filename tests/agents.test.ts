@@ -800,8 +800,10 @@ describe("intraday", () => {
     const steps: number[] = [];
     // Candele più lunghe = movimenti più ampi (√ dei minuti): così obiettivo e raggiungibilità sono realistici per ogni candela.
     const mins = (tf: string) => (tf.endsWith("Min") ? Number(tf.replace("Min", "")) : Number(tf.replace("Hour", "")) * 60);
-    const scaled = (b: IntradayBar[], tf: string) => { const f = Math.sqrt(mins(tf) / 5); const base = 76_000; const m = (x: number) => base + (x - base) * f; return b.map((x) => ({ ...x, open: m(x.open), high: m(x.high), low: m(x.low), close: m(x.close) })); };
-    const a = new IntradayAgent(async (syms, tf) => Object.fromEntries(syms.filter((x) => bars[x]).map((x) => [x, scaled(bars[x]!, tf)])), async (b, step) => { steps.push(step); return Object.fromEntries(Object.keys(b).map((x) => [x, byStep[step] ?? 0])); });
+    // Attorno all'ultima chiusura: tutte le candele finiscono al prezzo di adesso (le proiezioni di Kronos partono da lì).
+    const scaled = (b: IntradayBar[], tf: string) => { const f = Math.sqrt(mins(tf) / 5); const base = b.at(-1)!.close; const m = (x: number) => base + (x - base) * f; return b.map((x) => ({ ...x, open: m(x.open), high: m(x.high), low: m(x.low), close: m(x.close) })); };
+    const a = new IntradayAgent(async (syms, tf) => Object.fromEntries(syms.filter((x) => bars[x]).map((x) => [x, scaled(bars[x]!, tf)])), async (b, step) => { steps.push(step); return Object.fromEntries(Object.keys(b).map((x) => [x, byStep[step] ?? 0])); }, () => ({ fattore: 1, quota: 0.55, campione: 120, giusti: 0.56, resa: 0.001 }));
+    // Kronos misurato su tutte le candele (120 previsioni, 56% giuste, resa positiva): la candela più breve vale come controllo.
     const r = await a.observe(view({ closes, prices, now: day("2026-09-22", "16:30"), today: "2026-09-22" }));
     const buy = r.segnali.find((x) => x.lato === "buy" && x.simbolo === "BTC/USD")!;
     expect(buy.perche).toContain("su candele 15Min");
@@ -809,7 +811,10 @@ describe("intraday", () => {
     expect(buy.perche).toContain("controllo su candele 5Min");
     // In posizione oltre l'obiettivo: sulla candela più breve (5 min) Kronos vede ancora salire → si lascia correre.
     const st = r.intraday!.find((x) => x.simbolo === "BTC/USD")!;
-    const lastB = bars["BTC/USD"]!.at(-1)!; bars["BTC/USD"]!.push({ ...lastB, t: new Date(Date.parse(lastB.t) + 5 * 60_000).toISOString() });
+    const lastB = bars["BTC/USD"]!.at(-1)!;
+    // Le candele nuove chiudono al prezzo di adesso (le proiezioni partono da lì).
+    const sopra = st.obiettivo! + 50;
+    bars["BTC/USD"]!.push({ ...lastB, t: new Date(Date.parse(lastB.t) + 5 * 60_000).toISOString(), open: sopra, high: sopra, low: sopra, close: sopra });
     // Valori credibili per candele da 5 minuti che si muovono di circa lo 0,1% (oltre 4 volte la volatilità è rumore).
     byStep[5] = 0.004;
     const pos = [{ symbol: "BTC/USD", qty: 0.05, avgEntryPrice: 76_450, currentPrice: st.obiettivo! + 50, marketValue: 3_900 }];
@@ -820,7 +825,7 @@ describe("intraday", () => {
     expect(st2.stop!).toBeGreaterThan(76_450); // lo stop è salito sopra il carico
     expect(st2.controllo).toContain("candele 5Min");
     // Ora sulla candela breve Kronos gira al ribasso: oltre l'obiettivo si incassa.
-    bars["BTC/USD"]!.push({ ...lastB, t: new Date(Date.parse(lastB.t) + 10 * 60_000).toISOString() });
+    bars["BTC/USD"]!.push({ ...lastB, t: new Date(Date.parse(lastB.t) + 10 * 60_000).toISOString(), open: sopra, high: sopra, low: sopra, close: sopra });
     byStep[5] = -0.004;
     const r3 = await a.observe(view({ closes, prices: { ...prices, "BTC/USD": st.obiettivo! + 50 }, now: day("2026-09-22", "16:45"), today: "2026-09-22", positions: pos }));
     expect(r3.segnali.find((x) => x.lato === "sell" && x.simbolo === "BTC/USD")!.perche).toMatch(/obiettivo raggiunto|protezione del profitto/);
