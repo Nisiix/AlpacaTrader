@@ -379,6 +379,13 @@
   .tnome { color:var(--ink-3); font-weight:400; font-size:.86em; margin-left:6px; }
   .tnome.blk { display:block; margin:1px 0 0; font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%; }
   .inv-card .s { min-width:0; }
+  /* Intestazione della card: codice e nome a sinistra (il nome si accorcia), stato a destra; se non c'è posto lo stato
+     va a capo invece di uscire dalla card. */
+  .inv-card { min-width:0; overflow:hidden; }
+  .inv-card .h:first-child { display:grid; grid-template-columns:minmax(0, 1fr) auto; align-items:start; }
+  .inv-card .h > .s { min-width:0; overflow:hidden; }
+  .inv-card .h > .pill { max-width:9.5em; white-space:normal; text-align:center; line-height:1.25; }
+  .inv-card .h { flex-wrap:wrap; min-width:0; }
   .persona { color:var(--agent); font-weight:600; }
   /* Card dei trading agents: intestazione sempre su due righe (persona, codice e probabilità; poi il nome del titolo su
      una riga sola, accorciato se lungo), stato in alto a destra: tutte le card restano allineate. */
@@ -524,6 +531,10 @@
       <p class="why" id="chart-note" style="margin-top:8px"></p>
       <details class="feed-box"><summary>Le azioni del motore di oggi su questo titolo</summary><div id="feed" style="margin-top:8px"></div></details>
     </section>
+    <details class="card fold" style="margin-top:16px">
+      <summary><h2 style="display:inline">Tabella delle posizioni <small>quantità, carico, prezzo, guadagno e peso</small></h2></summary>
+      <div id="positions"></div>
+    </details>
     <section class="card" style="margin-top:16px">
       <h2>In osservazione <small>custodi, voti d'acquisto dell'ultimo giro e titoli in attesa</small></h2>
       <div class="inv-grid" id="inv-watch"></div>
@@ -537,10 +548,6 @@
           <h2>Simulazioni di oggi <small>dopo l'obiettivo del giorno: cosa avrebbero comprato gli agenti e come sta andando</small></h2>
           <div id="simulazioni"></div>
         </section>
-        <details class="card fold" style="margin-top:16px">
-          <summary><h2 style="display:inline">Tabella delle posizioni <small>quantità, carico, prezzo, guadagno e peso</small></h2></summary>
-          <div id="positions"></div>
-        </details>
   </div>
 
   <dialog id="lavagna" class="sheet largo" aria-labelledby="lavagna-title">
