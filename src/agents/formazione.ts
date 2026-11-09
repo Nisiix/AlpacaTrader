@@ -53,8 +53,10 @@ const pnl = (t: Trade) => (t.incassato ?? 0) - (t.costo ?? 0);
 const pct = (x: number) => `${x >= 0 ? "+" : ""}${(x * 100).toFixed(1)}%`;
 
 // La postazione di un voto: c:SYM per i trading agents, i:SYM per gli intraday agents, a:nome per gli agenti generali.
+// Un voto «intraday» senza il segno intraday (un titolo trovato con l'esplorazione, a 5 sedute) è un'occasione di più
+// giorni: va ai trading agents.
 export function postazioneDelVoto(s: Signal): string {
-  return s.agente.startsWith("custode ") ? `c:${s.agente.slice(8)}` : s.agente === "intraday" ? `i:${s.simbolo}` : `a:${s.agente}`;
+  return s.agente.startsWith("custode ") ? `c:${s.agente.slice(8)}` : s.agente === "intraday" ? (s.intraday ? `i:${s.simbolo}` : `c:${s.simbolo}`) : `a:${s.agente}`;
 }
 
 function bagaglioDa(mentori: string[], per: Map<string, Trade[]>, tutti: Trade[]): Bagaglio {
