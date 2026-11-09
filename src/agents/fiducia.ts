@@ -1,4 +1,4 @@
-import { AGENTS, LIMITS } from "../config.ts";
+import { AGENTS, LIMITS, isCrypto } from "../config.ts";
 import { dailyVol, sma } from "../indicators.ts";
 
 // La fiducia nella proiezione di Kronos: P(rendimento > 0 a fine orizzonte) = Φ(atteso / (volatilità × √orizzonte)).
@@ -31,6 +31,36 @@ export function controTendenza(closes: number[] | undefined, fc: number | undefi
   if (p === null || p < c.minFiducia) return { ok: false, p, motivo: `probabilità di successo ${pp} sotto il minimo (${Math.round(c.minFiducia * 100)}%)` };
   return { ok: true, p, motivo: `Kronos ${fc >= 0 ? "+" : ""}${(fc * 100).toFixed(1)}% con probabilità di successo ${pp}` };
 }
+
+// Rimbalzo di breve (media a 50 facoltativa): prezzo sotto la media a 50, calo netto nell'ultimo giorno (la giornata
+// conclusa o quella in corso, oltre caloMin o caloVol × volatilità giornaliera) e Kronos che anticipa un rialzo
+// temporaneo di almeno minRendimento con probabilità di successo ≥ minFiducia. L'obiettivo è il rialzo previsto.
+export function rimbalzo(simbolo: string, closes: number[] | undefined, price: number | null | undefined, fc: number | undefined): { ok: boolean; p: number | null; calo: number | null; obiettivo: number | null; motivo: string } {
+  const r = AGENTS.rimbalzo;
+  const no = (motivo: string, p: number | null = null, calo: number | null = null) => ({ ok: false, p, calo, obiettivo: null, motivo });
+  if (!r.enabled) return no("rimbalzi spenti");
+  if (!closes || closes.length < LIMITS.trendSmaDays + 2 || price === null || price === undefined || price <= 0) return no("dati insufficienti");
+  const m50 = sma(closes, LIMITS.trendSmaDays);
+  if (m50 === null || price >= m50) return no("sopra la media a 50: vale il trend");
+  const ieri = closes.at(-1)!, prima = closes.at(-2)!;
+  const calo = Math.min(prima > 0 ? ieri / prima - 1 : 0, ieri > 0 ? price / ieri - 1 : 0);
+  const crypto = isCrypto(simbolo);
+  const vol = dailyVol(closes, LIMITS.volLookbackDays) ?? LIMITS.fallbackDailyVol;
+  const soglia = Math.max(crypto ? r.caloMin.crypto : r.caloMin.stocks, r.caloVol * vol);
+  const p = kronosProb(closes, fc);
+  const pp = p === null ? "n.d." : `${Math.round(p * 100)}%`;
+  const f = (x: number) => `${x >= 0 ? "+" : ""}${(x * 100).toFixed(1)}%`;
+  if (calo > -soglia) return no(`nessun calo netto nell'ultimo giorno (${f(calo)}, serve oltre ${f(-soglia)})`, p, calo);
+  if (fc === undefined) return no("nessuna proiezione di Kronos", p, calo);
+  if (Math.abs(fc) > AGENTS.kronos.maxAbs) return no("proiezione fuori misura", p, calo);
+  const minR = crypto ? r.minRendimento.crypto : r.minRendimento.stocks;
+  if (fc < minR) return no(`calo del ${f(calo)} ma Kronos ${f(fc)} sotto il minimo per il rimbalzo (${f(minR)})`, p, calo);
+  if (p === null || p < r.minFiducia) return no(`calo del ${f(calo)}, Kronos ${f(fc)} ma probabilità di successo ${pp} sotto il minimo (${Math.round(r.minFiducia * 100)}%)`, p, calo);
+  return { ok: true, p, calo, obiettivo: fc, motivo: `calo del ${f(calo)} nell'ultimo giorno e Kronos anticipa ${f(fc)} a ${AGENTS.kronos.horizon} sedute con probabilità di successo ${pp}` };
+}
+
+// Il peso massimo di un rimbalzo di breve.
+export const pesoRimbalzo = () => LIMITS.maxPositionPct * AGENTS.rimbalzo.pesoFattore;
 
 export const sotto200 = (closes: number[] | undefined, price: number | undefined) => {
   if (!closes || price === undefined) return false;

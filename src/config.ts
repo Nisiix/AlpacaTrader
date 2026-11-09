@@ -160,7 +160,7 @@ export const AGENTS = {
   // maxAbs: proiezioni oltre questa misura (in valore assoluto) sono rumore del modello e non si usano.
   // controTendenza: sotto la media a 200 si entra solo se Kronos anticipa almeno minRendimento con probabilità di successo
   // (Φ del rendimento atteso sulla volatilità) almeno minFiducia; peso massimo ridotto a pesoFattore × 10%.
-  kronos: { topShare: 1, horizon: 5, timeoutMs: 900_000, port: 8765, model: "small" as "mini" | "small" | "base", lookback: 400, samples: 3, anticipaSoglia: 0.01, maxAbs: 0.25, zMax: 4, controTendenza: { enabled: true, minRendimento: 0.02, minFiducia: 0.6, pesoFattore: 0.5 },
+  kronos: { topShare: 1, horizon: 5, timeoutMs: 900_000, port: 8765, model: "small" as "mini" | "small" | "base", lookback: 400, samples: 3, anticipaSoglia: 0.01, maxAbs: 0.25, zMax: 4, controTendenza: { enabled: true, minRendimento: 0.02, minFiducia: 0.57, pesoFattore: 0.5 },
     // Il cervello delle previsioni: il sidecar fa girare accanto a Kronos altri modelli gratuiti (Chronos-2 di Amazon e
     // TimesFM 2.5 di Google, Apache 2.0; quelli non installati si saltano). Peso di un modello = affidabilità × risultato
     // misurato. Affidabilità (scala 0-1, metà dai dati finanziari dell'addestramento, metà dalle prove pubblicate sui
@@ -235,7 +235,7 @@ export const AGENTS = {
   // Custodi senza numero fisso: uno per ogni titolo o crypto in trend (maxCandidates è solo una sicurezza).
   // minProbabilita: sotto questa probabilità favorevole del dossier il trading agent non vota l'acquisto (è il suo stesso
   // consiglio «restare fuori»); il capo ufficio può alzarla per la squadra e per la singola persona (src/agents/profili.ts).
-  custodi: { enabled: true, maxCandidates: 100, pullbackSmaDays: 20, extendedPct: 0.15, keepIdleTicks: 12, minProbabilita: 0.6 },
+  custodi: { enabled: true, maxCandidates: 100, pullbackSmaDays: 20, extendedPct: 0.15, keepIdleTicks: 12, minProbabilita: 0.57 },
   // Calibrazione del capo ufficio (src/agents/calibrazione.ts): sotto `obiettivo` di vittorie su almeno `minTrade` trade
   // chiusi un agente diventa più selettivo di un passo (al massimo `maxPassi`); da `buono` in su torna di un passo.
   calibrazione: { enabled: true, minTrade: 10, obiettivo: 0.51, buono: 0.55, maxPassi: 4 },
@@ -254,8 +254,16 @@ export const AGENTS = {
   formazione: { enabled: true, minTrade: 20, obiettivo: 0.51, ore: 24, minOperativi: 10, minIntraday: 1 },
   // Evidenza combinata del dossier (Kronos, grafico, notizie, contesto) minima per un ingresso nuovo di più giorni:
   // sopra la media a 200 e, più alta, sotto la 200 (contro tendenza).
-  // Stessa soglia della scrivania: si vota e si entra solo da «pronto» (60%); contro tendenza serve di più.
-  evidenza: { min: 0.6, minContro: 0.65 },
+  // Stessa soglia della scrivania: si vota e si entra solo da «pronto» (57%); contro tendenza serve di più (salvo il
+  // rimbalzo di breve, che ha già le sue condizioni: calo netto e Kronos al rialzo).
+  evidenza: { min: 0.57, minContro: 0.65 },
+  // Rimbalzo di breve: la media a 50 giorni diventa facoltativa. Con il prezzo sotto la 50 (anche sotto la 200), se
+  // nell'ultimo giorno il titolo è sceso nettamente (oltre caloMin o caloVol volte la sua volatilità giornaliera; per la
+  // giornata conclusa o per quella in corso) e Kronos anticipa un rialzo di almeno minRendimento a 5 sedute con
+  // probabilità di successo ≥ minFiducia, si entra per un profitto breve: taglia ridotta (pesoFattore del peso massimo),
+  // si esce all'obiettivo (il rialzo previsto da Kronos all'ingresso), con lo stop, quando Kronos non vede più rialzo o
+  // dopo maxSedute sedute (giorni per le crypto).
+  rimbalzo: { enabled: true, caloMin: { stocks: 0.03, crypto: 0.05 }, caloVol: 1.5, minRendimento: { stocks: 0.015, crypto: 0.025 }, minFiducia: 0.57, pesoFattore: 0.5, maxSedute: 3 },
   // Contanti che restano sempre liberi (quota del patrimonio): il riparto del capitale divide il resto.
   riservaContanti: 0.01,
   // Costi di andata e ritorno su Alpaca: crypto 0,25% per lato (taker, livello base: percentuale, nessuna quota fissa);

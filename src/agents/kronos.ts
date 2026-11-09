@@ -1,6 +1,6 @@
 import { AGENTS, LIMITS } from "../config.ts";
 import { sma } from "../indicators.ts";
-import { controTendenza, pesoControTendenza } from "./fiducia.ts";
+import { controTendenza, pesoControTendenza, pesoRimbalzo, rimbalzo } from "./fiducia.ts";
 import type { Agent, AgentReport, AgentView, Signal } from "./types.ts";
 
 // Kronos (modello per candele, tools/kronos/server.py) come agente: chiede al sidecar il rendimento previsto a
@@ -32,7 +32,9 @@ export class KronosAgent implements Agent {
     };
     // Sotto la 200 si vota solo con una proiezione netta e una probabilità di successo sufficiente (contro tendenza).
     const contro = (f: KronosForecast) => !above200(f.simbolo) && controTendenza(v.closes[f.simbolo], f.rendimentoPrevisto).ok;
-    const ups = sane.filter((f) => f.rendimentoPrevisto >= AGENTS.kronos.anticipaSoglia && (above200(f.simbolo) || contro(f))).sort((a, b) => b.rendimentoPrevisto - a.rendimentoPrevisto);
+    // Rimbalzo di breve: calo netto nell'ultimo giorno sotto la media a 50 e rialzo temporaneo anticipato.
+    const rimb = (f: KronosForecast) => rimbalzo(f.simbolo, v.closes[f.simbolo], v.prices[f.simbolo] ?? v.closes[f.simbolo]?.at(-1), f.rendimentoPrevisto);
+    const ups = sane.filter((f) => f.rendimentoPrevisto >= AGENTS.kronos.anticipaSoglia && (above200(f.simbolo) || contro(f) || rimb(f).ok)).sort((a, b) => b.rendimentoPrevisto - a.rendimentoPrevisto);
     const upsAll = sane.filter((f) => f.rendimentoPrevisto >= AGENTS.kronos.anticipaSoglia).length;
     const downs = sane.filter((f) => f.rendimentoPrevisto <= -AGENTS.kronos.anticipaSoglia).sort((a, b) => a.rendimentoPrevisto - b.rendimentoPrevisto);
     const keepUp = Math.max(1, Math.round(ups.length * AGENTS.kronos.topShare));
@@ -40,6 +42,11 @@ export class KronosAgent implements Agent {
     const segnali: Signal[] = [];
     const held = new Set(v.positions.filter((p) => p.qty > 0).map((p) => p.symbol));
     for (const f of ups.slice(0, keepUp)) {
+      const rb = rimb(f);
+      if (rb.ok) {
+        segnali.push({ agente: this.name, simbolo: f.simbolo, lato: "buy", forza: Math.min(0.8, 0.4 + f.rendimentoPrevisto * 5), orizzonteSedute: AGENTS.rimbalzo.maxSedute, kronos: f.rendimentoPrevisto, pesoMassimo: pesoRimbalzo(), misure: { rimbalzo: rb.calo!, obiettivo: rb.obiettivo! }, perche: `rimbalzo di breve: ${rb.motivo}; taglia ridotta, si esce all'obiettivo, con lo stop o quando la proiezione gira` });
+        continue;
+      }
       if (contro(f)) {
         const ct = controTendenza(v.closes[f.simbolo], f.rendimentoPrevisto);
         segnali.push({ agente: this.name, simbolo: f.simbolo, lato: "buy", forza: Math.min(0.8, 0.4 + f.rendimentoPrevisto * 5), orizzonteSedute: AGENTS.kronos.horizon, kronos: f.rendimentoPrevisto, pesoMassimo: pesoControTendenza(), perche: `contro tendenza: Kronos anticipa ${(f.rendimentoPrevisto * 100).toFixed(1)}% a ${AGENTS.kronos.horizon} sedute sotto la media a 200, ${ct.motivo.replace(/^Kronos [^ ]+ /, "")}; taglia ridotta, si esce con lo stop o quando la proiezione gira` });
