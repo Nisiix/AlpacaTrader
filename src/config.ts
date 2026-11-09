@@ -308,7 +308,7 @@ export const AGENTS = {
   esecuzione: { maxRialzo: 0.003 },
   costi: { cryptoAndataRitorno: 0.004, azioniAndataRitorno: 0.0005, margineCosti: 2, ordiniLimite: { crypto: true, sotto: 0.0005, scadenzaMinuti: 10 } },
   // Su un conto piccolo (es. 1.000 $) i 100 $ fissi erano il 10% del conto: quasi nessun ingresso intraday ci arrivava.
-  // Il minimo in dollari è al più `quotaConto` del conto (1.000 $ → 20 $; da 5.000 $ in su resta 100 $).
+  // Il minimo in dollari è al più `quotaConto` del conto (1.000 $ → 10 $; da 10.000 $ in su resta 100 $).
   minNuova: { pct: 0.002, usd: 100, quotaConto: 0.01 },
   // Esplorazione: gli agenti in sala caffè passano in rassegna il radar (RADAR_SECTORS e le crypto rimaste fuori dal
   // tetto di coppie) ogni everyMinutes (di serie ogni minuto, anche tra un giro e l'altro), perGiro titoli alla volta;
