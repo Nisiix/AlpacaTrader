@@ -115,6 +115,36 @@ describe("intraday nel motore vero: candele da 5 minuti, Kronos, ordini", () => 
     expect(debole.intraday!.find((x) => x.simbolo === "BTC/USD")!.motivo).toContain("non basta");
   });
 
+  test("rimbalzo dopo un calo netto sotto la media a 50: si decide sulle candele con probabilità ≥ 57% invece di minProbSenzaGrafico", async () => {
+    setCryptoUniverse(["BTC/USD"]);
+    const now = new Date("2026-09-27T21:00:00+02:00");
+    const end = Math.floor(now.getTime() / 300_000) * 300_000;
+    const bars: IntradayBar[] = Array.from({ length: 120 }, (_, i) => {
+      const k = 119 - i;
+      const c = 76_000 * (1 + 0.0008 * k) * (1 + (k % 2 === 0 ? 0.003 : -0.003));
+      return { t: new Date(end - (k + 1) * 300_000).toISOString(), open: c, high: c * 1.002, low: c * 0.998, close: c, volume: 1_000 };
+    });
+    const prezzo = bars.at(-1)!.close;
+    // Chiusure giornaliere: oscillano intorno a un livello più alto, poi due settimane di discesa e -7% nell'ultimo giorno.
+    const giorni = Array.from({ length: 245 }, (_, i) => 1 + 0.01 * Math.sin(i / 3));
+    for (let i = 1; i <= 14; i++) giorni.push(1 - 0.006 * i);
+    giorni.push(giorni.at(-1)! * 0.93);
+    const calo = giorni.map((x) => (x * prezzo) / giorni.at(-1)!);
+    const vista = (closes: number[]) => ({ today: "2026-09-27", now, prices: { "BTC/USD": prezzo }, closes: { "BTC/USD": closes }, indicators: {}, positions: [], account: { equity: 100_000, lastEquity: 100_000, cash: 100_000, status: "ACTIVE" }, journal: emptyJournal(), mercatoAperto: false }) as unknown as AgentView;
+    const agente = () => new IntradayAgent(async (syms, tf) => Object.fromEntries(syms.map((x) => [x, tf === "5Min" ? bars : []])), async (b, step, h) => Object.fromEntries(Object.keys(b).map((x) => [x, Array.from({ length: h }, (_, i) => (step === 5 ? Math.min(0.015, 0.005 * (i + 1)) : 0))])));
+    const prima = AGENTS.intraday.kronos.minProbSenzaGrafico;
+    AGENTS.intraday.kronos.minProbSenzaGrafico = 0.99; // senza rimbalzo servirebbe il 99%
+    try {
+      const senza = await agente().observe(vista(syntheticCloses(prezzo, 0.02, 260)));
+      expect(senza.segnali.filter((x) => x.lato === "buy")).toEqual([]);
+      const con = await agente().observe(vista(calo));
+      const buy = con.segnali.find((x) => x.lato === "buy")!;
+      expect(buy.perche).toContain("rimbalzo dopo un calo del -7.00%");
+      expect(buy.perche).toContain("candele 5Min");
+      expect(buy.misure?.rimbalzo).toBeCloseTo(-0.07, 6);
+    } finally { AGENTS.intraday.kronos.minProbSenzaGrafico = prima; }
+  });
+
   test("ingresso deciso da Kronos sotto la media a 20: al giro dopo non si esce per «due candele sotto la media» (la ragione per cui è entrato)", async () => {
     setCryptoUniverse(["BTC/USD"]);
     const now = new Date("2026-09-27T21:00:00+02:00");

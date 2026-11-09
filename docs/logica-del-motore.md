@@ -106,7 +106,7 @@ fidata può far vendere o fermare un acquisto, mai far comprare.
 
 | Agente | Compito | Vota |
 |---|---|---|
-| **kronos** | proiezioni a 5 sedute | compra i rialzi oltre +1% (forza 0,5 → 1 con la proiezione); sotto la media a 200 solo contro tendenza (≥ +2% con probabilità ≥ 57%, metà taglia); **rimbalzo di breve** dopo un calo netto (sotto); vende (0,5) un titolo in portafoglio con ribasso netto |
+| **kronos** | proiezioni a 5 sedute | compra i rialzi oltre +1% (forza 0,5 → 1 con la proiezione); sotto la media a 200 solo contro tendenza (≥ +2% con probabilità ≥ 57%, metà taglia); vende (0,5) un titolo in portafoglio con ribasso netto |
 | **trend** | sopra le medie a 50 e 200 giorni, rendimento a 12 mesi positivo (crypto anche a 3 mesi), classifica per momentum a 6 mesi | compra (1 → 0,5 per classifica); vende chi chiude sotto la 50, salvo Kronos ancora al rialzo |
 | **rientro** | RSI(2) sotto 10 sopra la media a 200 | compra a taglia ridotta (5%); esce a RSI 70 o dopo 5 sedute |
 | **custodi** | un investitore per ogni titolo in trend, con rialzo netto di Kronos o in portafoglio; nessun numero fisso | tesi, piano, rischio e dossier; vota ingressi e uscite (sotto) |
@@ -170,14 +170,14 @@ l'opportunità regge. Si chiude quando è comprato (lo segue il suo custode), qu
    - il contesto non dice di aspettare;
    - **costi**: Kronos deve prevedere almeno **2 volte** i costi di andata e ritorno (crypto 0,5% → +1%; azioni ~0,05%
      → +0,1%); con Kronos attivo, senza proiezione utilizzabile non si entra;
-   - **evidenza combinata** del dossier: almeno 57% sopra la media a 200, 65% sotto (al rimbalzo di breve basta il 57%).
+   - **evidenza combinata** del dossier: almeno 57% sopra la media a 200, 65% sotto.
 
    **Voti misti**: se sullo stesso titolo votano sia agenti di più giorni sia l'intraday e uno di questi filtri fa
    aspettare l'ingresso di più giorni, si guarda la sola parte intraday: se da sola arriva a +0,5 entra come **trade
    intraday** (sua taglia, suo obiettivo e stop, chiusura in giornata o promozione), invece di perdere l'occasione.
 3. **Taglia**: al massimo il **10% del conto** per titolo, meno se il titolo è nervoso (valore × volatilità giornaliera ≤
    0,25% del conto) × rischio ammesso × **fiducia in Kronos** (50% → 40% della taglia, ≥ 80% → piena) × evidenza (al
-   minimo metà); sotto la media a 200, e per il rimbalzo di breve, ancora × 0,5, mai oltre il 5%.
+   minimo metà); sotto la media a 200 ancora × 0,5, mai oltre il 5%.
 4. **Riparto del capitale**: nessun numero fisso di titoli o di agenti. Se i contanti (meno l'1% di riserva e meno gli
    ordini d'acquisto ancora aperti) non bastano, si dividono in proporzione alla **qualità** (fiducia × evidenza ×
    punteggio), rispettando il **35% per settore** in ordine di punteggio. Una posizione nuova vale la pena da 0,2% del
@@ -186,18 +186,22 @@ l'opportunità regge. Si chiude quando è comprato (lo segue il suo custode), qu
 
 ### Il rimbalzo di breve (media a 50 facoltativa)
 
-La media a 50 giorni non è più un requisito assoluto (`src/agents/fiducia.ts`, `AGENTS.rimbalzo`). Con il prezzo
-sotto la 50 (anche sotto la 200) si entra per un profitto breve se:
+La media a 50 giorni non è più un requisito assoluto. Se un titolo o una crypto è sotto la 50 (anche sotto la 200) e
+nell'ultimo giorno è **sceso nettamente** (oltre il 3% per le azioni, il 5% per le crypto, o 1,5 volte la sua
+volatilità giornaliera; la giornata conclusa o quella in corso: `caloNetto` in `src/agents/fiducia.ts`), il rimbalzo
+lo cercano gli **intraday agents**, e tutto si decide **sulle candele**, non a sedute o a giorni:
 
-- nell'ultimo giorno (la giornata conclusa o quella in corso) il titolo è **sceso nettamente**: oltre il 3% per le
-  azioni e il 5% per le crypto, o oltre 1,5 volte la sua volatilità giornaliera se è più alta;
-- **Kronos anticipa un rialzo temporaneo** a 5 sedute di almeno +1,5% (azioni) o +2,5% (crypto, per i costi) con
-  probabilità di successo **≥ 57%**; il dossier deve comunque arrivare al 57%.
+- Kronos proietta le candele da 5 e 15 minuti, 1 e 4 ore (le azioni 1 e 4 ore); si sceglie la candela e l'orizzonte
+  con la probabilità più alta di un rialzo che copre due volte i costi;
+- con le medie brevi della candela non ancora in ordine (normale dopo un calo) basta una probabilità **≥ 57%**
+  (`AGENTS.rimbalzo.minFiducia`) invece del 65%; il grafico giornaliero sotto la sua media non dimezza la taglia (è la
+  premessa), le medie brevi non in ordine sì;
+- **obiettivo** il rialzo previsto da Kronos sull'orizzonte scelto, **stop** della candela, **scadenza** l'orizzonte di
+  Kronos su quella candela; se le candele superiori vedono ancora un rialzo netto il trade prosegue con il loro
+  obiettivo e il loro orizzonte (stesse regole di ogni operazione intraday, chiusura entro la giornata di borsa o le
+  12 ore per le crypto).
 
-Taglia a metà (massimo 5% del conto). Uscite: all'**obiettivo** (il rialzo previsto da Kronos all'ingresso, salvato nel
-diario), con lo **stop** sulla volatilità, quando **Kronos non vede più rialzo** (uscita di trend sotto la 50) o dopo
-**3 sedute** (giorni per le crypto). Custode e Kronos votano il rimbalzo; l'allocatore e la gabbia lo riconoscono con
-la stessa regola.
+Il calo dell'ultimo giorno resta nel diario (`misure.rimbalzo`) per giudicare questi ingressi.
 
 ### La gabbia
 
@@ -206,8 +210,8 @@ Il codice che dice l'ultima parola (`src/cage.ts`):
 - titoli solo a **borsa aperta**, crypto sempre; niente short, niente leva; azioni intere, crypto frazionarie (minimo 10 $);
 - massimo **10% per titolo** (meno se nervoso) e **35% per settore** (anche crypto e titoli scoperti);
 - metodo: sopra la media a 200 e sopra la 50, **oppure** con un rialzo netto di Kronos (≥ +1%); sotto la 200 solo contro
-  tendenza (Kronos ≥ +2% con probabilità ≥ 57%, metà taglia); il **rimbalzo di breve** entra sotto la 50 e sotto la 200
-  a metà taglia. L'intraday ha le sue regole;
+  tendenza (Kronos ≥ +2% con probabilità ≥ 57%, metà taglia). L'intraday (compreso il rimbalzo di breve) ha le sue
+  regole;
 - niente acquisti di azioni ed ETF nel **giorno della Fed** (le crypto sì) e di un titolo nei **2 giorni di borsa prima
   della trimestrale** fino al giorno dei conti;
 - registro degli errori, contanti sufficienti, un ordine aperto uguale non si duplica;

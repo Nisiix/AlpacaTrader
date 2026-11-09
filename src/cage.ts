@@ -7,7 +7,7 @@ import { dailyVol, indicatorsFor, sma, trendOf } from "./indicators.ts";
 import { setupOf } from "./journal.ts";
 import type { Lesson } from "./lessons.ts";
 import { stopPctFor } from "./stops.ts";
-import { controTendenza, pesoControTendenza, pesoRimbalzo, rimbalzo } from "./agents/fiducia.ts";
+import { controTendenza, pesoControTendenza } from "./agents/fiducia.ts";
 
 function setupOfSymbol(i: CageInput, symbol: string): string {
   const c = i.closes[symbol];
@@ -188,14 +188,10 @@ export function applyCage(i: CageInput): CageResult {
       if (!p.intraday) {
         if (t === null) { reject(`storico insufficiente per il metodo (servono ${LIMITS.longSmaDays} giorni di chiusure)`); continue; }
         // Kronos può anticipare: con una proiezione netta si entra anche sotto la media a 50; sotto la 200 solo contro
-        // tendenza (Kronos ≥ 2% con probabilità di successo ≥ 57%), a metà del peso massimo. Il rimbalzo di breve (calo
-        // netto nell'ultimo giorno e Kronos al rialzo) entra sotto la 50 e anche sotto la 200, a taglia ridotta.
+        // tendenza (Kronos ≥ 2% con probabilità di successo ≥ 57%), a metà del peso massimo.
         const kronosForte = p.kronos !== undefined && p.kronos >= AGENTS.kronos.anticipaSoglia;
         // Sotto la 200 solo contro tendenza: Kronos netto, probabilità di successo sufficiente, taglia ridotta.
-        const rb = rimbalzo(p.symbol, closes, price, p.kronos);
-        if (rb.ok) {
-          if (share > pesoRimbalzo() + 1e-9) { reject(`per un rimbalzo di breve il massimo è ${pct(pesoRimbalzo())} del conto, qui si arriverebbe al ${pct(share)}`); continue; }
-        } else if (t.close <= t.long) {
+        if (t.close <= t.long) {
           const ct = controTendenza(closes, p.kronos);
           if (!ct.ok) { reject(`chiusura ${t.close.toFixed(2)} sotto la media a ${LIMITS.longSmaDays} giorni (${t.long.toFixed(2)}): trend di lungo periodo negativo e niente ingresso contro tendenza (${ct.motivo})`); continue; }
           if (share > pesoControTendenza() + 1e-9) { reject(`contro tendenza il massimo è ${pct(pesoControTendenza())} del conto, qui si arriverebbe al ${pct(share)}`); continue; }

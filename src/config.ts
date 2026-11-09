@@ -254,16 +254,16 @@ export const AGENTS = {
   formazione: { enabled: true, minTrade: 20, obiettivo: 0.51, ore: 24, minOperativi: 10, minIntraday: 1 },
   // Evidenza combinata del dossier (Kronos, grafico, notizie, contesto) minima per un ingresso nuovo di più giorni:
   // sopra la media a 200 e, più alta, sotto la 200 (contro tendenza).
-  // Stessa soglia della scrivania: si vota e si entra solo da «pronto» (57%); contro tendenza serve di più (salvo il
-  // rimbalzo di breve, che ha già le sue condizioni: calo netto e Kronos al rialzo).
+  // Stessa soglia della scrivania: si vota e si entra solo da «pronto» (57%); contro tendenza serve di più.
   evidenza: { min: 0.57, minContro: 0.65 },
-  // Rimbalzo di breve: la media a 50 giorni diventa facoltativa. Con il prezzo sotto la 50 (anche sotto la 200), se
-  // nell'ultimo giorno il titolo è sceso nettamente (oltre caloMin o caloVol volte la sua volatilità giornaliera; per la
-  // giornata conclusa o per quella in corso) e Kronos anticipa un rialzo di almeno minRendimento a 5 sedute con
-  // probabilità di successo ≥ minFiducia, si entra per un profitto breve: taglia ridotta (pesoFattore del peso massimo),
-  // si esce all'obiettivo (il rialzo previsto da Kronos all'ingresso), con lo stop, quando Kronos non vede più rialzo o
-  // dopo maxSedute sedute (giorni per le crypto).
-  rimbalzo: { enabled: true, caloMin: { stocks: 0.03, crypto: 0.05 }, caloVol: 1.5, minRendimento: { stocks: 0.015, crypto: 0.025 }, minFiducia: 0.57, pesoFattore: 0.5, maxSedute: 3 },
+  // Rimbalzo di breve: la media a 50 giorni diventa facoltativa. Con il prezzo sotto la 50 (anche sotto la 200), dopo un
+  // calo netto nell'ultimo giorno (oltre caloMin o caloVol volte la volatilità giornaliera; la giornata conclusa o quella
+  // in corso) si cerca il rimbalzo con gli intraday agents: tutto si decide sulle candele (5 min, 15 min, 1 ora, 4 ore) e
+  // su Kronos per quelle candele, non a sedute o a giorni. Si entra se Kronos sulla candela scelta anticipa un rialzo
+  // temporaneo che copre i costi con probabilità ≥ minFiducia, anche con le medie brevi non ancora in ordine; obiettivo
+  // il rialzo previsto, scadenza l'orizzonte di Kronos su quella candela (prolungabile se le candele superiori vedono
+  // ancora rialzo), stop della candela.
+  rimbalzo: { enabled: true, caloMin: { stocks: 0.03, crypto: 0.05 }, caloVol: 1.5, minFiducia: 0.57 },
   // Contanti che restano sempre liberi (quota del patrimonio): il riparto del capitale divide il resto.
   riservaContanti: 0.01,
   // Costi di andata e ritorno su Alpaca: crypto 0,25% per lato (taker, livello base: percentuale, nessuna quota fissa);

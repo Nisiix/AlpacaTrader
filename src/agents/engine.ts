@@ -757,9 +757,9 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
         const prob = proposed?.intraday ? pIntra : (dossierP ?? pIntra);
         if (prob !== undefined) misure.probabilita = prob;
         if (rsi2 !== undefined) misure.rsi2 = rsi2;
-        // Rimbalzo di breve: il calo dell'ultimo giorno e l'obiettivo (rialzo previsto da Kronos), per le sue uscite.
-        const rb = proposed?.intraday ? undefined : voti.find((x) => x.misure?.rimbalzo !== undefined)?.misure;
-        if (rb) { misure.rimbalzo = rb.rimbalzo!; if (rb.obiettivo !== undefined) misure.obiettivo = rb.obiettivo; }
+        // Rimbalzo intraday dopo un calo netto: il calo dell'ultimo giorno, per giudicare a posteriori questi ingressi.
+        const calo = voti.find((x) => x.intraday && x.misure?.rimbalzo !== undefined)?.misure?.rimbalzo;
+        if (calo !== undefined) misure.rimbalzo = calo;
         if (Object.keys(misure).length) ctx.misure = misure;
         ctx.impostazioni = Object.fromEntries(TUTTI_PERSONALI.map((k) => [k, Number(valore(k, o.symbol))]));
         if (view.contesto?.generale) ctx.clima = view.contesto.generale;

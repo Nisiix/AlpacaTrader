@@ -1,7 +1,7 @@
 import { AGENTS, LIMITS, isCrypto } from "../config.ts";
 import { dailyVol, momentum, rsi, sma, trendOf } from "../indicators.ts";
 import { stopPctFor } from "../stops.ts";
-import { controTendenza, pesoControTendenza, pesoRimbalzo, rimbalzo } from "./fiducia.ts";
+import { controTendenza, pesoControTendenza } from "./fiducia.ts";
 import { crowdAdjustment } from "./fonti.ts";
 import { clamp01, type Agent, type AgentReport, type AgentView, type Signal } from "./types.ts";
 import { calibraP } from "./statistica.ts";
@@ -257,8 +257,6 @@ export class CustodiAgent implements Agent {
       const t = trendOf(c, LIMITS.trendSmaDays, LIMITS.longSmaDays);
       if (!c || !t) continue;
       const fc = v.previsioni?.[s];
-      // Rimbalzo di breve (media a 50 facoltativa): calo netto nell'ultimo giorno e Kronos al rialzo, sopra o sotto la 200.
-      if (rimbalzo(s, c, v.prices[s] ?? t.close, fc).ok) { out.push({ s, mom: fc! }); continue; }
       // Sotto la media a 200 solo contro tendenza: Kronos netto e probabilità di successo sufficiente.
       if (t.close <= t.long) {
         if (controTendenza(c, fc).ok) out.push({ s, mom: fc! });
@@ -356,15 +354,6 @@ export class CustodiAgent implements Agent {
     // Kronos prima del contesto: un ribasso anticipato ferma l'ingresso anche in trend; un rialzo anticipato lo rafforza.
     if (fc !== undefined && fc <= -AGENTS.kronos.anticipaSoglia) return { ...base, fase: "attende", piano: `Aspettare: Kronos anticipa un ribasso (${pct(fc)} a ${AGENTS.kronos.horizon} sedute). Si rientra quando la proiezione torna positiva.`, stato: "Trend intatto ma proiezione contraria: fermo." };
     if (v.contesto?.attendi[s]) return { ...base, fase: "attende", piano: `Aspettare: ${v.contesto.attendi[s]}.`, stato: "Pronto a entrare appena il contesto lo permette." };
-    // Rimbalzo di breve: sotto la media a 50, dopo un calo netto nell'ultimo giorno, con Kronos che anticipa un rialzo
-    // temporaneo. Taglia ridotta, obiettivo il rialzo previsto, poche sedute.
-    const rb = rimbalzo(s, closes, price, fc);
-    if (rb.ok) {
-      const sed = AGENTS.rimbalzo.maxSedute;
-      const ob = rb.obiettivo!;
-      segnali.push({ agente, simbolo: s, lato: "buy", forza: 0.55, orizzonteSedute: sed, kronos: fc, pesoMassimo: pesoRimbalzo(), misure: { rimbalzo: rb.calo!, obiettivo: ob }, perche: `${s} rimbalzo di breve sotto la media a ${LIMITS.trendSmaDays}: ${rb.motivo}; taglia ridotta (${Math.round(pesoRimbalzo() * 100)}% massimo), obiettivo ${pct(ob)}, stop a ${num(stop)}, al massimo ${sed} ${isCrypto(s) ? "giorni" : "sedute"}` });
-      return { ...base, fase: "pronto", piano: `Entrare per un rimbalzo di breve a taglia ridotta: ${rb.motivo}. Si esce all'obiettivo (${pct(ob)}), con lo stop (${num(stop)}), quando Kronos non vede più rialzo o dopo ${sed} ${isCrypto(s) ? "giorni" : "sedute"}.`, stato: `Candidata al rimbalzo dal ${c.dalle}, in attesa che allocatore e gabbia confermino.` };
-    }
     // Contro tendenza (sotto la 200): si entra solo con Kronos netto e probabilità sufficiente, a taglia ridotta.
     if (m200 !== null && price !== null && price <= m200) {
       const ct = controTendenza(closes, fc);

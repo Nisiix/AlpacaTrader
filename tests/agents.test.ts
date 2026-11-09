@@ -19,7 +19,7 @@ import { TrendAgent } from "../src/agents/trend.ts";
 import type { Agent, AgentView } from "../src/agents/types.ts";
 import { evaluateBreaker } from "../src/breaker.ts";
 import { applyCage } from "../src/cage.ts";
-import { controTendenza, rimbalzo } from "../src/agents/fiducia.ts";
+import { caloNetto, controTendenza } from "../src/agents/fiducia.ts";
 import { FAKE_VOL, syntheticCloses } from "../src/broker/fake.ts";
 import { AGENTS, LIMITS, UNIVERSE, enableCrypto, setCryptoUniverse } from "../src/config.ts";
 import { stopPctFor } from "../src/stops.ts";
@@ -1062,52 +1062,17 @@ describe("ingressi contro tendenza guidati da Kronos", () => {
   });
 });
 
-describe("rimbalzo di breve (media a 50 facoltativa)", () => {
-  // Un titolo che oscilla intorno a 100, scende per due settimane e nell'ultimo giorno perde il 6%: sotto la 50 e la 200.
-  const caduta = () => {
+describe("rimbalzo di breve: la premessa giornaliera (sotto la 50 dopo un calo netto)", () => {
+  test("calo netto nell'ultimo giorno sotto la media a 50; senza calo o sopra la 50 no", () => {
     const c = Array.from({ length: 245 }, (_, i) => 100 * (1 + 0.01 * Math.sin(i / 3)));
     for (let i = 1; i <= 14; i++) c.push(100 * (1 - 0.006 * i));
     c.push(c.at(-1)! * 0.94);
-    return c;
-  };
-  test("calo netto nell'ultimo giorno e Kronos al rialzo con probabilità ≥ 57%: si entra anche sotto la 50 e la 200", () => {
-    const c = caduta(), price = c.at(-1)!;
-    expect(rimbalzo("NVDA", c, price, 0.03).ok).toBe(true);
-    expect(rimbalzo("NVDA", c, price, 0.01).ok).toBe(false); // rialzo previsto troppo piccolo
-    expect(rimbalzo("NVDA", c, price, -0.02).ok).toBe(false); // Kronos al ribasso
-    const piatta = [...c.slice(0, -1), c.at(-2)!]; // senza il calo dell'ultimo giorno
-    expect(rimbalzo("NVDA", piatta, piatta.at(-1)!, 0.03).ok).toBe(false);
-    expect(rimbalzo("NVDA", salitaDi(100), 120, 0.03).ok).toBe(false); // sopra la 50 vale il trend
-  });
-  test("custode e Kronos votano il rimbalzo a taglia ridotta; la gabbia lo ammette sotto la 200 fino a metà del peso", async () => {
-    const c = caduta(), price = c.at(-1)!;
-    const v = view({ previsioni: { NVDA: 0.03 } });
-    v.closes.NVDA = c; v.prices.NVDA = price;
-    const rep = await new KronosAgent().observe(v);
-    const k = rep.segnali.find((x) => x.simbolo === "NVDA")!;
-    expect(k.perche).toContain("rimbalzo");
-    expect(k.misure?.obiettivo).toBeCloseTo(0.03, 9);
-    const cust = await new CustodiAgent().observe(v);
-    const st = cust.custodi!.find((x) => x.simbolo === "NVDA")!;
-    expect(st.fase).toBe("pronto");
-    expect(st.piano).toContain("rimbalzo");
-    const base = { today: "2026-09-24", marketOpen: true, account: v.account, positions: [], prices: v.prices, closes: v.closes, recentOrders: [], lessons: [], buyBlock: null };
-    const prop = (qty: number, kronos?: number) => ({ symbol: "NVDA", side: "buy" as const, qty, why: "x", confidence: "alta" as const, expect: "", ...(kronos !== undefined ? { kronos } : {}) });
-    const small = Math.floor(((LIMITS.maxPositionPct * 0.5 - 0.01) * v.account.equity) / price);
-    expect(applyCage({ ...base, proposals: [prop(small, 0.03)] }).orders).toHaveLength(1);
-    expect(applyCage({ ...base, proposals: [prop(small)] }).orders).toHaveLength(0);
-    const big = Math.floor(((LIMITS.maxPositionPct * 0.5 + 0.02) * v.account.equity) / price);
-    expect(applyCage({ ...base, proposals: [prop(big, 0.03)] }).rejected[0]!.reason).toContain("rimbalzo");
-  });
-  test("uscite: all'obiettivo previsto si incassa; dopo 3 sedute senza obiettivo si esce", () => {
-    const trade = (apertoIl: string) => { const j = emptyJournal(); j.trade.push({ id: "b", simbolo: "AAPL", stato: "aperto", apertoIl, comprate: 10, costo: 2000, vendute: 0, incassato: 0, quantita: 10, contesto: { setup: "", momentum20: null, volGiornaliera: null, distanzaMedia: null, fiducia: null, attesa: "", perche: "", agenti: ["custode AAPL"], misure: { rimbalzo: -0.05, obiettivo: 0.03 } } }); return j; };
-    const pos = (px: number) => [{ symbol: "AAPL", qty: 10, avgEntryPrice: 200, currentPrice: px, marketValue: px * 10 }];
-    const preso = new ExitAgent().observe(view({ journal: trade("2026-09-23T14:00:00Z"), positions: pos(207), prices: { ...PRICES, AAPL: 207 }, previsioni: { AAPL: 0.02 } }));
-    expect(preso.segnali.find((x) => x.simbolo === "AAPL")?.perche).toContain("rimbalzo preso");
-    const tiene = new ExitAgent().observe(view({ journal: trade("2026-09-23T14:00:00Z"), positions: pos(202), prices: { ...PRICES, AAPL: 202 }, previsioni: { AAPL: 0.02 } }));
-    expect(tiene.segnali.find((x) => x.simbolo === "AAPL")).toBeUndefined();
-    const scaduto = new ExitAgent().observe(view({ journal: trade("2026-09-18T14:00:00Z"), positions: pos(202), prices: { ...PRICES, AAPL: 202 }, previsioni: { AAPL: 0.02 } }));
-    expect(scaduto.segnali.find((x) => x.simbolo === "AAPL")?.perche).toContain("dopo 3 sedute");
+    expect(caloNetto("NVDA", c, c.at(-1)!).ok).toBe(true);
+    expect(caloNetto("NVDA", c, c.at(-1)!).calo!).toBeCloseTo(-0.06, 6);
+    const piatta = [...c.slice(0, -1), c.at(-2)!];
+    expect(caloNetto("NVDA", piatta, piatta.at(-1)!).ok).toBe(false);
+    expect(caloNetto("BTC/USD", c, c.at(-1)!).ok).toBe(true); // crypto: oltre il 5%
+    expect(caloNetto("NVDA", salitaDi(100), 120).ok).toBe(false); // sopra la 50 vale il trend
   });
 });
 

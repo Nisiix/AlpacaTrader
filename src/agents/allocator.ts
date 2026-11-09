@@ -1,6 +1,6 @@
 import type { ProposedOrder } from "../ordini.ts";
 import { maxWeightFor } from "../cage.ts";
-import { pesoControTendenza, pesoRimbalzo, rimbalzo, sotto200 } from "./fiducia.ts";
+import { pesoControTendenza, sotto200 } from "./fiducia.ts";
 import { AGENTS, CRYPTO_MIN_NOTIONAL, LIMITS, isCrypto, sectorOf } from "../config.ts";
 import { dailyVol } from "../indicators.ts";
 import { romeTime } from "../slots.ts";
@@ -172,10 +172,7 @@ export function allocate(view: AgentView, reports: Record<string, AgentReport>, 
       return `Kronos prevede ${(fcCosti * 100).toFixed(2)}%: non copre ${AGENTS.costi.margineCosti} volte i costi di andata e ritorno (${(costo * 100).toFixed(2)}%)`;
     // Evidenza combinata: il dossier del custode mette insieme Kronos (45%), grafico (25%), notizie e post (15%) e contesto
     // con Fear & Greed e funding (15%); sopra la media a 200 basta evidenza.min, sotto serve evidenza.minContro.
-    // Il rimbalzo di breve ha già le sue condizioni (calo netto, Kronos al rialzo con probabilità sufficiente): basta
-    // l'evidenza minima anche sotto la 200.
-    const rimb = rimbalzo(sc.simbolo, view.closes[sc.simbolo], price, view.previsioni?.[sc.simbolo] ?? sc.kronos).ok;
-    const contro = !rimb && sotto200(view.closes[sc.simbolo], price);
+    const contro = sotto200(view.closes[sc.simbolo], price);
     const ev = dossierOf(sc.simbolo);
     const minEv = contro ? AGENTS.evidenza.minContro : AGENTS.evidenza.min;
     if (ev !== null && ev < minEv) return `evidenza combinata ${(Math.floor(ev * 1000) / 10).toFixed(1).replace(".", ",")}% sotto il minimo ${Math.round(minEv * 100)}%${contro ? " richiesto sotto la media a 200" : ""} (Kronos, grafico, notizie, contesto)`;
@@ -217,8 +214,7 @@ export function allocate(view: AgentView, reports: Record<string, AgentReport>, 
     // Evidenza combinata: il dossier del custode mette insieme Kronos (45%), grafico (25%), notizie e post (15%) e contesto
     // con Fear & Greed e funding (15%). Per un ingresso nuovo di più giorni deve arrivare almeno a evidenza.min (sopra la
     // media a 200) o evidenza.minContro (sotto la 200): chiunque abbia votato, le altre fonti possono fermare l'ingresso.
-    const rimb = !sc.intraday && !p && rimbalzo(sc.simbolo, view.closes[sc.simbolo], price, view.previsioni?.[sc.simbolo] ?? sc.kronos).ok;
-    const contro = !sc.intraday && !rimb && sotto200(view.closes[sc.simbolo], price);
+    const contro = !sc.intraday && sotto200(view.closes[sc.simbolo], price);
     const ev = sc.intraday ? null : dossierOf(sc.simbolo);
     sc.evidenza = ev;
     const minEv = contro ? AGENTS.evidenza.minContro : AGENTS.evidenza.min;
@@ -235,8 +231,6 @@ export function allocate(view: AgentView, reports: Record<string, AgentReport>, 
     // Sotto la media a 200 (contro tendenza) sempre più prudente che sopra: a parità di fiducia ed evidenza la taglia si
     // moltiplica per la quota contro tendenza (metà di serie) e non supera mai quella quota del peso massimo.
     if (contro) w = Math.min(w * AGENTS.kronos.controTendenza.pesoFattore, pesoControTendenza());
-    // Rimbalzo di breve: stessa prudenza, taglia ridotta e mai oltre il suo peso massimo.
-    if (rimb) w = Math.min(w * AGENTS.rimbalzo.pesoFattore, pesoRimbalzo());
     if (!p) slots--;
     wanted.push({ sc, w, p });
   }

@@ -87,17 +87,6 @@ export class ExitAgent implements Agent {
         if (conti.frazione !== 0) sell(conti.perche, conti.frazione);
         continue;
       }
-      // Rimbalzo di breve: obiettivo il rialzo previsto da Kronos all'ingresso, al massimo maxSedute sedute (giorni per le
-      // crypto). Lo stop, la proiezione che gira e le altre regole valgono come per tutti.
-      const rimb = trade?.contesto?.misure?.rimbalzo !== undefined ? trade.contesto.misure : null;
-      if (rimb && trade?.apertoIl) {
-        const r = AGENTS.rimbalzo;
-        const crypto = isCrypto(p.symbol);
-        const ob = Math.max(rimb.obiettivo ?? 0, crypto ? r.minRendimento.crypto : r.minRendimento.stocks);
-        if (gain >= ob) { sell(`rimbalzo preso: ${pct(gain)} dal carico, obiettivo ${pct(ob)} raggiunto`); continue; }
-        const scaduto = crypto ? (v.now.getTime() - Date.parse(trade.apertoIl)) / 86_400_000 >= r.maxSedute : v.today >= addTradingDays(trade.apertoIl.slice(0, 10), r.maxSedute);
-        if (scaduto) { sell(`rimbalzo di breve: dopo ${r.maxSedute} ${crypto ? "giorni" : "sedute"} il trade rende ${pct(gain)} senza aver toccato l'obiettivo (${pct(ob)}): si esce`); continue; }
-      }
       // Protezione del profitto: in guadagno (oltre i costi) e Kronos vede nel breve un calo che lo azzererebbe → si incassa
       // adesso un profitto minore invece di rischiare di tornare a pari o in perdita.
       const pp = AGENTS.protezioneProfitto;
