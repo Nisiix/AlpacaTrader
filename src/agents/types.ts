@@ -54,6 +54,8 @@ export interface AgentView {
   percorsi?: Record<string, number[]>;
   // Contesto economico deciso prima degli altri agenti: settori in cui si aspetta, proiezioni di cui fidarsi.
   contesto?: MarketContext;
+  // Probabilità favorevole dei dossier dei trading agents (giro precedente): l'intraday la usa per una parte minima.
+  dossier?: Record<string, number>;
   // Borsa aperta adesso e finestra degli ingressi sui titoli: l'allocatore non spreca posti su titoli non negoziabili.
   mercatoAperto?: boolean;
   // Con la borsa aperta: quando chiude oggi (dall'orologio di Alpaca). Gli ingressi sulle azioni seguono l'orario vero.

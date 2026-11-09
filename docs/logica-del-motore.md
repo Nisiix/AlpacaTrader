@@ -199,6 +199,22 @@ decidono di nuovo le candele: obiettivo e stop restano quelli del trade, l'orizz
 per il riporto e la durata massima delle crypto riparte dal riporto. Le regole a sedute (uscita a tempo, rientro a 5
 sedute, uscita di trend) non riguardano questi trade.
 
+### Come si decide un ingresso intraday (riassunto)
+
+- **Candele con un vantaggio misurato**: Kronos si usa solo sulle candele dove indovina la direzione più del caso
+  (`intraday.vantaggio`: con almeno 300 previsioni verificate e affidabilità sotto 0,25 la candela non fa entrare; si
+  continua a proiettarla poco, 6 coppie a giro, per misurarla, e torna utilizzabile appena il vantaggio compare).
+- **Probabilità**: con le medie brevi in ordine (o rottura/rientro) quella della persona (55% di serie); senza, 57%
+  (come la soglia generale). La probabilità con cui si decide è per l'**85% Kronos sulle candele** e per il **15% il
+  dossier** del titolo (Kronos a 5 sedute, grafico giornaliero, notizie e post, contesto con Fear & Greed e funding)
+  o, senza dossier, il contesto del settore (favorevole 60%, neutro 50%, sfavorevole 40%) (`intraday.evidenza`).
+- **Costi**: le crypto si comprano con **ordini limite** appena sotto il prezzo (0,05%), che pagano la commissione
+  maker (0,15%) invece della taker (0,25%); le vendite restano a mercato. Andata e ritorno 0,40%: il rialzo previsto
+  deve essere almeno 0,8%. Un limite non eseguito in 10 minuti si cancella (`costi.ordiniLimite`).
+- **Obiettivo** = il rialzo previsto da Kronos (mai sotto due volte i costi), e deve valere almeno 1,2 volte lo stop.
+- **Rientri**: dopo un'operazione chiusa in guadagno si può rientrare sullo stesso titolo nello stesso giorno, al
+  massimo 3 ingressi; dopo una chiusa in perdita no, fino al giorno dopo (`intraday.ingressiGiorno`).
+
 ### La scaletta delle medie (prudenza)
 
 Si investe anche sotto le medie giornaliere, con taglie via via più piccole (la 200 conta più della 50;

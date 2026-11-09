@@ -282,7 +282,10 @@ export const AGENTS = {
   // azioni senza commissioni, solo tasse regolamentari sulle vendite arrotondate al centesimo (trascurabili sopra i 100 $).
   // Un ingresso di più giorni si fa solo se Kronos prevede almeno `margineCosti` volte il costo; una posizione nuova
   // vale la pena da `minNuova.pct` del conto e almeno `minNuova.usd` dollari.
-  costi: { cryptoAndataRitorno: 0.005, azioniAndataRitorno: 0.0005, margineCosti: 2 },
+  // Crypto: gli acquisti si fanno con ordini limite appena sotto il prezzo (ordiniLimite), che restano nel book e pagano
+  // la commissione maker (0,15%) invece della taker (0,25%); le vendite restano a mercato (taker). Andata e ritorno
+  // 0,40% invece di 0,50%. Un limite non eseguito entro scadenzaMinuti si cancella: al giro dopo si rivaluta.
+  costi: { cryptoAndataRitorno: 0.004, azioniAndataRitorno: 0.0005, margineCosti: 2, ordiniLimite: { crypto: true, sotto: 0.0005, scadenzaMinuti: 10 } },
   minNuova: { pct: 0.002, usd: 100 },
   // Esplorazione: gli agenti in sala caffè passano in rassegna il radar (RADAR_SECTORS e le crypto rimaste fuori dal
   // tetto di coppie) ogni everyMinutes (di serie ogni minuto, anche tra un giro e l'altro), perGiro titoli alla volta;
@@ -309,7 +312,7 @@ export const AGENTS = {
     // modello (succede sui prezzi minuscoli, es. 0,000005 $) e non si usa, come le giornaliere fuori misura.
     // minProbSenzaGrafico: con le medie brevi della candela non in ordine (né rottura né rientro) decide Kronos da solo,
     // ma serve una probabilità più alta e la taglia si dimezza (un'inversione anticipata, non un trend già visibile).
-    kronos: { orizzontiMin: [15, 30, 60, 120, 240, 480] as number[], maxCandele: 20, perGiro: 60, minProb: 0.55, minProbSenzaGrafico: 0.65, zMax: 4 },
+    kronos: { orizzontiMin: [15, 30, 60, 120, 240, 480] as number[], maxCandele: 20, perGiro: 60, minProb: 0.55, minProbSenzaGrafico: 0.57, zMax: 4 },
     // Scelta della candela: la probabilità che conta è quella di un guadagno NETTO dei costi di andata e ritorno, Φ(z) con
     // z = (rialzo previsto − costi) / (volatilità delle candele × √candele), moltiplicato per l'affidabilità misurata della
     // candela dal cervello: quota di direzioni giuste di Kronos su quella candela, avvicinata a `prior` con il peso di `forza`
@@ -332,9 +335,9 @@ export const AGENTS = {
     // Azioni: il feed gratuito di Alpaca è solo IEX (circa il 2% degli scambi): le candele da 5 e 15 minuti sono troppo
     // rumorose per Kronos. Per le azioni si usano solo 1 ora e 4 ore; le crypto hanno tutte le candele.
     candeleAzioni: ["1Hour", "4Hour"] as string[],
-    // Obiettivo: con Kronos è il rialzo che Kronos prevede sull'orizzonte scelto (minuti o ore), mai sotto questo minimo,
-    // che copre i costi con margine (azioni 0,3%, crypto 1,2% contro lo 0,5% di andata e ritorno); senza Kronos il maggiore
-    // tra minimo e targetAtr × ATR. Si entra solo se l'obiettivo vale almeno rapportoMin volte lo stop: un trade breve da
+    // Obiettivo: con Kronos è il rialzo che Kronos prevede sull'orizzonte scelto (minuti o ore), mai sotto due volte i
+    // costi di andata e ritorno (crypto 0,8%, azioni 0,1%); senza Kronos il maggiore tra questo minimo (azioni 0,3%,
+    // crypto 1,2%) e targetAtr × ATR. Si entra solo se l'obiettivo vale almeno rapportoMin volte lo stop: un trade breve da
     // pochi minuti è possibile quando Kronos vede un movimento netto rispetto al rumore della candela.
     target: { stocks: 0.003, crypto: 0.012 },
     rapportoMin: 1.2,
@@ -342,6 +345,17 @@ export const AGENTS = {
     // rispetta i criteri del metodo di più giorni (trend o Kronos netto, Kronos a 5 sedute che copre i costi con probabilità
     // ≥ minProb, nessuna attesa del contesto né trimestrale vicina) non si chiude: passa alle regole di più giorni.
     promozione: { enabled: true, minProb: 0.55 },
+    // Candele su cui Kronos non ha (ancora) un vantaggio misurato: con almeno minCampione previsioni verificate e un
+    // fattore d'affidabilità sotto minFattore non si entra su quella candela; si continua a proiettarla poco (misuraPerGiro
+    // coppie a giro) per misurarla, e torna utilizzabile appena il vantaggio compare.
+    vantaggio: { minCampione: 300, minFattore: 0.25, misuraPerGiro: 6 },
+    // Le informazioni del dossier (Kronos a 5 sedute, grafico giornaliero, notizie e post, contesto con Fear & Greed e
+    // funding) o, senza dossier, il contesto del settore pesano `peso` nella probabilità con cui si decide l'ingresso
+    // (il resto è Kronos sulle candele): una parte minima, che sposta solo i casi al limite.
+    evidenza: { peso: 0.15 },
+    // Più ingressi sullo stesso titolo nello stesso giorno: dopo un'operazione chiusa in guadagno si può rientrare, al
+    // massimo `max` volte al giorno; dopo una chiusa in perdita no, fino a domani.
+    ingressiGiorno: { max: 3 },
     // Riporto al giorno dopo (sostituisce la promozione a posizione di più giorni): a fine giornata un'operazione si tiene
     // se le proiezioni di Kronos sulle sue candele e su quelle superiori restano dentro la forchetta del trade (nessuna
     // tocca lo stop, la più lunga vede salire con probabilità ≥ minProb); il giorno dopo decidono di nuovo le candele.

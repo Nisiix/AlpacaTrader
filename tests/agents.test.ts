@@ -753,7 +753,8 @@ describe("intraday", () => {
     const prices = { ...PRICES, NVDA: 180.9, "BTC/USD": 76_450, "ETH/USD": 2_100 };
     const now = day("2026-09-22", "16:30");
     const asked: string[] = [];
-    let kint: Record<string, number> = { "BTC/USD": 0.01, NVDA: 0.006 };
+    // BTC +1,3%: l'obiettivo è il rialzo previsto e deve valere almeno 1,2 volte lo stop (1%).
+    let kint: Record<string, number> = { "BTC/USD": 0.013, NVDA: 0.006 };
     const a = new IntradayAgent(async (syms) => Object.fromEntries(syms.filter((x) => bars[x]).map((x) => [x, bars[x]!])), async (b, step, h) => { asked.push(`${step}:${h}:${Object.keys(b).join(",")}`); return Object.fromEntries(Object.keys(b).map((x) => [x, kint[x] ?? -0.01])); });
     const r = await a.observe(view({ closes, prices, now, today: "2026-09-22" }));
     const btc = r.segnali.find((x) => x.lato === "buy" && x.simbolo === "BTC/USD")!;
@@ -770,7 +771,7 @@ describe("intraday", () => {
     expect(prot.vincolante).toBe(true);
     expect(prot.perche).toContain("protezione del profitto");
     bars["BTC/USD"]!.pop();
-    kint = { "BTC/USD": 0.01, NVDA: 0.006 };
+    kint = { "BTC/USD": 0.013, NVDA: 0.006 };
     // Lo stesso ingresso con il Kronos a 5 sedute contrario: si entra lo stesso, ma a taglia ridotta.
     const a2 = new IntradayAgent(async (syms) => Object.fromEntries(syms.filter((x) => bars[x]).map((x) => [x, bars[x]!])), async (b) => Object.fromEntries(Object.keys(b).map((x) => [x, kint[x] ?? -0.01])));
     const rr = await a2.observe(view({ closes, prices, now, today: "2026-09-22", previsioni: { "BTC/USD": -0.03 } }));

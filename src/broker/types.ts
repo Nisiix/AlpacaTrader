@@ -42,6 +42,8 @@ export interface OrderRequest {
   side: Side;
   qty: number;
   clientOrderId: string;
+  // Ordine limite (crypto in acquisto): resta nel book e paga la commissione maker invece della taker.
+  limitPrice?: number;
 }
 
 // Stop di protezione che vive su Alpaca: vende da solo anche tra un giro e l'altro e a motore spento.

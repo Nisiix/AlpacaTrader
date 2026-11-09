@@ -130,7 +130,8 @@ export class AlpacaBroker implements Broker {
       symbol: req.symbol,
       qty: qtyString(req.symbol, req.qty),
       side: req.side,
-      type: "market",
+      type: req.limitPrice ? "limit" : "market",
+      ...(req.limitPrice ? { limit_price: prezzoStringa(req.symbol, req.limitPrice) } : {}),
       // Le crypto non accettano "day".
       time_in_force: isCrypto(req.symbol) ? "gtc" : "day",
       client_order_id: req.clientOrderId,

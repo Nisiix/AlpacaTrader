@@ -20,6 +20,8 @@ export interface PlannedOrder {
   qty: number;
   why: string;
   source: OrderSource;
+  // Prezzo limite (acquisti crypto con ordini limite): deciso al momento dell'invio.
+  limitPrice?: number;
 }
 
 // stop-loss = protezione contro i crolli; uscita-trend = l'uscita normale del metodo, decisa dal codice.

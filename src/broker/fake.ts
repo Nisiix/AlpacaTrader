@@ -187,7 +187,8 @@ export class FakeBroker implements Broker {
     this.checkOutage(s, "submitOrder");
     if (s.orders.some((o) => o.clientOrderId === req.clientOrderId)) throw new DuplicateOrderError(`client_order_id già usato: ${req.clientOrderId}`, 422);
     if (s.faults.rejectSymbols?.includes(req.symbol)) throw new BrokerError(`asset ${req.symbol} is not tradable (broker finto)`, 422);
-    const price = this.price(s, req.symbol);
+    // Ordine limite: il broker finto lo esegue subito al prezzo migliore tra mercato e limite (come se il prezzo lo toccasse).
+    const price = req.limitPrice ? Math.min(this.price(s, req.symbol), req.limitPrice) : this.price(s, req.symbol);
     const pos = s.positions[req.symbol] ?? { qty: 0, avgEntryPrice: 0 };
     if (req.side === "buy") {
       if (req.qty * price > s.cash) throw new BrokerError("fondi insufficienti", 403);
@@ -211,7 +212,7 @@ export class FakeBroker implements Broker {
       filledQty: req.qty,
       status: "filled",
       submittedAt: this.now().toISOString(),
-      type: "market",
+      type: req.limitPrice ? "limit" : "market",
       stopPrice: null,
       filledAvgPrice: price,
       filledAt: this.now().toISOString(),

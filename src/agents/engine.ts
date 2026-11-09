@@ -159,6 +159,8 @@ interface Snapshot {
 
 // Lo storico giornaliero cambia una volta al giorno: si scarica alla prima passata di ogni data.
 export interface EngineCache {
+  // I dossier dei trading agents dell'ultimo giro (probabilità favorevole): contesto per l'intraday.
+  dossier?: Record<string, number>;
   closesDate?: string;
   closes: Record<string, number[]>;
   bars: Record<string, Bar[]>;
@@ -421,6 +423,15 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
       for (let i = AGENTS.universe.length - 1; i >= 0; i--) { const u = AGENTS.universe[i]!; if (RADAR_SECTORS[u] && !keep.has(u)) AGENTS.universe.splice(i, 1); }
       for (const p of snap.positions) if (RADAR_SECTORS[p.symbol] && !AGENTS.universe.includes(p.symbol)) AGENTS.universe.push(p.symbol);
     }
+    // Ordini limite d'acquisto non eseguiti entro la scadenza: si cancellano, al giro dopo l'occasione si rivaluta.
+    {
+      const scad = AGENTS.costi.ordiniLimite.scadenzaMinuti * 60_000;
+      for (const o of snap.recentOrders) {
+        if (o.side !== "buy" || o.type !== "limit" || !["new", "accepted", "pending_new", "partially_filled"].includes(o.status)) continue;
+        if (startedAt.getTime() - Date.parse(o.submittedAt) < scad) continue;
+        try { await deps.broker.cancelOrder(o.id); log.info(`ordine limite ${o.clientOrderId} su ${o.symbol} non eseguito in ${AGENTS.costi.ordiniLimite.scadenzaMinuti} minuti: cancellato`); } catch (e) { log.warn(`cancellazione di ${o.clientOrderId} non riuscita: ${(e as Error).message}`); }
+      }
+    }
     bus.emit("conto", { patrimonio: snap.account.equity, contanti: snap.account.cash, pnlGiorno: snap.account.equity - snap.account.lastEquity, mercatoAperto: snap.clock.isOpen });
     bus.emit("prezzi", { prezzi: snap.prices });
     // Le previsioni scadute di ogni modello si confrontano con i prezzi di adesso (prima di chiederne di nuove).
@@ -547,7 +558,7 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
       (cache.difeseAvvisate ??= []).push(chiave);
       await alarm("Difesa del guadagno di una persona", `${motivo}: si vendono i suoi trade non favorevoli (${sym}${Object.entries(giornataP.difesa).filter(([s2, m]) => s2 !== sym && m === motivo).map(([s2]) => `, ${s2}`).join("")})`);
     }
-    const view: AgentView = { today, now: startedAt, difesaPersonale: giornataP.difesa, prices: snap.prices, closes, indicators, positions: snap.positions, account: snap.account, cashImpegnato, analisi, journal, previsioni, previsioniKronos: previsioni, percorsi, mercatoAperto: snap.clock.isOpen, chiusuraBorsa: snap.clock.nextClose, finestraIngressi: stockEntryOpen(snap.clock, startedAt), giornata, fonti };
+    const view: AgentView = { today, now: startedAt, difesaPersonale: giornataP.difesa, prices: snap.prices, closes, indicators, positions: snap.positions, account: snap.account, cashImpegnato, analisi, journal, previsioni, previsioniKronos: previsioni, percorsi, mercatoAperto: snap.clock.isOpen, chiusuraBorsa: snap.clock.nextClose, finestraIngressi: stockEntryOpen(snap.clock, startedAt), giornata, fonti, ...(cache.dossier ? { dossier: cache.dossier } : {}) };
     const reports: Record<string, AgentReport> = {};
     const agentStatus: AgentsStatus["agenti"] = {};
     // Il contesto economico si valuta per primo: decide dove si aspetta e di quali proiezioni fidarsi.
@@ -598,6 +609,7 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
     const formazione = aggiornaFormazione(deps.stateDir, journal, [...Object.keys(registro.staff).map(chiavePersona), ...generaliAttivi], startedAt, registro.vecchi, view.contesto?.generale);
     const votiDi = (desk: string) => Object.values(reports).flatMap((r) => r.segnali).filter((s) => s.lato === "buy" && !s.vincolante && postazioneDelVoto(s) === desk);
     const custodiGiro = Object.values(reports).flatMap((r) => r.custodi ?? []);
+    cache.dossier = Object.fromEntries(custodiGiro.filter((c) => c.dossier).map((c) => [c.simbolo, c.dossier!.probabilita]));
     const intradayGiro = Object.values(reports).flatMap((r) => r.intraday ?? []);
     const inIntraday = new Set(intradayGiro.filter((x) => x.fase === "in posizione").map((x) => x.simbolo));
     const preferite = new Map(attive(espl, today).map((s) => [`${s.agente === "intraday" ? "i" : "c"}:${s.simbolo}`, s.scopritore]));
@@ -783,6 +795,9 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
     lock.intended = cage.orders.map((o) => ({ clientOrderId: clientOrderId(runIdFor(o.side), o.symbol, o.side), symbol: o.symbol, side: o.side, qty: o.qty }));
     const outcomes: ExecOutcome[] = [];
     for (const plan of cage.orders) {
+      // Crypto in acquisto: ordine limite appena sotto il prezzo (commissione maker invece di taker).
+      const ol = AGENTS.costi.ordiniLimite;
+      if (ol.crypto && plan.side === "buy" && plan.source === "modello" && isCrypto(plan.symbol) && snap.prices[plan.symbol]) plan.limitPrice = snap.prices[plan.symbol]! * (1 - ol.sotto);
       const out = await sendOne(deps.broker, runIdFor(plan.side), plan, log, deps.sleep);
       outcomes.push(out);
       bus.emit("ordine", { id: out.id, simbolo: plan.symbol, lato: plan.side, quantita: plan.qty, origine: plan.source, esito: out.kind, stato: "order" in out ? out.order.status : undefined, errore: "error" in out ? out.error : undefined, perche: plan.why });

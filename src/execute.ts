@@ -49,8 +49,8 @@ export async function sendOne(broker: Broker, runId: string, plan: PlannedOrder,
       }
     }
     try {
-      const order = await broker.submitOrder({ symbol: plan.symbol, side: plan.side, qty: plan.qty, clientOrderId: id });
-      log.info(`inviato ${id}: ${plan.side} ${plan.qty} ${plan.symbol} (stato ${order.status})`);
+      const order = await broker.submitOrder({ symbol: plan.symbol, side: plan.side, qty: plan.qty, clientOrderId: id, ...(plan.limitPrice ? { limitPrice: plan.limitPrice } : {}) });
+      log.info(`inviato ${id}: ${plan.side} ${plan.qty} ${plan.symbol}${plan.limitPrice ? ` limite ${plan.limitPrice}` : ""} (stato ${order.status})`);
       return { kind: "inviato", plan, id, order };
     } catch (e) {
       if (e instanceof DuplicateOrderError) {

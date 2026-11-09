@@ -61,7 +61,7 @@ describe("intraday nel motore vero: candele da 5 minuti, Kronos, ordini", () => 
     const lv = readJournal(d.stateDir, new Date(env.clock.t)).file.trade.find((t) => t.simbolo === "BTC/USD" && t.stato === "aperto")?.contesto?.livelli;
     expect(lv?.candela).toBe("5Min");
     expect(lv!.obiettivo).toBeGreaterThan(lv!.stop);
-    expect(st.obiettivo! / entrata - 1).toBeCloseTo(0.015, 3);
+    expect(st.obiettivo! / entrata - 1).toBeCloseTo(0.015, 2); // ingresso con ordine limite appena sotto il prezzo
 
     // Cinque minuti dopo (giro senza analisi d'ingresso): il prezzo è all'obiettivo, Kronos sulla candela breve non vede altro.
     env.clock.t += 5 * 60_000;
@@ -115,7 +115,7 @@ describe("intraday nel motore vero: candele da 5 minuti, Kronos, ordini", () => 
     const buy = forte.segnali.find((x) => x.lato === "buy")!;
     expect(buy.perche).toContain("Kronos anticipa la ripartenza sulle candele 5Min");
     expect(buy.pesoMassimo!).toBeLessThanOrEqual(AGENTS.intraday.maxWeight / 2 + 1e-9);
-    const debole = await con(0.008).observe(v); // +0,8%: non copre 2 volte i costi crypto (1%)
+    const debole = await con(0.006).observe(v); // +0,6%: non copre 2 volte i costi crypto (0,8%)
     expect(debole.segnali.filter((x) => x.lato === "buy")).toEqual([]);
     expect(debole.intraday!.find((x) => x.simbolo === "BTC/USD")!.motivo).toContain("non basta");
   });
@@ -316,6 +316,47 @@ describe("il motore punta all'intraday: più giorni solo per riporto, deciso sul
       const r2 = await agente((h) => Array.from({ length: h }, (_, i) => -0.004 * (i + 1))).observe(view(j2));
       expect(r2.segnali.find((x) => x.lato === "sell")!.perche).toContain("arriverebbe allo stop");
     } finally { AGENTS.intraday.riporto.enabled = false; }
+  });
+});
+
+describe("ingressi intraday: candele senza vantaggio, dossier e contesto, rientri dopo un guadagno", () => {
+  const scenario = () => {
+    const now = new Date("2026-09-27T21:00:00+02:00");
+    const end = Math.floor(now.getTime() / 300_000) * 300_000;
+    const bars: IntradayBar[] = Array.from({ length: 120 }, (_, i) => {
+      const k = 119 - i;
+      const c = 76_000 * (1 + 0.0008 * k) * (1 + (k % 2 === 0 ? 0.003 : -0.003));
+      return { t: new Date(end - (k + 1) * 300_000).toISOString(), open: c, high: c * 1.002, low: c * 0.998, close: c, volume: 1_000 };
+    });
+    const prezzo = bars.at(-1)!.close;
+    const vista = (extra: Record<string, unknown> = {}) => ({ today: "2026-09-27", now, prices: { "BTC/USD": prezzo }, closes: { "BTC/USD": syntheticCloses(prezzo, 0.02, 260) }, indicators: {}, positions: [], account: { equity: 100_000, lastEquity: 100_000, cash: 100_000, status: "ACTIVE" }, journal: emptyJournal(), mercatoAperto: false, ...extra }) as unknown as AgentView;
+    const agente = (aff?: (step: number) => { fattore: number; quota: number; campione: number; giusti?: number }) => new IntradayAgent(async (syms, tf) => Object.fromEntries(syms.map((x) => [x, tf === "5Min" ? bars : []])), async (b, step, h) => Object.fromEntries(Object.keys(b).map((x) => [x, Array.from({ length: h }, (_, i) => (step === 5 ? Math.min(0.015, 0.005 * (i + 1)) : 0))])), aff ?? null);
+    return { vista, agente, now };
+  };
+  test("una candela su cui Kronos non ha un vantaggio misurato non fa entrare (si continua a misurarla)", async () => {
+    setCryptoUniverse(["BTC/USD"]);
+    const { vista, agente } = scenario();
+    const r = await agente(() => ({ fattore: 0.05, quota: 0.5, campione: 1_400, giusti: 0.499 })).observe(vista());
+    expect(r.segnali.filter((x) => x.lato === "buy")).toEqual([]);
+    expect(r.intraday!.find((x) => x.simbolo === "BTC/USD")!.motivo).toContain("senza vantaggio misurato");
+  });
+  test("dossier e contesto pesano una parte minima: al limite decidono loro", async () => {
+    setCryptoUniverse(["BTC/USD"]);
+    const { vista, agente } = scenario();
+    const prima = AGENTS.intraday.kronos.minProbSenzaGrafico;
+    AGENTS.intraday.kronos.minProbSenzaGrafico = 0.75; // soglia alta: Kronos da solo (83%) ci sta, con un dossier pessimo no
+    try {
+      expect((await agente().observe(vista({ dossier: { "BTC/USD": 0.9 } }))).segnali.some((x) => x.lato === "buy")).toBe(true);
+      const no = await agente().observe(vista({ dossier: { "BTC/USD": 0.05 } }));
+      expect(no.segnali.some((x) => x.lato === "buy")).toBe(false);
+    } finally { AGENTS.intraday.kronos.minProbSenzaGrafico = prima; }
+  });
+  test("dopo un'operazione chiusa in guadagno oggi si può rientrare; dopo una in perdita no", async () => {
+    setCryptoUniverse(["BTC/USD"]);
+    const { vista, agente, now } = scenario();
+    const diario = (risultato: number): JournalFile => ({ ...emptyJournal(), trade: [{ id: "x", simbolo: "BTC/USD", stato: "chiuso", apertoIl: new Date(now.getTime() - 3_600_000).toISOString(), chiusoIl: new Date(now.getTime() - 600_000).toISOString(), comprate: 0.1, costo: 7_600, vendute: 0.1, incassato: 7_600 + risultato, quantita: 0, contesto: { setup: "", momentum20: null, volGiornaliera: null, distanzaMedia: null, fiducia: null, attesa: "", perche: "", agenti: ["intraday"] } } as any] });
+    expect((await agente().observe(vista({ journal: diario(50) }))).segnali.some((x) => x.lato === "buy")).toBe(true);
+    expect((await agente().observe(vista({ journal: diario(-50) }))).segnali.some((x) => x.lato === "buy")).toBe(false);
   });
 });
 
