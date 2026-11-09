@@ -96,9 +96,7 @@ attesa del contesto; blu) e **nel radar** (grigio). Per il titolo scelto: le ult
 motore, le operazioni fatte (▲▼ dal diario), la **candela di oggi che si forma in diretta** con i prezzi letti dal motore a ogni giro,
 le **scelte di oggi** del motore sul titolo (puntini = voti, frecce = ordini, × = rifiuti) con il feed sotto il grafico, e lo
 **scenario di Kronos**: il percorso previsto per le prossime sedute con il cono d'incertezza (una volatilità e mezza), ricaricato da
-solo appena il motore calcola proiezioni nuove. «Chiedi agli agenti adesso» fa valutare quel titolo a tutti gli agenti con i prezzi
-di quel momento (`/api/valuta`): voti, punteggio, cosa direbbe la gabbia, livelli, custode con dossier. È una prova a secco: nessun
-ordine parte dalla dashboard. Dati: `/api/bars`, `/api/previsioni`, `/api/journal`.
+solo appena il motore calcola proiezioni nuove. Nessun ordine parte dalla dashboard. Dati: `/api/bars`, `/api/previsioni`, `/api/journal`.
 
 ### Impostazioni, schede degli agenti, guida
 

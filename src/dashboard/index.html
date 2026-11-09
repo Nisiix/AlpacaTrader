@@ -502,7 +502,7 @@
   </dialog>
   <dialog id="sheet" class="sheet" aria-labelledby="sheet-title">
     <div class="sheet-head"><h2 id="sheet-title">Analisi investimento</h2><button type="button" class="x" id="sheet-x" aria-label="chiudi">✕</button></div>
-    <div class="row" style="justify-content:space-between; margin-bottom:10px"><span class="why" id="sheet-sub"></span><button class="btn" id="ask">Chiedi agli agenti adesso</button></div>
+    <div class="row" style="justify-content:space-between; margin-bottom:10px"><span class="why" id="sheet-sub"></span></div>
     <p class="verdict" id="verdict">Scegli un titolo.</p>
     <div id="verdict-body"></div>
   </dialog>
@@ -581,7 +581,7 @@
       <ul>
         <li><b>Dashboard</b>: la frase di stato e il capitale (patrimonio totale, investito, liquidità, risultato sulle posizioni aperte, oggi, rischio ammesso, confronto con SPY); il <b>rendimento per periodo</b> con i filtri Oggi, 7 giorni, 30 giorni, Mese, Anno, Tutto o date a scelta (variazione del patrimonio dallo storico di Alpaca, risultato realizzato, operazioni chiuse e vinte, migliore e peggiore, ribasso massimo, grafico del patrimonio e risultato giorno per giorno); poi profitto e perdita di oggi e la situazione in breve.</li>
         <li><b>Ufficio</b>: la mappa 3D con gli agenti alle loro postazioni (la lavagna dei risultati, che si apre con un clic, il capo nella stanza di vetro, gli agenti generali solo se hanno votato almeno un trade, Trading agents, Intraday agents, Sala caffè). Alla scrivania c'è solo chi ha preso un'occasione: una posizione aperta, un titolo pronto a entrare o un ingresso votato; tutti gli altri, anche chi segue un titolo «in attesa», aspettano in sala caffè e la loro scrivania non c'è. La camicia dice la fase: blu pronto, verde in posizione, rosso in uscita, arancione intraday, grigio in sala caffè. A destra l'elenco degli agenti: passando sopra un nome l'avatar si alza e la postazione si illumina; il clic apre la scheda (situazione, ragionamento, giudizio del capo, impostazioni). Sotto, a schede: <b>Decisioni</b> (punteggio per titolo e voti), <b>Trading agents</b>, <b>Esplorazione</b> e <b>Sala caffè</b> (lezioni di squadra).</li>
-        <li><b>Investimenti</b>: le card dei titoli e delle crypto in portafoglio (valore, guadagno, carico e prezzo, peso, da quanto è aperta, obiettivo e stop dell'intraday) e quelle in osservazione (custodi, voti, attese); più in basso il radar. Il clic su una card apre il <b>grafico</b> (TradingView Lightweight Charts: rotella per lo zoom, trascina per scorrere, mirino con apertura, massimo, minimo e chiusura) con la proiezione dei modelli e il cono di probabilità (fasce 50% e 80%, probabilità di finire sopra o sotto il prezzo di adesso), medie, carico, stop, obiettivo e frecce delle operazioni. Il time frame si sceglie sopra il grafico: 1m, 5m, 15m, 1h, 4h, 1G; le candele brevi si aggiornano da sole (1 e 5 minuti ogni 15 secondi). «Analisi investimento» apre verdetto, voti e dossier del custode; «Chiedi agli agenti adesso» fa una valutazione a secco: nessun ordine parte dalla pagina. Sotto: operazioni intraday, simulazioni e la tabella delle posizioni.</li>
+        <li><b>Investimenti</b>: le card dei titoli e delle crypto in portafoglio (valore, guadagno, carico e prezzo, peso, da quanto è aperta, obiettivo e stop dell'intraday) e quelle in osservazione (custodi, voti, attese); più in basso il radar. Il clic su una card apre il <b>grafico</b> (TradingView Lightweight Charts: rotella per lo zoom, trascina per scorrere, mirino con apertura, massimo, minimo e chiusura) con la proiezione dei modelli e il cono di probabilità (fasce 50% e 80%, probabilità di finire sopra o sotto il prezzo di adesso), medie, carico, stop, obiettivo e frecce delle operazioni. Il time frame si sceglie sopra il grafico: 1m, 5m, 15m, 1h, 4h, 1G; le candele brevi si aggiornano da sole (1 e 5 minuti ogni 15 secondi). «Analisi investimento» apre verdetto, voti e dossier del custode; nessun ordine parte dalla pagina. Sotto: operazioni intraday, simulazioni e la tabella delle posizioni.</li>
         <li><b>Log operazioni</b>: gli acquisti e le vendite eseguiti negli ultimi 7 giorni, giorno per giorno, con ricerca per titolo, agente o motivo e filtri per tipo e periodo; per ogni vendita il risultato e quanto è stata tenuta la posizione. Clic su una riga per il grafico.</li>
         <li><b>Gli agenti sono persone</b>: ognuno ha un nome (Marco il trend, Giulia il rientro, Chiara Kronos, Andrea il capo degli intraday agents, Roberto il capo ufficio…). I <b>trading agents</b> e gli <b>intraday agents</b> sono uno staff di persone che non appartengono a un titolo: il motore trova le occasioni con i suoi criteri e ogni occasione la prende la persona libera più brava per risultati (a parità, chi aspetta da più tempo). Una persona resta sul suo titolo finché c'è la posizione o l'ingresso; poi torna in sala caffè. I due reparti restano distinti perché lavorano su orizzonti diversi: i trading agents su più giorni (dossier, Kronos a 5 sedute, stop di più giorni), gli intraday agents su minuti e ore (candele brevi, obiettivo e stop stretti, costi); ma su un titolo lavora una persona sola e c'è una sola posizione alla volta. Ogni persona ha <b>impostazioni sue</b> (trend, rientro, soglia del dossier per i trading agents; probabilità e peso per gli intraday agents) e il suo <b>obiettivo del giorno</b> (di serie 10%: +1 punto dopo un giorno in cui lo tocca, −1 dopo un giorno in perdita; se dopo averlo toccato il guadagno dei suoi trade torna a metà, vende i suoi trade non favorevoli). Si cambiano nella sua scheda; il capo le calibra dai risultati, e chi va in sala caffè le ricalibra imparando da chi lavora bene (o, se sono tutte uguali, dai dati di mercato e dai suoi trade persi). Kronos è uguale per tutti. Il capo ufficio giudica le persone, sui trade che hanno preso e sulle loro sessioni, non i titoli. Il clic su una persona nell'Ufficio apre la sua scheda con <b>le sue impostazioni</b>, modificabili (valgono dal giro successivo). Quando un agente vince meno del 51% dei trade chiusi (almeno 5), il <b>capo ufficio lo ricalibra</b>: il suo parametro d'ingresso diventa più selettivo di un passo (mai oltre i limiti e mai sotto il valore di base); quando torna a vincere almeno il 60% si riavvicina alla base. Ogni trading agent ha anche una soglia personale.</li>
         <li><b>Impostazioni</b>: <b>Generali</b> (le regole comuni del profilo di investimento e della piattaforma, come peso massimo per titolo, obiettivo del giorno, stop, pagina pubblica su GitHub) e le <b>chiavi</b> di Alpaca, Telegram e X con il riavvio del motore.</li>
@@ -2121,16 +2121,6 @@ $('#sheet-x').addEventListener('click', () => $('#sheet').close());
 $('#lavagna-x').addEventListener('click', () => $('#lavagna').close());
 $('#lavagna').addEventListener('click', (e) => { if (e.target === e.currentTarget) e.currentTarget.close(); });
 $('#sheet').addEventListener('click', (e) => { if (e.target === e.currentTarget) e.currentTarget.close(); });
-$('#ask').addEventListener('click', async () => {
-  if (!selected) return;
-  const b = $('#ask'); b.disabled = true; b.textContent = 'Gli agenti stanno guardando…';
-  try {
-    const r = await fetch(`/api/valuta?simbolo=${encodeURIComponent(selected)}`); const v = await r.json();
-    if (!r.ok) throw new Error(v.errore || r.statusText);
-    valutazione = v; paintVerdict(v);
-  } catch (e) { $('#verdict').className = 'verdict down'; $('#verdict').textContent = 'Valutazione non riuscita.'; $('#verdict-body').innerHTML = `<p class="why">${esc(e.message)}</p>`; }
-  b.disabled = false; b.textContent = 'Chiedi agli agenti adesso';
-});
 
 // ---------- biblioteca degli agenti ----------
 
@@ -2568,7 +2558,7 @@ if (window.STATIC_MODE) {
   document.querySelector('.sub[data-sub="chiavi"]').innerHTML = '';
   document.querySelector('.subnav a[data-sub="chiavi"]').remove();
   $('#schede').insertAdjacentHTML('beforebegin', '<p class="why" style="margin-bottom:10px">Pagina pubblica: le schede si leggono soltanto. Si modificano, con chiavi e riavvio, dalla dashboard sul PC (http://127.0.0.1:8787).</p>');
-  $('#ask').disabled = true; $('#ask').title = 'disponibile solo sulla dashboard del PC';
+
 }
 (async () => { await loadEvents(); await loadStatus(); connect(); })();
 setInterval(loadStatus, 15000);
