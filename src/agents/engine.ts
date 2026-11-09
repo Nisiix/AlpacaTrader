@@ -1,7 +1,7 @@
 import { aggiornaProposte } from "./proposte.ts";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { isOpenOrder, isProtectiveStop, type Account, type Bar, type Broker, type MarketClock, type Order, type Position } from "../broker/types.ts";
+import { isOpenOrder, isProtectiveStop, type Account, type Bar, type Broker, type MarketClock, type Order, type Position, type Quote } from "../broker/types.ts";
 import { capitaleIniziale, compareWithBenchmarks, type Comparison } from "../benchmark.ts";
 import { evaluateBreaker, readBreaker, writeBreaker } from "../breaker.ts";
 import { applyCage, lossPct, tradingBlockReason, type Rejection } from "../cage.ts";
@@ -167,6 +167,9 @@ interface Snapshot {
 
 // Lo storico giornaliero cambia una volta al giorno: si scarica alla prima passata di ogni data.
 export interface EngineCache {
+  // Ordini limite crypto d'acquisto cancellati perché non eseguiti (simbolo → quando): al prossimo voto sullo stesso titolo
+  // entro un'ora si compra al prezzo di vendita (commissione piena) invece di riprovare un limite che non si riempie.
+  limitiMancati?: Record<string, string>;
   // I dossier dei trading agents dell'ultimo giro (probabilità favorevole): contesto per l'intraday.
   dossier?: Record<string, number>;
   closesDate?: string;
@@ -455,7 +458,7 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
       for (const o of snap.recentOrders) {
         if (o.side !== "buy" || o.type !== "limit" || !["new", "accepted", "pending_new", "partially_filled"].includes(o.status)) continue;
         if (startedAt.getTime() - Date.parse(o.submittedAt) < scad) continue;
-        try { await deps.broker.cancelOrder(o.id); log.info(`ordine limite ${o.clientOrderId} su ${o.symbol} non eseguito in ${AGENTS.costi.ordiniLimite.scadenzaMinuti} minuti: cancellato`); } catch (e) { log.warn(`cancellazione di ${o.clientOrderId} non riuscita: ${(e as Error).message}`); }
+        try { await deps.broker.cancelOrder(o.id); (cache.limitiMancati ??= {})[o.symbol] = startedAt.toISOString(); log.info(`ordine limite ${o.clientOrderId} su ${o.symbol} non eseguito in ${AGENTS.costi.ordiniLimite.scadenzaMinuti} minuti: cancellato (al prossimo voto entro un'ora si compra al prezzo di vendita)`); } catch (e) { log.warn(`cancellazione di ${o.clientOrderId} non riuscita: ${(e as Error).message}`); }
       }
     }
     bus.emit("conto", { patrimonio: snap.account.equity, contanti: snap.account.cash, pnlGiorno: snap.account.equity - snap.account.lastEquity, mercatoAperto: snap.clock.isOpen });
@@ -848,6 +851,11 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
     const acquisti = cage.orders.filter((o) => o.side === "buy" && o.source === "modello");
     let freschi: Record<string, number> = {};
     if (acquisti.length) { try { freschi = await deps.broker.getLatestPrices(acquisti.map((o) => o.symbol)); } catch {} }
+    // Crypto: le migliori offerte di adesso, per mettere il limite dove il mercato è davvero (non sull'ultimo scambio, che
+    // sulle coppie poco scambiate può essere vecchio).
+    let offerte: Record<string, Quote> = {};
+    const acquistiCrypto = acquisti.filter((o) => isCrypto(o.symbol)).map((o) => o.symbol);
+    if (acquistiCrypto.length && deps.broker.getLatestQuotes) { try { offerte = await deps.broker.getLatestQuotes(acquistiCrypto); } catch {} }
     // Vendite di sostituzione: prima di comprare si aspetta che siano eseguite e si rilegge il conto; gli acquisti che i
     // contanti veri non coprono (vendita non ancora eseguita) si rimandano al giro dopo invece di farli rifiutare da Alpaca.
     let contantiVeri: number | null = null;
@@ -878,9 +886,21 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
         bus.emit("nota", { testo: m });
         continue;
       }
-      // Crypto in acquisto: ordine limite appena sotto il prezzo di adesso (commissione maker invece di taker).
+      // Crypto in acquisto: ordine limite (commissione maker invece di taker) dentro le migliori offerte di adesso: al
+      // prezzo di metà meno ol.sotto, mai sotto il miglior acquisto né al prezzo di vendita. Se un limite sullo stesso
+      // titolo non si è riempito nell'ultima ora, si compra al prezzo di vendita (poco sopra: si esegue subito, commissione
+      // piena, 0,1% in più) invece di perdere di nuovo l'occasione.
       const ol = AGENTS.costi.ordiniLimite;
-      if (ol.crypto && plan.side === "buy" && plan.source === "modello" && isCrypto(plan.symbol) && p1) plan.limitPrice = p1 * (1 - ol.sotto);
+      if (ol.crypto && plan.side === "buy" && plan.source === "modello" && isCrypto(plan.symbol) && p1) {
+        const q = offerte[plan.symbol];
+        const mancato = cache.limitiMancati?.[plan.symbol];
+        const subito = mancato !== undefined && startedAt.getTime() - Date.parse(mancato) < 3_600_000;
+        if (subito) {
+          plan.limitPrice = (q && q.ask > 0 ? q.ask : p1) * (1 + ol.sopraVendita);
+          log.info(`${plan.symbol}: l'ultimo limite non si è riempito, si compra al prezzo di vendita (${plan.limitPrice})`);
+        } else if (q && q.bid > 0 && q.ask >= q.bid) plan.limitPrice = Math.min(q.ask * (1 - 1e-4), Math.max(q.bid, ((q.bid + q.ask) / 2) * (1 - ol.sotto)));
+        else plan.limitPrice = p1 * (1 - ol.sotto);
+      }
       const out = await sendOne(deps.broker, runIdFor(plan.side), plan, log, deps.sleep);
       outcomes.push(out);
       bus.emit("ordine", { id: out.id, simbolo: plan.symbol, lato: plan.side, quantita: plan.qty, origine: plan.source, esito: out.kind, stato: "order" in out ? out.order.status : undefined, errore: "error" in out ? out.error : undefined, perche: plan.why });

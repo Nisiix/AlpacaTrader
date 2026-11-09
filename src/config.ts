@@ -309,7 +309,7 @@ export const AGENTS = {
   // Esecuzione: prima di inviare un acquisto il prezzo si rilegge; salito oltre maxRialzo dal prezzo su cui si è deciso,
   // non si compra (il giro dura un paio di minuti, l'occasione può essere passata).
   esecuzione: { maxRialzo: 0.003 },
-  costi: { cryptoAndataRitorno: 0.004, azioniAndataRitorno: 0.0005, margineCosti: 2, ordiniLimite: { crypto: true, sotto: 0.0005, scadenzaMinuti: 10 } },
+  costi: { cryptoAndataRitorno: 0.004, azioniAndataRitorno: 0.0005, margineCosti: 2, ordiniLimite: { crypto: true, sotto: 0.0005, scadenzaMinuti: 10, sopraVendita: 0.001 } },
   // Su un conto piccolo (es. 1.000 $) i 100 $ fissi erano il 10% del conto: quasi nessun ingresso intraday ci arrivava.
   // Il minimo in dollari è al più `quotaConto` del conto (1.000 $ → 10 $; da 10.000 $ in su resta 100 $).
   minNuova: { pct: 0.002, usd: 100, quotaConto: 0.01 },
@@ -382,7 +382,8 @@ export const AGENTS = {
     // Percentuale di vittorie per candela (obiettivo dell'utente: almeno 51%): sugli ultimi `ultimi` trade intraday chiusi
     // di quella candela (minimo `minimo`), sotto `obiettivo` la probabilità richiesta per entrare sale di `passo`, sotto
     // `obiettivo` − 0,11 di 2 passi. Le altre candele restano aperte: gli ingressi continuano, si spostano dove si vince.
-    vittorie: { obiettivo: 0.51, ultimi: 20, minimo: 8, passo: 0.05 },
+    // Minimo 20 trade (come le lezioni del capo): con 8 bastavano 4 vinti su 9 per alzare la soglia di 5 punti.
+    vittorie: { obiettivo: 0.51, ultimi: 20, minimo: 20, passo: 0.05 },
     // Le candele su cui si cerca l'ingresso: con Kronos si sceglie quella con la probabilità di successo più alta.
     candele: ["5Min", "15Min", "1Hour", "4Hour"] as string[],
     // Azioni: il feed gratuito di Alpaca è solo IEX (circa il 2% degli scambi): le candele da 5 e 15 minuti sono troppo

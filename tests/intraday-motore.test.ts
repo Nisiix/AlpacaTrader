@@ -292,10 +292,14 @@ describe("intraday nel motore vero: candele da 5 minuti, Kronos, ordini", () => 
     const now = new Date("2026-09-27T21:00:00+02:00");
     const bars = salitaA5Minuti(76_000, now);
     const chiuso = (i: number, vinto: boolean) => ({ id: `t${i}`, simbolo: "ETH/USD", stato: "chiuso", apertoIl: "2026-09-27T10:00:00Z", chiusoIl: new Date(Date.parse("2026-09-27T10:00:00Z") + i * 60_000).toISOString(), comprate: 1, costo: 100, vendute: 1, incassato: vinto ? 101 : 99, quantita: 0, contesto: { setup: "", momentum20: null, volGiornaliera: null, distanzaMedia: null, fiducia: null, attesa: "", perche: "", agenti: ["intraday"], livelli: { candela: "5Min", obiettivo: 1, stop: 1 } } }) as any;
-    const journal: JournalFile = { ...emptyJournal(), trade: Array.from({ length: 10 }, (_, i) => chiuso(i, i < 3)) };
-    const v = { today: "2026-09-27", now, prices: { "BTC/USD": 76_000 }, closes: { "BTC/USD": syntheticCloses(76_000, 0.02, 260) }, indicators: {}, positions: [], account: { equity: 100_000, lastEquity: 100_000, cash: 100_000, status: "ACTIVE" }, journal, mercatoAperto: false } as unknown as AgentView;
-    const r = await new IntradayAgent(async (syms) => Object.fromEntries(syms.map((x) => [x, bars])), async (b, step, h) => Object.fromEntries(Object.keys(b).map((x) => [x, Array.from({ length: h }, (_, i) => (step === 5 ? Math.min(0.015, 0.005 * (i + 1)) : 0))]))).observe(v);
-    expect((r.note ?? []).some((n) => n.includes("candele 5Min: 3 vinti su 10 (30%)") && n.includes("+10 punti"))).toBe(true);
+    const prova = async (n: number, vinti: number) => {
+      const journal: JournalFile = { ...emptyJournal(), trade: Array.from({ length: n }, (_, i) => chiuso(i, i < vinti)) };
+      const v = { today: "2026-09-27", now, prices: { "BTC/USD": 76_000 }, closes: { "BTC/USD": syntheticCloses(76_000, 0.02, 260) }, indicators: {}, positions: [], account: { equity: 100_000, lastEquity: 100_000, cash: 100_000, status: "ACTIVE" }, journal, mercatoAperto: false } as unknown as AgentView;
+      return (await new IntradayAgent(async (syms) => Object.fromEntries(syms.map((x) => [x, bars])), async (b, step, h) => Object.fromEntries(Object.keys(b).map((x) => [x, Array.from({ length: h }, (_, i) => (step === 5 ? Math.min(0.015, 0.005 * (i + 1)) : 0))]))).observe(v)).note ?? [];
+    };
+    expect((await prova(20, 6)).some((n) => n.includes("candele 5Min: 6 vinti su 20 (30%)") && n.includes("+10 punti"))).toBe(true);
+    // Con meno di 20 trade chiusi sulla candela il caso pesa troppo: la soglia non si alza (prima bastavano 4 vinti su 9).
+    expect((await prova(10, 3)).some((n) => n.includes("candele 5Min:") && n.includes("punti"))).toBe(false);
   });
 });
 

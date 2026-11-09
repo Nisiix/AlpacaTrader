@@ -2,7 +2,7 @@ import { limitiSedute } from "../sedute.ts";
 import { CRYPTO_STOP_LIMIT_GAP, HTTP_TIMEOUT_MS, MARKET_DATA_URL, PAPER_TRADING_URL, isCrypto } from "../config.ts";
 import { assertPaperUrl } from "../guard.ts";
 import type { Account, Bar, Broker, IntradayBar, MarketClock, Order, OrderRequest, Position, StopOrderRequest } from "./types.ts";
-import { BrokerError, DuplicateOrderError, humanizeBrokerError, prezzoStringa } from "./types.ts";
+import { BrokerError, DuplicateOrderError, humanizeBrokerError, prezzoStringa, prezzoDaQuote, type Quote } from "./types.ts";
 
 const num = (v: unknown) => (v === null || v === undefined || v === "" ? 0 : Number(v));
 
@@ -118,8 +118,22 @@ export class AlpacaBroker implements Broker {
     }
     if (crypto.length) {
       const data = await this.request(MARKET_DATA_URL, `/v1beta3/crypto/us/latest/trades?symbols=${crypto.map(encodeURIComponent).join(",")}`);
-      for (const [sym, t] of Object.entries<any>(data?.trades ?? {})) if (t?.p) out[sym] = Number(t.p);
+      const ultimi: Record<string, number> = {};
+      for (const [sym, t] of Object.entries<any>(data?.trades ?? {})) if (t?.p) ultimi[sym] = Number(t.p);
+      // Le crypto poco scambiate hanno l'ultimo scambio vecchio: vale il prezzo a metà tra le migliori offerte.
+      let quotes: Record<string, Quote> = {};
+      try { quotes = await this.getLatestQuotes(crypto); } catch {}
+      for (const sym of crypto) { const p = prezzoDaQuote(quotes[sym], ultimi[sym]); if (p) out[sym] = p; }
     }
+    return out;
+  }
+
+  async getLatestQuotes(symbols: string[]): Promise<Record<string, Quote>> {
+    const crypto = symbols.filter(isCrypto);
+    const out: Record<string, Quote> = {};
+    if (!crypto.length) return out;
+    const data = await this.request(MARKET_DATA_URL, `/v1beta3/crypto/us/latest/quotes?symbols=${crypto.map(encodeURIComponent).join(",")}`);
+    for (const [sym, q] of Object.entries<any>(data?.quotes ?? {})) if (Number(q?.bp) > 0 && Number(q?.ap) > 0) out[sym] = { bid: Number(q.bp), ask: Number(q.ap) };
     return out;
   }
 

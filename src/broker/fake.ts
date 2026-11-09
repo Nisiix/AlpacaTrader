@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { writeJsonAtomic } from "../fsutil.ts";
 import { isCrypto } from "../config.ts";
 import { addDays, romeTime } from "../slots.ts";
-import type { Account, Bar, Broker, IntradayBar, MarketClock, Order, OrderRequest, Position, StopOrderRequest } from "./types.ts";
+import type { Account, Bar, Broker, IntradayBar, MarketClock, Order, OrderRequest, Position, Quote, StopOrderRequest } from "./types.ts";
 import { BrokerError, DuplicateOrderError, isOpenOrder, isProtectiveStop } from "./types.ts";
 
 // Data e ora di New York (gli ordini «day» scadono alla chiusura delle 16:00 di New York).
@@ -43,6 +43,8 @@ export interface FakeState {
   lastEquity: number;
   positions: Record<string, { qty: number; avgEntryPrice: number }>;
   prices: Record<string, number>;
+  // Migliori offerte (crypto); senza, acquisto e vendita al prezzo.
+  quotes?: Record<string, Quote>;
   orders: Order[];
   // Chiusure giornaliere per simbolo (la più recente è sostituita dal prezzo attuale).
   closes: Record<string, number[]>;
@@ -204,6 +206,14 @@ export class FakeBroker implements Broker {
     this.checkOutage(s, "getLatestPrices");
     const out: Record<string, number> = {};
     for (const sym of symbols) if (s.prices[sym]) out[sym] = s.prices[sym]!;
+    return out;
+  }
+
+  async getLatestQuotes(symbols: string[]): Promise<Record<string, Quote>> {
+    const s = this.load();
+    this.checkOutage(s, "getLatestQuotes");
+    const out: Record<string, Quote> = {};
+    for (const sym of symbols.filter(isCrypto)) { const q = s.quotes?.[sym] ?? (s.prices[sym] ? { bid: s.prices[sym]!, ask: s.prices[sym]! } : undefined); if (q) out[sym] = q; }
     return out;
   }
 

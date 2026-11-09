@@ -332,9 +332,12 @@ sedute, uscita di trend) non riguardano questi trade.
   (come la soglia generale). La probabilità con cui si decide è per l'**85% Kronos sulle candele** e per il **15% il
   dossier** del titolo (Kronos a 5 sedute, grafico giornaliero, notizie e post, contesto con Fear & Greed e funding)
   o, senza dossier, il contesto del settore (favorevole 60%, neutro 50%, sfavorevole 40%) (`intraday.evidenza`).
-- **Costi**: le crypto si comprano con **ordini limite** appena sotto il prezzo (0,05%), che pagano la commissione
-  maker (0,15%) invece della taker (0,25%); le vendite restano a mercato. Andata e ritorno 0,40%: il rialzo previsto
-  deve essere almeno 0,8%. Un limite non eseguito in 10 minuti si cancella (`costi.ordiniLimite`).
+- **Costi**: le crypto si comprano con **ordini limite** dentro le migliori offerte di adesso (a metà tra acquisto e
+  vendita meno 0,05%, mai sotto il miglior acquisto), che pagano la commissione maker (0,15%) invece della taker
+  (0,25%); le vendite restano a mercato. Andata e ritorno 0,40%: il rialzo previsto deve essere almeno 0,8%. Un limite
+  non eseguito in 10 minuti si cancella; al voto successivo sullo stesso titolo entro un'ora si compra al prezzo di
+  vendita (+0,1%, si esegue subito) (`costi.ordiniLimite`). Il prezzo delle crypto è quello a metà tra le migliori
+  offerte: l'ultimo scambio sulle coppie poco scambiate su Alpaca può essere vecchio di decine di minuti.
 - **Obiettivo** = il rialzo previsto da Kronos (mai sotto due volte i costi); con lo stop dell'ATR deve valere almeno
   1,2 volte lo stop, con quello dei percorsi decide l'aspettativa.
 - **Rientri**: sullo stesso titolo al massimo 3 ingressi al giorno (`intraday.ingressiGiorno`). Dopo una chiusura in
@@ -626,7 +629,7 @@ d'opinione prima di una candela giornaliera nuova: escono solo stop e regole vin
   investito finita nei trade in guadagno: sopra il 50% si è investito di più dove si è vinto. La dimensione di ogni
   ingresso cresce già con la probabilità (fiducia di Kronos per i trading agents, probabilità netta per l'intraday).
 - **Vittorie per candela** (obiettivo: almeno il 51% di trade chiusi in guadagno): sugli ultimi 20 trade intraday chiusi
-  di ogni candela (almeno 8), se si vince meno del 51% per entrare su quella candela servono 5 punti di probabilità in
+  di ogni candela (almeno 20), se si vince meno del 51% per entrare su quella candela servono 5 punti di probabilità in
   più (10 sotto il 40%). Gli ingressi non si fermano: si spostano sulle candele dove si vince.
 - **Cervello delle previsioni**: quanto vale ogni modello, per il giornaliero e per ogni candela.
 - **Memoria per titolo** dei custodi.

@@ -60,6 +60,14 @@ export interface StopOrderRequest {
   giornaliero?: boolean;
 }
 
+export interface Quote { bid: number; ask: number }
+// Prezzo di una crypto: a metà tra le migliori offerte se il libro è sensato (spread sotto il 2%), perché l'ultimo scambio
+// sulle coppie poco scambiate su Alpaca può essere vecchio di decine di minuti (POL fermo per 40 minuti); se no l'ultimo scambio.
+export const prezzoDaQuote = (q: Quote | undefined, ultimo: number | undefined): number | undefined => {
+  if (q && q.bid > 0 && q.ask >= q.bid && (q.ask - q.bid) / ((q.ask + q.bid) / 2) < 0.02) return (q.ask + q.bid) / 2;
+  return ultimo;
+};
+
 // Stessa interfaccia per il broker vero e per quello finto.
 export interface Broker {
   readonly name: string;
@@ -70,6 +78,8 @@ export interface Broker {
   getOpenOrders(): Promise<Order[]>;
   getClock(): Promise<MarketClock>;
   getLatestPrices(symbols: string[]): Promise<Record<string, number>>;
+  // Migliori prezzi in acquisto e in vendita (crypto): per mettere un ordine limite dove il mercato è davvero.
+  getLatestQuotes?(symbols: string[]): Promise<Record<string, Quote>>;
   getOrderByClientId(clientOrderId: string): Promise<Order | null>;
   submitOrder(req: OrderRequest): Promise<Order>;
   submitStopOrder(req: StopOrderRequest): Promise<Order>;
