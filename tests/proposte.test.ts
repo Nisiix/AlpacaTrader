@@ -52,7 +52,7 @@ describe("proposte del capo ufficio", () => {
   test("operazioni in perdita nel complesso: propone una taglia più piccola", () => {
     const dir = mkdtempSync(join(tmpdir(), "prop-"));
     const r = aggiornaProposte(dir, diario([{ n: 40, p: 0.9, r: -0.006 }]), new Date("2026-11-01T10:00:00Z"));
-    const p = r.nuove.find((x) => x.chiave === "AGENTS.intraday.maxWeight")!;
+    const p = r.nuove.find((x) => x.chiave === "AGENTS.intraday.budget.rischioTrade")!;
     expect(p.proposto).toBeLessThan(p.attuale);
   });
 });

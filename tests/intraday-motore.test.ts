@@ -31,6 +31,8 @@ function salitaA5Minuti(fine: number, finoA: Date, n = 120): IntradayBar[] {
 
 describe("intraday nel motore vero: candele da 5 minuti, Kronos, ordini", () => {
   test("Kronos vede +1,5% in 15 minuti su BTC: il motore compra su candele da 5 minuti e incassa all'obiettivo di Kronos pochi minuti dopo", async () => {
+    // Questo test prova le uscite di prima (all'obiettivo si esce subito): «lascia correre» ha i suoi test.
+    AGENTS.intraday.lasciaCorrere.enabled = false;
     setCryptoUniverse(["BTC/USD"]);
     const start = new Date("2026-09-27T21:00:00+02:00"); // domenica sera: solo crypto
     const env = makeEnv(start);
@@ -77,6 +79,7 @@ describe("intraday nel motore vero: candele da 5 minuti, Kronos, ordini", () => 
     // Il conto di oggi registra l'operazione chiusa in pochi minuti, in guadagno.
     const pnl = r2.status_file!.pnlOggi;
     expect(pnl.vendite.find((x) => x.simbolo === "BTC/USD")!.pnl).toBeGreaterThan(0);
+    AGENTS.intraday.lasciaCorrere.enabled = true;
   });
 
   test("trend che continua: a fine finestra l'operazione in guadagno non si chiude, passa alle regole di più giorni", async () => {
@@ -120,7 +123,8 @@ describe("intraday nel motore vero: candele da 5 minuti, Kronos, ordini", () => 
     // con il pavimento.
     expect(buy.perche).toContain("medie brevi delle candele 5Min non ancora in ordine");
     expect(buy.pesoMassimo!).toBeLessThanOrEqual(AGENTS.intraday.maxWeight + 1e-9);
-    expect(buy.pesoMassimo!).toBeGreaterThanOrEqual(AGENTS.intraday.maxWeight * AGENTS.intraday.taglia.pavimento - 1e-9);
+    // Dal rischio allo stop: con lo stop delle crypto all'1% almeno il pavimento di 0,25% / 1,6% (≈ 15,6%).
+    expect(buy.pesoMassimo!).toBeGreaterThanOrEqual(Math.min(AGENTS.intraday.budget.quota * AGENTS.intraday.budget.maxQuotaTrade, AGENTS.intraday.budget.rischioTrade / (0.01 + 0.004 + AGENTS.intraday.budget.scivolamento)) * AGENTS.intraday.taglia.pavimento - 1e-9);
     const debole = await con(0.006).observe(v); // +0,6%: non copre 2 volte i costi crypto (0,8%)
     expect(debole.segnali.filter((x) => x.lato === "buy")).toEqual([]);
     expect(debole.intraday!.find((x) => x.simbolo === "BTC/USD")!.motivo).toContain("non basta");

@@ -247,7 +247,10 @@ export function allocate(view: AgentView, reports: Record<string, AgentReport>, 
     sc.evidenza = ev;
     const minEv = contro ? AGENTS.evidenza.minContro : AGENTS.evidenza.min;
     let w = maxWeightFor(view.closes[sc.simbolo]).max * rischioDi(sc.simbolo, !(kronosSu(sc.simbolo) || sc.intraday)) * (AGENTS.scaleByScore ? Math.min(1, sc.punteggio) : 1);
-    if (sc.pesoMassimo !== undefined) w = Math.min(w, sc.pesoMassimo);
+    // Intraday: la taglia viene dal rischio allo stop (agente intraday), poi il rischio del mercato; il tetto della
+    // volatilità giornaliera (maxWeightFor) vale per i trade di più giorni, non per un trade con lo stop a −0,4%.
+    if (sc.intraday && sc.pesoMassimo !== undefined) w = sc.pesoMassimo * rischioDi(sc.simbolo, false);
+    else if (sc.pesoMassimo !== undefined) w = Math.min(w, sc.pesoMassimo);
     // Taglia proporzionale alla fiducia nella proiezione di Kronos: più è probabile che il rialzo si avveri, più si investe.
     // Solo per i trade di più giorni: un trade intraday ha già la sua taglia dalla probabilità sulle candele (Kronos a 5
     // sedute non c'entra: prima lo riduceva fino a ×0,4).
@@ -287,6 +290,35 @@ export function allocate(view: AgentView, reports: Record<string, AgentReport>, 
     const q = Math.max(0.05, (x.sc.fiducia ?? 0.6) * (x.sc.evidenza ?? 0.6) * Math.min(2, Math.max(0.1, x.sc.punteggio)));
     return { ...x, price, have, chiesto: Math.max(0, x.w * scale * equity - have), q, dato: 0 };
   });
+  // Budget dell'intraday: investito in operazioni intraday nello stesso momento al massimo budget.quota del conto, le
+  // crypto al massimo budget.maxCrypto. Se le occasioni chiedono di più si divide in proporzione alla qualità. Prima del
+  // tetto per settore: se no il settore si riempiva in ordine di punteggio e al terzo titolo dello stesso settore non
+  // restava niente, anche quando poi il budget riduceva i primi due.
+  const bud = AGENTS.intraday.budget;
+  const intradayAperta = (s: string) => view.journal.trade.some((t) => t.simbolo === s && t.stato === "aperto" && t.contesto?.agenti?.includes("intraday") && !t.contesto?.promossa);
+  const valoreAperto = (pred: (s: string) => boolean) => [...held.values()].filter((p) => intradayAperta(p.symbol) && pred(p.symbol)).reduce((a, p) => a + p.qty * (view.prices[p.symbol] ?? p.currentPrice), 0);
+  const tagliati = new Map<string, string>();
+  const ripartisci = (gruppo: typeof asks, spazio: number, perche: string) => {
+    const tot = gruppo.reduce((a, x) => a + x.chiesto, 0);
+    if (tot <= spazio || tot <= 0) return;
+    const dati = new Map(gruppo.map((x) => [x, 0]));
+    let left = Math.max(0, spazio);
+    let aperti = gruppo.filter((x) => x.chiesto > 0);
+    for (let round = 0; round < 6 && left > 1 && aperti.length; round++) {
+      const qs = aperti.reduce((a, x) => a + x.q * x.chiesto, 0);
+      for (const x of aperti) dati.set(x, dati.get(x)! + Math.min(x.chiesto - dati.get(x)!, (left * x.q * x.chiesto) / qs));
+      left = Math.max(0, spazio) - [...dati.values()].reduce((a, v) => a + v, 0);
+      aperti = aperti.filter((x) => x.chiesto - dati.get(x)! > 1);
+    }
+    for (const x of gruppo) { if (dati.get(x)! < x.chiesto - 0.01) tagliati.set(x.sc.simbolo, perche); x.chiesto = dati.get(x)!; }
+  };
+  const nuoviIntraday = asks.filter((x) => x.sc.intraday && !x.p);
+  // Gli acquisti ancora in corso (ordini limite crypto non eseguiti) contano come già investiti: se no il giro dopo,
+  // con l'ordine ancora aperto, si sforava il budget.
+  const inCorso = view.cashImpegnato ?? 0;
+  const cryptoAperto = valoreAperto(isCrypto) + inCorso, intradayAperto = valoreAperto(() => true) + inCorso;
+  ripartisci(nuoviIntraday.filter((x) => isCrypto(x.sc.simbolo)), bud.maxCrypto * equity - cryptoAperto, `crypto intraday già al ${((cryptoAperto / Math.max(1, equity)) * 100).toFixed(0)}% del conto (massimo ${Math.round(bud.maxCrypto * 100)}%: si muovono insieme)`);
+  ripartisci(nuoviIntraday, bud.quota * equity - intradayAperto, `budget intraday: ${((intradayAperto / Math.max(1, equity)) * 100).toFixed(0)}% del conto già investito in operazioni intraday (massimo ${Math.round(bud.quota * 100)}%), il resto diviso tra le occasioni per qualità`);
   // Tetto per settore (lo stesso della gabbia): si riempie in ordine di punteggio, così i contanti non vanno a un titolo
   // che la gabbia poi rifiuterebbe per settore pieno, lasciando fermi soldi che altri avrebbero usato.
   const usato = new Map<string, number>();
@@ -320,7 +352,8 @@ export function allocate(view: AgentView, reports: Record<string, AgentReport>, 
     const minimo = Math.max(AGENTS.minNuova.pct * equity, Math.min(AGENTS.minNuova.usd, AGENTS.minNuova.quotaConto * equity));
     if (p ? delta / equity < AGENTS.minAddPct : delta < minimo) {
       // Un ingresso nuovo troppo piccolo non sparisce in silenzio: resta in attesa con il perché.
-      if (!p && sc.compra > 0) inAttesa.push({ simbolo: sc.simbolo, motivo: `taglia troppo piccola: ${delta.toFixed(2)} $ (${((delta / Math.max(1, equity)) * 100).toFixed(2)}% del conto) sotto il minimo di ${minimo.toFixed(2)} $ per una posizione nuova` });
+      if (!p && sc.compra > 0 && tagliati.has(sc.simbolo)) inAttesa.push({ simbolo: sc.simbolo, motivo: tagliati.get(sc.simbolo)! });
+      else if (!p && sc.compra > 0) inAttesa.push({ simbolo: sc.simbolo, motivo: `taglia troppo piccola: ${delta.toFixed(2)} $ (${((delta / Math.max(1, equity)) * 100).toFixed(2)}% del conto) sotto il minimo di ${minimo.toFixed(2)} $ per una posizione nuova` });
       continue;
     }
     const qty = roundQty(sc.simbolo, delta / price);

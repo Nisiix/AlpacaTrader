@@ -691,6 +691,8 @@ describe("intraday", () => {
   });
 
   test("l'agente: entra su rottura nel verso del trend con peso ridotto; esce all'obiettivo, allo stop, a fine giornata; non entra contro Kronos", async () => {
+    // Questo test prova le uscite di prima (all'obiettivo si esce subito): «lascia correre» ha i suoi test.
+    AGENTS.intraday.lasciaCorrere.enabled = false;
     setCryptoUniverse(["BTC/USD", "ETH/USD"]);
     const fetched: string[] = [];
     const bars: Record<string, IntradayBar[]> = { NVDA: candles(180, 40, [180.2, 180.5, 180.9]), "BTC/USD": candles(76_000, 40, [76_100, 76_250, 76_450]) };
@@ -707,7 +709,9 @@ describe("intraday", () => {
     // BTC entra (rottura, Kronos a favore); NVDA no: Kronos anticipa un ribasso.
     expect(buys.map((x) => x.simbolo)).toEqual(["BTC/USD"]);
     expect(buys[0]!.intraday).toBe(true);
-    expect(buys[0]!.pesoMassimo).toBe(AGENTS.intraday.maxWeight);
+    // Taglia dal rischio allo stop: (stop + costi + scivolamento) × taglia = rischioTrade, al massimo maxWeight.
+    expect(buys[0]!.pesoMassimo!).toBeLessThanOrEqual(AGENTS.intraday.maxWeight);
+    expect(buys[0]!.pesoMassimo!).toBeGreaterThan(AGENTS.intraday.maxWeight * AGENTS.intraday.taglia.pavimento * 0.5);
     expect(buys[0]!.perche).toContain("5Min");
     expect(fetched.some((f) => f.startsWith("5Min:") && f.includes("BTC/USD"))).toBe(true);
     const st = r.intraday!.find((x) => x.simbolo === "BTC/USD")!;
@@ -722,13 +726,13 @@ describe("intraday", () => {
     // Allo stop vende.
     const r3 = await a.observe(view({ closes, prices: { ...prices, "BTC/USD": st.stop! - 1 }, now: day("2026-09-22", "17:35"), today: "2026-09-22", positions: pos }));
     expect(r3.segnali.find((x) => x.lato === "sell")!.perche).toContain("stop intraday");
-    // Il prezzo è già arrivato all'obiettivo: lo stop è salito in pareggio (carico + metà margine dei costi), quindi da
-    // qui il trade non chiude in perdita. Crypto: nessun orario di chiusura, ma dopo la durata massima (12 ore) si chiude.
+    // Il prezzo è già arrivato all'obiettivo: lo stop è salito in pareggio (carico + i costi di andata e ritorno con
+    // margine: crypto +0,5%), quindi da qui il trade non chiude in perdita nemmeno dopo i costi. Crypto: nessun orario di chiusura, ma dopo la durata massima (12 ore) si chiude.
     const stPareggio = r3.intraday!.find((x) => x.simbolo === "BTC/USD")!;
     expect(stPareggio.stop!).toBeGreaterThan(76_450);
-    const r4a = await a.observe(view({ closes, prices: { ...prices, "BTC/USD": 76_800 }, now: day("2026-09-22", "23:40"), today: "2026-09-22", positions: pos }));
+    const r4a = await a.observe(view({ closes, prices: { ...prices, "BTC/USD": 76_900 }, now: day("2026-09-22", "23:40"), today: "2026-09-22", positions: pos }));
     expect(r4a.segnali.filter((x) => x.lato === "sell" && x.simbolo === "BTC/USD")).toEqual([]);
-    const r4 = await a.observe(view({ closes, prices: { ...prices, "BTC/USD": 76_800 }, now: day("2026-09-23", "04:40"), today: "2026-09-23", positions: pos }));
+    const r4 = await a.observe(view({ closes, prices: { ...prices, "BTC/USD": 76_900 }, now: day("2026-09-23", "04:40"), today: "2026-09-23", positions: pos }));
     expect(r4.segnali.find((x) => x.lato === "sell")!.perche).toContain("durata massima");
     // Senza ordine eseguito il voto non blocca il titolo: al giro dopo si riprova (un voto scartato dall'allocatore non lo ferma).
     const fresh = new IntradayAgent(async (syms) => Object.fromEntries(syms.filter((x) => bars[x]).map((x) => [x, bars[x]!])));
@@ -742,9 +746,12 @@ describe("intraday", () => {
     // Fuori orario per i titoli (22:30): NVDA non è candidata neanche con Kronos favorevole.
     const r6 = await a.observe(view({ closes, prices, now: day("2026-09-22", "22:30"), today: "2026-09-22", previsioni: { NVDA: 0.03 } }));
     expect(r6.segnali.filter((x) => x.simbolo === "NVDA")).toEqual([]);
+    AGENTS.intraday.lasciaCorrere.enabled = true;
   });
 
   test("con Kronos intraday decide la proiezione sulle candele brevi, non la media a 200; grafico più lungo e Kronos a 5 sedute contano come indizi sulla probabilità", async () => {
+    // Questo test prova le uscite di prima (all'obiettivo si esce subito): «lascia correre» ha i suoi test.
+    AGENTS.intraday.lasciaCorrere.enabled = false;
     setCryptoUniverse(["BTC/USD", "ETH/USD"]);
     const bars: Record<string, IntradayBar[]> = { NVDA: candles(180, 40, [180.2, 180.5, 180.9]), "BTC/USD": candles(76_000, 40, [76_100, 76_250, 76_450]) };
     const closes: Record<string, number[]> = {};
@@ -789,9 +796,12 @@ describe("intraday", () => {
     const r2 = await b2.observe(view({ closes, prices, now, today: "2026-09-22" }));
     expect(r2.segnali.filter((x) => x.lato === "buy")).toEqual([]);
     expect(r2.intraday!.find((x) => x.simbolo === "BTC/USD")!.motivo).toContain("non basta");
+    AGENTS.intraday.lasciaCorrere.enabled = true;
   });
 
   test("con Kronos si sceglie la candela con la probabilità di successo più alta; la posizione si segue sulla candela più breve", async () => {
+    // Questo test prova le uscite di prima (all'obiettivo si esce subito): «lascia correre» ha i suoi test.
+    AGENTS.intraday.lasciaCorrere.enabled = false;
     setCryptoUniverse(["BTC/USD", "ETH/USD"]);
     const bars: Record<string, IntradayBar[]> = { "BTC/USD": candles(76_000, 40, [76_100, 76_250, 76_450]) };
     const closes: Record<string, number[]> = {};
@@ -833,6 +843,7 @@ describe("intraday", () => {
     const r3 = await a.observe(view({ closes, prices: { ...prices, "BTC/USD": st.obiettivo! + 50 }, now: day("2026-09-22", "16:45"), today: "2026-09-22", positions: pos }));
     expect(r3.segnali.find((x) => x.lato === "sell" && x.simbolo === "BTC/USD")!.perche).toMatch(/obiettivo raggiunto|protezione del profitto/);
     bars["BTC/USD"]!.splice(-2);
+    AGENTS.intraday.lasciaCorrere.enabled = true;
   });
 
   test("una proiezione intraday fuori misura (es. prezzi minuscoli) è rumore: niente ingresso", async () => {

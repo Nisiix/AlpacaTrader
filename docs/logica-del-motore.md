@@ -297,6 +297,20 @@ sedute, uscita di trend) non riguardano questi trade.
   la corregge. Lo stesso vale per il riporto al giorno dopo.
 - **Misure per classe**: il cervello conta le previsioni intraday anche separate per azioni e crypto; con almeno 150 di
   una classe su una candela valgono le sue (i costi delle crypto sono 8 volte quelli delle azioni).
+- **Budget dell'intraday** (`intraday.budget`): la taglia di un'operazione la decide il rischio allo stop: perdita allo
+  stop (stop + costi + scivolamento 0,2%) al massimo lo **0,25% del conto**, e un'operazione da sola al massimo metà del
+  budget. In operazioni intraday si investe insieme al massimo il **25% del conto** (le crypto, che si muovono insieme,
+  al massimo il 20%); gli ordini ancora in corso contano. Se le occasioni chiedono di più, il budget si divide in
+  proporzione alla qualità (prima del tetto per settore). Il **capo propone il 50%** quando ci sono almeno 30 operazioni
+  chiuse con resa media positiva dopo i costi e almeno il 51% vinte (e il ritorno al 25% se poi perdono); decidi tu.
+  Le sue proposte sulla taglia cambiano il rischio per operazione; la formazione riduce la taglia della persona.
+- **Lascia correre** (`intraday.lasciaCorrere`): il pareggio mette lo stop sopra i costi di andata e ritorno (crypto
+  +0,5%, prima +0,3%: sotto i costi); dopo il pareggio lo stop segue il massimo a 2 ATR della candela di controllo.
+  Un'uscita «morbida» (obiettivo raggiunto senza altro rialzo, piccolo calo previsto da Kronos, orizzonte scaduto, medie
+  perse) su un trade che guadagna più di 2 volte i costi non chiude subito: lo stop sale a tenere almeno metà del
+  guadagno (mai sotto 1,5 volte i costi: se scatta, si chiude comunque in guadagno) e si esce solo se la ragione resta per
+  2 candele di controllo di fila senza un massimo nuovo. Un massimo nuovo fa ripartire il conteggio: si esce quando il
+  prezzo smette di salire. Stop, fine giornata e perdita che peggiora restano immediati.
 - **Meno titoli, più qualità** (`intraday.selezione`): una coppia titolo-candela si proietta solo se il prezzo si muove
   abbastanza da coprire due volte i costi sull'orizzonte più lungo (es. BTC a 5 minuti no: ±0,5% in un'ora contro lo
   0,8% che serve); poi per ogni candela al massimo 8 (5 min), 10 (15 min), 16 (1 ora) proiezioni nuove a giro, prima

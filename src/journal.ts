@@ -52,6 +52,8 @@ export interface LivelliIntraday {
   // La proiezione di Kronos con cui si è entrati («candela|ora dell'ultima candela chiusa»): un rientro sulla stessa
   // candela aspetta una proiezione nuova (quella vecchia ha già fatto il suo trade).
   previsione?: string;
+  // Il prezzo più alto visto dall'ingresso (lo stop che segue il trade riparte da qui dopo un riavvio).
+  massimo?: number;
 }
 
 export interface Intent {

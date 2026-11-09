@@ -196,7 +196,12 @@ function replay() {
         const s = sg.simbolo; const px = prices[s];
         if (!px || pos.has(s)) continue;
         if (!isCrypto(s) && !aperto) continue;
-        const peso = Math.min(sg.pesoMassimo ?? c.maxWeight, LIMITS.maxPositionPct);
+        // Come nel motore: la taglia dell'agente (dal rischio allo stop), poi il budget dell'intraday (investito insieme al
+        // massimo budget.quota del conto, crypto al massimo budget.maxCrypto).
+        const investito = (pred: (x: string) => boolean) => [...pos.entries()].filter(([x]) => pred(x)).reduce((a, [x, p2]) => a + p2.qty * (prices[x] ?? p2.carico), 0);
+        const spazio = Math.min(c.budget.quota * equity - investito(() => true), isCrypto(s) ? c.budget.maxCrypto * equity - investito(isCrypto) : Infinity);
+        const peso = Math.min(sg.pesoMassimo ?? c.maxWeight, c.maxWeight, Math.max(0, spazio) / equity);
+        if (peso * equity < 10) { motivi.set("budget intraday pieno", (motivi.get("budget intraday pieno") ?? 0) + 1); continue; }
         let prezzo = px;
         if (isCrypto(s)) {
           const lim = px * (1 - AGENTS.costi.ordiniLimite.sotto);

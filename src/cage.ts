@@ -184,7 +184,9 @@ export function applyCage(i: CageInput): CageResult {
       if (!price || price <= 0) { reject("prezzo non disponibile"); continue; }
       const cost = p.qty * price;
       const share = (valueOf(p.symbol) + cost) / i.account.equity;
-      if (share > LIMITS.maxPositionPct) { reject(`porterebbe il titolo al ${pct(share)} del conto (massimo ${pct(LIMITS.maxPositionPct)})`); continue; }
+      // Intraday: il tetto per titolo è il suo (AGENTS.intraday.maxWeight); la taglia la decide il rischio allo stop.
+      const tettoTitolo = p.intraday ? Math.max(LIMITS.maxPositionPct, AGENTS.intraday.maxWeight) : LIMITS.maxPositionPct;
+      if (share > tettoTitolo + 1e-9) { reject(`porterebbe il titolo al ${pct(share)} del conto (massimo ${pct(tettoTitolo)})`); continue; }
       if (!symbols.has(p.symbol) && symbols.size >= LIMITS.maxPositions) { reject(`massimo ${LIMITS.maxPositions} titoli in portafoglio`); continue; }
       const settore = sectorOf(p.symbol);
       if (settore !== "altro") {
@@ -212,7 +214,7 @@ export function applyCage(i: CageInput): CageResult {
         }
       }
       const w = maxWeightFor(closes);
-      if (share > w.max) { reject(`con volatilità giornaliera ${pct(w.vol)}${w.estimated ? " (stimata)" : ""} il massimo è ${pct(w.max)} del conto, qui si arriverebbe al ${pct(share)}`); continue; }
+      if (!p.intraday && share > w.max) { reject(`con volatilità giornaliera ${pct(w.vol)}${w.estimated ? " (stimata)" : ""} il massimo è ${pct(w.max)} del conto, qui si arriverebbe al ${pct(share)}`); continue; }
       if (cost > cash) { reject("niente leva: contanti insufficienti"); continue; }
       cash -= cost;
       symbols.add(p.symbol);

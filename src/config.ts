@@ -418,6 +418,11 @@ export const AGENTS = {
     // fattori di rischio della taglia (fiducia, medie, stop, serie di perdite) non la portano sotto `pavimento` della
     // taglia massima.
     taglia: { pavimento: 0.3, penalitaIndizio: 0.02 },
+    // Lascia correre i trade in guadagno: dopo il pareggio lo stop segue il massimo a trailingAtr ATR della candela;
+    // un'uscita «morbida» (obiettivo raggiunto senza altro rialzo, piccolo calo previsto da Kronos, orizzonte scaduto,
+    // medie perse) su un trade che guadagna più di minGuadagnoCosti volte i costi alza lo stop a `blocca` del guadagno
+    // (mai sotto 1,5 volte i costi) e chiude solo se la ragione resta per `conferma` candele di controllo di fila.
+    lasciaCorrere: { enabled: true, trailingAtr: 2, blocca: 0.5, conferma: 2, minGuadagnoCosti: 2 },
     // Stop su Alpaca delle operazioni intraday al loro livello (quello che l'agente segue: −0,4%, pareggio, rialzi), non a
     // quello largo dei più giorni (−5/−10%): a PC spento o tra un giro e l'altro la perdita si ferma dove deve.
     stopSuAlpaca: true,
@@ -431,7 +436,15 @@ export const AGENTS = {
     riporto: { enabled: true, minProb: 0.55, maxRiporti: 5 },
     // Stop minimo: sulle crypto sopra il costo di andata e ritorno (0,5%), altrimenti ogni stop costa quasi il doppio.
     targetAtr: 1.5, stopAtr: 1.2, minStopPct: { stocks: 0.004, crypto: 0.01 },
-    maxWeight: 0.1, // peso massimo di un'operazione intraday (comparto a taglia ridotta)
+    // Peso massimo di un'operazione intraday (un titolo). La taglia vera la decide il rischio allo stop (budget.rischioTrade).
+    maxWeight: 0.25,
+    // Budget dell'intraday. Taglia di un trade: perdita allo stop (stop + costi + scivolamento) ≤ rischioTrade del conto,
+    // al massimo maxWeight; un trade con lo stop largo (crypto, 4 ore, trend) è da solo più piccolo, uno con lo stop
+    // stretto (azioni su 1 ora, −0,4%) può arrivare al 25%. Investito in intraday nello stesso momento: al massimo
+    // `quota` del conto (25%; il capo propone il 50%, quotaPiena, quando ci sono almeno 30 trade chiusi con resa media
+    // positiva dopo i costi e almeno il 51% vinti); le crypto, che si muovono insieme, al massimo maxCrypto. Se le
+    // occasioni chiedono più del budget, si divide in proporzione alla qualità.
+    budget: { quota: 0.25, quotaPiena: 0.5, rischioTrade: 0.0025, scivolamento: 0.002, maxCrypto: 0.2, maxQuotaTrade: 0.5 },
     // Finestre, ora di Roma: ingressi solo se resta tempo per chiudere in giornata; poi chiusura forzata.
     // Crypto: sempre aperte, un'operazione intraday dura al massimo cryptoOreMax ore. Azioni: tutta la seduta vera
     // (orologio di Alpaca): ingressi fino a minutiPrimaChiusura.ingresso dalla chiusura, uscita a minutiPrimaChiusura.uscita.

@@ -55,7 +55,9 @@ describe("taglia intraday: indizi nella probabilità, rischio nella taglia, pavi
     AGENTS.intraday.taglia.pavimento = 0.9;
     const r = await new IntradayAgent(fetch, kf(10), misurata).observe(vista());
     const buy = r.segnali.find((x) => x.lato === "buy")!;
-    expect(buy.pesoMassimo!).toBeCloseTo(AGENTS.intraday.maxWeight * 0.9, 9);
+    // Stop delle crypto 1% (minimo): taglia dal rischio = 0,25% / (1% + 0,4% di costi + 0,2% di scivolamento) ≈ 15,6%.
+    const pesoRischio = Math.min(AGENTS.intraday.maxWeight, AGENTS.intraday.budget.quota * AGENTS.intraday.budget.maxQuotaTrade, AGENTS.intraday.budget.rischioTrade / (0.01 + 0.004 + AGENTS.intraday.budget.scivolamento));
+    expect(buy.pesoMassimo!).toBeCloseTo(pesoRischio * 0.9, 9);
     expect(buy.perche).toContain("taglia al pavimento (90% della massima)");
     AGENTS.intraday.taglia.pavimento = prima;
   });
