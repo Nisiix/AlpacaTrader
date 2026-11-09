@@ -189,8 +189,10 @@ export const AGENTS = {
     // concesso (il costo non è proporzionale: Kronos genera i campioni insieme). Giornaliere 6 s per titolo (una volta per
     // giornata conclusa: 70 titoli ≈ 7 minuti, si possono aspettare), intraday 3 s per titolo e candela (nell'analisi ogni
     // 15 minuti), esplorazione 1,5 s (è una prima scrematura: chi entra nell'universo viene riproiettato con più campioni),
-    // grafici della dashboard e della pagina pubblica 0,7 s (solo indicativi: non tolgono tempo agli agenti).
-    campioni: { min: 4, max: 128, giorno: { msPerSerie: 6_000, iniziali: 24 }, intraday: { msPerSerie: 3_000, iniziali: 16 }, esplorazione: { msPerSerie: 1_500, iniziali: 8 }, grafico: { msPerSerie: 700, iniziali: 4 } },
+    // grafici della dashboard e della pagina pubblica 0,7 s (solo indicativi: non tolgono tempo agli agenti). Intraday al
+    // massimo 24 percorsi: bastano per la quota che sale e tengono il giro sotto i 5 minuti (con 40 una sola chiamata da 15
+    // minuti durava 80 secondi).
+    campioni: { min: 4, max: 128, giorno: { msPerSerie: 6_000, iniziali: 24 }, intraday: { msPerSerie: 3_000, iniziali: 16, max: 24 }, esplorazione: { msPerSerie: 1_500, iniziali: 8 }, grafico: { msPerSerie: 700, iniziali: 4 } },
     cervello: { minCampione: 100, prudenza: 50, kronosMinimo: 0.5, maxAperte: 6000, bravuraAttesa: 0.03, affidabilita: { kronos: 1, chronos2: 0.13, timesfm: 0.05 } as Record<string, number>, affidabilitaIgnota: 0.05 } },
   // Riepilogo su Telegram una volta al giorno, alla prima passata dopo quest'ora di Roma.
   summaryAfter: "22:05",

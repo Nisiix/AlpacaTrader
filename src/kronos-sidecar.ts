@@ -44,7 +44,7 @@ export class Campionatore {
   }
   quanti(): number {
     const c = AGENTS.kronos.campioni;
-    return (this.n = Math.max(c.min, Math.min(c.max, this.n)));
+    return (this.n = Math.max(c.min, Math.min(this.massimo(), this.n)));
   }
   misura(ms: number, serie: number, campioni: number) {
     if (serie <= 0 || campioni <= 0 || !(ms > 0)) return;
@@ -54,7 +54,12 @@ export class Campionatore {
     this.ultimoMsPerSerie = perSerie;
     if (perSerie > budget) this.n = Math.floor((campioni * budget) / perSerie);
     else if (perSerie < 0.75 * budget) this.n = Math.max(campioni + 1, Math.floor(campioni * Math.min(2, (0.9 * budget) / perSerie)));
-    this.n = Math.max(c.min, Math.min(c.max, this.n));
+    this.n = Math.max(c.min, Math.min(this.massimo(), this.n));
+  }
+  private massimo(): number {
+    const c = AGENTS.kronos.campioni;
+    const t = c[this.tipo] as { max?: number };
+    return Math.min(c.max, t.max ?? c.max);
   }
   stato(): string {
     return `${this.n}${this.ultimoMsPerSerie !== null ? ` (${(this.ultimoMsPerSerie / 1000).toFixed(1)} s per titolo)` : ""}`;

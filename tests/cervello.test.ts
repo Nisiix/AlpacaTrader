@@ -128,7 +128,7 @@ describe("campioni di Kronos", () => {
     c.misura(100_000, 1, 4);
     expect(c.quanti()).toBe(cfg.min);
     for (let i = 0; i < 20; i++) c.misura(10, 1, c.quanti());
-    expect(c.quanti()).toBe(cfg.max);
+    expect(c.quanti()).toBe(cfg.intraday.max);
   });
 
   test("affidabilità per candela: campione piccolo vicino all'atteso, campione grande decide; prezzi minuscoli con i decimali giusti; messaggi lunghi divisi", async () => {
