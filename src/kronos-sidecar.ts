@@ -13,6 +13,9 @@ export interface KronosLink {
   ready: boolean;
   stato: string; // una riga per dashboard e log
   stop(): void;
+  // Richieste degli agenti in corso: intanto i grafici della dashboard non chiedono proiezioni (le avranno al prossimo
+  // aggiornamento), così non rubano la CPU al giro degli agenti.
+  occupato?: number;
 }
 
 export interface KronosForecastPath {
@@ -23,6 +26,9 @@ export interface KronosForecastPath {
   modelli?: Record<string, number[]>;
   // Fin dove arrivavano le giornate concluse quando è stata calcolata (limite di src/sedute.ts per la sua classe).
   del?: string;
+  // I singoli percorsi di Kronos (rendimenti candela per candela), se il sidecar li ha mandati: da quanti chiudono sopra i
+  // costi la probabilità, dai minimi dei peggiori lo stop.
+  campioni?: number[][];
 }
 
 // Quanti campioni chiedere: si parte dal numero iniziale e, a ogni richiesta, si guarda il tempo per serie misurato sul
@@ -206,6 +212,15 @@ export function scalaSerie(b: { o: number; h: number; l: number; c: number; v: n
   return { serie: b.map((x) => ({ ...x, o: x.o * k, h: x.h * k, l: x.l * k, c: x.c * k })), k };
 }
 
+// I singoli percorsi mandati dal sidecar: righe di numeri finiti, tutte lunghe uguali (almeno 4, se no non servono).
+export function campioniDi(x: unknown): number[][] | null {
+  if (!Array.isArray(x) || x.length < 4) return null;
+  const righe = x.filter((r): r is unknown[] => Array.isArray(r)).map((r) => r.map(Number));
+  const n = righe[0]?.length ?? 0;
+  const ok = righe.filter((r) => r.length === n && n > 0 && r.every(Number.isFinite));
+  return ok.length >= 4 ? ok : null;
+}
+
 // Chiede le proiezioni mandando le barre che il motore ha già (così il sidecar non ha bisogno di chiavi Alpaca).
 export function pathForecaster(link: KronosLink): (symbols: string[], bars: Record<string, Bar[]>, tipo?: "giorno" | "esplorazione") => Promise<Record<string, KronosForecastPath>> {
   return async (symbols, bars, tipo = "giorno") => {
@@ -221,12 +236,18 @@ export function pathForecaster(link: KronosLink): (symbols: string[], bars: Reco
     const camp = CAMPIONI[tipo];
     const samples = camp.quanti();
     const t0 = Date.now();
-    const res = await fetch(`${link.url}/forecast`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ series, horizon: AGENTS.kronos.horizon, samples }),
-      signal: AbortSignal.timeout(AGENTS.kronos.timeoutMs),
-    });
+    link.occupato = (link.occupato ?? 0) + 1;
+    let res: Response;
+    try {
+      res = await fetch(`${link.url}/forecast`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ series, horizon: AGENTS.kronos.horizon, samples }),
+        signal: AbortSignal.timeout(AGENTS.kronos.timeoutMs),
+      });
+    } finally {
+      link.occupato = Math.max(0, (link.occupato ?? 1) - 1);
+    }
     if (!res.ok) throw new Error(`Kronos ${res.status}: ${(await res.text()).slice(0, 200)}`);
     const data = (await res.json()) as { forecasts?: Record<string, { pred_ret: number; path?: number[]; last_close?: number; modelli?: Record<string, unknown> }> };
     camp.misura(Date.now() - t0, n, samples);
@@ -246,6 +267,7 @@ export function pathForecaster(link: KronosLink): (symbols: string[], bars: Reco
 export function intradayForecaster(link: KronosLink, tipo: "intraday" | "grafico" = "intraday"): (series: Record<string, IntradayBar[]>, stepMinutes: number, horizon: number) => Promise<Record<string, KronosForecastPath>> {
   return async (bars, stepMinutes, horizon) => {
     if (!link.ready) throw new Error(`Kronos ${link.stato}`);
+    if (tipo === "grafico" && (link.occupato ?? 0) > 0) throw new Error("occupato dal giro degli agenti: la proiezione arriva al prossimo aggiornamento");
     const series: Record<string, { t: string; o: number; h: number; l: number; c: number; v: number }[]> = {};
     const scala: Record<string, number> = {};
     for (const [s, b] of Object.entries(bars)) if (b.length >= 60) { const sc = scalaSerie(b.slice(-AGENTS.kronos.lookback).map((x) => ({ t: x.t, o: x.open, h: x.high, l: x.low, c: x.close, v: x.volume }))); series[s] = sc.serie; scala[s] = sc.k; }
@@ -254,20 +276,28 @@ export function intradayForecaster(link: KronosLink, tipo: "intraday" | "grafico
     const camp = CAMPIONI[tipo];
     const samples = camp.quanti();
     const t0 = Date.now();
-    const res = await fetch(`${link.url}/forecast`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ series, horizon, step_minutes: stepMinutes, samples }),
-      signal: AbortSignal.timeout(AGENTS.kronos.timeoutMs),
-    });
+    const agenti = tipo !== "grafico";
+    if (agenti) link.occupato = (link.occupato ?? 0) + 1;
+    let res: Response;
+    try {
+      res = await fetch(`${link.url}/forecast`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ series, horizon, step_minutes: stepMinutes, samples, ...(agenti ? { percorsi: true } : {}) }),
+        signal: AbortSignal.timeout(AGENTS.kronos.timeoutMs),
+      });
+    } finally {
+      if (agenti) link.occupato = Math.max(0, (link.occupato ?? 1) - 1);
+    }
     if (!res.ok) throw new Error(`Kronos ${res.status}: ${(await res.text()).slice(0, 200)}`);
-    const data = (await res.json()) as { forecasts?: Record<string, { pred_ret: number; path?: number[]; last_close?: number; modelli?: Record<string, unknown> }> };
+    const data = (await res.json()) as { forecasts?: Record<string, { pred_ret: number; path?: number[]; last_close?: number; modelli?: Record<string, unknown>; campioni?: unknown }> };
     camp.misura(Date.now() - t0, n, samples);
     const out: Record<string, KronosForecastPath> = {};
     for (const [s, f] of Object.entries(data.forecasts ?? {})) {
       const r = Number(f.pred_ret);
       const modelli = modelliDi(f);
-      if (Number.isFinite(r)) out[s] = { rendimentoPrevisto: r, percorso: Array.isArray(f.path) ? f.path.map(Number) : [r], ultimaChiusura: typeof f.last_close === "number" ? f.last_close / (scala[s] ?? 1) : null, ...(modelli ? { modelli } : {}) };
+      const campioni = campioniDi(f.campioni);
+      if (Number.isFinite(r)) out[s] = { rendimentoPrevisto: r, percorso: Array.isArray(f.path) ? f.path.map(Number) : [r], ultimaChiusura: typeof f.last_close === "number" ? f.last_close / (scala[s] ?? 1) : null, ...(modelli ? { modelli } : {}), ...(campioni ? { campioni } : {}) };
     }
     return out;
   };

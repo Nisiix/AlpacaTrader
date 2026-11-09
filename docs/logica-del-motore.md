@@ -246,8 +246,27 @@ sedute, uscita di trend) non riguardano questi trade.
 ### Come si decide un ingresso intraday (riassunto)
 
 - **Candele con un vantaggio misurato**: Kronos si usa solo sulle candele dove indovina la direzione più del caso
-  (`intraday.vantaggio`: con almeno 300 previsioni verificate e affidabilità sotto 0,25 la candela non fa entrare; si
-  continua a proiettarla poco, 6 coppie a giro, per misurarla, e torna utilizzabile appena il vantaggio compare).
+  (`intraday.vantaggio`: con almeno 300 previsioni verificate e affidabilità sotto 0,25, oppure con almeno 40 e la
+  direzione giusta meno della metà delle volte, la candela non fa entrare e non conferma né blocca le altre come candela
+  superiore; si continua a proiettarla poco, 6 coppie a giro, per misurarla, e torna utilizzabile appena il vantaggio
+  compare). Esempio: le 4 ore, giuste il 41% su 44.
+- **Probabilità dai percorsi di Kronos**: il sidecar manda i singoli percorsi (16 di solito), non solo la media. La
+  probabilità è la quota di percorsi che all'orizzonte chiudono **sopra i costi senza toccare lo stop**, avvicinata a
+  50% secondo l'affidabilità della candela: 0,5 + fattore × (quota − 0,5). Esempio: 12 percorsi su 16 su una candela
+  da 1 ora con affidabilità ×0,67 → 0,5 + 0,67 × (12,5/17 − 0,5) ≈ 66%. Prima si usava solo la media dei percorsi
+  rispetto al rumore della candela, che esce quasi sempre piccola: le probabilità restavano tra il 46% e il 52%.
+- **Scelta della candela**: prima quelle con cui si può entrare (rialzo oltre i costi e probabilità oltre la soglia),
+  poi la probabilità più alta; non più «prima chi copre i costi», che sceglieva le 4 ore anche dove Kronos sbaglia di più.
+- **Stop dai percorsi peggiori**: lo stop è il livello che l'80% dei percorsi non tocca (`intraday.percorsi`), tra lo
+  stop minimo (0,4% azioni, 1% crypto) e quello dell'ATR; con questo stop decide l'aspettativa (Thorp), non il rapporto
+  fisso 1,2. Senza percorsi vale l'ATR, che ora non conta il salto tra una seduta e l'altra (prima gonfiava lo stop
+  delle candele da 1 ora delle azioni: NVDA −2,56%).
+- **Meno titoli, più qualità** (`intraday.selezione`): una coppia titolo-candela si proietta solo se il prezzo si muove
+  abbastanza da coprire due volte i costi sull'orizzonte più lungo (es. BTC a 5 minuti no: ±0,5% in un'ora contro lo
+  0,8% che serve); poi per ogni candela al massimo 8 (5 min), 10 (15 min), 16 (1 ora) proiezioni nuove a giro, prima
+  rotture e rientri, poi medie brevi in ordine e rimbalzi, poi per la probabilità vista all'ultima proiezione, con 2
+  posti a rotazione per le altre. Le candele si scaricano in parallelo e i grafici della dashboard non chiedono
+  proiezioni mentre lavorano gli agenti: il giro resta sotto i 5 minuti (prima ne durava 6, e i giri cadevano ogni 10).
 - **Probabilità**: con le medie brevi in ordine (o rottura/rientro) quella della persona (55% di serie); senza, 57%
   (come la soglia generale). La probabilità con cui si decide è per l'**85% Kronos sulle candele** e per il **15% il
   dossier** del titolo (Kronos a 5 sedute, grafico giornaliero, notizie e post, contesto con Fear & Greed e funding)
@@ -255,7 +274,8 @@ sedute, uscita di trend) non riguardano questi trade.
 - **Costi**: le crypto si comprano con **ordini limite** appena sotto il prezzo (0,05%), che pagano la commissione
   maker (0,15%) invece della taker (0,25%); le vendite restano a mercato. Andata e ritorno 0,40%: il rialzo previsto
   deve essere almeno 0,8%. Un limite non eseguito in 10 minuti si cancella (`costi.ordiniLimite`).
-- **Obiettivo** = il rialzo previsto da Kronos (mai sotto due volte i costi), e deve valere almeno 1,2 volte lo stop.
+- **Obiettivo** = il rialzo previsto da Kronos (mai sotto due volte i costi); con lo stop dell'ATR deve valere almeno
+  1,2 volte lo stop, con quello dei percorsi decide l'aspettativa.
 - **Rientri**: dopo un'operazione chiusa in guadagno si può rientrare sullo stesso titolo nello stesso giorno, al
   massimo 3 ingressi; dopo una chiusa in perdita no, fino al giorno dopo (`intraday.ingressiGiorno`).
 
@@ -324,7 +344,8 @@ rimasto (azioni fino a 30 minuti dalla chiusura vera; crypto entro la durata mas
    solo**: serve una probabilità più alta (65%) e la taglia si dimezza (è un'inversione anticipata).
 2. **Kronos, e quale time frame**: una proiezione per titolo e candela, letta a ogni orizzonte che sta nel tempo rimasto
    (da 15 minuti a 8 ore). Candele e orizzonti diversi si confrontano sulla stessa scala, la **probabilità di un
-   guadagno netto dei costi**: Φ((rialzo previsto − costi) / (volatilità delle candele × √candele)), moltiplicata per
+   guadagno netto dei costi**: la quota dei percorsi di Kronos sopra i costi senza toccare lo stop (senza percorsi
+   Φ((rialzo previsto − costi) / (volatilità delle candele × √candele))), avvicinata a 50% secondo
    l'**affidabilità misurata di Kronos su quella candela** (il cervello conta quante volte ha preso la direzione giusta;
    un campione piccolo resta vicino al valore atteso del 55%). Se su una candela Kronos indovina come una moneta, quella
    candela non fa più entrare e si sceglie un'altra. Esempio vero: sulle 5 minuti Kronos ha preso la direzione 27 volte
@@ -340,8 +361,9 @@ rimasto (azioni fino a 30 minuti dalla chiusura vera; crypto entro la durata mas
      così il rischio in euro resta quello del trade breve;
    - altrimenti è un trade breve.
 5. **Obiettivo = il rialzo che Kronos prevede** sull'orizzonte scelto, mai sotto il minimo dei costi (azioni 0,3%,
-   crypto 1,2%). **Stop** = 1,2 ATR della candela (minimo 0,4% azioni, 1% crypto). Si entra solo se l'obiettivo vale
-   almeno **1,2 volte lo stop**.
+   crypto 1,2%). **Stop** = il livello che l'80% dei percorsi di Kronos non tocca, al massimo 1,2 ATR della candela
+   (senza i salti tra le sedute; minimo 0,4% azioni, 1% crypto). Con lo stop dell'ATR (senza percorsi) si entra solo se
+   l'obiettivo vale almeno **1,2 volte lo stop**.
 6. **Aspettativa positiva (Thorp)**: probabilità × guadagno netto − (1 − probabilità) × perdita allo stop (costi
    compresi) deve essere maggiore di zero.
 7. **Taglia**: 10% del conto × fiducia (55% → metà, 70% → piena); il grafico della candela superiore sotto la sua media

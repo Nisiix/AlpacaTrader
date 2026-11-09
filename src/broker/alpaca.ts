@@ -221,8 +221,16 @@ export class AlpacaBroker implements Broker {
     // A gruppi di pochi simboli: Alpaca restituisce le candele un simbolo dopo l'altro, e con tanti simboli le ultime pagine
     // (gli ultimi in ordine alfabetico: SHIB, SOL, UNI, XRP...) restavano fuori, con «candele insufficienti».
     const gruppi = (xs: string[], n = 6) => Array.from({ length: Math.ceil(xs.length / n) }, (_, i) => xs.slice(i * n, i * n + n));
-    for (const g of gruppi(stocks)) await fetchAll(`/v2/stocks/bars?timeframe=${encodeURIComponent(timeframe)}&adjustment=all&feed=iex&limit=10000&start=${start}&symbols=${g.map(encodeURIComponent).join(",")}`);
-    for (const g of gruppi(crypto)) await fetchAll(`/v1beta3/crypto/us/bars?timeframe=${encodeURIComponent(timeframe)}&limit=10000&start=${startCrypto}&symbols=${g.map(encodeURIComponent).join(",")}`);
+    // I gruppi si scaricano tre alla volta (prima uno dopo l'altro): con decine di simboli e quattro passi di candela era
+    // il grosso del tempo del giro, prima ancora di Kronos. Ogni gruppo ha le sue pagine, in ordine.
+    const percorsi = [
+      ...gruppi(stocks).map((g) => `/v2/stocks/bars?timeframe=${encodeURIComponent(timeframe)}&adjustment=all&feed=iex&limit=10000&start=${start}&symbols=${g.map(encodeURIComponent).join(",")}`),
+      ...gruppi(crypto).map((g) => `/v1beta3/crypto/us/bars?timeframe=${encodeURIComponent(timeframe)}&limit=10000&start=${startCrypto}&symbols=${g.map(encodeURIComponent).join(",")}`),
+    ];
+    let prossimo = 0;
+    await Promise.all(Array.from({ length: Math.min(3, percorsi.length) }, async () => {
+      while (prossimo < percorsi.length) await fetchAll(percorsi[prossimo++]!);
+    }));
     for (const sym of Object.keys(out)) out[sym] = out[sym]!.sort((a, b) => a.t.localeCompare(b.t)).slice(-count);
     return out;
   }

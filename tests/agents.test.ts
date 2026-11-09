@@ -39,6 +39,8 @@ import { makeEnv, ordersFor, openStopsFor, type TestEnv } from "./helpers.ts";
 // Questi test provano anche il metodo di più giorni e la promozione: il motore che punta all'intraday (e il riporto al
 // giorno dopo) ha i suoi test, che lo riaccendono.
 AGENTS.puntaIntraday = false;
+// Le candele sintetiche dei test si muovono poco: qui il filtro del movimento (selezione prima di Kronos) non si usa.
+AGENTS.intraday.selezione.movimentoMin = 0;
 AGENTS.intraday.riporto.enabled = false;
 
 const day = (d: string, hhmm: string) => new Date(`${d}T${hhmm}:00+02:00`);

@@ -4,11 +4,13 @@
 # -> {"forecasts": {"SPY": {"pred_ret": 0.012, "path": [..], "last_close": .., "modelli": {"kronos": [..], "chronos2": [..]}}}}:
 # rendimento previsto della chiusura a `horizon` passi e il percorso passo per passo (di Kronos, il modello principale), più
 # il percorso di ogni modello caricato. Il motore li combina pesandoli per i risultati che ognuno ha avuto davvero.
+# Con "percorsi": true anche "campioni": i singoli percorsi di Kronos (rendimenti), da cui il motore conta quanti chiudono
+# sopra i costi (la probabilità) e quanto scendono i peggiori (lo stop).
 # Modelli (--modelli, separati da virgola): kronos (sempre; candele OHLCV, addestrato sui mercati), chronos2 (Amazon
 # Chronos-2, Apache 2.0) e timesfm (Google TimesFM 2.5, Apache 2.0): generici, sulla serie delle chiusure. Quelli non
 # installati si saltano. Nessun ordine parte da qui.
 # Uso: ./venv/bin/python server.py [--model small] [--port 8765] [--lookback 400] [--samples 3] [--modelli kronos,chronos2,timesfm]
-import argparse, json, os, sys, datetime as dt, urllib.request, urllib.parse, time
+import argparse, json, os, sys, datetime as dt, urllib.request, urllib.parse, time, threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import numpy as np, pandas as pd, torch
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "kronos-src"))
@@ -96,12 +98,41 @@ def to_df(bs):
     df["timestamps"] = pd.to_datetime(df["timestamps"])
     return df
 
-def forecast(symbols, horizon, series=None, step_minutes=None, samples=None):
-    # Campioni: quanti percorsi Kronos genera e media per ogni serie. Più campioni = media più stabile (l'errore casuale
-    # scende con la radice del numero), ma tempo proporzionale. Il motore li sceglie richiesta per richiesta.
+# Un solo lavoro di Kronos alla volta: due richieste insieme (agenti e grafici della dashboard) si contendono i core della
+# CPU e rallentano tutte e due più che in fila.
+LAVORO = threading.Lock()
+# Quante sequenze per chiamata al modello (titoli × campioni): abbastanza per sfruttare la CPU, non troppe per la memoria.
+LOTTO = 48
+
+def campioni_kronos(voci, horizon, n_samples):
+    """voci: [(simbolo, df, y_ts)]. Per ogni simbolo i percorsi di chiusura dei singoli campioni (n_samples × horizon).
+    Kronos con sample_count > 1 restituisce solo la media dei percorsi: qui ogni campione è una riga del lotto (stessa serie
+    ripetuta, sample_count=1), così si sa anche quanti percorsi salgono e quanto scendono nel peggiore dei casi; e più titoli
+    vanno nella stessa chiamata (le serie di un lotto si tagliano alla stessa lunghezza, la più corta del lotto)."""
+    out = {}
+    per = max(1, LOTTO // n_samples)
+    voci = sorted(voci, key=lambda x: len(x[1]), reverse=True)
+    cols = ["open", "high", "low", "close", "volume", "amount"]
+    for i in range(0, len(voci), per):
+        grp = voci[i:i + per]
+        L = min(len(x[1]) for x in grp)
+        dfs, xts, yts = [], [], []
+        for _, df, y in grp:
+            d = df.iloc[-L:].reset_index(drop=True)
+            for _ in range(n_samples):
+                dfs.append(d[cols]); xts.append(d["timestamps"]); yts.append(y)
+        preds = predictor.predict_batch(dfs, xts, yts, pred_len=horizon, T=a.T, top_p=a.top_p, sample_count=1, verbose=False)
+        for j, (s, _, _) in enumerate(grp):
+            out[s] = np.stack([p["close"].to_numpy(dtype=np.float64) for p in preds[j * n_samples:(j + 1) * n_samples]])
+    return out
+
+def forecast(symbols, horizon, series=None, step_minutes=None, samples=None, percorsi=False):
+    # Campioni: quanti percorsi Kronos genera per ogni serie. Più campioni = media più stabile (l'errore casuale scende con
+    # la radice del numero), ma tempo proporzionale. Il motore li sceglie richiesta per richiesta. Con `percorsi` si
+    # restituiscono anche i singoli percorsi (rendimenti), per la probabilità e lo stop dai campioni.
     n_samples = max(1, min(128, int(samples or a.samples)))
     data = series if series is not None else bars(symbols, a.lookback)
-    out = {}
+    voci = []
     for s in symbols:
         bs = data.get(s, [])
         if not step_minutes and series is None:
@@ -116,25 +147,43 @@ def forecast(symbols, horizon, series=None, step_minutes=None, samples=None):
             y_ts = pd.Series(pd.date_range(last_ts + pd.Timedelta(minutes=step_minutes), periods=horizon, freq=f"{int(step_minutes)}min"))
         else:
             y_ts = pd.Series(pd.bdate_range(last_ts + pd.Timedelta(days=1), periods=horizon))
-        t0 = time.time()
-        pred = predictor.predict(df=df[["open", "high", "low", "close", "volume", "amount"]], x_timestamp=df["timestamps"], y_timestamp=y_ts, pred_len=horizon, T=a.T, top_p=a.top_p, sample_count=n_samples, verbose=False)
-        last = float(df["close"].iloc[-1])
-        path = [float(x) / last - 1 for x in pred["close"].values]
-        out[s] = {"pred_ret": path[-1], "path": path, "last_close": last, "seconds": round(time.time() - t0, 2), "modelli": {"kronos": path}, "_c": df["close"].to_numpy(dtype=np.float64)}
-    # I modelli generici in un colpo solo su tutte le serie (le chiusure, non le candele intere).
-    nomi = list(out.keys())
-    for modello, percorsi in generici([out[s]["_c"] for s in nomi], horizon).items():
-        for s, pp in zip(nomi, percorsi):
-            last = out[s]["last_close"]
-            if len(pp) and np.all(np.isfinite(pp)) and last > 0: out[s]["modelli"][modello] = [float(x) / last - 1 for x in pp]
-    for s in nomi: del out[s]["_c"]
+        voci.append((s, df, y_ts))
+    out = {}
+    t0 = time.time()
+    with LAVORO:
+        try:
+            tutti = campioni_kronos(voci, horizon, n_samples)
+        except Exception as e:
+            # Lotto non riuscito (versione di Kronos senza predict_batch, memoria): una serie alla volta, solo la media.
+            print(f"lotto non riuscito ({e}): una serie alla volta")
+            tutti = None
+        for s, df, y_ts in voci:
+            last = float(df["close"].iloc[-1])
+            if tutti is not None and s in tutti:
+                camp = tutti[s] / last - 1
+                path = [float(x) for x in camp.mean(axis=0)]
+            else:
+                pred = predictor.predict(df=df[["open", "high", "low", "close", "volume", "amount"]], x_timestamp=df["timestamps"], y_timestamp=y_ts, pred_len=horizon, T=a.T, top_p=a.top_p, sample_count=n_samples, verbose=False)
+                camp = None
+                path = [float(x) / last - 1 for x in pred["close"].values]
+            out[s] = {"pred_ret": path[-1], "path": path, "last_close": last, "modelli": {"kronos": path}, "_c": df["close"].to_numpy(dtype=np.float64)}
+            if percorsi and camp is not None: out[s]["campioni"] = [[round(float(x), 6) for x in r] for r in camp]
+        # I modelli generici in un colpo solo su tutte le serie (le chiusure, non le candele intere).
+        nomi = list(out.keys())
+        for modello, pp_tutti in generici([out[s]["_c"] for s in nomi], horizon).items():
+            for s, pp in zip(nomi, pp_tutti):
+                last = out[s]["last_close"]
+                if len(pp) and np.all(np.isfinite(pp)) and last > 0: out[s]["modelli"][modello] = [float(x) / last - 1 for x in pp]
+    for s in nomi:
+        del out[s]["_c"]
+        out[s]["seconds"] = round((time.time() - t0) / max(1, len(nomi)), 2)
     return out
 
 class H(BaseHTTPRequestHandler):
     def _json(self, code, obj):
         body = json.dumps(obj).encode(); self.send_response(code); self.send_header("content-type", "application/json"); self.send_header("content-length", str(len(body))); self.end_headers(); self.wfile.write(body)
     def do_GET(self):
-        self._json(200, {"ok": True, "model": a.model, "lookback": a.lookback, "pronto": True, "modelli": CARICATI})
+        self._json(200, {"ok": True, "model": a.model, "lookback": a.lookback, "pronto": True, "modelli": CARICATI, "percorsi": True})
     def do_POST(self):
         if self.path != "/forecast": return self._json(404, {"error": "non trovato"})
         try:
@@ -144,7 +193,7 @@ class H(BaseHTTPRequestHandler):
             horizon = max(1, min(20, int(body.get("horizon", 5))))
             samples = body.get("samples")
             t0 = time.time()
-            out = forecast(symbols, horizon, series if isinstance(series, dict) else None, body.get("step_minutes"), samples)
+            out = forecast(symbols, horizon, series if isinstance(series, dict) else None, body.get("step_minutes"), samples, bool(body.get("percorsi")))
             secs = round(time.time() - t0, 2)
             print(f"previsione: {len(out)} serie, {samples or a.samples} campioni, passo {body.get('step_minutes') or 'giorno'}, {secs} s")
             self._json(200, {"model": a.model, "horizon": horizon, "samples": samples or a.samples, "secondi": secs, "forecasts": out})

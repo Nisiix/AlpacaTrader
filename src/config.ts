@@ -338,6 +338,17 @@ export const AGENTS = {
     // previsioni finte (un campione piccolo conta poco). Fattore = (quota − 50%) / (prior − 50%), tra 0 e `max`: una candela
     // su cui Kronos indovina come una moneta non fa entrare, una su cui indovina più del previsto pesa di più.
     affidabilita: { prior: 0.55, forza: 100, max: 1.5 },
+    // Con i singoli percorsi di Kronos (il sidecar li manda): la probabilità è la quota di percorsi che chiudono sopra i
+    // costi senza toccare lo stop, avvicinata a 50% secondo l'affidabilità della candela: 0,5 + fattore × (quota − 0,5).
+    // Lo stop è il minimo che i percorsi peggiori toccano (il `quantileStop` dei minimi: l'80% dei percorsi resta sopra),
+    // tra lo stop minimo e quello dell'ATR. Senza percorsi valgono Φ(z) e lo stop dell'ATR.
+    percorsi: { minCampioni: 8, quantileStop: 0.2 },
+    // Selezione prima di Kronos (meno titoli, più qualità): una coppia titolo-candela si proietta solo se in quel tempo il
+    // prezzo si muove abbastanza da coprire i costi (volatilità sull'orizzonte più lungo ≥ movimentoMin × due volte i
+    // costi); poi, per ogni candela, al massimo perCandela proiezioni nuove a giro: prima rotture e rientri, poi medie brevi
+    // in ordine e rimbalzi, poi le altre per la probabilità vista all'ultima proiezione; `esplora` posti a rotazione per le
+    // altre. Così il giro resta sotto i 5 minuti anche quando chiudono insieme le candele da 5, 15 minuti e 1 ora.
+    selezione: { perCandela: { "5Min": 8, "15Min": 10, "1Hour": 16, "4Hour": 6 } as Record<string, number>, esplora: 2, movimentoMin: 1 },
     // Dopo `perdite` operazioni intraday chiuse in perdita di fila oggi, la taglia degli ingressi nuovi × fattore.
     serieNegativa: { perdite: 3, fattore: 0.5 },
     // Scaduto l'orizzonte scelto (× questo fattore) senza obiettivo e senza rialzo ancora probabile, si chiude.
@@ -367,7 +378,9 @@ export const AGENTS = {
     // Candele su cui Kronos non ha (ancora) un vantaggio misurato: con almeno minCampione previsioni verificate e un
     // fattore d'affidabilità sotto minFattore non si entra su quella candela; si continua a proiettarla poco (misuraPerGiro
     // coppie a giro) per misurarla, e torna utilizzabile appena il vantaggio compare.
-    vantaggio: { minCampione: 300, minFattore: 0.25, misuraPerGiro: 6 },
+    // Anche con almeno minCampioneContro previsioni e direzione giusta sotto minGiusti (peggio di una moneta) la candela non
+    // si usa: né per entrare né come candela superiore che conferma o blocca (es. 4 ore: giusta il 41% su 44).
+    vantaggio: { minCampione: 300, minFattore: 0.25, misuraPerGiro: 6, minCampioneContro: 40, minGiusti: 0.5 },
     // Le informazioni del dossier (Kronos a 5 sedute, grafico giornaliero, notizie e post, contesto con Fear & Greed e
     // funding) o, senza dossier, il contesto del settore pesano `peso` nella probabilità con cui si decide l'ingresso
     // (il resto è Kronos sulle candele): una parte minima, che sposta solo i casi al limite.
