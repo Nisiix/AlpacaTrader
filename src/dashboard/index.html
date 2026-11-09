@@ -424,9 +424,9 @@
 
   <!-- Ufficio: la mappa 3D con gli agenti e, sotto, la squadra in forma schematica. -->
   <div class="page" data-page="ufficio">
-    <div class="title-row"><h1 class="page-title">Ufficio</h1><div class="row" style="gap:8px"><button type="button" class="btn ghost" id="apri-lavagna">Lavagna dei risultati</button></div></div>
+    <div class="title-row"><h1 class="page-title">Ufficio</h1></div>
       <details class="scene" id="scene-box" open>
-      <summary>Ufficio degli agenti <span class="hint">trading agents: <b style="color:#16a34a">verde</b> in posizione (rosso se in uscita) · <b style="color:#2563eb">blu</b> pronto a entrare, luce che pulsa · <b style="color:#94a3b8">grigio</b> in osservazione o in attesa · arancione intraday</span></summary>
+      <summary>Ufficio degli agenti <span class="hint">trading agents: <b style="color:#16a34a">verde</b> in posizione (rosso se in uscita) · <b style="color:#2563eb">blu</b> pronto a entrare, luce che pulsa · <b style="color:#94a3b8">grigio</b> in sala caffè · arancione intraday agents · chi non ha un'occasione aspetta in sala caffè</span></summary>
       <div class="scene-wrap"><div id="scene"></div><aside class="agent-list" id="agent-list" aria-label="agenti dell'ufficio"></aside></div>
       <p class="legend" hidden>In fondo la <b>lavagna dei risultati</b> (clic per aprirla) e gli agenti generali che hanno votato almeno un trade; poi i <b>Custodi</b>, una scrivania per titolo seguito, con la camicia del colore della fase (blu pronto, verde in posizione, rosso in uscita, grigio in attesa) e lo schermo con prezzo e andamento; infine la <b>Sala intraday</b> (arancione). A destra, oltre la porta, la <b>Sala caffè</b>: chi in questo giro non ha niente da fare si siede ai tavolini e scambia con i colleghi dati veri (dossier, candele, proiezioni di Kronos, lezioni dei trade chiusi); appena ha un trade da aprire o una posizione da seguire torna alla scrivania. Chi vota alza la mano, chi compra o vende si alza e lo schermo lampeggia. Mouse sopra per leggere, clic per aprire. A destra l'elenco degli agenti: passando sopra un nome il suo avatar si alza in piedi e la postazione si illumina; il clic apre la scheda.</p>
     </details>
@@ -580,10 +580,10 @@
       <p>Il menu è a sinistra (sul telefono si apre con ☰).</p>
       <ul>
         <li><b>Dashboard</b>: la frase di stato e il capitale (patrimonio totale, investito, liquidità, risultato sulle posizioni aperte, oggi, rischio ammesso, confronto con SPY); il <b>rendimento per periodo</b> con i filtri Oggi, 7 giorni, 30 giorni, Mese, Anno, Tutto o date a scelta (variazione del patrimonio dallo storico di Alpaca, risultato realizzato, operazioni chiuse e vinte, migliore e peggiore, ribasso massimo, grafico del patrimonio e risultato giorno per giorno); poi profitto e perdita di oggi e la situazione in breve.</li>
-        <li><b>Ufficio</b>: la mappa 3D con gli agenti alle loro postazioni (la lavagna dei risultati, che si apre con un clic o col pulsante «Lavagna dei risultati», il capo nella stanza di vetro, gli agenti generali solo se hanno votato almeno un trade, Trading agents, Sala intraday, Sala caffè); la camicia dice la fase: blu pronto, verde in posizione, rosso in uscita, grigio in attesa, arancione intraday. A destra l'elenco degli agenti: passando sopra un nome l'avatar si alza e la postazione si illumina; il clic apre la scheda (situazione, ragionamento, giudizio del capo, impostazioni). Sotto, a schede: <b>Decisioni</b> (punteggio per titolo e voti), <b>Trading agents</b>, <b>Esplorazione</b> e <b>Sala caffè</b> (lezioni di squadra).</li>
+        <li><b>Ufficio</b>: la mappa 3D con gli agenti alle loro postazioni (la lavagna dei risultati, che si apre con un clic, il capo nella stanza di vetro, gli agenti generali solo se hanno votato almeno un trade, Trading agents, Intraday agents, Sala caffè). Alla scrivania c'è solo chi ha preso un'occasione: una posizione aperta, un titolo pronto a entrare o un ingresso votato; tutti gli altri, anche chi segue un titolo «in attesa», aspettano in sala caffè e la loro scrivania non c'è. La camicia dice la fase: blu pronto, verde in posizione, rosso in uscita, arancione intraday, grigio in sala caffè. A destra l'elenco degli agenti: passando sopra un nome l'avatar si alza e la postazione si illumina; il clic apre la scheda (situazione, ragionamento, giudizio del capo, impostazioni). Sotto, a schede: <b>Decisioni</b> (punteggio per titolo e voti), <b>Trading agents</b>, <b>Esplorazione</b> e <b>Sala caffè</b> (lezioni di squadra).</li>
         <li><b>Investimenti</b>: le card dei titoli e delle crypto in portafoglio (valore, guadagno, carico e prezzo, peso, da quanto è aperta, obiettivo e stop dell'intraday) e quelle in osservazione (custodi, voti, attese); più in basso il radar. Il clic su una card apre il <b>grafico</b> (TradingView Lightweight Charts: rotella per lo zoom, trascina per scorrere, mirino con apertura, massimo, minimo e chiusura) con la proiezione dei modelli e il cono di probabilità (fasce 50% e 80%, probabilità di finire sopra o sotto il prezzo di adesso), medie, carico, stop, obiettivo e frecce delle operazioni. Il time frame si sceglie sopra il grafico: 1m, 5m, 15m, 1h, 4h, 1G; le candele brevi si aggiornano da sole (1 e 5 minuti ogni 15 secondi). «Analisi investimento» apre verdetto, voti e dossier del custode; «Chiedi agli agenti adesso» fa una valutazione a secco: nessun ordine parte dalla pagina. Sotto: operazioni intraday, simulazioni e la tabella delle posizioni.</li>
         <li><b>Log operazioni</b>: gli acquisti e le vendite eseguiti negli ultimi 7 giorni, giorno per giorno, con ricerca per titolo, agente o motivo e filtri per tipo e periodo; per ogni vendita il risultato e quanto è stata tenuta la posizione. Clic su una riga per il grafico.</li>
-        <li><b>Gli agenti sono persone</b>: ognuno ha un nome (Marco il trend, Giulia il rientro, Chiara Kronos, Andrea la sala intraday, Roberto il capo ufficio…) e ogni trading agent e operatore intraday ne riceve uno suo, che tiene. Il clic su una persona nell'Ufficio apre la sua scheda con <b>le sue impostazioni</b>, modificabili (valgono dal giro successivo). Quando un agente vince meno del 51% dei trade chiusi (almeno 5), il <b>capo ufficio lo ricalibra</b>: il suo parametro d'ingresso diventa più selettivo di un passo (mai oltre i limiti e mai sotto il valore di base); quando torna a vincere almeno il 60% si riavvicina alla base. Ogni trading agent ha anche una soglia personale.</li>
+        <li><b>Gli agenti sono persone</b>: ognuno ha un nome (Marco il trend, Giulia il rientro, Chiara Kronos, Andrea il capo degli intraday agents, Roberto il capo ufficio…). I <b>trading agents</b> e gli <b>intraday agents</b> sono uno staff di persone che non appartengono a un titolo: il motore trova le occasioni con i suoi criteri e ogni occasione la prende la persona libera più brava per risultati (a parità, chi aspetta da più tempo). Una persona resta sul suo titolo finché c'è la posizione o l'ingresso; poi torna in sala caffè. I due reparti restano distinti perché lavorano su orizzonti diversi: i trading agents su più giorni (dossier, Kronos a 5 sedute, stop di più giorni), gli intraday agents su minuti e ore (candele brevi, obiettivo e stop stretti, costi); sulla stessa crypto possono esserci un'operazione di più giorni e una intraday, con regole e risultati separati. Il clic su una persona nell'Ufficio apre la sua scheda con <b>le sue impostazioni</b>, modificabili (valgono dal giro successivo). Quando un agente vince meno del 51% dei trade chiusi (almeno 5), il <b>capo ufficio lo ricalibra</b>: il suo parametro d'ingresso diventa più selettivo di un passo (mai oltre i limiti e mai sotto il valore di base); quando torna a vincere almeno il 60% si riavvicina alla base. Ogni trading agent ha anche una soglia personale.</li>
         <li><b>Impostazioni</b>: <b>Generali</b> (le regole comuni del profilo di investimento e della piattaforma, come peso massimo per titolo, obiettivo del giorno, stop, pagina pubblica su GitHub) e le <b>chiavi</b> di Alpaca, Telegram e X con il riavvio del motore.</li>
         <li><b>Guida</b>: questa pagina.</li>
         <li><b>Pagina pubblica</b>: con «Pagina pubblica su GitHub Pages» nella scheda Motore e gabbia, il PC pubblica ogni N minuti un'istantanea in sola lettura, da aprire anche dal telefono. È visibile a chiunque abbia il link; chiavi e modifiche restano solo sulla dashboard del PC.</li>
@@ -678,6 +678,9 @@ const nomeTitolo = (sym) => status?.nomi?.[sym] || '';
 const tn = (sym, blocco = false) => { const n = nomeTitolo(sym); return n ? `<span class="tnome${blocco ? ' blk' : ''}">${esc(n)}</span>` : ''; };
 // Nei testi del motore le persone compaiono come chiavi (c:AAPL, i:ETH/USD, a:kronos): qui diventano nomi.
 const nomiNelTesto = (t) => String(t ?? '').replace(/\b([ci]):([A-Z0-9]+(?:\/[A-Z]+)?)|\ba:([a-z]+)\b/g, (m) => keyName(m));
+// Lo staff: p:Nome → { nome, reparto, simbolo } (simbolo null: in sala caffè). La postazione di una persona al lavoro.
+const staffDi = (st) => Object.entries(st?.persone || {}).filter(([k]) => k.startsWith('p:'));
+const postazioneDi = (per) => per?.simbolo ? `${per.reparto === 'intraday' ? 'i' : 'c'}:${per.simbolo}` : null;
 const conNome = (sym) => nomeTitolo(sym) ? `${sym} · ${nomeTitolo(sym)}` : sym;
 const agentName = (n) => {
   const s = String(n);
@@ -688,7 +691,7 @@ const agentName = (n) => {
 
 // ---------- ufficio 3D: gli agenti come impiegati alle loro postazioni ----------
 // Tre reparti: la Direzione (gli agenti generali, vicino alla lavagna), i Custodi (una scrivania per titolo seguito, lo
-// schermo mostra titolo, prezzo e andamento) e la Sala intraday (operatori in arancione). La lavagna sul muro riassume
+// schermo mostra titolo, prezzo e andamento) e la Sala intraday (intraday agents in arancione). La lavagna sul muro riassume
 // successi e insuccessi di ogni agente dal diario dei trade. Mouse sopra una postazione per leggere, clic per aprirla.
 const host = $('#scene');
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -756,9 +759,9 @@ function lavagnaHtml() {
   let h = `<div class="lav-kpi">${kpi('Oggi', `<span class="${cls(og.pnl)}">${usd(og.pnl)}</span>`, `${og.n} chiusi · ${og.v} vinti`)}${kpi('Trade vinti oggi', q(og), 'obiettivo 51%')}${kpi('Capitale sui vincenti oggi', qc(og), 'più del 50%: si è investito di più dove si è vinto')}${kpi('Dall\'inizio', `<span class="${cls(tot.pnl)}">${usd(tot.pnl)}</span>`, `${tot.n} chiusi · ${q(tot)} vinti · ${qc(tot)} del capitale sui vincenti`)}</div>`;
   if (!chiusi.length) return h + '<p class="empty">Nessun trade chiuso ancora: la lavagna si riempie man mano che gli agenti chiudono le operazioni.</p>';
   const per = new Map();
-  for (const t of chiusi) for (const a of (t.contesto?.agenti?.length ? t.contesto.agenti : ['senza agente'])) per.set(a, [...(per.get(a) || []), t]);
+  for (const t of chiusi) for (const a of (t.contesto?.persone?.length ? t.contesto.persone : t.contesto?.agenti?.length ? t.contesto.agenti : ['senza agente'])) per.set(a, [...(per.get(a) || []), t]);
   const righe = [...per.entries()].map(([a, ts]) => [a, riassunto(ts)]).sort((x, y) => y[1].pnl - x[1].pnl);
-  h += `<h3 style="margin:8px 0">Per agente</h3><table class="stack-sm"><thead><tr><th>Agente</th><th class="n">Vinti / persi</th><th class="n">% vinti</th><th class="n">Capitale sui vincenti</th><th class="n">Risultato</th></tr></thead><tbody>${righe.map(([a, g]) => `<tr><td>${esc(agentName(a))}${a.startsWith('custode ') ? tn(a.slice(8)) : ''}</td><td class="n" data-l="Vinti / persi">${barra(g)} <span class="up">${g.v}</span> / <span class="down">${g.n - g.v}</span></td><td class="n" data-l="% vinti">${q(g)}</td><td class="n" data-l="Capitale sui vincenti">${qc(g)}</td><td class="n ${cls(g.pnl)}" data-l="Risultato">${usd(g.pnl)}</td></tr>`).join('')}</tbody></table>`;
+  h += `<h3 style="margin:8px 0">Per agente</h3><table class="stack-sm"><thead><tr><th>Agente</th><th class="n">Vinti / persi</th><th class="n">% vinti</th><th class="n">Capitale sui vincenti</th><th class="n">Risultato</th></tr></thead><tbody>${righe.map(([a, g]) => `<tr><td>${esc(a.startsWith('p:') ? (personaDi(a)?.nome ?? a.slice(2)) : agentName(a))}${a.startsWith('custode ') ? tn(a.slice(8)) : ''}</td><td class="n" data-l="Vinti / persi">${barra(g)} <span class="up">${g.v}</span> / <span class="down">${g.n - g.v}</span></td><td class="n" data-l="% vinti">${q(g)}</td><td class="n" data-l="Capitale sui vincenti">${qc(g)}</td><td class="n ${cls(g.pnl)}" data-l="Risultato">${usd(g.pnl)}</td></tr>`).join('')}</tbody></table>`;
   const giorni = [...new Set(chiusi.map(giorno))].sort().reverse().slice(0, 14);
   h += `<h3 style="margin:16px 0 8px">Per giorno</h3><table class="stack-sm"><thead><tr><th>Giorno</th><th class="n">Vinti / persi</th><th class="n">% vinti</th><th class="n">Capitale sui vincenti</th><th class="n">Risultato</th></tr></thead><tbody>${giorni.map((d) => { const g = riassunto(chiusi.filter((t) => giorno(t) === d)); return `<tr><td>${esc(new Date(`${d}T12:00:00`).toLocaleDateString('it-IT', { weekday: 'short', day: 'numeric', month: 'short' }))}</td><td class="n" data-l="Vinti / persi">${barra(g)} <span class="up">${g.v}</span> / <span class="down">${g.n - g.v}</span></td><td class="n" data-l="% vinti">${q(g)}</td><td class="n" data-l="Capitale sui vincenti">${qc(g)}</td><td class="n ${cls(g.pnl)}" data-l="Risultato">${usd(g.pnl)}</td></tr>`; }).join('')}</tbody></table>`;
   return h + '<p class="why" style="margin-top:10px">Un trade conta per ogni agente che ha votato il suo ingresso. «Capitale sui vincenti» è la parte del capitale investito nei trade chiusi finita in quelli in guadagno.</p>';
@@ -781,7 +784,7 @@ function drawBoard(st, journal) {
   for (const t of journal?.trade || []) {
     if (t.stato !== 'chiuso') continue;
     const pnl = (t.incassato ?? 0) - (t.costo ?? 0);
-    for (const a of (t.contesto?.agenti?.length ? t.contesto.agenti : ['senza agente'])) {
+    for (const a of (t.contesto?.persone?.length ? t.contesto.persone : t.contesto?.agenti?.length ? t.contesto.agenti : ['senza agente'])) {
       const g = per.get(a) ?? { v: 0, p: 0, pnl: 0 }; if (pnl > 0) g.v++; else g.p++; g.pnl += pnl; per.set(a, g);
     }
   }
@@ -795,7 +798,7 @@ function drawBoard(st, journal) {
   rows.forEach(([a, g], i) => {
     const y = 192 + i * 50; const n = g.v + g.p;
     c.fillStyle = '#0f172a'; c.font = '32px "Segoe Print", Figtree, sans-serif';
-    c.fillText(agentName(a), cols[0], y);
+    c.fillText(a.startsWith('p:') ? (personaDi(a)?.nome ?? a.slice(2)) : agentName(a), cols[0], y);
     c.fillStyle = '#15803d'; c.fillText(String(g.v), cols[1], y);
     c.fillStyle = '#b91c1c'; c.fillText(String(g.p), cols[2], y);
     c.fillStyle = '#0f172a'; c.fillText(n ? `${Math.round((g.v / n) * 100)}%` : '–', cols[3], y);
@@ -932,15 +935,16 @@ const generaliEffettivi = (st) => { const usati = new Set((journal?.trade || [])
 function paintAgentList(st) {
   const box = $('#agent-list'); if (!box) return;
   const pausa = new Set((st.caffe?.presenti || []).map((p) => p.chiave));
-  const row = (key, nome, stato) => { const d = desks.get(key); if (!d) return ''; if ((status?.formazione?.inFormazione || []).some((x) => x.chiave === key)) stato = '☕ in formazione'; const per = personaDi(key); if (per && !String(nome).startsWith(`${per.nome} ·`)) nome = key === 'capo' ? `${per.nome} · capo ufficio` : `${per.nome} · ${nome}`; const col = hexCss(d.group.userData.emp.userData.shirtM.color.getHex()); return `<button type="button" data-key="${esc(key)}" class="${cardKey === key || listHoverKey === key ? 'on' : ''}"><span class="sw" style="background:${col}"></span><span class="nm">${esc(nome)}${pausa.has(key) ? ' <span class="caffe">☕</span>' : ''}</span><span class="st">${esc(stato)}</span></button>`; };
+  const row = (key, nome, stato) => { const d = desks.get(key); if (!d) return ''; if ((status?.formazione?.inFormazione || []).some((x) => x.chiave === key)) stato = '☕ in formazione'; const per = key.startsWith('p:') ? null : personaDi(key); if (key.startsWith('p:') && !String(nome).startsWith(`${personaDi(key)?.nome} ·`)) nome = `${personaDi(key)?.nome ?? key.slice(2)} · ${nome}`; if (per && !String(nome).startsWith(`${per.nome} ·`)) nome = key === 'capo' ? `${per.nome} · capo ufficio` : `${per.nome} · ${nome}`; const col = hexCss(d.group.userData.emp.userData.shirtM.color.getHex()); return `<button type="button" data-key="${esc(key)}" class="${cardKey === key || listHoverKey === key ? 'on' : ''}"><span class="sw" style="background:${col}"></span><span class="nm">${esc(nome)}${pausa.has(key) ? ' <span class="caffe">☕</span>' : ''}</span><span class="st">${esc(stato)}</span></button>`; };
   const general = generaliEffettivi(st);
-  const cust = st.custodi || [];
-  const intra = [...desks.keys()].filter((k) => k.startsWith('i:'));
+  const lav = [...desks.entries()].filter(([, d]) => d.group.visible && (d.info?.kind === 'custode' || d.info?.kind === 'intraday'));
+  const tr = lav.filter(([, d]) => d.info.kind === 'custode'); const intra = lav.filter(([, d]) => d.info.kind === 'intraday');
+  const liberi = staffDi(st).filter(([, per]) => !per.simbolo);
   const capo = st.capo; const rich = (capo?.valutazioni || []).filter((v) => v.giudizio === 'richiamato').length;
   const html = `<h4>Capo ufficio</h4>${row('capo', 'Capo ufficio', rich ? `${rich} richiami` : 'in regola')}${general.length ? `<h4>Agenti generali <span>${general.length}</span></h4>` : ''}${general.map((n) => { const a = st.agenti[n]; return row(`a:${n}`, AGENT_NAMES[n] ?? n, a.errore ? 'errore' : `${a.segnali} segnali`); }).join('')}
-    ${['posizione', 'pronto', 'osserva'].map((k) => { const g = cust.filter((c) => CATEGORIA(c) === k); return g.length ? `<h4>Trading agents · ${CAT_INFO[k].nome.toLowerCase()} <span>${g.length}</span></h4>${g.map((c) => row(`c:${c.simbolo}`, conNome(c.simbolo), `${c.dossier ? `${Math.round(c.dossier.probabilita * 100)}%` : ''}${c.fase === 'in uscita' ? ' · in uscita' : c.fase === 'attende' ? ' · in attesa' : ''}`)).join('')}` : ''; }).join('') || '<h4>Trading agents</h4><p class="empty" style="padding:4px 8px">nessuno</p>'}
-    <h4>Sala intraday <span>${intra.length}</span></h4>${intra.map((k) => { const x = desks.get(k)?.info?.x; return x ? row(k, conNome(x.simbolo), `${x.candela} · ${x.fase === 'in posizione' ? 'in posizione' : x.ingresso !== null ? 'ingresso votato' : 'cerca'}`) : ''; }).join('') || '<p class="empty" style="padding:4px 8px">nessuno</p>'}
-    ${pausa.size ? `<p class="why" style="padding:8px">☕ ${pausa.size} in pausa in sala caffè</p>` : ''}`;
+    ${['posizione', 'pronto'].map((k) => { const g = tr.filter(([, d]) => (CATEGORIA(d.info.c) === 'osserva' ? 'pronto' : CATEGORIA(d.info.c)) === k); return g.length ? `<h4>Trading agents · ${CAT_INFO[k].nome.toLowerCase()} <span>${g.length}</span></h4>${g.map(([key, d]) => { const c = d.info.c; return row(key, conNome(c.simbolo), `${c.dossier ? `${Math.round(c.dossier.probabilita * 100)}%` : ''}${c.fase === 'in uscita' ? ' · in uscita' : ''}`); }).join('')}` : ''; }).join('') || '<h4>Trading agents</h4><p class="empty" style="padding:4px 8px">nessuno alla scrivania</p>'}
+    <h4>Intraday agents <span>${intra.length}</span></h4>${intra.map(([key, d]) => { const x = d.info.x; return row(key, conNome(x.simbolo), `${x.candela ? `${x.candela} · ` : ''}${x.fase === 'in posizione' ? 'in posizione' : 'ingresso votato'}`); }).join('') || '<p class="empty" style="padding:4px 8px">nessuno alla scrivania</p>'}
+    <h4>In sala caffè <span>${liberi.length}</span></h4>${liberi.map(([key, per]) => row(key, `${per.nome} · ${per.reparto === 'intraday' ? 'intraday' : 'trading'}`, 'libero')).join('') || '<p class="empty" style="padding:4px 8px">nessuno</p>'}`;
   // Si riscrive solo se cambia qualcosa: il nome sotto il mouse resta lo stesso elemento.
   if (box.dataset.html !== html) { box.innerHTML = html; box.dataset.html = html; }
 }
@@ -959,7 +963,7 @@ const deptLabels = [];
 function deptLabel(text, x, z) { const el = document.createElement('div'); el.className = 'lbl dept-lbl'; el.textContent = text; const o = new CSS2DObject(el); o.position.set(x, 2.6, z); scene.add(o); deptLabels.push(o); }
 const SPX = 2.2, SPZ = 2.6;
 let roomSize = { w: 10, d: 10 };
-function layout(groups) {
+function layout(groups, inCaffe = 0) {
   // groups: [{ name, items: [{ key, ... }] }] → righe di scrivanie, un reparto dopo l'altro, dalla lavagna verso la finestra.
   for (const o of deptLabels) scene.remove(o); deptLabels.length = 0;
   const cols = Math.max(4, Math.min(10, Math.ceil(Math.sqrt(groups.reduce((a, g) => a + g.items.length, 0) * 1.5))));
@@ -984,14 +988,14 @@ function layout(groups) {
   placed.set('capo', new THREE.Vector3(w / 2 - 1.2, 0, -2.7));
   glass.position.set(w / 2 - 1.2, 1.1, -2.7);
   deptLabel('Capo ufficio', w / 2 - 1.2, -2.0);
-  caffeBox = buildCaffe(Math.max(4, placed.size - 1), w, d);
+  caffeBox = buildCaffe(Math.max(4, placed.size - 1 + inCaffe), w, d); // posti per tutti: chi lavora può andare in pausa, chi è libero c'è già
   zones.set('Capo', { center: new THREE.Vector3(w / 2 - 1.2, 0, -2.7), size: 4 });
   zones.set('Sala caffè', { center: new THREE.Vector3(caffeBox.x0 + caffeBox.cw / 2, 0, -4.2 + caffeBox.cd / 2), size: Math.max(caffeBox.cw, caffeBox.cd) });
   zones.set('Tutto', { center: new THREE.Vector3((caffeBox.cw + 2) / 2, 0, d / 2 - 2), size: Math.max(w + caffeBox.cw + 2, d) });
   return placed;
 }
 const zones = new Map(); // nome della zona -> { center, size }: i pulsanti di navigazione ci volano sopra
-const RUG = { 'Agenti generali': 0x334155, Custodi: 0x1e3a5f, 'Sala intraday': 0x7c4a12 };
+const RUG = { 'Agenti generali': 0x334155, 'Trading agents': 0x1e3a5f, 'Intraday agents': 0x7c4a12 };
 function buildDecor(groups, cols, w, d) {
   decor.clear();
   // tappeti sotto ogni reparto
@@ -1106,23 +1110,39 @@ const CAT_INFO = { posizione: { nome: 'In posizione', colore: 0x16a34a }, pronto
 const ROLE = { trend: 'trend', rientro: 'rientro', regime: 'clima di mercato', orizzonte: 'orizzonte', uscite: 'uscite e stop', contesto: 'contesto economico', profitto: 'presa di profitto', kronos: 'previsioni Kronos' };
 
 function paintScene(st) {
+  // Una scrivania per ogni persona al lavoro (posizione aperta, pronta a entrare, voto d'acquisto); chi non ha
+  // un'occasione, anche se il suo titolo è «in attesa», sta in sala caffè e la sua scrivania non c'è.
   const general = generaliEffettivi(st);
   const cust = st.custodi || [];
-  const intra = (st.intraday || []).filter((x) => x.fase === 'in posizione' || x.fase === 'cerca ingresso').slice(0, 20);
+  const intra = st.intraday || [];
+  const lavoro = { trading: [], intraday: [] }; const liberi = [];
+  for (const [k, per] of staffDi(st)) {
+    if (!per.simbolo) { liberi.push({ key: k, kind: 'persona', per }); continue; }
+    if (per.reparto === 'intraday') lavoro.intraday.push({ key: k, kind: 'intraday', per, x: intra.find((x) => x.simbolo === per.simbolo) ?? { simbolo: per.simbolo, candela: '', fase: 'ingresso votato', motivo: '', ingresso: null, obiettivo: null, stop: null } });
+    else lavoro.trading.push({ key: k, kind: 'custode', per, c: cust.find((c) => c.simbolo === per.simbolo) ?? { simbolo: per.simbolo, fase: 'pronto', stato: 'occasione presa', tesi: '', piano: '', rischio: '' } });
+  }
   const groups = [
     { name: 'Agenti generali', items: general.map((n) => ({ key: `a:${n}`, kind: 'agente', n })) },
-    { name: 'Custodi', items: cust.map((c) => ({ key: `c:${c.simbolo}`, kind: 'custode', c })) },
-    { name: 'Sala intraday', items: intra.map((x) => ({ key: `i:${x.simbolo}`, kind: 'intraday', x })) },
+    { name: 'Trading agents', items: lavoro.trading },
+    { name: 'Intraday agents', items: lavoro.intraday },
   ];
-  const keys = groups.flatMap((g) => g.items.map((i) => i.key)).join('|') + '|capo';
+  const keys = groups.flatMap((g) => g.items.map((i) => i.key)).join('|') + '|capo|' + liberi.map((i) => i.key).join('|');
   let pos = null;
   if (keys !== lastLayoutKey) {
-    pos = layout(groups);
-    for (const [k, d] of desks) if (!pos.has(k)) { scene.remove(d.group); if (d.away || d.walk) scene.remove(d.group.userData.emp); desks.delete(k); }
-    for (const [k, p] of pos) { let d = desks.get(k); if (!d) { d = { group: makeDesk(k, k === 'capo') }; scene.add(d.group); desks.set(k, d); } d.group.position.copy(p); }
+    pos = layout(groups, liberi.length);
+    const liberiK = new Set(liberi.map((i) => i.key));
+    for (const [k, d] of desks) {
+      if (pos.has(k)) continue;
+      if (liberiK.has(k)) { d.group.visible = false; continue; } // la persona va in sala caffè, la scrivania sparisce
+      scene.remove(d.group); if (d.away || d.walk) scene.remove(d.group.userData.emp); desks.delete(k);
+    }
+    for (const [k, p] of pos) { let d = desks.get(k); if (!d) { d = { group: makeDesk(k, k === 'capo') }; scene.add(d.group); desks.set(k, d); } d.group.position.copy(p); d.group.visible = true; }
+    // Chi è libero e non ha ancora un avatar entra dalla porta della sala caffè.
+    for (const it of liberi) if (!desks.has(it.key)) { const d = { group: makeDesk(it.key, false) }; d.group.visible = false; d.group.position.set(caffeDoor.x - 1, 0, caffeDoor.z); scene.add(d.group); desks.set(it.key, d); }
     if (!lastLayoutKey) fitCamera();
     lastLayoutKey = keys;
   }
+  for (const it of liberi) { const d = desks.get(it.key); if (d) { d.info = it; d.group.userData.emp.userData.shirtM.color.set(0x94a3b8); d.group.userData.el.innerHTML = `<b>${esc(it.per.nome)}</b>`; } }
   const held = new Map((st.posizioni || []).map((p) => [p.simbolo, p]));
   for (const g of groups) for (const it of g.items) {
     const d = desks.get(it.key); if (!d) continue; const u = d.group.userData; d.info = it;
@@ -1138,12 +1158,12 @@ function paintScene(st) {
       u.plate.visible = true; u.plate.material.color.setHex(col); u.plate.material.opacity = cat === 'osserva' ? 0.18 : 0.42;
       u.lamp.visible = cat !== 'osserva'; u.lamp.material.color.setHex(col); u.lamp.material.emissive.setHex(col); u.lamp.userData.pulsa = cat === 'pronto';
       drawScreen(u.scr, c.simbolo, `${px(st.prezzi?.[c.simbolo])}${prob !== null ? ` · ${prob}%` : ''}`, p ? p.variazione : null, histOf(c.simbolo).map((b) => b.close));
-      u.el.innerHTML = `<b>${esc(personaDi(it.key)?.nome ?? '')} · ${esc(c.simbolo)}</b>${tn(c.simbolo)}${prob !== null ? ` <span>${prob}%</span>` : ''}`;
+      u.el.innerHTML = `<b>${esc(it.per?.nome ?? '')} · ${esc(c.simbolo)}</b>${tn(c.simbolo)}${prob !== null ? ` <span>${prob}%</span>` : ''}`;
     } else {
       const x = it.x;
       u.emp.userData.shirtM.color.set(0xf59e0b);
       drawScreen(u.scr, x.simbolo, `${x.candela} · ${x.fase}`, x.ingresso && x.prezzo ? x.prezzo / x.ingresso - 1 : null, histOf(x.simbolo).map((b) => b.close), '#fbbf24');
-      u.el.innerHTML = `<b>${esc(personaDi(it.key)?.nome ?? '')} · ${esc(x.simbolo)}</b>${tn(x.simbolo)} <span>${esc(x.candela)}</span>`;
+      u.el.innerHTML = `<b>${esc(it.per?.nome ?? '')} · ${esc(x.simbolo)}</b>${tn(x.simbolo)} <span>${esc(x.candela)}</span>`;
     }
   }
   // Chi lavora su un titolo trovato con l'esplorazione mostra quel titolo sullo schermo.
@@ -1159,13 +1179,15 @@ function paintScene(st) {
     u.el.innerHTML = `<b>Capo ufficio</b><br><span>${rich.length ? `richiama ${esc(rich.map((v) => v.agente).join(', ')).slice(0, 40)}` : 'controlla il lavoro'}</span>`;
   }
   moveToCaffe(st);
+  // Nessuna anteprima del titolo sugli schermi senza nessuno alla scrivania.
+  for (const d of desks.values()) if ((d.away || d.walk) && d.group.visible && d.info?.kind !== 'capo') drawScreen(d.group.userData.scr, '', '', null, null);
   drawBoard(st, journal);
   if (cardKey) renderCard();
   paintAgentList(st);
 }
 
 // In sala caffè si parla: ogni 4 secondi uno scambio vero dallo stato del motore (dossier, candele, Kronos, lezioni, capo).
-const keyName = (k) => k === 'capo' ? `${personaDi('capo')?.nome ?? 'Roberto'} · capo ufficio` : k.startsWith('a:') ? agentName(k.slice(2)) : k.startsWith('c:') ? `${personaDi(k)?.nome ?? 'Trading agent'} · ${conNome(k.slice(2))}` : k.startsWith('i:') && personaDi(k) ? `${personaDi(k).nome} · intraday ${k.slice(2)}` : k.startsWith('i:') ? `intraday ${k.slice(2)}` : k;
+const keyName = (k) => k.startsWith('p:') ? `${personaDi(k)?.nome ?? k.slice(2)}${personaDi(k)?.simbolo ? ` · ${conNome(personaDi(k).simbolo)}` : ''}` : k === 'capo' ? `${personaDi('capo')?.nome ?? 'Roberto'} · capo ufficio` : k.startsWith('a:') ? agentName(k.slice(2)) : k.startsWith('c:') ? `${personaDi(k)?.nome ?? 'Trading agent'} · ${conNome(k.slice(2))}` : k.startsWith('i:') && personaDi(k) ? `${personaDi(k).nome} · intraday ${k.slice(2)}` : k.startsWith('i:') ? `intraday ${k.slice(2)}` : k;
 let chatAt = 0, chatIdx = 0;
 function chatTick(now) {
   if (now - chatAt < 4200) return; chatAt = now;
@@ -1198,7 +1220,9 @@ function walkTo(d, to, rot, viaDoor) {
   d.walk = { path, len, t0: performance.now(), dur: Math.min(9000, 1200 + len * 380), rot };
 }
 function moveToCaffe(st) {
-  const away = (st.caffe?.presenti || []).map((p) => p.chiave).filter((k) => desks.has(k)).sort();
+  // In sala caffè: chi il motore mette lì e chiunque non abbia una scrivania (libero, o appena tornato dall'esplorazione
+  // in attesa che il prossimo giro gli assegni il titolo trovato).
+  const away = [...new Set([...(st.caffe?.presenti || []).map((p) => p.chiave), ...[...desks.entries()].filter(([k, d]) => k !== 'capo' && !d.group.visible).map(([k]) => k)])].filter((k) => desks.has(k)).sort();
   const want = new Set(away);
   away.forEach((k, i) => { const d = desks.get(k); d.seatIdx = i; });
   for (const [k, d] of desks) {
@@ -1238,10 +1262,11 @@ renderer.domElement.addEventListener('mousemove', (ev) => {
   if (!d) { hoverEl.style.display = 'none'; return; }
   let html;
   if (d.board) html = '<b>Lavagna dei risultati</b><br>trade chiusi vinti e persi per agente, dal diario; in alto il risultato di oggi<br><span style="opacity:.7">clic: apri la lavagna</span>';
+  else if (d.info?.kind === 'persona') html = `<b>${esc(d.info.per.nome)}</b> · ${d.info.per.reparto === 'intraday' ? 'intraday agent' : 'trading agent'}<br>${esc((status?.caffe?.presenti || []).find((p) => p.chiave === d.info.key)?.perche || 'in sala caffè')}<br><span style="opacity:.7">clic: apri la scheda</span>`;
   else if (d.info?.kind === 'capo') html = `<b>Capo ufficio</b><br>${esc(status?.capo?.sintesi || 'controlla il lavoro degli agenti')}<br><span style="opacity:.7">clic: apri la scheda</span>`;
   else if (d.info.kind === 'agente') { const a = status?.agenti?.[d.info.n] || {}; html = `<b>${esc(agentName(d.info.n))}</b> · ${esc(ROLE[d.info.n] || '')}<br>${a.errore ? `<span class="down">${esc(a.errore)}</span>` : `${a.segnali} segnali nell'ultimo giro`}${a.note?.length ? `<br><span style="opacity:.8">${esc(a.note.join(' · ')).slice(0, 220)}</span>` : ''}<br><span style="opacity:.7">clic: pagina Agenti</span>`; }
-  else if (d.info.kind === 'custode') { const c = d.info.c; html = `<b>${esc(personaDi(`c:${c.simbolo}`)?.nome ?? 'Trading agent')} · ${esc(c.simbolo)}</b>${tn(c.simbolo)} · ${esc(FASI[c.fase] || c.fase)}${c.dossier ? ` · ${Math.round(c.dossier.probabilita * 100)}% favorevole` : ''}<br>${esc(c.dossier?.prossimaAzione || c.piano).slice(0, 220)}<br><span style="opacity:.7">clic: apri il titolo</span>`; }
-  else { const x = d.info.x; html = `<b>${esc(personaDi(`i:${x.simbolo}`)?.nome ?? 'Operatore intraday')} · ${esc(x.simbolo)}</b>${tn(x.simbolo)} · candele ${esc(x.candela)}<br>${esc(x.fase)}: ${esc(x.motivo).slice(0, 200)}<br><span style="opacity:.7">clic: apri il titolo</span>`; }
+  else if (d.info.kind === 'custode') { const c = d.info.c; html = `<b>${esc(d.info.per?.nome ?? 'Trading agent')} · ${esc(c.simbolo)}</b>${tn(c.simbolo)} · ${esc(FASI[c.fase] || c.fase)}${c.dossier ? ` · ${Math.round(c.dossier.probabilita * 100)}% favorevole` : ''}<br>${esc(c.dossier?.prossimaAzione || c.piano).slice(0, 220)}<br><span style="opacity:.7">clic: apri il titolo</span>`; }
+  else { const x = d.info.x; html = `<b>${esc(d.info.per?.nome ?? 'Intraday agent')} · ${esc(x.simbolo)}</b>${tn(x.simbolo)} · candele ${esc(x.candela)}<br>${esc(x.fase)}: ${esc(x.motivo).slice(0, 200)}<br><span style="opacity:.7">clic: apri il titolo</span>`; }
   hoverEl.innerHTML = html;
   const r = host.getBoundingClientRect();
   hoverEl.style.left = `${Math.min(ev.clientX - r.left + 14, r.width - 320)}px`; hoverEl.style.top = `${ev.clientY - r.top + 14}px`; hoverEl.style.display = 'block';
@@ -1255,10 +1280,12 @@ renderer.domElement.addEventListener('click', (ev) => {
 
 // Gli eventi in diretta muovono le persone: chi vota alza la mano, chi compra o vende si alza e lo schermo lampeggia.
 function deskFor(e) {
+  // Le postazioni dei titoli (c:SYM, i:SYM) sono delle persone che ci lavorano: si cerca la loro scrivania.
+  const dellaPersona = (post) => { const per = status?.persone?.[post]; return per ? desks.get(`p:${per.nome}`) : null; };
   if (e.agente && desks.has(`a:${e.agente}`)) return desks.get(`a:${e.agente}`);
-  if (e.agente?.startsWith('custode ')) return desks.get(`c:${e.agente.slice(8)}`);
-  if (e.agente === 'intraday') return desks.get(`i:${e.simbolo}`);
-  return desks.get(`c:${e.simbolo}`) || desks.get(`i:${e.simbolo}`);
+  if (e.agente?.startsWith('custode ')) return dellaPersona(`c:${e.agente.slice(8)}`);
+  if (e.agente === 'intraday') return dellaPersona(`i:${e.simbolo}`);
+  return dellaPersona(`c:${e.simbolo}`) || dellaPersona(`i:${e.simbolo}`);
 }
 function bubble(d, text, color, life = 2500, html = false) {
   const el = document.createElement('div'); el.className = `lbl bubble${html ? ' chat' : ''}`; if (html) el.innerHTML = text; else el.textContent = text; el.style.color = color;
@@ -1274,7 +1301,7 @@ function sceneEvent(e) {
   if (e.tipo === 'esplorazione') for (const n of e.nuove || []) { const d = deskFor({ agente: n.agente.startsWith('custode ') ? n.agente : n.agente === 'intraday' ? undefined : n.agente, simbolo: n.simbolo }); if (d) { d.group.userData.emp.userData.stand = 1; bubble(d, `ho trovato ${n.simbolo}!`, '#15803d', 4000); } }
   if (e.tipo === 'capo') {
     const cd = desks.get('capo'); if (cd) { cd.group.userData.emp.userData.stand = 1; bubble(cd, (e.richiamati || []).length ? `Richiamo a ${e.richiamati.map((r) => r.agente).join(', ')}!` : 'Bravi tutti!', (e.richiamati || []).length ? '#b91c1c' : '#15803d'); }
-    for (const r of e.richiamati || []) { const d = desks.get(`a:${r.agente}`) || (r.agente.startsWith('custode ') ? desks.get(`c:${r.agente.slice(8)}`) : null); if (d) { d.group.userData.emp.userData.bow = 1; bubble(d, 'ricevuto, capo', '#334155'); } }
+    for (const r of e.richiamati || []) { const d = desks.get(`a:${r.agente}`) || (r.agente.startsWith('custode ') ? deskFor({ agente: r.agente }) : null); if (d) { d.group.userData.emp.userData.bow = 1; bubble(d, 'ricevuto, capo', '#334155'); } }
   }
 }
 
@@ -1361,7 +1388,7 @@ function zoomBy(k) {
 }
 {
   const bar = document.createElement('div'); bar.className = 'scene-nav'; bar.setAttribute('role', 'toolbar'); bar.setAttribute('aria-label', 'vai a');
-  bar.innerHTML = ['Tutto', 'Custodi', 'Sala intraday', 'Sala caffè', 'Capo'].map((n) => `<button type="button" data-zone="${n}">${n === 'Sala intraday' ? 'Intraday' : n}</button>`).join('') + '<button type="button" data-zoom="0.75" aria-label="avvicina">＋</button><button type="button" data-zoom="1.33" aria-label="allontana">−</button>';
+  bar.innerHTML = ['Tutto', 'Trading agents', 'Intraday agents', 'Sala caffè', 'Capo'].map((n) => `<button type="button" data-zone="${n}">${n}</button>`).join('') + '<button type="button" data-zoom="0.75" aria-label="avvicina">＋</button><button type="button" data-zoom="1.33" aria-label="allontana">−</button>';
   host.appendChild(bar);
   for (const b of bar.querySelectorAll('button')) b.addEventListener('click', () => { if (b.dataset.zone) { closeCard(); flyToZone(b.dataset.zone); } else zoomBy(Number(b.dataset.zoom)); });
   const help = document.createElement('div'); help.className = 'scene-help';
@@ -1403,14 +1430,14 @@ async function openCard(key) {
 }
 // La scheda delle impostazioni di chi è stato aperto: gli agenti generali hanno la loro; i trading agents quella della
 // squadra (con la loro soglia personale calibrata dal capo); gli operatori intraday quella di Andrea.
-const schedaDi = (key) => key.startsWith('a:') ? key.slice(2) : key.startsWith('c:') ? 'custodi' : key.startsWith('i:') ? 'intraday' : null;
+const schedaDi = (key) => key.startsWith('a:') ? key.slice(2) : key.startsWith('p:') ? (personaDi(key)?.reparto === 'intraday' ? 'intraday' : 'custodi') : key.startsWith('c:') ? 'custodi' : key.startsWith('i:') ? 'intraday' : null;
 async function renderAgentForm(key) {
   const nome = schedaDi(key); card.classList.remove('largo');
   try { cards = (await (await fetch('/api/agenti/schede')).json()).schede; } catch {}
   const sc = (cards || []).find((c) => c.agente === nome);
   if (key !== cardKey) return;
   if (!sc) { cardForm.innerHTML = key === 'capo' ? '<h4>Impostazioni</h4><p class="why">Il capo ufficio non ha parametri suoi: giudica i risultati e ricalibra gli agenti. Le regole comuni sono in Impostazioni → Generali.</p>' : '<h4>Impostazioni</h4><p class="why">Questo agente non ha parametri propri.</p>'; return; }
-  const nota = key.startsWith('c:') ? 'Valgono per tutti i trading agents; la soglia personale di questo agente la calibra il capo ufficio dai suoi risultati.' : key.startsWith('i:') ? 'Sono quelle della sala intraday di Andrea, valgono per tutti i suoi operatori.' : '';
+  const nota = schedaDi(key) === 'custodi' ? 'Valgono per tutti i trading agents; la soglia personale di questo agente la calibra il capo ufficio dai suoi risultati.' : schedaDi(key) === 'intraday' ? 'Sono quelle degli intraday agents di Andrea, valgono per tutti.' : '';
   cardForm.innerHTML = `<h4 id="impostazioni-agente">Impostazioni${personaDi(key) ? ` di ${esc(personaDi(key).nome)}` : ''}</h4>${nota ? `<p class="why">${esc(nota)}</p>` : ''}<div class="schede-agente"></div>`;
   renderSchede(cardForm.querySelector('.schede-agente'), [sc], () => renderAgentForm(key), true);
   card.classList.add('largo'); // su schermi grandi: chi è a sinistra, impostazioni a destra
@@ -1429,26 +1456,29 @@ function renderCard() {
     const cal = (st.calibrazione || []).filter((r) => r.passi);
     body = `<p>${esc(capo?.sintesi || '')}</p>${capo?.sogliaKronos !== null && capo?.sogliaKronos !== undefined ? `<p class="why">Lezione per tutti: Kronos ≥ ${pct(capo.sogliaKronos)}${capo.ingressoMigliore ? ` · ingresso migliore: ${esc(capo.ingressoMigliore)}` : ''}</p>` : ''}
       ${(st.formazione?.inFormazione || []).length ? `<h4>In sala caffè per formazione</h4>${st.formazione.inFormazione.map((x) => `<div class="why">☕ <b>${esc(keyName(x.chiave))}</b> fino alle ${hhmm(x.fino)}: ${esc(nomiNelTesto(x.motivo))}</div>`).join('')}` : ''}
-      ${cal.length ? `<h4>Calibrazioni in corso</h4>${cal.map((r) => `<div class="why">• <b>${esc(agentName(r.agente))}</b>: ${esc(r.etichetta)} ${fmtCal(r)}</div>`).join('')}` : ''}
+      ${cal.length ? `<h4>Calibrazioni in corso</h4>${cal.map((r) => `<div class="why">• <b>${esc(r.agente.startsWith('p:') ? keyName(r.agente) : agentName(r.agente))}</b>: ${esc(r.etichetta)} ${fmtCal(r)}</div>`).join('')}` : ''}
       ${(capo?.valutazioni || []).map((v) => `<div class="vote"><b>${esc(agentName(v.agente))}</b> <span class="pill ${v.giudizio === 'richiamato' ? 'down' : v.giudizio === 'ottimo' || v.giudizio === 'bene' ? 'up' : ''}">${esc(v.giudizio)}</span> <span class="why">${v.vinti}/${v.trade} vinti · ${usd(v.risultato)}</span><br><span class="why">${esc(v.messaggio)}</span>${v.consigli.length ? `<ul>${v.consigli.map((c) => `<li class="why">${esc(c)}</li>`).join('')}</ul>` : ''}</div>`).join('') || '<p class="why">Nessun trade chiuso ancora.</p>'}`;
   } else {
     let who;
     if (it.kind === 'agente') { name = it.n; who = it.n; const a = st.agenti?.[it.n] || {}; title = personaDi(`a:${it.n}`)?.nome ?? agentName(it.n); sub = personaDi(`a:${it.n}`)?.ruolo ?? (ROLE[it.n] || ''); body = `<h4>Ultimo giro</h4><dl class="kv"><dt>Segnali</dt><dd>${a.errore ? `<span class="down">${esc(a.errore)}</span>` : a.segnali ?? 0}</dd></dl>${a.note?.length ? `<ul>${a.note.slice(0, 6).map((n) => `<li class="why">${esc(String(n).slice(0, 220))}</li>`).join('')}</ul>` : ''}`; }
-    else if (it.kind === 'custode') { name = 'custodi'; who = `custode ${it.c.simbolo}`; const c = it.c; title = personaDi(`c:${c.simbolo}`)?.nome ?? `Trading agent di ${c.simbolo}`; sub = `Trading agent di ${conNome(c.simbolo)} · ${FASI[c.fase] || c.fase}`; body = `<h4>Situazione</h4><dl class="kv">${c.dossier ? `<dt>Favorevole</dt><dd><b class="${c.dossier.probabilita >= 0.6 ? 'up' : c.dossier.probabilita < 0.45 ? 'down' : ''}">${Math.round(c.dossier.probabilita * 100)}%</b></dd><dt>Prossima azione</dt><dd>${esc(c.dossier.prossimaAzione)}</dd>` : ''}<dt>Fase</dt><dd>${esc(FASI[c.fase] || c.fase)}</dd></dl><h4>Ragionamento</h4><dl class="kv"><dt>Tesi</dt><dd>${esc(c.tesi)}</dd><dt>Piano</dt><dd>${esc(c.piano)}</dd><dt>Rischio</dt><dd>${esc(c.rischio)}</dd>${c.dossier?.memoria?.trade ? `<dt>Memoria</dt><dd>${esc(c.dossier.memoria.lezione)}</dd>` : ''}</dl>`; }
-    else { name = 'intraday'; who = 'intraday'; const x = it.x; title = personaDi(`i:${x.simbolo}`)?.nome ?? `Operatore intraday ${x.simbolo}`; sub = `Operatore intraday su ${conNome(x.simbolo)} · candele ${x.candela} · ${x.fase}`; body = `<h4>Operazione</h4><dl class="kv"><dt>Candela</dt><dd>${esc(x.candela)}${x.orizzonte ? ` · orizzonte ${esc(x.orizzonte)}` : ''}</dd><dt>Fase</dt><dd>${esc(x.fase)}</dd>${x.obiettivo ? `<dt>Ingresso</dt><dd>${px(x.ingresso)}</dd><dt>Obiettivo</dt><dd class="up">${px(x.obiettivo)}</dd><dt>Stop</dt><dd class="down">${px(x.stop)}</dd>` : ''}${x.controllo ? `<dt>Controllo</dt><dd>${esc(x.controllo)}</dd>` : ''}</dl><h4>Perché</h4><p class="why">${esc(x.motivo)}</p>`; }
+    else if (it.kind === 'persona') { name = it.per.reparto === 'intraday' ? 'intraday' : 'custodi'; who = cardKey; title = it.per.nome; sub = `${it.per.reparto === 'intraday' ? 'Intraday agent' : 'Trading agent'} · in sala caffè`; body = `<h4>Adesso</h4><p class="why">${esc((st.caffe?.presenti || []).find((p) => p.chiave === cardKey)?.perche || 'in sala caffè')}. Prende la prossima occasione che il motore trova, se è il più bravo tra i liberi.</p>`; }
+    else if (it.kind === 'custode') { name = 'custodi'; who = `custode ${it.c.simbolo}`; const c = it.c; title = it.per?.nome ?? `Trading agent di ${c.simbolo}`; sub = `Trading agent di ${conNome(c.simbolo)} · ${FASI[c.fase] || c.fase}`; body = `<h4>Situazione</h4><dl class="kv">${c.dossier ? `<dt>Favorevole</dt><dd><b class="${c.dossier.probabilita >= 0.6 ? 'up' : c.dossier.probabilita < 0.45 ? 'down' : ''}">${Math.round(c.dossier.probabilita * 100)}%</b></dd><dt>Prossima azione</dt><dd>${esc(c.dossier.prossimaAzione)}</dd>` : ''}<dt>Fase</dt><dd>${esc(FASI[c.fase] || c.fase)}</dd></dl><h4>Ragionamento</h4><dl class="kv"><dt>Tesi</dt><dd>${esc(c.tesi)}</dd><dt>Piano</dt><dd>${esc(c.piano)}</dd><dt>Rischio</dt><dd>${esc(c.rischio)}</dd>${c.dossier?.memoria?.trade ? `<dt>Memoria</dt><dd>${esc(c.dossier.memoria.lezione)}</dd>` : ''}</dl>`; }
+    else { name = 'intraday'; who = 'intraday'; const x = it.x; title = it.per?.nome ?? `Intraday agent ${x.simbolo}`; sub = `Intraday agent su ${conNome(x.simbolo)} · candele ${x.candela} · ${x.fase}`; body = `<h4>Operazione</h4><dl class="kv"><dt>Candela</dt><dd>${esc(x.candela)}${x.orizzonte ? ` · orizzonte ${esc(x.orizzonte)}` : ''}</dd><dt>Fase</dt><dd>${esc(x.fase)}</dd>${x.obiettivo ? `<dt>Ingresso</dt><dd>${px(x.ingresso)}</dd><dt>Obiettivo</dt><dd class="up">${px(x.obiettivo)}</dd><dt>Stop</dt><dd class="down">${px(x.stop)}</dd>` : ''}${x.controllo ? `<dt>Controllo</dt><dd>${esc(x.controllo)}</dd>` : ''}</dl><h4>Perché</h4><p class="why">${esc(x.motivo)}</p>`; }
     const v = val(who);
     if (v) body += `<h4>Giudizio del capo</h4><div class="vote" style="margin-top:0"><b>Giudizio:</b> <span class="pill ${v.giudizio === 'richiamato' ? 'down' : v.giudizio === 'ottimo' || v.giudizio === 'bene' ? 'up' : ''}">${esc(v.giudizio)}</span> <span class="why">${v.vinti}/${v.trade} vinti · ${usd(v.risultato)}</span><br><span class="why">${esc(v.messaggio)}</span>${v.consigli.length ? `<ul>${v.consigli.map((c) => `<li class="why">${esc(c)}</li>`).join('')}</ul>` : ''}</div>`;
     // Calibrazione del capo ufficio per questo agente (e per il trading agent, la sua soglia personale).
-    const calDi = { custodi: ['custodi (squadra)', who], intraday: ['intraday'], kronos: ['kronos'], rientro: ['rientro'] }[name] || [];
+    // I risultati della persona: i trade che ha preso (dal diario).
+    if (cardKey.startsWith('p:')) { const ts = (journal?.trade || []).filter((t) => t.stato === 'chiuso' && (t.contesto?.persone || []).includes(cardKey)); const v = ts.filter((t) => t.incassato - t.costo > 0).length; const ris = ts.reduce((a, t) => a + t.incassato - t.costo, 0); body += `<h4>I suoi risultati</h4><p class="why">${ts.length ? `${v} vinti su ${ts.length} (${Math.round((v / ts.length) * 100)}%), <span class="${cls(ris)}">${usd(ris)}</span>` : 'nessun trade chiuso ancora'}</p>`; }
+    const calDi = { custodi: ['custodi (squadra)', cardKey], intraday: ['intraday'], kronos: ['kronos'], rientro: ['rientro'] }[name] || [];
     const righeCal = (st.calibrazione || []).filter((r) => calDi.includes(r.agente));
-    if (righeCal.length) body += `<h4>Calibrazione del capo</h4>${righeCal.map((r) => `<div class="why">• ${r.agente.startsWith('custode ') ? 'Personale: ' : r.agente === 'custodi (squadra)' ? 'Squadra: ' : ''}${esc(r.etichetta)} ${fmtCal(r)}</div>`).join('')}`;
+    if (righeCal.length) body += `<h4>Calibrazione del capo</h4>${righeCal.map((r) => `<div class="why">• ${r.agente.startsWith('p:') ? 'Personale: ' : r.agente === 'custodi (squadra)' ? 'Squadra: ' : ''}${esc(r.etichetta)} ${fmtCal(r)}</div>`).join('')}`;
   }
   // Formazione in sala caffè: chi è lì a imparare e chi è tornato col bagaglio dei colleghi bravi.
   { const fz = st.formazione; const fIn = fz?.inFormazione?.find((x) => x.chiave === cardKey); const fBag = fz?.conBagaglio?.find((x) => x.chiave === cardKey);
     if (fIn) body = `<div class="formazione">☕ <b>In sala caffè per formazione</b> fino alle ${hhmm(fIn.fino)}: niente nuovi acquisti, le sue posizioni restano protette da stop e regole d'uscita.<br><span class="why">${esc(nomiNelTesto(fIn.motivo))}</span>${fIn.imparato?.length ? `<br>Sta imparando: ${esc(fIn.imparato.join('; '))}` : ''}</div>` + body;
     else if (fBag) body += `<h4>Bagaglio della sala caffè</h4><div class="why">${fBag.formazioni} ${fBag.formazioni === 1 ? 'formazione' : 'formazioni'}, rientrato alle ${hhmm(fBag.rientrato)}${fBag.bagaglio.mentori.length ? ` dopo aver ascoltato ${esc(fBag.bagaglio.mentori.map(keyName).join(', '))}` : ''}: ${esc(fBag.bagaglio.testo.join('; '))}.</div>`; }
   cardInfo.innerHTML = `<button type="button" class="x" aria-label="chiudi">✕</button><div class="portrait"></div><h3>${esc(title)}</h3><div class="why">${esc(sub)}</div>${body}
-    <div class="row" style="margin-top:10px">${it.kind === 'custode' || it.kind === 'intraday' ? '<button type="button" class="btn" data-go="titolo">Apri il grafico</button>' : ''}</div>`;
+    <div class="row" style="margin-top:10px">${(it.kind === 'custode' || it.kind === 'intraday') && d.group.visible ? '<button type="button" class="btn" data-go="titolo">Apri il grafico</button>' : ''}</div>`;
   cardInfo.querySelector('.portrait').appendChild(portrait.renderer.domElement);
   cardInfo.querySelector('.x').addEventListener('click', closeCard);
   cardInfo.querySelector('[data-go="titolo"]')?.addEventListener('click', () => { openChart(it.kind === 'custode' ? it.c.simbolo : it.x.simbolo); });
@@ -2052,7 +2082,6 @@ function paintVerdict(v) {
 // Il dialogo del titolo: si apre dal pulsante accanto al prezzo, si chiude con ✕, con Esc o toccando fuori.
 $('#inv-btn').addEventListener('click', () => { if (!selected) return; const d = $('#sheet'); if (!d.open) d.showModal(); });
 $('#sheet-x').addEventListener('click', () => $('#sheet').close());
-$('#apri-lavagna').addEventListener('click', apriLavagna);
 $('#lavagna-x').addEventListener('click', () => $('#lavagna').close());
 $('#lavagna').addEventListener('click', (e) => { if (e.target === e.currentTarget) e.currentTarget.close(); });
 $('#sheet').addEventListener('click', (e) => { if (e.target === e.currentTarget) e.currentTarget.close(); });

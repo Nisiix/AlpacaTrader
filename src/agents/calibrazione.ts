@@ -4,6 +4,7 @@ import { AGENTS } from "../config.ts";
 import { isObject, readJson, writeJsonAtomic } from "../fsutil.ts";
 import type { JournalFile } from "../journal.ts";
 import { regolaSuperata, SQUADRA_CUSTODI } from "./capo.ts";
+import { leggiRegistro, nomeDi, personeDelTrade } from "./persone.ts";
 
 // La calibrazione del capo ufficio: quando un agente vince meno del 51% dei suoi trade chiusi, il capo rende più
 // selettivo il suo parametro d'ingresso di un passo; quando torna a vincere almeno il 60%, lo riavvicina di un passo al
@@ -22,7 +23,8 @@ export const CALIBRABILI: Record<string, Calibrabile> = {
   kronos: { chiave: "AGENTS.kronos.controTendenza.minFiducia", passo: 0.05, limite: 0.8 },
   rientro: { chiave: "AGENTS.pullback.rsiEntry", passo: -1, limite: 4 },
 };
-// Ogni trading agent ha anche la sua soglia personale, sopra quella della squadra.
+// Ogni trading agent (persona dello staff) ha anche la sua soglia personale, sopra quella della squadra: vale sul titolo
+// su cui lavora.
 const PERSONALE: Omit<Calibrabile, "chiave"> = { passo: 0.05, limite: 0.7 };
 
 interface Voce {
@@ -57,14 +59,16 @@ export function aggiornaCalibrazione(stateDir: string, journal: JournalFile, now
   const f = leggi(stateDir);
   const note: string[] = [];
   const chiusi = journal.trade.filter((t) => t.stato === "chiuso" && t.chiusoIl && !regolaSuperata(t));
+  const reg = leggiRegistro(stateDir);
   const per = new Map<string, typeof chiusi>();
   for (const t of chiusi) {
     const ag = t.contesto?.agenti ?? [];
     for (const a of ag) per.set(a, [...(per.get(a) ?? []), t]);
     if (ag.some((a) => a.startsWith("custode "))) per.set(SQUADRA_CUSTODI, [...(per.get(SQUADRA_CUSTODI) ?? []), t]);
+    for (const p of personeDelTrade(t, reg.vecchi)) if (p.startsWith("p:") && reg.staff[nomeDi(p)]?.reparto === "trading") per.set(p, [...(per.get(p) ?? []), t]);
   }
   for (const [agente, ts] of per) {
-    if (!CALIBRABILI[agente] && !agente.startsWith("custode ")) continue;
+    if (!CALIBRABILI[agente] && !agente.startsWith("p:")) continue;
     const v = f.voci[agente] ?? { passi: 0, dal: "", motivo: "" };
     const nuovi = ts.filter((t) => !v.dal || t.chiusoIl! > v.dal);
     if (nuovi.length < c.minTrade) continue;
@@ -106,13 +110,14 @@ export function applicaCalibrazione(stateDir: string): RigaCalibrazione[] {
     if (v?.passi) setPath(cal.chiave, attuale);
     righe.push({ agente, etichetta: paramOf(cal.chiave)?.etichetta ?? cal.chiave, base, attuale, passi: v?.passi ?? 0, motivo: v?.motivo ?? "", dal: v?.dal ?? "" });
   }
-  // Soglie personali dei trading agents: sopra quella (già calibrata) della squadra.
+  // Soglie personali dei trading agents: sopra quella (già calibrata) della squadra, sul titolo su cui ognuno lavora.
   const squadra = AGENTS.custodi.minProbabilita;
+  const reg = leggiRegistro(stateDir);
   for (const [agente, v] of Object.entries(f.voci)) {
-    if (!agente.startsWith("custode ") || !v.passi) continue;
-    const sym = agente.slice("custode ".length);
+    if (!agente.startsWith("p:") || !v.passi) continue;
     const attuale = spingi(squadra, v.passi, PERSONALE, "AGENTS.custodi.minProbabilita");
-    AGENTS.custodi.minProbabilitaPer[sym] = attuale;
+    const sym = reg.staff[nomeDi(agente)]?.simbolo;
+    if (sym) AGENTS.custodi.minProbabilitaPer[sym] = attuale;
     righe.push({ agente, etichetta: "Probabilità minima del dossier per votare l'acquisto", base: squadra, attuale, passi: v.passi, motivo: v.motivo, dal: v.dal });
   }
   return righe;

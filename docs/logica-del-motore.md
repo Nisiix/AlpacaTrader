@@ -331,8 +331,16 @@ d'opinione prima di una candela giornaliera nuova: escono solo stop e regole vin
 - **Capo ufficio** e **sala caffè** (capitolo 4), dal diario dei trade, da subito e con limiti.
 - **Gli agenti come persone** (`src/agents/persone.ts`): ogni agente ha un nome. Fissi per gli agenti generali (Roberto
   capo ufficio, Marco trend, Giulia rientro, Paolo regime, Sara orizzonte, Luca uscite, Davide presa di profitto, Elena
-  contesto, Chiara Kronos, Andrea capo della sala intraday); ogni trading agent e ogni operatore intraday riceve un nome
-  la prima volta che compare e lo tiene (`state/persone.json`).
+  contesto, Chiara Kronos, Andrea capo degli intraday agents). I **trading agents** e gli **intraday agents** sono uno
+  staff di persone (`state/persone.json`, 20 + 8, oltre solo per seguire una posizione aperta) che non appartengono a un
+  titolo: il motore trova le occasioni con i suoi criteri e a ogni giro le assegna. Un'occasione è una posizione aperta,
+  un trading agent pronto a entrare (dossier ≥ 60%) o un voto d'acquisto; un titolo «in attesa» o in osservazione non
+  lo è. Chi lavora su un titolo ci resta finché l'occasione dura; le nuove vanno alla persona libera più brava per
+  risultati ((vinti + 1) / (trade + 2)), a parità a chi aspetta da più tempo, e a chi ha trovato il titolo con
+  l'esplorazione. Chi non ha un'occasione aspetta in sala caffè. Ogni trade salva nel diario le persone che l'hanno
+  preso (`contesto.persone`): su quelle si calcolano risultati, calibrazione personale e formazione. I due reparti
+  restano distinti perché lavorano su orizzonti e regole diversi (più giorni contro minuti e ore): sulla stessa crypto
+  possono esserci un trade di più giorni e uno intraday.
 - **Calibrazione del capo** (`src/agents/calibrazione.ts`): quando un agente vince meno del 51% dei suoi trade chiusi
   (almeno 5, contati dall'ultima correzione) il capo rende più selettivo di un passo il suo parametro d'ingresso; quando
   torna sopra il 60% lo riavvicina di un passo al valore di base. Parametri: probabilità minima intraday (+2,5 punti a
@@ -387,7 +395,7 @@ Menu a sinistra (sul telefono si apre con ☰):
   impostazioni**, modificabili lì; sugli schermi grandi la scheda si apre su due colonne). Gli agenti generali hanno una
   scrivania solo se sono effettivi, cioè hanno votato l'ingresso di almeno un trade; gli altri lavorano come strumenti
   comuni e le loro regole stanno in Impostazioni → Generali. La **lavagna dei risultati** si apre in un dialogo (clic
-  sulla lavagna o pulsante in alto): per agente e per giorno trade vinti e persi, percentuale, capitale sui vincenti,
+  sulla lavagna): per agente e per giorno trade vinti e persi, percentuale, capitale sui vincenti,
   risultato. Sotto, a schede: Trading agents (nome dell'agente e titolo seguito), Decisioni, Esplorazione, Sala caffè;
 - Ovunque compare un codice si vede anche il **nome del titolo o della crypto** (Apple Inc., Bitcoin), chiesto ad
   Alpaca una volta per simbolo e tenuto in `state/nomi-titoli.json`;

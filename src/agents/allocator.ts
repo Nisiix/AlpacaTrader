@@ -175,7 +175,7 @@ export function allocate(view: AgentView, reports: Record<string, AgentReport>, 
     const contro = sotto200(view.closes[sc.simbolo], price);
     const ev = dossierOf(sc.simbolo);
     const minEv = contro ? AGENTS.evidenza.minContro : AGENTS.evidenza.min;
-    if (ev !== null && ev < minEv) return `evidenza combinata ${Math.round(ev * 100)}% sotto il minimo ${Math.round(minEv * 100)}%${contro ? " richiesto sotto la media a 200" : ""} (Kronos, grafico, notizie, contesto)`;
+    if (ev !== null && ev < minEv) return `evidenza combinata ${(Math.floor(ev * 1000) / 10).toFixed(1).replace(".", ",")}% sotto il minimo ${Math.round(minEv * 100)}%${contro ? " richiesto sotto la media a 200" : ""} (Kronos, grafico, notizie, contesto)`;
     return null;
   };
   for (let sc of punteggi) {

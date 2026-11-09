@@ -21,6 +21,8 @@ export interface EntryContext {
   perche: string;
   // Motore degli agenti: quali agenti hanno votato l'ingresso (serve a pesarli sui risultati).
   agenti?: string[];
+  // Le persone che hanno preso l'occasione (p:Nome per trading e intraday agents, a:nome per gli agenti generali).
+  persone?: string[];
   // Proiezione di Kronos all'ingresso: il capo ufficio la confronta con l'esito per consigliare la soglia giusta.
   kronos?: number;
   // Operazione intraday promossa a posizione di più giorni (ISO del momento): da lì la seguono le regole di più giorni.

@@ -5,6 +5,7 @@ import type { CustodeStato } from "./custode.ts";
 import type { IntradayStato } from "./intraday.ts";
 import type { AgentReport, Signal } from "./types.ts";
 import type { FormazioneReport } from "./formazione.ts";
+import { chiavePersona, type Registro } from "./persone.ts";
 
 // La sala caffè. Gli agenti che in questo giro non hanno niente da fare (nessuna posizione da seguire, nessun voto,
 // nessun trade da aprire) lasciano la scrivania e si siedono qui. Non chiacchierano a caso: si scambiano quello che
@@ -40,6 +41,8 @@ export interface Presenza {
   chiave: string;
   nome: string;
   perche: string;
+  reparto?: "trading" | "intraday";
+  formazione?: boolean; // in sala caffè mandato dal capo a imparare
 }
 
 export interface CaffeReport {
@@ -160,6 +163,7 @@ export function coffeeBreak(input: {
   primaInPausa?: Set<string>; // chi era in sala caffè al giro prima: solo loro "tornano" alla scrivania
   esploratori?: Map<string, string>; // chi sta lavorando su un titolo trovato con l'esplorazione: alla scrivania
   formazione?: FormazioneReport; // chi è in sala caffè mandato dal capo a imparare
+  staff?: { chi: Record<string, string>; reg: Registro }; // chi lavora su quale titolo (c:SYM / i:SYM → p:Nome)
 }): CaffeReport {
   const { reports, held } = input;
   const presenti: Presenza[] = [];
@@ -170,7 +174,7 @@ export function coffeeBreak(input: {
   for (const [k, why] of esploratori) operativi.push({ chiave: k, nome: k, perche: why });
   // In formazione: in sala caffè qualunque cosa abbia da fare (le sue posizioni le proteggono stop e regole d'uscita).
   const formazione = new Map((input.formazione?.inFormazione ?? []).map((x) => [x.chiave, x]));
-  for (const [k, x] of formazione) if (!esploratori.has(k)) presenti.push({ chiave: k, nome: k, perche: `in formazione fino alle ${new Date(x.fino).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Rome" })}: ascolta chi lavora bene` });
+  for (const [k, x] of formazione) if (!esploratori.has(k)) presenti.push({ chiave: k, nome: k, formazione: true, perche: `in formazione fino alle ${new Date(x.fino).toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Rome" })}: ascolta chi lavora bene` });
   const taken = (k: string) => esploratori.has(k) || formazione.has(k);
 
   // Agenti generali: alla scrivania se votano o se stanno frenando il rischio (regime, contesto); altrimenti in pausa.
@@ -181,26 +185,28 @@ export function coffeeBreak(input: {
     else if (r.rischio !== undefined && r.rischio < 1) operativi.push({ chiave: `a:${n}`, nome: n, perche: `tiene il rischio a ${Math.round(r.rischio * 100)}%` });
     else presenti.push({ chiave: `a:${n}`, nome: n, perche: "nessun voto in questo giro" });
   }
-  // Custodi: alla scrivania con una posizione, un'uscita, un ingresso pronto o un voto; altrimenti in sala caffè.
+  // Trading agents e intraday agents: alla scrivania solo chi ha preso un'occasione (posizione aperta, pronto a entrare,
+  // voto d'acquisto); tutti gli altri, anche chi è «in attesa», in sala caffè.
   const custodi: CustodeStato[] = Object.values(reports).flatMap((r) => r.custodi ?? []);
-  for (const c of custodi) {
-    const key = `c:${c.simbolo}`;
-    if (taken(key)) continue;
-    const v = voted((s) => s.agente === c.agente);
-    if (held.has(c.simbolo) || c.fase === "in posizione" || c.fase === "in uscita") operativi.push({ chiave: key, nome: c.agente, perche: "segue la posizione" });
-    else if (v) operativi.push({ chiave: key, nome: c.agente, perche: `trade da ${v.lato === "buy" ? "aprire" : "chiudere"} su ${c.simbolo}` });
-    else if (c.fase === "pronto") operativi.push({ chiave: key, nome: c.agente, perche: "ingresso pronto" });
-    else presenti.push({ chiave: key, nome: c.agente, perche: c.fase === "attende" ? "aspetta: niente da aprire" : "osserva da lontano" });
-  }
-  // Operatori intraday: in posizione o con un ingresso votato alla scrivania; chi cerca soltanto, in pausa.
   const intraday: IntradayStato[] = Object.values(reports).flatMap((r) => r.intraday ?? []);
-  for (const x of intraday) {
-    const key = `i:${x.simbolo}`;
-    if (taken(key)) continue;
-    const v = voted((s) => s.agente === "intraday" && s.simbolo === x.simbolo);
-    if (x.fase === "in posizione") operativi.push({ chiave: key, nome: `intraday ${x.simbolo}`, perche: "operazione aperta" });
-    else if (v) operativi.push({ chiave: key, nome: `intraday ${x.simbolo}`, perche: `ingresso su ${x.simbolo}, candele ${x.candela}` });
-    else if (x.fase === "cerca ingresso") presenti.push({ chiave: key, nome: `intraday ${x.simbolo}`, perche: "cerca un ingresso, ancora niente" });
+  const chi = input.staff?.chi ?? {};
+  for (const [desk, p] of Object.entries(chi)) {
+    if (taken(p)) continue;
+    const sym = desk.slice(2);
+    if (desk.startsWith("c:")) {
+      const c = custodi.find((x) => x.simbolo === sym);
+      const v = voted((s) => s.lato === "buy" && s.simbolo === sym && s.agente.startsWith("custode "));
+      operativi.push({ chiave: p, nome: p.slice(2), perche: held.has(sym) || c?.fase === "in posizione" || c?.fase === "in uscita" ? `segue la posizione su ${sym}` : v ? `trade da aprire su ${sym}` : `pronto a entrare su ${sym}` });
+    } else {
+      const x = intraday.find((y) => y.simbolo === sym);
+      operativi.push({ chiave: p, nome: p.slice(2), perche: x?.fase === "in posizione" ? `operazione intraday aperta su ${sym}` : `ingresso intraday su ${sym}${x ? `, candele ${x.candela}` : ""}` });
+    }
+  }
+  const occupati = new Set(Object.values(chi));
+  for (const [n, m] of Object.entries(input.staff?.reg.staff ?? {})) {
+    const p = chiavePersona(n);
+    if (occupati.has(p) || taken(p)) continue;
+    presenti.push({ chiave: p, nome: n, reparto: m.reparto, perche: m.reparto === "intraday" ? "nessuna occasione intraday: aspetta in sala caffè" : "nessun titolo pronto a entrare: aspetta in sala caffè" });
   }
 
   // Cosa si dicono: solo cose vere, prese dai loro dati.
@@ -213,32 +219,38 @@ export function coffeeBreak(input: {
     return pool.length ? pool[(input.giro + key.length) % pool.length]! : null;
   };
   const sec = (k: string) => (k.startsWith("c:") || k.startsWith("i:") ? sectorOf(k.slice(2)) : null);
+  // Le persone libere in sala caffè, per reparto: raccontano i titoli che l'ufficio osserva.
+  const liberi = (rep: "trading" | "intraday") => presenti.filter((p) => p.reparto === rep).map((p) => p.chiave);
   // 0. Chi lavora bene spiega a chi è in formazione come fa: il bagaglio che si porterà alla scrivania.
   for (const [k, x] of [...formazione].slice(0, 4)) {
     const testo = x.imparato;
     const mentore = x.mentori[(input.giro + k.length) % Math.max(1, x.mentori.length)] ?? "capo";
     scambi.push({ da: mentore, a: k, tema: "lezione", testo: x.mentori.length ? `Io vinco così: ${testo.length ? testo.join("; ") : "entro solo quando Kronos è netto e la probabilità è alta, ed esco presto se il trade va contro"}.` : "Studia i trade vinti della squadra: entra solo quando Kronos è netto e la probabilità è alta." });
   }
-  // 1. I custodi in pausa raccontano il loro dossier a un collega dello stesso settore.
-  for (const c of custodi.filter((c) => here.includes(`c:${c.simbolo}`)).slice(0, 6)) {
-    const d = c.dossier;
-    if (!d) continue;
-    const key = `c:${c.simbolo}`;
+  // 1. I trading agents in sala caffè raccontano il dossier dei titoli in osservazione (nessuno ci lavora ancora).
+  const lt = liberi("trading");
+  const osservati = custodi.filter((c) => c.dossier && !chi[`c:${c.simbolo}`]);
+  for (const [i, c] of osservati.slice(0, 6).entries()) {
+    const d = c.dossier!;
+    if (!lt.length) break;
+    const key = lt[(input.giro + i) % lt.length]!;
     const pezzi = [`${c.simbolo}: ${Math.round(d.probabilita * 100)}% favorevole`, `Kronos ${d.kronos.nota}`];
     if (d.tecnica.pattern.length) pezzi.push(`grafico: ${d.tecnica.pattern.slice(0, 2).join(", ")}`);
     if (d.notizie.punteggio !== null) pezzi.push(`notizie ${d.notizie.nota}`);
     if (d.memoria.trade) pezzi.push(`memoria: ${d.memoria.lezione}`);
-    scambi.push({ da: key, a: peerOf(key, (k) => sec(k) === sectorOf(c.simbolo)), tema: "parere", testo: pezzi.join(" · ") });
+    scambi.push({ da: key, a: peerOf(key), tema: "parere", testo: pezzi.join(" · ") });
   }
   // 1b. Gli agenti generali in pausa raccontano la loro lettura del giro (le loro note).
   for (const p of presenti.filter((p) => p.chiave.startsWith("a:")).slice(0, 4)) {
     const n = reports[p.nome]?.note?.[0];
     if (n) scambi.push({ da: p.chiave, a: peerOf(p.chiave), tema: "parere", testo: n.length > 220 ? `${n.slice(0, 217)}…` : n });
   }
-  // 2. Gli operatori intraday in pausa dicono cosa vedono sulle candele brevi.
-  for (const x of intraday.filter((x) => here.includes(`i:${x.simbolo}`)).slice(0, 4)) {
-    const key = `i:${x.simbolo}`;
-    scambi.push({ da: key, a: peerOf(key, (k) => k.startsWith("i:") || sec(k) === sectorOf(x.simbolo)), tema: "parere", testo: `${x.simbolo} su candele ${x.candela}: ${x.motivo}` });
+  // 2. Gli intraday agents in sala caffè dicono cosa vedono sulle candele brevi dei titoli che cercano un ingresso.
+  const li = liberi("intraday");
+  for (const [i, x] of intraday.filter((x) => !chi[`i:${x.simbolo}`] && x.fase === "cerca ingresso").slice(0, 4).entries()) {
+    if (!li.length) break;
+    const key = li[(input.giro + i) % li.length]!;
+    scambi.push({ da: key, a: peerOf(key, (k) => li.includes(k)), tema: "parere", testo: `${x.simbolo} su candele ${x.candela}: ${x.motivo}` });
   }
   // 3. Kronos (alla scrivania o in pausa) dice dove vede i rialzi e i ribassi più netti, e cosa ha scartato.
   const fc = Object.entries(input.previsioni ?? {});
@@ -254,7 +266,7 @@ export function coffeeBreak(input: {
   }
   // 4. Le lezioni di squadra: le racconta chi ne ha più esperienza.
   for (const l of input.lezioni.filter((l) => l.effetto).slice(0, 4)) {
-    const da = l.da?.startsWith("custode ") ? `c:${l.da.slice(8)}` : l.da === "intraday" ? (here.find((k) => k.startsWith("i:")) ?? "capo") : l.da ? `a:${l.da}` : "capo";
+    const da = l.da?.startsWith("custode ") ? (chi[`c:${l.da.slice(8)}`] ?? lt[0] ?? "capo") : l.da === "intraday" ? (li[0] ?? "capo") : l.da ? `a:${l.da}` : "capo";
     scambi.push({ da: here.includes(da) ? da : (here[0] ?? da), a: null, tema: "lezione", testo: l.testo });
   }
   // 5. Il capo ufficio passa a dare la lezione comune, se ce n'è una.

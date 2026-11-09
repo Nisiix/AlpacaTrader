@@ -34,8 +34,8 @@ import { simboliIntraday } from "./posizioni.ts";
 import type { Cervello, RigaCervello } from "./cervello.ts";
 import { BIBLIOTECA, type Principio } from "./biblioteca.ts";
 import { aggiornaCalibrazione, applicaCalibrazione, type RigaCalibrazione } from "./calibrazione.ts";
-import { aggiornaFormazione, allaScrivania, applicaFormazione, type FormazioneReport } from "./formazione.ts";
-import { persone, type Persona } from "./persone.ts";
+import { aggiornaFormazione, applicaFormazione, postazioneDelVoto, provaRientro, type FormazioneReport } from "./formazione.ts";
+import { assegnaPersone, chiavePersona, leggiRegistro, persone, personeDelTrade, type Bisogno, type Persona } from "./persone.ts";
 import { nomiTitoli } from "../nomi-titoli.ts";
 import { plausibile } from "./fiducia.ts";
 import { refreshEarnings, type EarningsFetcher } from "../earnings.ts";
@@ -568,14 +568,43 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
       log.info(n);
       bus.emit("nota", { testo: n });
     }
-    // Formazione: chi lavora male va in sala caffè a imparare da chi lavora bene e torna col bagaglio (minimo 10 alla scrivania).
-    const personeGiro = [
-      ...Object.values(reports).flatMap((r) => r.custodi ?? []).map((c) => `c:${c.simbolo}`),
-      ...Object.values(reports).flatMap((r) => r.intraday ?? []).map((x) => `i:${x.simbolo}`),
-      ...Object.entries(reports).filter(([n, r]) => n !== "custodi" && n !== "intraday" && r.segnali.length).map(([n]) => `a:${n}`),
-    ];
-    const formazione = aggiornaFormazione(deps.stateDir, journal, [...new Set(personeGiro)], startedAt);
-    for (const n of [...formazione.note, ...applicaFormazione(deps.stateDir, reports, formazione, view.previsioni, allaScrivania(reports, new Set(view.positions.map((p) => p.symbol)), new Set(formazione.inFormazione.map((x) => x.chiave))), startedAt)]) {
+    // Le persone. Formazione: chi lavora male va in sala caffè a imparare da chi lavora bene. Poi le occasioni del giro
+    // (posizioni aperte, trading agents pronti a entrare, voti d'acquisto) vanno alle persone libere dello staff, le
+    // più brave per risultati; chi non ha un'occasione (anche chi è «in attesa») resta in sala caffè.
+    const registro = leggiRegistro(deps.stateDir);
+    const generaliAttivi = Object.entries(reports).filter(([n, r]) => n !== "custodi" && n !== "intraday" && r.segnali.length).map(([n]) => `a:${n}`);
+    const formazione = aggiornaFormazione(deps.stateDir, journal, [...Object.keys(registro.staff).map(chiavePersona), ...generaliAttivi], startedAt, registro.vecchi);
+    const votiDi = (desk: string) => Object.values(reports).flatMap((r) => r.segnali).filter((s) => s.lato === "buy" && !s.vincolante && postazioneDelVoto(s) === desk);
+    const custodiGiro = Object.values(reports).flatMap((r) => r.custodi ?? []);
+    const intradayGiro = Object.values(reports).flatMap((r) => r.intraday ?? []);
+    const inIntraday = new Set(intradayGiro.filter((x) => x.fase === "in posizione").map((x) => x.simbolo));
+    const preferite = new Map(attive(espl, today).map((s) => [`${s.agente === "intraday" ? "i" : "c"}:${s.simbolo}`, s.scopritore]));
+    const bisogni: Record<"trading" | "intraday", Bisogno[]> = { trading: [], intraday: [] };
+    const aggiungi = (rep: "trading" | "intraday", b: Bisogno) => { const x = bisogni[rep].find((y) => y.simbolo === b.simbolo); if (x) { x.tiene ||= b.tiene; x.voto ||= b.voto; } else bisogni[rep].push(b); };
+    for (const c of custodiGiro) {
+      const tiene = (c.fase === "in posizione" || c.fase === "in uscita") && !inIntraday.has(c.simbolo);
+      const pronto = c.fase === "pronto" && (c.dossier?.probabilita ?? 0) >= 0.595;
+      if (tiene || pronto) aggiungi("trading", { simbolo: c.simbolo, tiene, voto: false, ...(preferite.get(`c:${c.simbolo}`) ? { preferita: preferite.get(`c:${c.simbolo}`)! } : {}) });
+    }
+    for (const x of intradayGiro) if (x.fase === "in posizione") aggiungi("intraday", { simbolo: x.simbolo, tiene: true, voto: false });
+    for (const s of Object.values(reports).flatMap((r) => r.segnali)) {
+      if (s.lato !== "buy" || s.vincolante) continue;
+      const desk = postazioneDelVoto(s);
+      if (desk.startsWith("c:")) aggiungi("trading", { simbolo: desk.slice(2), tiene: false, voto: true, ...(preferite.get(desk) ? { preferita: preferite.get(desk)! } : {}) });
+      else if (desk.startsWith("i:")) aggiungi("intraday", { simbolo: desk.slice(2), tiene: false, voto: true, ...(preferite.get(desk) ? { preferita: preferite.get(desk)! } : {}) });
+    }
+    // Più bravo = più trade vinti (stima prudente: (vinti + 1) / (trade + 2)).
+    const record = new Map<string, { n: number; v: number }>();
+    for (const t of journal.trade.filter((t) => t.stato === "chiuso")) for (const k of personeDelTrade(t, registro.vecchi)) { const g = record.get(k) ?? { n: 0, v: 0 }; g.n++; if (t.incassato - t.costo > 0) g.v++; record.set(k, g); }
+    const assegnazione = assegnaPersone({
+      stateDir: deps.stateDir,
+      now: startedAt,
+      bisogni,
+      sospesi: [...formazione.inFormazione].sort((a, b) => a.dal.localeCompare(b.dal)).map((x) => x.chiave),
+      punteggio: (p) => { const g = record.get(p); return g ? (g.v + 1) / (g.n + 2) : 0.5; },
+      rientro: (p, desk, rep, scrivania) => provaRientro(deps.stateDir, formazione, p, votiDi(desk), view.previsioni, scrivania, rep === "intraday" ? AGENTS.formazione.minIntraday : AGENTS.formazione.minOperativi, startedAt),
+    });
+    for (const n of [...formazione.note, ...assegnazione.note.map((n) => `ufficio: ${n}`), ...applicaFormazione(deps.stateDir, reports, formazione, view.previsioni, assegnazione.chi, new Set(assegnazione.senzaPersona), startedAt)]) {
       log.info(n);
       bus.emit("nota", { testo: n });
     }
@@ -614,7 +643,11 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
       const sc = alloc.punteggi.find((p) => p.simbolo === o.symbol);
       const proposed = alloc.proposte.find((p) => p.symbol === o.symbol && p.side === o.side);
       const ctx = contextFor(indicators[o.symbol], snap.prices[o.symbol], o.source === "modello" ? (proposed?.confidence ?? null) : null, o.source === "modello" ? (proposed?.expect ?? "") : "", o.why);
-      if (o.source === "modello" && sc) ctx.agenti = sc.agenti;
+      if (o.source === "modello" && sc) {
+        ctx.agenti = sc.agenti;
+        const chi = sc.agenti.map((a) => (a.startsWith("custode ") ? assegnazione.chi[`c:${a.slice(8)}`] : a === "intraday" ? assegnazione.chi[`i:${o.symbol}`] : `a:${a}`)).filter((k): k is string => !!k);
+        if (chi.length) ctx.persone = [...new Set(chi)];
+      }
       if (view.previsioni?.[o.symbol] !== undefined) ctx.kronos = view.previsioni[o.symbol];
       // Operazione intraday: i livelli decisi all'ingresso vanno nel diario con il trade (sopravvivono a un riavvio).
       if (o.side === "buy" && proposed?.intraday) {
@@ -728,7 +761,7 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
       custodi: Object.values(reports).flatMap((r) => r.custodi ?? []),
       intraday: Object.values(reports).flatMap((r) => r.intraday ?? []),
       nomi: await nomiTitoli(deps.stateDir, deps.broker, [...AGENTS.universe, ...positions.map((p) => p.symbol), ...Object.values(reports).flatMap((r) => r.intraday ?? []).map((x) => x.simbolo)]).catch(() => ({})),
-      persone: persone(deps.stateDir, Object.values(reports).flatMap((r) => r.custodi ?? []).map((c) => c.simbolo), Object.values(reports).flatMap((r) => r.intraday ?? []).filter((x) => x.fase === "in posizione" || x.fase === "cerca ingresso").map((x) => x.simbolo)),
+      persone: persone(assegnazione.reg, assegnazione.chi),
       calibrazione,
       universo: { titoli: AGENTS.universe.filter((s) => !isCrypto(s)), crypto: AGENTS.universe.filter(isCrypto), fonteCrypto: cache.universeInfo?.fonte ?? null, aggiornatoCrypto: cache.universeInfo?.aggiornato ?? null },
       kronos: { stato: deps.kronosStato?.() ?? (deps.forecaster ? "attivo" : "non configurato"), proiezioniDel: cache.previsioni?.giorno ?? null, simboli: Object.keys(cache.previsioni?.data ?? {}).length, scartate },
@@ -737,7 +770,7 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
       analisi: { questoGiro: analisi, ultima: cache.ultimaAnalisi ?? null, prossima: cache.ultimaAnalisi ? new Date(Date.parse(cache.ultimaAnalisi) + AGENTS.analisiMinuti * 60_000).toISOString() : null, ogniMinuti: AGENTS.analisiMinuti },
       capo,
       fonti: fonti ? { paura: fonti.paura, funding: Object.fromEntries(AGENTS.universe.filter((u) => fonti!.funding[u] !== undefined).map((u) => [u, fonti!.funding[u]!])), errori: fonti.errori } : undefined,
-      caffe: coffeeBreak({ now: deps.now(), reports, held: new Set([...positions.map((p) => p.symbol), ...cage.orders.filter((o) => o.side === "buy").map((o) => o.symbol)]), previsioni: view.previsioni, scartate, lezioni, capo, applicati: applicatiCaffe, giro: (cache.giriCaffe = (cache.giriCaffe ?? 0) + 1), primaInPausa: new Set((cache.caffePresenti ?? "").split(",").filter(Boolean)), esploratori: scout.esploratori, formazione }),
+      caffe: coffeeBreak({ now: deps.now(), reports, held: new Set([...positions.map((p) => p.symbol), ...cage.orders.filter((o) => o.side === "buy").map((o) => o.symbol)]), previsioni: view.previsioni, scartate, lezioni, capo, applicati: applicatiCaffe, giro: (cache.giriCaffe = (cache.giriCaffe ?? 0) + 1), primaInPausa: new Set((cache.caffePresenti ?? "").split(",").filter(Boolean)), esploratori: scout.esploratori, formazione, staff: { chi: assegnazione.chi, reg: assegnazione.reg } }),
       formazione,
     };
     // Esplorazione: con qualcuno in pausa si passa in rassegna un pezzo del radar (anche tra un giro e l'altro, ogni minuto).

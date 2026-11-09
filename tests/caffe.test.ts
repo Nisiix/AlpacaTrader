@@ -97,23 +97,28 @@ describe("sala caffè", () => {
       intraday: { segnali: [], intraday: [{ simbolo: "DOT/USD", candela: "5Min", fase: "cerca ingresso", ingresso: null, obiettivo: null, stop: null, prezzo: 1, motivo: "prudenza: giornaliero sotto le medie" }] },
     };
     const lezioni = teamLessons(journalOf(perdenti));
-    const c = coffeeBreak({ now: new Date("2026-11-08T17:00:00Z"), reports, held: new Set(["AAPL"]), previsioni: { NVDA: 0.047, "DOT/USD": 0.04, AAPL: -0.14 }, scartate: ["PEPE/USD"], lezioni, capo: null, applicati: [], giro: 1 });
+    // Lo staff: Anna segue la posizione su AAPL, Bruno ha preso ETH/USD (voto d'acquisto), Carlo e Diana (trading) e
+    // Elio (intraday) non hanno occasioni. BTC/USD è «in attesa»: nessuno ci lavora, resta un titolo in osservazione.
+    const reg = { versione: 2 as const, vecchi: {}, staff: { Anna: { reparto: "trading" as const, simbolo: "AAPL", dal: "" }, Bruno: { reparto: "trading" as const, simbolo: "ETH/USD", dal: "" }, Carlo: { reparto: "trading" as const, simbolo: null, dal: "" }, Diana: { reparto: "trading" as const, simbolo: null, dal: "" }, Elio: { reparto: "intraday" as const, simbolo: null, dal: "" } } };
+    const staff = { chi: { "c:AAPL": "p:Anna", "c:ETH/USD": "p:Bruno" }, reg };
+    const c = coffeeBreak({ now: new Date("2026-11-08T17:00:00Z"), reports, held: new Set(["AAPL"]), previsioni: { NVDA: 0.047, "DOT/USD": 0.04, AAPL: -0.14 }, scartate: ["PEPE/USD"], lezioni, capo: null, applicati: [], giro: 1, staff });
     const qui = c.presenti.map((p) => p.chiave).sort();
-    expect(qui).toEqual(["a:kronos", "a:trend", "c:BTC/USD", "c:SOL/USD", "i:DOT/USD"]);
+    expect(qui).toEqual(["a:kronos", "a:trend", "p:Carlo", "p:Diana", "p:Elio"]);
     const op = Object.fromEntries(c.operativi.map((o) => [o.chiave, o.perche]));
-    expect(op["c:ETH/USD"]).toBe("trade da aprire su ETH/USD");
-    expect(op["c:AAPL"]).toBe("segue la posizione");
+    expect(op["p:Bruno"]).toBe("trade da aprire su ETH/USD");
+    expect(op["p:Anna"]).toBe("segue la posizione su AAPL");
     expect(op["a:regime"]).toContain("75%");
     const testi = c.scambi.map((s) => s.testo).join("\n");
-    expect(testi).toContain("BTC/USD: 42% favorevole");
+    expect(testi).toContain("BTC/USD: 42% favorevole"); // lo racconta una persona libera in sala caffè
     expect(testi).toContain("DOT/USD su candele 5Min");
     expect(testi).toContain("NVDA +4.7%");
     expect(testi).toContain("non fidatevi di PEPE/USD");
     expect(testi).toContain("0 vinti su 3");
-    // ETH non era in pausa al giro prima: non "torna". Se c'era, lo dice.
+    expect(c.scambi.filter((s) => s.tema === "parere" && s.testo.startsWith("BTC/USD")).every((s) => ["p:Carlo", "p:Diana"].includes(s.da))).toBe(true);
+    // Bruno non era in pausa al giro prima: non "torna". Se c'era, lo dice.
     expect(c.scambi.some((s) => s.tema === "rientro")).toBe(false);
-    const c2 = coffeeBreak({ now: new Date("2026-11-08T17:05:00Z"), reports, held: new Set(["AAPL"]), previsioni: undefined, scartate: [], lezioni: [], capo: null, applicati: [], giro: 2, primaInPausa: new Set(["c:ETH/USD"]) });
-    expect(c2.scambi.find((s) => s.tema === "rientro")).toMatchObject({ da: "c:ETH/USD", testo: "Torno alla scrivania: trade da aprire su ETH/USD." });
+    const c2 = coffeeBreak({ now: new Date("2026-11-08T17:05:00Z"), reports, held: new Set(["AAPL"]), previsioni: undefined, scartate: [], lezioni: [], capo: null, applicati: [], giro: 2, primaInPausa: new Set(["p:Bruno"]), staff });
+    expect(c2.scambi.find((s) => s.tema === "rientro")).toMatchObject({ da: "p:Bruno", testo: "Torno alla scrivania: trade da aprire su ETH/USD." });
     // I pareri dei custodi vanno a un collega in sala (preferibilmente dello stesso settore), mai a se stessi.
     for (const s of c.scambi.filter((s) => s.tema === "parere")) expect(s.a).not.toBe(s.da);
   });

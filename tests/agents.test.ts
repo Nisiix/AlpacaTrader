@@ -1116,7 +1116,7 @@ describe("evidenza combinata e prudenza sotto la media a 200", () => {
     const v = view({ previsioni: { NVDA: 0.03 } });
     const low = allocate(v, { ...buy("NVDA"), custodi: custodiCon("NVDA", 0.42) }, { trend: 1 });
     expect(low.proposte.filter((x) => x.symbol === "NVDA")).toEqual([]);
-    expect(low.inAttesa.find((x) => x.simbolo === "NVDA")!.motivo).toContain("evidenza combinata 42%");
+    expect(low.inAttesa.find((x) => x.simbolo === "NVDA")!.motivo).toContain("evidenza combinata 42,0%");
     const q = (p: number) => allocate(v, { ...buy("NVDA"), custodi: custodiCon("NVDA", p) }, { trend: 1 }).proposte.find((x) => x.symbol === "NVDA")!.qty;
     expect(q(0.5)).toBeLessThan(q(0.85));
   });

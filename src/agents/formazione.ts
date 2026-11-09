@@ -4,6 +4,7 @@ import { isObject, readJson, writeJsonAtomic } from "../fsutil.ts";
 import type { JournalFile, Trade } from "../journal.ts";
 import { entryKind, kronosOf, regolaSuperata } from "./capo.ts";
 import type { AgentReport, Signal } from "./types.ts";
+import { nomeDi, personeDelTrade } from "./persone.ts";
 
 // La formazione in sala caffè. Quando il capo ufficio giudica che una persona lavora male (sui trade chiusi dal suo
 // ultimo rientro, almeno `minTrade`: vince meno del 51% e chiude in perdita), la manda in sala caffè per `ore` ore: non
@@ -12,12 +13,13 @@ import type { AgentReport, Signal } from "./types.ts";
 // - la proiezione minima di Kronos da cui partivano i loro trade vinti;
 // - il tipo d'ingresso che ha reso di più;
 // - le candele su cui vincono (per gli operatori intraday).
-// Finito il periodo torna alla scrivania con quel bagaglio, che da lì vale per i suoi voti d'acquisto. Alla scrivania
-// devono restare sempre almeno `minOperativi` persone: se mancano, torna prima chi è in sala caffè da più tempo (sempre
-// col bagaglio raccolto fin lì).
+// Finito il periodo torna disponibile con quel bagaglio, che da lì vale per i suoi acquisti. Prima della fine torna
+// solo prendendo un'occasione: se il capo la giudica valida col bagaglio, o se alla scrivania servono persone (almeno
+// `minOperativi` trading agents, almeno `minIntraday` intraday agents): rientra per primo chi è lì da più tempo.
+// Le chiavi sono quelle delle persone: p:Nome per lo staff, a:nome per gli agenti generali.
 
 export interface Bagaglio {
-  mentori: string[]; // chiavi delle persone ascoltate (c:SYM, i:SYM, a:nome)
+  mentori: string[]; // chiavi delle persone ascoltate (p:Nome, a:nome)
   kronosMin: number | null;
   ingresso: string | null;
   candele: string[];
@@ -38,6 +40,7 @@ interface File {
 export interface FormazioneReport {
   inFormazione: { chiave: string; dal: string; fino: string; motivo: string; mentori: string[]; imparato: string[] }[];
   conBagaglio: { chiave: string; bagaglio: Bagaglio; rientrato: string; formazioni: number }[];
+  rientri: Record<string, "approvato" | "necessità">; // rientri anticipati di questo giro
   note: string[];
 }
 
@@ -49,11 +52,8 @@ function leggi(stateDir: string): File {
 const pnl = (t: Trade) => (t.incassato ?? 0) - (t.costo ?? 0);
 const pct = (x: number) => `${x >= 0 ? "+" : ""}${(x * 100).toFixed(1)}%`;
 
-// Le persone di un trade: i trading agents (c:SYM), l'operatore intraday del titolo (i:SYM), gli agenti generali (a:nome).
-export function personeDelTrade(t: Trade): string[] {
-  return (t.contesto?.agenti ?? []).map((a) => (a.startsWith("custode ") ? `c:${a.slice(8)}` : a === "intraday" ? `i:${t.simbolo}` : `a:${a}`));
-}
-export function personaDelVoto(s: Signal): string {
+// La postazione di un voto: c:SYM per i trading agents, i:SYM per gli intraday agents, a:nome per gli agenti generali.
+export function postazioneDelVoto(s: Signal): string {
   return s.agente.startsWith("custode ") ? `c:${s.agente.slice(8)}` : s.agente === "intraday" ? `i:${s.simbolo}` : `a:${s.agente}`;
 }
 
@@ -75,15 +75,15 @@ function bagaglioDa(mentori: string[], per: Map<string, Trade[]>, tutti: Trade[]
 }
 
 // Aggiorna chi va in formazione e chi torna (una volta per giro). `presenti`: le persone di questo giro.
-export function aggiornaFormazione(stateDir: string, journal: JournalFile, presenti: string[], now: Date): FormazioneReport {
+export function aggiornaFormazione(stateDir: string, journal: JournalFile, presenti: string[], now: Date, vecchi: Record<string, string> = {}): FormazioneReport {
   const c = AGENTS.formazione;
   const f = leggi(stateDir);
   const note: string[] = [];
   let cambiato = false;
-  if (!c.enabled) return { inFormazione: [], conBagaglio: [], note };
+  if (!c.enabled) return { inFormazione: [], conBagaglio: [], rientri: {}, note };
   const chiusi = journal.trade.filter((t) => t.stato === "chiuso" && t.chiusoIl && !regolaSuperata(t));
   const per = new Map<string, Trade[]>();
-  for (const t of chiusi) for (const k of personeDelTrade(t)) per.set(k, [...(per.get(k) ?? []), t]);
+  for (const t of chiusi) for (const k of personeDelTrade(t, vecchi)) per.set(k, [...(per.get(k) ?? []), t]);
   // Chi lavora bene: almeno il 51% di trade vinti e risultato positivo (almeno 3 trade).
   const bravi = [...per].filter(([k, ts]) => f.voci[k]?.stato !== "in formazione" && ts.length >= 3 && ts.filter((t) => pnl(t) > 0).length / ts.length >= c.obiettivo && ts.reduce((a, t) => a + pnl(t), 0) > 0)
     .sort((a, b) => b[1].reduce((x, t) => x + pnl(t), 0) - a[1].reduce((x, t) => x + pnl(t), 0)).map(([k]) => k);
@@ -92,7 +92,7 @@ export function aggiornaFormazione(stateDir: string, journal: JournalFile, prese
   const rientra = (k: string, v: Voce, perche: string) => {
     const bag = bagaglioDa(bravi.length ? bravi.slice(0, 5) : v.bagaglio?.mentori ?? [], per, chiusi);
     f.voci[k] = { stato: "operativo", dal: now.toISOString(), motivo: perche, bagaglio: bag, formazioni: v.formazioni };
-    note.push(`capo ufficio: ${k} torna alla scrivania (${perche})${bag.testo.length ? ` con il bagaglio: ${bag.testo.join("; ")}` : ""}`);
+    note.push(`capo ufficio: ${nomeDi(k)} torna disponibile (${perche})${bag.testo.length ? ` con il bagaglio: ${bag.testo.join("; ")}` : ""}`);
     cambiato = true;
   };
   for (const [k, v] of Object.entries(f.voci)) if (v.stato === "in formazione" && v.fino && v.fino <= now.toISOString()) rientra(k, v, "formazione finita");
@@ -108,8 +108,8 @@ export function aggiornaFormazione(stateDir: string, journal: JournalFile, prese
     if (vinti / nuovi.length >= c.obiettivo || ris >= 0) continue;
     const mentori = bravi.filter((b) => b !== k).slice(0, 5);
     const fino = new Date(now.getTime() + c.ore * 3600_000).toISOString();
-    f.voci[k] = { stato: "in formazione", dal: now.toISOString(), fino, motivo: `${vinti} vinti su ${nuovi.length} (${Math.round((vinti / nuovi.length) * 100)}%), ${ris.toFixed(2)} $: lavora male, in sala caffè a imparare${mentori.length ? ` da ${mentori.join(", ")}` : " dai trade vinti della squadra"}`, bagaglio: bagaglioDa(mentori, per, chiusi), formazioni: (v?.formazioni ?? 0) + 1 };
-    note.push(`capo ufficio: ${k} in sala caffè fino alle ${fino.slice(11, 16)} UTC, ${f.voci[k]!.motivo}`);
+    f.voci[k] = { stato: "in formazione", dal: now.toISOString(), fino, motivo: `${vinti} vinti su ${nuovi.length} (${Math.round((vinti / nuovi.length) * 100)}%), ${ris.toFixed(2)} $: lavora male, in sala caffè a imparare${mentori.length ? ` da ${mentori.map(nomeDi).join(", ")}` : " dai trade vinti della squadra"}`, bagaglio: bagaglioDa(mentori, per, chiusi), formazioni: (v?.formazioni ?? 0) + 1 };
+    note.push(`capo ufficio: ${nomeDi(k)} in sala caffè fino alle ${fino.slice(11, 16)} UTC, ${f.voci[k]!.motivo}`);
     cambiato = true;
   }
 
@@ -124,29 +124,14 @@ export function aggiornaFormazione(stateDir: string, journal: JournalFile, prese
   return {
     inFormazione: Object.entries(f.voci).filter(([, v]) => v.stato === "in formazione").map(([k, v]) => ({ chiave: k, dal: v.dal, fino: v.fino ?? "", motivo: v.motivo, mentori: v.bagaglio?.mentori ?? [], imparato: v.bagaglio?.testo ?? [] })),
     conBagaglio: Object.entries(f.voci).filter(([, v]) => v.stato === "operativo" && v.bagaglio?.testo.length).map(([k, v]) => ({ chiave: k, bagaglio: v.bagaglio!, rientrato: v.dal, formazioni: v.formazioni })),
+    rientri: {},
     note,
   };
 }
 
-// Quante persone lavorano alla scrivania in questo giro (stessa regola della sala caffè): trading agents con una
-// posizione, un ingresso pronto o un voto; operatori intraday in posizione o con un voto; agenti generali che votano.
-export interface Scrivanie { trading: number; intraday: number }
-export function allaScrivania(reports: Record<string, AgentReport>, held: Set<string>, esclusi: Set<string>): Scrivanie {
-  const k = new Set<string>();
-  for (const [n, r] of Object.entries(reports)) {
-    for (const s of r.segnali) k.add(personaDelVoto(s));
-    for (const c of r.custodi ?? []) if (held.has(c.simbolo) || c.fase === "in posizione" || c.fase === "in uscita" || c.fase === "pronto") k.add(`c:${c.simbolo}`);
-    for (const x of r.intraday ?? []) if (x.fase === "in posizione") k.add(`i:${x.simbolo}`);
-    if (n !== "custodi" && n !== "intraday" && r.rischio !== undefined && r.rischio < 1) k.add(`a:${n}`);
-  }
-  for (const e of esclusi) k.delete(e);
-  const intraday = [...k].filter((x) => x.startsWith("i:")).length;
-  return { trading: k.size - intraday, intraday };
-}
-
 // Un'occasione passa il bagaglio? Kronos almeno alla soglia imparata dai colleghi bravi; per l'intraday una candela su cui
 // loro vincono. È il giudizio del capo ufficio sull'esito atteso.
-function passaBagaglio(s: Signal, b: Bagaglio | undefined, previsioni: Record<string, number> | undefined): { ok: boolean; perche: string } {
+export function passaBagaglio(s: Signal, b: Bagaglio | undefined, previsioni: Record<string, number> | undefined): { ok: boolean; perche: string } {
   if (!b) return { ok: false, perche: "nessun bagaglio" };
   if (s.intraday) {
     const tf = /su candele (\w+)/.exec(s.perche)?.[1];
@@ -156,71 +141,61 @@ function passaBagaglio(s: Signal, b: Bagaglio | undefined, previsioni: Record<st
   return b.kronosMin !== null && fc !== undefined && fc >= b.kronosMin ? { ok: true, perche: `Kronos ${pct(fc)} ≥ ${pct(b.kronosMin)} imparato dai colleghi bravi` } : { ok: false, perche: `Kronos ${fc === undefined ? "n.d." : pct(fc)} sotto ${b.kronosMin === null ? "una soglia ancora da imparare" : pct(b.kronosMin)}` };
 }
 
-// Applica la formazione ai voti. Chi è in sala caffè e trova un'occasione torna alla scrivania prima della fine della
-// formazione solo se (a) il capo ufficio giudica valida l'occasione col bagaglio imparato, oppure (b) alla scrivania del
-// suo reparto servono persone (meno di minOperativi trading agents, nessun operatore nella sala intraday): torna per
-// primo chi è in sala caffè da più tempo. Altrimenti il suo voto
-// d'acquisto non vale. Chi è tornato col bagaglio lo usa. Le vendite e le regole vincolanti non si toccano.
-export function applicaFormazione(stateDir: string, reports: Record<string, AgentReport>, r: FormazioneReport, previsioni: Record<string, number> | undefined, scrivania: Scrivanie, now: Date): string[] {
-  const c = AGENTS.formazione;
-  const sospesi = new Map(r.inFormazione.map((x) => [x.chiave, x]));
-  const bag = new Map(r.conBagaglio.map((x) => [x.chiave, x.bagaglio]));
-  if (!sospesi.size && !bag.size) return [];
-  const note: string[] = [];
+// Il capo fa rientrare prima del tempo una persona in formazione per questa occasione (i voti d'acquisto della
+// postazione)? Sì se l'occasione passa il suo bagaglio, oppure se alla scrivania del suo reparto servono persone. Se sì,
+// la persona torna operativa (salvato) e il motivo si restituisce; altrimenti null.
+export function provaRientro(stateDir: string, r: FormazioneReport, k: string, voti: Signal[], previsioni: Record<string, number> | undefined, scrivania: number, minimo: number, now: Date): string | null {
   const f = leggi(stateDir);
-  // Le occasioni di chi è in sala caffè, da chi ci è da più tempo.
-  const occasioni = new Map<string, Signal[]>();
-  for (const rep of Object.values(reports)) for (const s of rep.segnali) { const k = personaDelVoto(s); if (sospesi.has(k) && s.lato === "buy" && !s.vincolante) occasioni.set(k, [...(occasioni.get(k) ?? []), s]); }
-  const tornati = new Map<string, string>();
-  for (const [k] of [...occasioni].sort((a, b) => sospesi.get(a[0])!.dal.localeCompare(sospesi.get(b[0])!.dal))) {
-    const v = f.voci[k];
-    if (!v) continue;
-    const valida = occasioni.get(k)!.map((s) => ({ s, esito: passaBagaglio(s, v.bagaglio, previsioni) })).find((x) => x.esito.ok);
-    // Le due sale hanno minimi diversi: 10 trading agents (con gli agenti generali), 1 operatore intraday (zero se nessuno
-    // ha un'occasione: senza trade intraday da aprire la sala può restare vuota).
-    const sala: keyof Scrivanie = k.startsWith("i:") ? "intraday" : "trading";
-    const minimo = sala === "intraday" ? c.minIntraday : c.minOperativi;
-    const perche = valida ? `il capo ufficio approva l'occasione su ${valida.s.simbolo}: ${valida.esito.perche}` : scrivania[sala] < minimo ? `${sala === "intraday" ? "nella sala intraday" : "alla scrivania"} servono almeno ${minimo} persone (ora ${scrivania[sala]}): rientra per primo chi è in sala caffè da più tempo` : null;
-    if (!perche) continue;
-    f.voci[k] = { stato: "operativo", dal: now.toISOString(), motivo: perche, ...(v.bagaglio ? { bagaglio: v.bagaglio } : {}), formazioni: v.formazioni };
-    tornati.set(k, perche); scrivania[sala]++; sospesi.delete(k);
-    if (v.bagaglio) bag.set(k, v.bagaglio);
-    note.push(`capo ufficio: ${k} torna alla scrivania per un'occasione (${perche})${v.bagaglio?.testo.length ? `, col bagaglio: ${v.bagaglio.testo.join("; ")}` : ""}`);
+  const v = f.voci[k];
+  if (!v || v.stato !== "in formazione") return null;
+  const valida = voti.map((s) => ({ s, esito: passaBagaglio(s, v.bagaglio, previsioni) })).find((x) => x.esito.ok);
+  const perche = valida ? `il capo ufficio approva l'occasione su ${valida.s.simbolo}: ${valida.esito.perche}` : voti.length && scrivania < minimo ? `alla scrivania servono almeno ${minimo} ${minimo === 1 ? "persona" : "persone"} (ora ${scrivania}): rientra per primo chi è in sala caffè da più tempo` : null;
+  if (!perche) return null;
+  f.voci[k] = { stato: "operativo", dal: now.toISOString(), motivo: perche, ...(v.bagaglio ? { bagaglio: v.bagaglio } : {}), formazioni: v.formazioni };
+  writeJsonAtomic(percorso(stateDir), f);
+  r.inFormazione = r.inFormazione.filter((x) => x.chiave !== k);
+  if (v.bagaglio) r.conBagaglio.push({ chiave: k, bagaglio: v.bagaglio, rientrato: now.toISOString(), formazioni: v.formazioni });
+  r.rientri[k] = valida ? "approvato" : "necessità";
+  r.note.push(`capo ufficio: ${nomeDi(k)} torna dalla sala caffè (${perche})${v.bagaglio?.testo.length ? `, col bagaglio: ${v.bagaglio.testo.join("; ")}` : ""}`);
+  return perche;
+}
+
+// Applica formazione e assegnazioni ai voti d'acquisto. `chi`: postazione (c:SYM / i:SYM) → persona; `senzaPersona`:
+// postazioni con un voto ma nessuna persona disponibile (il voto non vale). Gli agenti generali in formazione rientrano
+// solo con un'occasione approvata dal capo. Chi è tornato col bagaglio lo usa; chi è rientrato per necessità con
+// un'occasione che non passa il bagaglio entra con forza ×0,8 o taglia ×0,7. Vendite e regole vincolanti non si toccano.
+export function applicaFormazione(stateDir: string, reports: Record<string, AgentReport>, r: FormazioneReport, previsioni: Record<string, number> | undefined, chi: Record<string, string>, senzaPersona: Set<string>, now: Date): string[] {
+  const note: string[] = [];
+  const sospesi = new Set(r.inFormazione.map((x) => x.chiave));
+  // Agenti generali in formazione con un'occasione: il capo la giudica col bagaglio.
+  for (const k of [...sospesi].filter((k) => k.startsWith("a:"))) {
+    const voti = Object.values(reports).flatMap((x) => x.segnali).filter((s) => s.lato === "buy" && !s.vincolante && postazioneDelVoto(s) === k);
+    if (voti.length && provaRientro(stateDir, r, k, voti, previsioni, Infinity, 0, now)) sospesi.delete(k);
   }
-  if (tornati.size) {
-    writeJsonAtomic(percorso(stateDir), f);
-    r.inFormazione = r.inFormazione.filter((x) => !tornati.has(x.chiave));
-    for (const [k] of tornati) { const b = f.voci[k]!.bagaglio; if (b) r.conBagaglio.push({ chiave: k, bagaglio: b, rientrato: now.toISOString(), formazioni: f.voci[k]!.formazioni }); }
-  }
+  const bag = new Map(r.conBagaglio.map((x) => [x.chiave, x.bagaglio]));
   for (const rep of Object.values(reports)) {
     const kept: Signal[] = [];
     for (const s of rep.segnali) {
-      const k = personaDelVoto(s);
       if (s.lato !== "buy" || s.vincolante) { kept.push(s); continue; }
-      if (sospesi.has(k)) { note.push(`formazione: voto d'acquisto di ${k} su ${s.simbolo} non vale, è in sala caffè a imparare (occasione non approvata dal capo e scrivanie già coperte)`); continue; }
-      // Rientrato per necessità con un'occasione che non passa il bagaglio: entra, ma con forza o taglia ridotte.
-      if (tornati.has(k) && !passaBagaglio(s, bag.get(k), previsioni).ok) {
-        kept.push(s.intraday && s.pesoMassimo !== undefined ? { ...s, pesoMassimo: s.pesoMassimo * 0.7, perche: `${s.perche} · rientrato dalla sala caffè per necessità: taglia ridotta` } : { ...s, forza: s.forza * 0.8, perche: `${s.perche} · rientrato dalla sala caffè per necessità: forza ridotta` });
+      const desk = postazioneDelVoto(s);
+      if (senzaPersona.has(desk)) { note.push(`ufficio: voto d'acquisto su ${s.simbolo} senza una persona libera (tutte occupate o in formazione)`); continue; }
+      const k = desk.startsWith("a:") ? desk : chi[desk];
+      if (!k) { kept.push(s); continue; }
+      if (sospesi.has(k)) { note.push(`formazione: ${nomeDi(k)} è in sala caffè a imparare, il suo voto su ${s.simbolo} non vale`); continue; }
+      const b = bag.get(k);
+      const passa = passaBagaglio(s, b, previsioni);
+      if (r.rientri[k] === "necessità" && !passa.ok) {
+        kept.push(s.intraday && s.pesoMassimo !== undefined ? { ...s, pesoMassimo: s.pesoMassimo * 0.7, perche: `${s.perche} · ${nomeDi(k)} rientrato dalla sala caffè per necessità: taglia ridotta` } : { ...s, forza: s.forza * 0.8, perche: `${s.perche} · ${nomeDi(k)} rientrato dalla sala caffè per necessità: forza ridotta` });
         continue;
       }
-      const b = bag.get(k);
       if (!b) { kept.push(s); continue; }
       if (s.intraday) {
-        // Operatore intraday: fuori dalle candele su cui vince chi lavora bene, taglia ridotta.
-        const tf = /su candele (\w+)/.exec(s.perche)?.[1];
-        if (b.candele.length && s.pesoMassimo !== undefined && tf && !b.candele.includes(tf)) {
-          kept.push({ ...s, pesoMassimo: s.pesoMassimo * 0.7, perche: `${s.perche} · bagaglio della sala caffè: candela diversa da quelle dei colleghi bravi (${b.candele.join(", ")}), taglia ridotta` });
-          continue;
-        }
-        kept.push(s);
+        // Intraday agent: fuori dalle candele su cui vince chi lavora bene, taglia ridotta.
+        kept.push(!passa.ok && b.candele.length && s.pesoMassimo !== undefined ? { ...s, pesoMassimo: s.pesoMassimo * 0.7, perche: `${s.perche} · bagaglio di ${nomeDi(k)}: ${passa.perche}, taglia ridotta` } : s);
         continue;
       }
-      const fc = s.kronos ?? previsioni?.[s.simbolo];
-      if (b.kronosMin !== null && (fc === undefined || fc < b.kronosMin)) {
-        note.push(`formazione: voto di ${k} su ${s.simbolo} scartato dal suo bagaglio (Kronos ${fc === undefined ? "n.d." : pct(fc)} sotto ${pct(b.kronosMin)})`);
-        continue;
-      }
-      kept.push({ ...s, perche: `${s.perche} · col bagaglio della sala caffè (${b.testo[0] ?? "lezioni dei colleghi"})` });
+      if (!passa.ok && b.kronosMin !== null) { note.push(`formazione: voto di ${nomeDi(k)} su ${s.simbolo} scartato dal suo bagaglio (${passa.perche})`); continue; }
+      kept.push({ ...s, perche: `${s.perche} · ${nomeDi(k)} col bagaglio della sala caffè (${b.testo[0] ?? "lezioni dei colleghi"})` });
     }
     rep.segnali = kept;
   }

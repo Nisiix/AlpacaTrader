@@ -84,13 +84,18 @@ export function technicalGate(closes: number[] | undefined): { ok: boolean; cont
 
 // Chi va a cercare: gli agenti in pausa, gli investitori prima (custodi e operatori intraday), poi gli altri.
 function scoutFor(simbolo: string, presenti: Presenza[], busy: Set<string>): Presenza | null {
-  const free = presenti.filter((p) => !busy.has(p.chiave));
+  // Chi è in formazione impara, non esplora; tra gli altri prima i trading agents liberi dello staff.
+  const free = presenti.filter((p) => !busy.has(p.chiave) && !p.formazione);
+  const staff = free.find((p) => p.chiave.startsWith("p:") && p.reparto !== "intraday");
+  if (staff) return staff;
   const sec = sectorOf(simbolo);
   const same = (p: Presenza) => (p.chiave.startsWith("c:") || p.chiave.startsWith("i:")) && sectorOf(p.chiave.slice(2)) === sec;
   const sameClass = (p: Presenza) => (p.chiave.startsWith("c:") || p.chiave.startsWith("i:")) && isCrypto(p.chiave.slice(2)) === isCrypto(simbolo);
   return free.find(same) ?? free.find(sameClass) ?? free.find((p) => p.chiave.startsWith("c:") || p.chiave.startsWith("i:")) ?? free[0] ?? null;
 }
-const agentOf = (p: Presenza) => (p.chiave.startsWith("c:") ? `custode ${p.chiave.slice(2)}` : p.chiave.startsWith("i:") ? "intraday" : p.nome);
+// Chi trova il titolo lo vota col suo ruolo: un trading agent (persona dello staff o vecchia postazione c:) come trading
+// agent di quel titolo, un intraday agent come intraday, un agente generale col suo nome.
+const agentOf = (p: Presenza, simbolo: string) => (p.chiave.startsWith("p:") ? (p.reparto === "intraday" ? "intraday" : `custode ${simbolo}`) : p.chiave.startsWith("c:") ? `custode ${p.chiave.slice(2)}` : p.chiave.startsWith("i:") ? "intraday" : p.nome);
 
 export interface GiroEsplorazione {
   esaminati: string[];
@@ -164,7 +169,7 @@ export async function explore(input: {
       busy.add(who.chiave);
       const g = technicalGate(bars[s]!.map((b) => b.close));
       nuove.push({
-        simbolo: s, settore: sectorOf(s), scopritore: who.chiave, agente: agentOf(who), trovata: input.now.toISOString(), validaFino: addDays(input.today, c.giorniValida - 1), kronos: fc, tecnica: g.tecnica,
+        simbolo: s, settore: sectorOf(s), scopritore: who.chiave, agente: agentOf(who, s), trovata: input.now.toISOString(), validaFino: addDays(input.today, c.giorniValida - 1), kronos: fc, tecnica: g.tecnica,
         motivo: `${g.contro ? `contro tendenza (sotto la media a 200, ${controTendenza(bars[s]!.map((b) => b.close), fc).motivo.replace(/^Kronos [^ ]+ /, "")})` : `sopra la media a 200, ${g.tecnica.pattern.slice(0, 2).join(", ") || "grafico in ordine"}`}; Kronos anticipa ${pct(fc)} a ${AGENTS.kronos.horizon} sedute`,
         stato: "attiva",
       });
@@ -214,7 +219,7 @@ export function scoutVotes(f: EsplorazioneFile, v: AgentView, reports: Record<st
     }
     const forza = Math.min(1, (0.5 + k * 5) * (0.75 + 0.25 * s.tecnica.punteggio));
     const sig: Signal = { agente: s.agente, simbolo: s.simbolo, lato: "buy", forza, orizzonteSedute: AGENTS.kronos.horizon, kronos: k, ...(contro ? { pesoMassimo: pesoControTendenza() } : {}), perche: `esplorazione dalla sala caffè: ${s.simbolo} ${s.motivo.replace(/Kronos anticipa [^;]+/, `Kronos anticipa ${pct(k)} a ${AGENTS.kronos.horizon} sedute`)}` };
-    const home = s.scopritore.startsWith("c:") ? "custodi" : s.scopritore.startsWith("i:") ? "intraday" : s.scopritore.slice(2);
+    const home = s.agente.startsWith("custode ") ? "custodi" : s.agente === "intraday" ? "intraday" : s.scopritore.slice(2);
     (reports[home] ??= { segnali: [] }).segnali.push(sig);
     esploratori.set(s.scopritore, `opera su ${s.simbolo} (scoperto in sala caffè)`);
   }

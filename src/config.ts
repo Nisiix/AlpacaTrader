@@ -237,6 +237,9 @@ export const AGENTS = {
   // almeno `minOperativi` trading agents (e agenti generali) e almeno `minIntraday` operatori della sala intraday quando
   // c'è un'occasione (zero se non c'è niente da fare): se mancano, chi è in sala caffè e trova un'occasione rientra, per
   // primo chi c'è da più tempo.
+  // Lo staff: quante persone (trading agents e intraday agents) prendono le occasioni del motore. Una posizione aperta
+  // ha sempre una persona, anche oltre questi numeri.
+  persone: { trading: 20, intraday: 8 },
   formazione: { enabled: true, minTrade: 5, obiettivo: 0.51, ore: 24, minOperativi: 10, minIntraday: 1 },
   // Evidenza combinata del dossier (Kronos, grafico, notizie, contesto) minima per un ingresso nuovo di più giorni:
   // sopra la media a 200 e, più alta, sotto la 200 (contro tendenza).
