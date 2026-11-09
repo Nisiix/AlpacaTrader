@@ -10,11 +10,11 @@
 //    per giro ogni 5 minuti, con gli stessi criteri, ordini limite simulati, commissioni e uscite. Stampa quanti trade al
 //    giorno, quanti vinti, il risultato, per candela, e perché la maggior parte delle volte non si entra. Le varianti si
 //    provano con le opzioni (soglie, candele, affidabilità).
-//       bun src/cli/backtest-intraday.ts replay --file state/backtest/dati.json [--minprob 0.55] [--senzagrafico 0.57]
+//       bun src/cli/backtest-intraday.ts replay --file state/backtest/dati.json [--minprob 0.55] [--senzagrafico 0.57] [--percorsi no]
 //         [--margine 2] [--affidabilita misurata|neutra] [--candele 5Min,1Hour,4Hour] [--json out.json]
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { IntradayAgent, profondita } from "../agents/intraday.ts";
+import { IntradayAgent, profondita, type PrevisioneIntraday } from "../agents/intraday.ts";
 import type { AgentView } from "../agents/types.ts";
 import type { Bar, IntradayBar } from "../broker/types.ts";
 import { AGENTS, LIMITS, isCrypto } from "../config.ts";
@@ -31,6 +31,9 @@ interface Raccolta {
   barre: Record<string, Record<string, IntradayBar[]>>; // tf -> simbolo -> candele
   giornaliere: Record<string, Bar[]>;
   previsioni: Record<string, number[]>; // `${simbolo}|${tf}|${t ultima candela}` -> percorso
+  // I singoli percorsi di Kronos (stessa chiave), per provare la probabilità e lo stop dai percorsi; assenti nelle
+  // raccolte vecchie (lì vale la probabilità dalla media).
+  percorsi?: Record<string, number[][]>;
   campioni: number;
   affidabilita?: Record<string, { n: number; giusti: number }>; // dal cervello del PC, al momento della raccolta
 }
@@ -102,7 +105,10 @@ async function raccolta() {
       if (!Object.keys(serie).length) continue;
       try {
         const f = await kf(serie, tfMin(tf), profondita(tf));
-        for (const [s, p] of Object.entries(f)) r.previsioni[`${s}|${tf}|${t}`] = p.percorso.length ? p.percorso : [p.rendimentoPrevisto];
+        for (const [s, p] of Object.entries(f)) {
+          r.previsioni[`${s}|${tf}|${t}`] = p.percorso.length ? p.percorso : [p.rendimentoPrevisto];
+          if (p.campioni?.length) (r.percorsi ??= {})[`${s}|${tf}|${t}`] = p.campioni.map((x) => x.map((y) => Math.round(y * 1e5) / 1e5));
+        }
       } catch (e) { log(`proiezione ${tf} ${t}: ${(e as Error).message}`); }
       if (++fatte % 20 === 0) { log(`  ${tf}: ${fatte}/${tempi.length}`); salva(); }
       if (existsSync(join(out, "stop"))) { log("fermata a richiesta"); salva(); link.stop(); process.exit(0); }
@@ -140,11 +146,14 @@ function replay() {
   const chiuse = (b: IntradayBar[] | undefined, tf: string) => (b ?? []).filter((x) => Date.parse(x.t) + tfMin(tf) * 60_000 <= ora.getTime());
   const fetchBars = async (syms: string[], tf: string, n: number) => Object.fromEntries(syms.map((s) => [s, chiuse(r.barre[tf]?.[s], tf).slice(-n)]).filter(([s, b]) => (b as IntradayBar[]).length && (!soloCandele || soloCandele.includes(tf)) && r.candele[s as string]?.includes(tf))) as Record<string, IntradayBar[]>;
   const tfDiStep: Record<number, string> = { 5: "5Min", 15: "15Min", 60: "1Hour", 240: "4Hour" };
+  const usaPercorsi = arg("percorsi", "si") !== "no";
   const forecast = async (bars: Record<string, IntradayBar[]>, step: number, h: number) => {
-    const out: Record<string, number[]> = {};
+    const out: Record<string, PrevisioneIntraday> = {};
     for (const [s, b] of Object.entries(bars)) {
-      const p = r.previsioni[`${s}|${tfDiStep[step]}|${b.at(-1)!.t}`];
-      if (p && p.length >= Math.min(h, p.length)) out[s] = p;
+      const k = `${s}|${tfDiStep[step]}|${b.at(-1)!.t}`;
+      const p = r.previsioni[k];
+      const cs = usaPercorsi ? r.percorsi?.[k] : undefined;
+      if (p && p.length >= Math.min(h, p.length)) out[s] = cs?.length ? { path: p, campioni: cs } : p;
     }
     return out;
   };
