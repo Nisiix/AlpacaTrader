@@ -70,7 +70,7 @@ export async function publishPages(root: string, stateDir: string, candele?: Rec
   await git(outDir, ["add", "-A"]);
   // Un solo commit che si sostituisce a ogni pubblicazione: il ramo non cresce con la storia delle istantanee.
   const hasHead = (await git(outDir, ["rev-parse", "--verify", "-q", "HEAD"])).code === 0;
-  const c = await git(outDir, ["-c", "user.name=Agenti Alpaca", "-c", "user.email=agenti@localhost", "commit", "-q", ...(hasHead ? ["--amend"] : []), "-m", `istantanea ${new Date().toISOString()}`]);
+  const c = await git(outDir, ["-c", "user.name=Agentics sniper", "-c", "user.email=agenti@localhost", "commit", "-q", ...(hasHead ? ["--amend"] : []), "-m", `istantanea ${new Date().toISOString()}`]);
   if (hasHead) await git(outDir, ["gc", "-q", "--prune=now"]);
   if (c.code !== 0 && !/nothing to commit/i.test(c.out)) return { ok: false, messaggio: `commit fallito: ${c.out.slice(0, 200)}` };
   const p = await git(outDir, ["push", "-q", "-f", "origin", `HEAD:${cfg.branch}`]);

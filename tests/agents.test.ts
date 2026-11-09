@@ -371,7 +371,7 @@ describe("dashboard", () => {
     const d = startDashboard({ port: 0, stateDir: env.stateDir, bus: deps.bus });
     try {
       const page = await (await fetch(`${d.url}/`)).text();
-      expect(page).toContain("Agenti Alpaca");
+      expect(page).toContain("Agentics sniper");
       const st = (await (await fetch(`${d.url}/api/status`)).json()) as AgentsStatus;
       expect(st.giro).toBe("agenti-2026-09-24-1541");
       const ev = (await (await fetch(`${d.url}/api/events?n=5&tipi=ordine`)).json()) as { giorno: string; eventi: { tipo: string }[] };

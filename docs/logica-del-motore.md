@@ -184,6 +184,28 @@ l'opportunità regge. Si chiude quando è comprato (lo segue il suo custode), qu
    conto e 100 $; un'aggiunta da 2%.
 5. Gli acquisti si decidono solo nei giri con **analisi d'ingresso** (ogni 5 minuti); le vendite in ogni giro.
 
+### Proposte del capo ufficio
+
+Oltre a giudicare le persone, il capo ufficio guarda i risultati delle operazioni intraday chiuse (le ultime 200) e,
+solo con dati sufficienti (almeno 30 operazioni e almeno 12 nel gruppo che giustifica il cambio), **propone all'utente**
+di cambiare un'impostazione generale, con il valore attuale, quello proposto e il perché in numeri
+(`src/agents/proposte.ts`, `AGENTS.capo.proposte`). Le regole:
+
+- operazioni entrate con probabilità vicina alla soglia (entro 5 punti) in perdita → soglia più alta; risultati molto
+  buoni ma meno di un'operazione al giorno → soglia senza medie in ordine più bassa di un punto;
+- nel complesso in perdita → taglia per operazione più piccola; resa costante (vinte ≥ 55%, guadagni/perdite ≥ 1,4)
+  → un po' più grande (massimo 15%);
+- un livello della scaletta delle medie in perdita → più prudenza su quel livello; molto positivo → un po' meno;
+- operazioni con obiettivo vicino ai costi in perdita → margine sui costi più alto;
+- chiusure per tempo scaduto in perdita → scadenza dell'orizzonte più corta;
+- rientri nello stesso giorno in perdita → meno ingressi al giorno per titolo;
+- operazioni riportate al giorno dopo in perdita → riporto più selettivo.
+
+Il capo non cambia niente da solo: la proposta compare in Impostazioni → Generali (e su Telegram); «Accetta» la salva
+come le altre impostazioni, «Rifiuta» la tiene ferma 7 giorni. Dopo un'accettazione la stessa impostazione si riguarda
+solo con almeno 12 operazioni nuove. Per queste analisi ogni ingresso intraday registra nel diario anche la posizione
+rispetto alle medie a 50 e 200 (`misure.medie`).
+
 ### Voti e tempi
 
 - **Quanti voti**: ogni agente vota con una forza (0-1) e il punteggio di un titolo è la somma dei voti d'acquisto

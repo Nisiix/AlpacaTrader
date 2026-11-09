@@ -1,3 +1,4 @@
+import { aggiornaProposte } from "./proposte.ts";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { isOpenOrder, isProtectiveStop, type Account, type Bar, type Broker, type MarketClock, type Order, type Position } from "../broker/types.ts";
@@ -134,6 +135,8 @@ export interface AgentsStatus {
   giornataPersone?: Record<string, GiornataPersona>;
   // Il motore punta all'intraday: gli ingressi nuovi li decidono le candele; i dossier dei trading agents fanno da contesto.
   puntaIntraday?: boolean;
+  // Proposte del capo ufficio sulle impostazioni generali ancora da decidere.
+  proposteAperte?: number;
   // Calibrazione delle probabilità e meta-modello: campione, attivi o no, Brier score sulla prova fuori campione.
   statistica?: { probabilita: Record<string, StatoCalibrazione>; meta: StatoMeta };
   // I nomi dei titoli e delle crypto (Apple, Bitcoin...), per mostrarli accanto ai codici.
@@ -608,6 +611,21 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
     // Il capo ufficio: rivede i risultati di ciascun agente sul diario e applica i suoi richiami ai voti di oggi.
     // Il capo ufficio giudica le persone sui trade che hanno preso (i suoi richiami si applicano dopo l'assegnazione).
     const capo = review(journal, startedAt, leggiRegistro(deps.stateDir).vecchi);
+    // Le proposte del capo sulle impostazioni generali (solo con dati sufficienti): le decide l'utente.
+    let proposteAperte = 0;
+    try {
+      const pr = aggiornaProposte(deps.stateDir, journal, startedAt);
+      proposteAperte = pr.file.proposte.filter((x) => x.stato === "aperta").length;
+      for (const x of pr.nuove) {
+        const m = `capo ufficio: propone di cambiare «${x.etichetta}» da ${x.attuale} a ${x.proposto}. ${x.motivo}`;
+        log.info(m);
+        bus.emit("nota", { testo: m });
+        const r = await deps.notifier.send(deps.redactor.apply(`🧑‍💼 Agentics sniper · proposta del capo ufficio\n«${x.etichetta}»: ${x.attuale} → ${x.proposto}\n${x.motivo}\nDecidi in Impostazioni → Generali.`));
+        if (!r.ok) log.error(`Telegram non ha ricevuto la proposta: ${r.error}`);
+      }
+    } catch (e) {
+      log.warn(`proposte del capo: ${(e as Error).message}`);
+    }
     // Le persone. Formazione: chi lavora male va in sala caffè a imparare da chi lavora bene. Poi le occasioni del giro
     // (posizioni aperte, trading agents pronti a entrare, voti d'acquisto) vanno alle persone libere dello staff, le
     // più brave per risultati; chi non ha un'occasione (anche chi è «in attesa») resta in sala caffè.
@@ -783,6 +801,9 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
         // Rimbalzo intraday dopo un calo netto: il calo dell'ultimo giorno, per giudicare a posteriori questi ingressi.
         const calo = voti.find((x) => x.intraday && x.misure?.rimbalzo !== undefined)?.misure?.rimbalzo;
         if (calo !== undefined) misure.rimbalzo = calo;
+        // Dove stava il prezzo rispetto alle medie a 50 e 200 (0 sopra, 1 sotto la 50, 2 sotto la 200, 3 sotto entrambe).
+        const medie = voti.find((x) => x.intraday && x.misure?.medie !== undefined)?.misure?.medie;
+        if (medie !== undefined) misure.medie = medie;
         if (Object.keys(misure).length) ctx.misure = misure;
         ctx.impostazioni = Object.fromEntries(TUTTI_PERSONALI.map((k) => [k, Number(valore(k, o.symbol))]));
         if (view.contesto?.generale) ctx.clima = view.contesto.generale;
@@ -926,6 +947,7 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
       kronos: { stato: deps.kronosStato?.() ?? (deps.forecaster ? "attivo" : "non configurato"), proiezioniDel: cache.previsioni?.giorno ?? null, simboli: Object.keys(cache.previsioni?.data ?? {}).length, scartate },
       giornataPersone: giornataP.perPersona,
       puntaIntraday: AGENTS.puntaIntraday,
+      proposteAperte,
       statistica,
       giornata: { pnlPct, obiettivoPct: AGENTS.daily.targetPct, pavimentoPct: AGENTS.daily.pavimentoPct, picco: giornata.picco, perditaMaxPct: AGENTS.daily.maxLossPct, obiettivoRaggiunto: giornata.obiettivoRaggiunto, difesa: giornata.difesa, perditaOltre: giornata.perditaOltre },
       simulazioni,
