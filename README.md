@@ -130,6 +130,7 @@ scrive nel registro ogni mezz'ora («memoria: PC libera …»). Se Kronos cresce
 meno di 1 GB libero, Kronos si riavvia da solo (pochi secondi); se il motore supera 2,5 GB, riparte il motore. Su Windows
 Kronos si chiude con tutto il suo albero di processi (`taskkill /T`). Se il motore si chiude per un errore,
 `avvia-bot.cmd` lo rilancia dopo 30 secondi (si ferma solo con codice 0, chiusura chiesta, o 2, errore di avvio).
+Dal 10/11/2026 il sidecar carica solo Kronos (`AGENTS.kronos.modelli`): Chronos-2 e TimesFM sono spenti.
 
 ### Ripartire da zero
 

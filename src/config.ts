@@ -190,7 +190,10 @@ export const AGENTS = {
     // poi è la bravura (direzioni giuste oltre il caso, ridotta dalla prudenza sui campioni piccoli) divisa per
     // bravuraAttesa, tra 0 e 3: chi non supera il caso pesa zero. Conti separati per giornaliero e per ogni candela.
     // Kronos, se non risulta peggiore del caso, tiene almeno kronosMinimo.
-    modelli: ["kronos", "chronos2", "timesfm"] as string[],
+    // Dal 10/11/2026 solo Kronos (scelta dell'utente): Chronos-2 e TimesFM non si caricano più. Pesavano poco nelle
+    // decisioni (affidabilità 0,13 e 0,05) e occupavano memoria nel sidecar (il PC è rimasto senza memoria il 10/11).
+    // Per riaccenderli: aggiungerli qui (il cervello li ripesa da solo).
+    modelli: ["kronos"] as string[],
     // Campioni di Kronos: quanti percorsi genera e media per ogni previsione. Più campioni = previsione più stabile
     // (l'errore casuale scende con la radice del numero: da 3 a 48 si divide per 4), ma il tempo cresce in proporzione.
     // Il motore misura quanto impiega davvero il PC e sale con i campioni finché il tempo per titolo resta in quello
