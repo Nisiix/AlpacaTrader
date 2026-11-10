@@ -28,7 +28,9 @@ export interface Score {
   evidenza?: number | null;
   // Con voti misti (più giorni e intraday) la sola parte intraday: se l'ingresso di più giorni deve aspettare (contesto,
   // costi, evidenza), l'occasione sulle candele brevi segnalata da Kronos può comunque entrare come trade intraday.
-  parteIntraday?: { compra: number; pesoMassimo?: number; perche: string[] };
+  parteIntraday?: { compra: number; pesoMassimo?: number; perche: string[]; probIngresso?: number };
+  // Probabilità d'ingresso dell'intraday (la più alta tra i voti): decide l'accesso alla riserva per le occasioni.
+  probIngresso?: number;
 }
 
 // La sola parte intraday di un punteggio misto, come punteggio a sé (vendite d'opinione comprese).
@@ -36,7 +38,7 @@ export function soloParteIntraday(sc: Score): Score | null {
   const pi = sc.parteIntraday;
   if (!pi || sc.intraday) return null;
   const { parteIntraday: _, kronos: __, evidenza: ___, ...base } = sc;
-  return { ...base, punteggio: pi.compra - sc.vende, compra: pi.compra, intraday: true, pesoMassimo: pi.pesoMassimo, agenti: ["intraday"], perche: pi.perche };
+  return { ...base, punteggio: pi.compra - sc.vende, compra: pi.compra, intraday: true, pesoMassimo: pi.pesoMassimo, agenti: ["intraday"], perche: pi.perche, ...(pi.probIngresso !== undefined ? { probIngresso: pi.probIngresso } : {}) };
 }
 
 export interface Allocation {
@@ -69,6 +71,8 @@ export function scoreSignals(signals: Signal[], weights: Record<string, number>)
         const pi = sc.parteIntraday ?? { compra: 0, perche: [] };
         pi.compra += w;
         if (s.pesoMassimo !== undefined) pi.pesoMassimo = Math.min(pi.pesoMassimo ?? Infinity, s.pesoMassimo);
+        const pr = s.misure?.ingresso ?? s.misure?.probabilita;
+        if (pr !== undefined) { pi.probIngresso = Math.max(pi.probIngresso ?? 0, pr); sc.probIngresso = Math.max(sc.probIngresso ?? 0, pr); }
         pi.perche.push(`${s.agente}: ${s.perche}`);
         sc.parteIntraday = pi;
       }
@@ -328,7 +332,25 @@ export function allocate(view: AgentView, reports: Record<string, AgentReport>, 
   ripartisci(nuoviIntraday.filter((x) => isCrypto(x.sc.simbolo)), bud.maxCrypto * equity - cryptoAperto, `crypto intraday già al ${((cryptoAperto / Math.max(1, equity)) * 100).toFixed(0)}% del conto (massimo ${Math.round(bud.maxCrypto * 100)}%: si muovono insieme)`);
   // Con il profitto reinvestito il budget cresce oltre la quota di serie (vedi budget.ts).
   const qb = quotaBudget(equity, view.capitaleBase, bud.quota, guadagniAperti(view.positions, view.prices));
+  const voluto = new Map(nuoviIntraday.map((x) => [x, x.chiesto]));
   ripartisci(nuoviIntraday, qb.quota * equity - intradayAperto, `budget intraday: ${((intradayAperto / Math.max(1, equity)) * 100).toFixed(0)}% del conto già investito in operazioni intraday (massimo ${Math.round(qb.quota * 100)}%${qb.reinvestito > 0.5 ? `, con ${qb.reinvestito.toFixed(2)} $ di profitto reinvestito` : ""}), il resto diviso tra le occasioni per qualità`);
+  // Riserva per le occasioni: a budget pieno, un'occasione nettamente migliore (probabilità d'ingresso ≥ soglia +
+  // extraProb) prende dalla riserva (il resto del conto) fino a maxTrade, le più probabili per prime.
+  const ro = bud.riservaOccasioni;
+  if (ro.enabled) {
+    let riserva = ro.quota * equity - Math.max(0, intradayAperto - qb.quota * equity);
+    const prob = (x: (typeof asks)[number]) => x.sc.probIngresso ?? 0;
+    const forti = nuoviIntraday.filter((x) => tagliati.has(x.sc.simbolo) && prob(x) >= AGENTS.intraday.kronos.minProb + ro.extraProb).sort((a, b) => prob(b) - prob(a));
+    for (const x of forti) {
+      if (riserva <= 1) break;
+      const extra = Math.min(voluto.get(x)! - x.chiesto, ro.maxTrade * equity, riserva);
+      if (extra <= 0) continue;
+      x.chiesto += extra;
+      riserva -= extra;
+      if (x.chiesto >= voluto.get(x)! - 0.01) tagliati.delete(x.sc.simbolo);
+      else tagliati.set(x.sc.simbolo, `budget intraday pieno: dalla riserva per le occasioni (probabilità ${Math.round(prob(x) * 100)}%) al massimo ${Math.round(ro.maxTrade * 100)}% del conto in più`);
+    }
+  }
   // Tetto per settore (lo stesso della gabbia): se le occasioni di un settore chiedono più dello spazio rimasto, si divide
   // in proporzione alla qualità (come il budget), così i contanti non vanno a un titolo che la gabbia poi rifiuterebbe.
   // Prima si riempiva in ordine di punteggio: con il budget al 50% il terzo titolo dello stesso settore restava a zero.

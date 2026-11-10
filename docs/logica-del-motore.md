@@ -299,10 +299,14 @@ sedute, uscita di trend) non riguardano questi trade.
   una classe su una candela valgono le sue (i costi delle crypto sono 8 volte quelli delle azioni).
 - **Budget dell'intraday** (`intraday.budget`): la taglia di un'operazione la decide il rischio allo stop: perdita allo
   stop (stop + costi + scivolamento 0,2%) al massimo lo **0,25% del conto**, e un'operazione da sola al massimo metà del
-  budget (25% del conto). In operazioni intraday si investe insieme fino al **100% del conto** (regola di serie, meno
-  la riserva di contanti dell'1%; le crypto, che si muovono insieme, al massimo il 20%; un settore al massimo il 35%,
-  diviso per qualità); gli ordini ancora in corso contano. Se le occasioni chiedono di più, il budget si divide in
-  proporzione alla qualità. Un segnale oltre il tetto per titolo (25%) viene ridotto, non scartato dalla gabbia.
+  budget (25% del conto). In operazioni intraday si investe insieme fino all'**80% del conto** (regola di serie dal
+  10/11/2026: su 1.000 $ si investono 800 $ divisi tra le occasioni della giornata; le crypto, che si muovono insieme,
+  al massimo il 20%; un settore al massimo il 35%, diviso per qualità); gli ordini ancora in corso contano. Se le
+  occasioni chiedono di più, il budget si divide in proporzione alla qualità. Un segnale oltre il tetto per titolo (25%)
+  viene ridotto, non scartato dalla gabbia. **Riserva per le occasioni** (`budget.riservaOccasioni`): il 20% restante
+  resta liquido; a budget pieno lo prende solo un'occasione nettamente migliore (probabilità d'ingresso almeno 10 punti
+  sopra la soglia), al massimo il 10% del conto a operazione. La taglia di un'operazione arriva al 20% del conto e la
+  fiducia la riduce al massimo del 40% (`taglia.pavimento` 0,6).
 - **Acquisti crypto fermati** (`cryptoAcquisti`, dal 10/11/2026): nella prova sullo storico del 9/11 le crypto intraday
   vincevano il 20-25% dei trade (−0,8% a trade) in tutte le varianti, le azioni l'83-93% (+0,7%). La gabbia rifiuta ogni
   acquisto crypto e l'agente intraday non le analizza per entrare; le crypto già aperte si gestiscono fino all'uscita.

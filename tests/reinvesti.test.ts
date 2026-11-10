@@ -15,9 +15,9 @@ const totale = (a: ReturnType<typeof allocate>) => a.proposte.reduce((t, x) => t
 const quattro = { intraday: { segnali: simboli.map((s) => intra(s, 0.2)) } };
 
 describe("profitto reinvestito nel budget intraday", () => {
-  test("con il budget di serie al 100% il profitto è già tutto investito: la quota resta 100%", () => {
-    expect(quotaBudget(1100, 1000).quota).toBe(1);
-    expect(quotaBudget(900, 1000).quota).toBe(1);
+  test("con il budget di serie all'80% (uguale al tetto) il profitto è reinvestito dentro l'80% del patrimonio", () => {
+    expect(quotaBudget(1100, 1000).quota).toBe(0.8);
+    expect(quotaBudget(900, 1000).quota).toBe(0.8);
   });
 
   test("al capitale di partenza vale il 50%; il profitto incassato si aggiunge tutto", () => {

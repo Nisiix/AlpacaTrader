@@ -428,7 +428,9 @@ export const AGENTS = {
     // Taglia intraday: gli indizi contrari tolgono penalitaIndizio di probabilità ciascuno (non dimezzano la taglia); i
     // fattori di rischio della taglia (fiducia, medie, stop, serie di perdite) non la portano sotto `pavimento` della
     // taglia massima.
-    taglia: { pavimento: 0.3, penalitaIndizio: 0.02 },
+    // pavimento 0,6 (dal 10/11/2026, era 0,3): con solo azioni e poche occasioni, la fiducia e la prudenza riducono la
+    // taglia al massimo del 40%, così il budget dell'80% si usa davvero.
+    taglia: { pavimento: 0.6, penalitaIndizio: 0.02 },
     // Lascia correre i trade in guadagno: dopo il pareggio lo stop segue il massimo a trailingAtr ATR della candela;
     // un'uscita «morbida» (obiettivo raggiunto senza altro rialzo, piccolo calo previsto da Kronos, orizzonte scaduto,
     // medie perse) su un trade che guadagna più di minGuadagnoCosti volte i costi alza lo stop a `blocca` del guadagno
@@ -456,13 +458,17 @@ export const AGENTS = {
     // Budget dell'intraday. Taglia di un trade: perdita allo stop (stop + costi + scivolamento) ≤ rischioTrade del conto,
     // al massimo maxWeight; un trade con lo stop largo (crypto, 4 ore, trend) è da solo più piccolo, uno con lo stop
     // stretto (azioni su 1 ora, −0,4%) può arrivare al 25%. Investito in intraday nello stesso momento: al massimo
-    // `quota` del conto (100%, regola di serie: tutto il conto, meno la riserva di contanti, sotto i tetti per settore e per
-    // operazione); le crypto, che si muovono insieme, al massimo maxCrypto; un trade da solo
-    // al massimo maxQuotaTrade del budget. Se le occasioni chiedono più del budget, si divide in proporzione alla qualità.
-    budget: { quota: 1, rischioTrade: 0.0025, scivolamento: 0.002, maxCrypto: 0.2, maxQuotaTrade: 0.5,
+    // `quota` del conto (80%, dal 10/11/2026: su 1.000 $ si investono 800 $ divisi tra le occasioni della giornata); le
+    // crypto, che si muovono insieme, al massimo maxCrypto; un trade da solo al massimo maxQuotaTrade del budget (25% → 20%
+    // del conto: servono almeno 4 titoli per riempirlo). Se le occasioni chiedono più del budget, si divide per qualità.
+    // riservaOccasioni: il resto del conto (20%) resta liquido per un'occasione in più a budget pieno, ma solo se nettamente
+    // migliore (probabilità d'ingresso ≥ soglia + extraProb) e al massimo maxTrade del conto a operazione.
+    budget: { quota: 0.8, rischioTrade: 0.0025, scivolamento: 0.002, maxCrypto: 0.2, maxQuotaTrade: 0.25,
+      riservaOccasioni: { enabled: true, quota: 0.2, extraProb: 0.1, maxTrade: 0.1 },
       // Profitto reinvestito: il guadagno accumulato dal capitale di partenza (state/benchmark.json) si aggiunge al budget
       // per la parte `quota` (1 = tutto), fino a `tetto` del conto. Sotto il capitale di partenza vale la quota di serie.
-      // Con il budget al 100% il profitto è già tutto reinvestito (il budget è il conto intero): conta se la quota scende.
+      // Il budget è una quota del patrimonio: il profitto è già reinvestito all'80%; con il tetto all'80% la parte in più
+      // non si aggiunge (resta la riserva per le occasioni). Conta se la quota scende sotto il tetto.
       reinvesti: { enabled: true, quota: 1, tetto: 0.8 } },
     // Sostituzione dei trade deboli: con budget o contanti pieni (spazio libero sotto `mancanza` di quanto chiede la
     // migliore occasione nuova), si vende l'operazione aperta più debole per far posto a quella. Debole: aperta da almeno

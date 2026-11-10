@@ -24,14 +24,28 @@ const valore = (a: ReturnType<typeof allocate>, s: string) => (a.proposte.find((
 const conQuota = (q: number, fn: () => void) => { const prima = AGENTS.intraday.budget.quota; AGENTS.intraday.budget.quota = q; try { fn(); } finally { AGENTS.intraday.budget.quota = prima; } };
 
 describe("budget dell'intraday", () => {
-  test("di serie il budget è il 100% del conto: quattro settori al 25% usano tutto, meno la riserva di contanti", () => {
+  test("di serie il budget è l'80% del conto: quattro settori al 25% si dividono 80.000 $, il resto resta liquido", () => {
     setCryptoUniverse(["BTC/USD", "ETH/USD", "SOL/USD"]);
-    expect(AGENTS.intraday.budget.quota).toBe(1);
+    expect(AGENTS.intraday.budget.quota).toBe(0.8);
     const a = allocate(view(), { intraday: { segnali: [intra("NVDA", 0.25), intra("SPY", 0.25), intra("GLD", 0.25), intra("TLT", 0.25)] } }, { intraday: 1 });
     const tot = ["NVDA", "SPY", "GLD", "TLT"].reduce((t, s) => t + valore(a, s), 0);
-    expect(tot).toBeLessThanOrEqual(100_000 * (1 - AGENTS.riservaContanti) + 1);
-    expect(tot).toBeGreaterThan(97_000);
-    for (const s of ["NVDA", "SPY", "GLD", "TLT"]) expect(valore(a, s)).toBeLessThanOrEqual(25_000 + 1);
+    expect(tot).toBeLessThanOrEqual(80_000 + 1);
+    expect(tot).toBeGreaterThan(78_000);
+    for (const s of ["NVDA", "SPY", "GLD", "TLT"]) expect(valore(a, s)).toBeGreaterThan(19_000);
+  });
+
+  test("a budget pieno la riserva (20%) va solo a un'occasione nettamente migliore, al massimo 10% del conto", () => {
+    setCryptoUniverse(["BTC/USD", "ETH/USD", "SOL/USD"]);
+    // IWM intraday aperta per 80.000 $: budget pieno, 20.000 $ di contanti.
+    const j = emptyJournal();
+    j.trade.push({ id: "w", simbolo: "IWM", stato: "aperto", apertoIl: "2026-09-24T14:00:00Z", comprate: 800, costo: 80_000, vendute: 0, incassato: 0, quantita: 800, contesto: { agenti: ["intraday"], tipo: "intraday" } } as any);
+    const v = view({ journal: j, positions: [{ symbol: "IWM", qty: 800, avgEntryPrice: 100, currentPrice: 100, marketValue: 80_000 }], account: { equity: 100_000, lastEquity: 100_000, cash: 20_000, status: "ACTIVE" } });
+    const forte = { ...intra("NVDA", 0.2), misure: { probabilita: 0.8, ingresso: 0.75 } };
+    const normale = { ...intra("SPY", 0.2), misure: { probabilita: 0.6, ingresso: 0.6 } };
+    const a = allocate(v, { intraday: { segnali: [forte, normale] } }, { intraday: 1 });
+    expect(valore(a, "NVDA")).toBeGreaterThan(9_000);
+    expect(valore(a, "NVDA")).toBeLessThanOrEqual(10_000 + 1);
+    expect(valore(a, "SPY")).toBe(0);
   });
 
   test("le occasioni intraday insieme non superano il budget (50%); si divide, non si scarta", () => conQuota(0.5, () => {
