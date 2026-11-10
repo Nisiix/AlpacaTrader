@@ -246,6 +246,11 @@ export const AGENTS = {
   eventsKeepDays: 60,
   // Universo crypto: tutte le coppie USD negoziabili su Alpaca che stanno nella top N per capitalizzazione
   // (CoinGecko, una volta al giorno, cache in state/crypto-universe.json). Senza CoinGecko: tutte le coppie di Alpaca.
+  // Acquisti crypto (tutti gli agenti): fermati il 10/11/2026. Nella prova sullo storico del 9/11 le crypto intraday hanno
+  // vinto il 20-25% dei trade (−0,8% a trade) in tutte le varianti, le azioni l'83-93% (+0,7%). Le crypto già aperte si
+  // gestiscono fino all'uscita (stop, obiettivi, uscite); la raccolta del controllo giornaliero continua a misurarle per
+  // decidere se riaccenderle (dalla dashboard).
+  cryptoAcquisti: { enabled: false },
   cryptoUniverse: { enabled: true, topMarketCap: 100, maxPairs: 40, refreshHours: 24, coingeckoUrl: "https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=100&page=1" },
   // Custodi: un agente per ogni crypto in portafoglio o tra le migliori candidate; ognuno segue il suo titolo
   // con tesi, piano e rischio dichiarati, dentro le stesse regole del motore.
@@ -349,7 +354,9 @@ export const AGENTS = {
     // modello (succede sui prezzi minuscoli, es. 0,000005 $) e non si usa, come le giornaliere fuori misura.
     // minProbSenzaGrafico: con le medie brevi della candela non in ordine (né rottura né rientro) decide Kronos da solo,
     // ma serve una probabilità più alta e la taglia si dimezza (un'inversione anticipata, non un trend già visibile).
-    kronos: { orizzontiMin: [15, 30, 60, 120, 240, 480] as number[], maxCandele: 20, perGiro: 60, minProb: 0.55, minProbSenzaGrafico: 0.57, zMax: 4 },
+    // 60% per tutte e due (10/11/2026): nella prova sullo storico del 9/11 la soglia al 60% ha dato il risultato migliore
+    // (47% vinti, −0,24% a trade, contro 41% e −0,31% con 55%/57%).
+    kronos: { orizzontiMin: [15, 30, 60, 120, 240, 480] as number[], maxCandele: 20, perGiro: 60, minProb: 0.6, minProbSenzaGrafico: 0.6, zMax: 4 },
     // Scelta della candela: la probabilità che conta è quella di un guadagno NETTO dei costi di andata e ritorno, Φ(z) con
     // z = (rialzo previsto − costi) / (volatilità delle candele × √candele), moltiplicato per l'affidabilità misurata della
     // candela dal cervello: quota di direzioni giuste di Kronos su quella candela, avvicinata a `prior` con il peso di `forza`
@@ -463,7 +470,9 @@ export const AGENTS = {
     // sulla sua candela di controllo sotto la soglia d'ingresso (oggi non la si aprirebbe). La nuova deve avere almeno
     // `margine` punti di probabilità in più (netta dei costi, contro una che non li conta: il confronto è prudente).
     // Al massimo una a giro e `maxGiorno` al giorno; mai quando nello stesso giro si vende già altro (lo spazio si libera da sé).
-    sostituzione: { enabled: true, mancanza: 0.5, minMinuti: 30, margine: 0.1, maxGiorno: 4 },
+    // traClassi: false = un'azione si sostituisce solo con un'azione e una crypto con una crypto (le probabilità delle
+    // crypto sono risultate troppo ottimiste: nella prova del 9/11 MSFT e AAPL in guadagno vendute per LINK e ADA all'81%).
+    sostituzione: { enabled: true, mancanza: 0.5, minMinuti: 30, margine: 0.1, maxGiorno: 4, traClassi: false },
     // Finestre, ora di Roma: ingressi solo se resta tempo per chiudere in giornata; poi chiusura forzata.
     // Crypto: sempre aperte, un'operazione intraday dura al massimo cryptoOreMax ore. Azioni: tutta la seduta vera
     // (orologio di Alpaca): ingressi fino a minutiPrimaChiusura.ingresso dalla chiusura, uscita a minutiPrimaChiusura.uscita.

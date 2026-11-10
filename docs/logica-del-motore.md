@@ -303,11 +303,15 @@ sedute, uscita di trend) non riguardano questi trade.
   la riserva di contanti dell'1%; le crypto, che si muovono insieme, al massimo il 20%; un settore al massimo il 35%,
   diviso per qualità); gli ordini ancora in corso contano. Se le occasioni chiedono di più, il budget si divide in
   proporzione alla qualità. Un segnale oltre il tetto per titolo (25%) viene ridotto, non scartato dalla gabbia.
+- **Acquisti crypto fermati** (`cryptoAcquisti`, dal 10/11/2026): nella prova sullo storico del 9/11 le crypto intraday
+  vincevano il 20-25% dei trade (−0,8% a trade) in tutte le varianti, le azioni l'83-93% (+0,7%). La gabbia rifiuta ogni
+  acquisto crypto e l'agente intraday non le analizza per entrare; le crypto già aperte si gestiscono fino all'uscita.
+  Soglie di probabilità al 60% (con e senza medie brevi in ordine).
 - **Sostituzione dei trade deboli** (`intraday.sostituzione`): con budget o contanti pieni (spazio libero sotto metà di
   quanto chiede la migliore occasione nuova) si vende l'operazione aperta più debole per far posto. Debole: aperta da
   almeno 30 minuti, nessuna uscita già decisa, non sostenuta dalle candele superiori né in corsa, probabilità di salire
   sulla sua candela di controllo sotto la soglia d'ingresso. La nuova deve avere almeno 10 punti di probabilità in più.
-  Al massimo una a giro e 4 al giorno, mai nei giri in cui si vende già altro. La vendita è «libera»: allocatore e
+  Al massimo una a giro e 4 al giorno, mai nei giri in cui si vende già altro, e solo nella stessa classe (azione con azione, crypto con crypto). La vendita è «libera»: allocatore e
   gabbia contano subito il suo ricavato; l'invio aspetta che sia eseguita e rilegge i contanti prima di comprare, e un
   acquisto che i contanti veri non coprono si rimanda al giro dopo.
 - **Profitto reinvestito** (`intraday.budget.reinvesti`): budget, rischio per operazione e posizione minima sono quote

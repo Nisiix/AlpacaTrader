@@ -7,3 +7,8 @@ LIMITS.maxPositions = 5;
 LIMITS.maxPositionPct = 0.2;
 AGENTS.sizing.byKronos = false;
 LIMITS.breakerEnabled = true;
+// La meccanica intraday è provata soprattutto sulle crypto (24 ore su 24) e con le soglie storiche 55%/57%: di serie gli
+// acquisti crypto sono fermi e le soglie al 60% (10/11/2026), con test propri in tests/crypto-ferme.test.ts.
+AGENTS.cryptoAcquisti.enabled = true;
+AGENTS.intraday.kronos.minProb = 0.55;
+AGENTS.intraday.kronos.minProbSenzaGrafico = 0.57;

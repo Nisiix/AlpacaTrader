@@ -186,6 +186,7 @@ export function applyCage(i: CageInput): CageResult {
       }
     } else {
       if (i.buyBlock) { reject(i.buyBlock); continue; }
+      if (isCrypto(p.symbol) && !AGENTS.cryptoAcquisti.enabled) { reject("acquisti crypto fermati (impostazione «Acquisti crypto»): le crypto già aperte si gestiscono fino all'uscita"); continue; }
       // L'intraday si chiude in giornata con obiettivo e stop propri: non segue il filtro macro né il trend giornaliero.
       const ev = p.intraday ? null : eventBlockFor(p.symbol, i.today, i.events ?? EVENTS);
       if (ev) { reject(ev); continue; }

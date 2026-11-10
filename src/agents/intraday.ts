@@ -314,6 +314,8 @@ export class IntradayAgent implements Agent {
       if (v.analisi === false) break; // la scansione delle candidate si fa nell'analisi d'ingresso, ogni AGENTS.analisiMinuti
       if (v.giornata?.perditaOltre) break; // oltre la perdita massima del giorno (se impostata) niente ingressi
       if (held.has(s)) continue;
+      // Acquisti crypto fermati: nessuna analisi d'ingresso (e nessuna sostituzione verso una crypto).
+      if (isCrypto(s) && !AGENTS.cryptoAcquisti.enabled) continue;
       const blocco = bloccatoOggi(s);
       if (blocco) {
         // La pausa dopo una perdita si vede in dashboard (con l'ora da cui si rivaluta), gli altri limiti del giorno no.
@@ -1001,7 +1003,7 @@ export class IntradayAgent implements Agent {
       const chiesto = Math.min(nuovi.reduce((a, x) => a + x.peso * eq, 0), migliore.peso * eq);
       if (spazio < so.mancanza * chiesto) {
         const debole = deboli
-          .filter((d) => d.s !== migliore.s && d.minuti >= so.minMinuti && d.pl < Number(valore("AGENTS.intraday.kronos.minProb", d.s)) && migliore.pr - d.pl >= so.margine && (isCrypto(d.s) || v.mercatoAperto !== false))
+          .filter((d) => d.s !== migliore.s && (so.traClassi || isCrypto(d.s) === isCrypto(migliore.s)) && d.minuti >= so.minMinuti && d.pl < Number(valore("AGENTS.intraday.kronos.minProb", d.s)) && migliore.pr - d.pl >= so.margine && (isCrypto(d.s) || v.mercatoAperto !== false))
           .sort((a, b) => a.pl - b.pl || a.gain - b.gain)[0];
         if (debole) {
           this.sostituzioni.n++;
