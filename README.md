@@ -119,6 +119,12 @@ toccato il **+10%** sul patrimonio di ieri gli agenti continuano a investire; se
 trade non favorevoli (Kronos non vede più rialzo) e tengono gli altri. Da **Impostazioni → Riavvia il motore** il processo esce con
 codice 75 e `avvia-bot.cmd` lo rilancia da solo: codice e chiavi nuove entrano in uso senza toccare il PC.
 
+**Se il motore sembra fermo** (dashboard che non si aggiorna, nessun giro nel registro): su Windows un clic nella finestra
+nera del motore la mette in selezione («Seleziona» nel titolo) e blocca il motore e Kronos finché non si preme **Esc**.
+Dal 10/11/2026 il motore spegne la «Modifica rapida» della sua finestra a ogni avvio (`tools/senza-quickedit.ps1`); in più
+un giro che dura oltre 15 minuti (`watchdogMinuti`) o un errore non gestito fanno ripartire il motore da solo, con la riga
+nel registro `logs/agenti-AAAA-MM-GG.log`.
+
 ### Ripartire da zero
 
 `bun run chiudi-posizioni` (Windows: `chiudi-posizioni.cmd`) toglie gli stop e vende a mercato tutte le posizioni del conto paper

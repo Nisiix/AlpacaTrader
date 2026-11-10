@@ -139,6 +139,8 @@ export const AGENTS = {
   daily: { enabled: true, targetPct: 0.1, pavimentoPct: 0.05, maxLossPct: 0 },
   // Pagina pubblica su GitHub Pages: istantanea in sola lettura spinta sul ramo gh-pages ogni everyMinutes minuti.
   // Spenta di serie: la pagina è visibile a chiunque abbia il link (conto, posizioni, operazioni). remote vuoto = origin.
+  // Sorveglianza del motore: un giro più lungo di questi minuti si considera bloccato e il motore riparte da solo.
+  watchdogMinuti: 15,
   pages: { enabled: false, everyMinutes: 10, branch: "gh-pages", remote: "" },
   // Taglia proporzionale alla fiducia: la probabilità che la proiezione di Kronos si avveri (rendimento atteso diviso la
   // volatilità sull'orizzonte) porta il peso da minFactor (fiducia 50%) a 1 (fiducia ≥ fullAt); senza proiezione vale noForecast.

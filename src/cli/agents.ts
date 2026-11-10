@@ -39,6 +39,23 @@ try {
   // con la stessa logica dei titoli, 24 ore su 24, anche a borsa chiusa.
   if (!args.noCrypto) enableCrypto();
   const deps = await buildDeps(args);
+  const registro = (testo: string) => {
+    try {
+      mkdirSync(deps.logsDir, { recursive: true });
+      appendFileSync(join(deps.logsDir, `agenti-${new Date().toISOString().slice(0, 10)}.log`), `${new Date().toISOString()} [ERROR] ${testo}\n`);
+    } catch {}
+    console.error(testo);
+  };
+  // Windows: un clic nella finestra del motore (QuickEdit) la mette in selezione e blocca ogni scrittura sulla console,
+  // cioè tutto il motore e Kronos, finché non si preme Esc: il 10/11 il motore si è fermato così per mezz'ora. Si spegne
+  // la Modifica rapida per questa finestra a ogni avvio.
+  if (process.platform === "win32" && process.stdin.isTTY) {
+    try { Bun.spawnSync(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", join(ROOT, "tools", "senza-quickedit.ps1")], { stdin: "inherit", stdout: "inherit", stderr: "inherit" }); } catch {}
+  }
+  // Un errore non gestito si scrive nel registro (prima finiva solo nella finestra) e il motore riparte da solo
+  // (codice 75: avvia-bot.cmd lo rilancia) invece di restare fermo.
+  process.on("uncaughtException", (e) => { registro(`errore non gestito: ${e?.stack ?? e}: riavvio del motore`); process.exit(RESTART_CODE); });
+  process.on("unhandledRejection", (e) => { registro(`promessa rifiutata non gestita: ${(e as Error)?.stack ?? e}`); });
   for (const w of deps.warnings) console.warn(w);
   const bus = new EventBus(deps.stateDir, deps.now);
   const agents: Agent[] = [new TrendAgent(), new PullbackAgent(), new RegimeAgent(), new HorizonAgent()];
@@ -157,6 +174,23 @@ try {
     quit(RESTART_CODE);
   }, 5_000);
   watcher.unref();
+  // Sorveglianza: un giro che dura più di watchdogMinuti (di solito 1-3 minuti, al massimo 6) è bloccato su una chiamata
+  // che non risponde: si scrive nel registro e il motore riparte (codice 75) invece di restare fermo per ore.
+  const lockFile = join(deps.stateDir, "run.lock");
+  const sorveglianza = setInterval(() => {
+    try {
+      if (stop || !existsSync(lockFile)) return;
+      const l = JSON.parse(readFileSync(lockFile, "utf8")) as { runId?: string; pid?: number; startedAt?: string };
+      if (l.pid !== process.pid || !l.startedAt) return;
+      const minuti = (Date.now() - Date.parse(l.startedAt)) / 60_000;
+      if (minuti < AGENTS.watchdogMinuti) return;
+      registro(`giro ${l.runId} bloccato da ${Math.round(minuti)} minuti: riavvio del motore`);
+      try { unlinkSync(lockFile); } catch {}
+      kronos?.stop();
+      process.exit(RESTART_CODE);
+    } catch {}
+  }, 60_000);
+  sorveglianza.unref();
   // Prova sullo storico (src/cli/backtest-intraday.ts raccolta): il file state/backtest.richiesta (con le opzioni nel
   // testo, es. «--giorni 3 --campioni 8») la avvia in un processo a parte, con un sidecar Kronos suo; il motore continua.
   const backtestFile = join(deps.stateDir, "backtest.richiesta");
