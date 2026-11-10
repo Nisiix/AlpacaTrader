@@ -10,7 +10,7 @@
 # Chronos-2, Apache 2.0) e timesfm (Google TimesFM 2.5, Apache 2.0): generici, sulla serie delle chiusure. Quelli non
 # installati si saltano. Nessun ordine parte da qui.
 # Uso: ./venv/bin/python server.py [--model small] [--port 8765] [--lookback 400] [--samples 3] [--modelli kronos,chronos2,timesfm]
-import argparse, json, os, sys, datetime as dt, urllib.request, urllib.parse, time, threading
+import argparse, json, os, sys, datetime as dt, urllib.request, urllib.parse, time, threading, gc
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import numpy as np, pandas as pd, torch
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "kronos-src"))
@@ -98,6 +98,30 @@ def to_df(bs):
     df["timestamps"] = pd.to_datetime(df["timestamps"])
     return df
 
+def memoria_mb():
+    """Memoria del processo in MB: privata (quella che cresce con le perdite) e in uso. Il motore la legge da GET / per
+    riavviare il sidecar prima che il PC resti senza memoria (10/11/2026: «not enough memory» e motore chiuso)."""
+    try:
+        import psutil
+        m = psutil.Process().memory_info()
+        return {"privata": round(getattr(m, "private", m.rss) / 1e6), "uso": round(m.rss / 1e6)}
+    except Exception:
+        pass
+    try:
+        if os.name == "nt":
+            import ctypes, ctypes.wintypes as w
+            class PMC(ctypes.Structure):
+                _fields_ = [("cb", w.DWORD), ("PageFaultCount", w.DWORD), ("PeakWorkingSetSize", ctypes.c_size_t), ("WorkingSetSize", ctypes.c_size_t), ("QuotaPeakPagedPoolUsage", ctypes.c_size_t), ("QuotaPagedPoolUsage", ctypes.c_size_t), ("QuotaPeakNonPagedPoolUsage", ctypes.c_size_t), ("QuotaNonPagedPoolUsage", ctypes.c_size_t), ("PagefileUsage", ctypes.c_size_t), ("PeakPagefileUsage", ctypes.c_size_t)]
+            c = PMC(); c.cb = ctypes.sizeof(c)
+            k32 = ctypes.WinDLL("kernel32"); psapi = ctypes.WinDLL("psapi")
+            k32.GetCurrentProcess.restype = w.HANDLE
+            psapi.GetProcessMemoryInfo(k32.GetCurrentProcess(), ctypes.byref(c), c.cb)
+            return {"privata": round(c.PagefileUsage / 1e6), "uso": round(c.WorkingSetSize / 1e6)}
+        import resource
+        return {"privata": None, "uso": round(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024)}
+    except Exception:
+        return {"privata": None, "uso": None}
+
 # Un solo lavoro di Kronos alla volta: due richieste insieme (agenti e grafici della dashboard) si contendono i core della
 # CPU e rallentano tutte e due più che in fila.
 LAVORO = threading.Lock()
@@ -150,7 +174,7 @@ def forecast(symbols, horizon, series=None, step_minutes=None, samples=None, per
         voci.append((s, df, y_ts))
     out = {}
     t0 = time.time()
-    with LAVORO:
+    with LAVORO, torch.inference_mode():
         try:
             tutti = campioni_kronos(voci, horizon, n_samples)
         except Exception as e:
@@ -177,13 +201,15 @@ def forecast(symbols, horizon, series=None, step_minutes=None, samples=None, per
     for s in nomi:
         del out[s]["_c"]
         out[s]["seconds"] = round((time.time() - t0) / max(1, len(nomi)), 2)
+    # I tensori dei lotti grandi (titoli × campioni × lookback) si liberano subito, non al prossimo giro del garbage collector.
+    gc.collect()
     return out
 
 class H(BaseHTTPRequestHandler):
     def _json(self, code, obj):
         body = json.dumps(obj).encode(); self.send_response(code); self.send_header("content-type", "application/json"); self.send_header("content-length", str(len(body))); self.end_headers(); self.wfile.write(body)
     def do_GET(self):
-        self._json(200, {"ok": True, "model": a.model, "lookback": a.lookback, "pronto": True, "modelli": CARICATI, "percorsi": True})
+        self._json(200, {"ok": True, "model": a.model, "lookback": a.lookback, "pronto": True, "modelli": CARICATI, "percorsi": True, "memoria": memoria_mb()})
     def do_POST(self):
         if self.path != "/forecast": return self._json(404, {"error": "non trovato"})
         try:

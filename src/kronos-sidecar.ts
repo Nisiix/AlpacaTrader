@@ -13,6 +13,8 @@ export interface KronosLink {
   ready: boolean;
   stato: string; // una riga per dashboard e log
   stop(): void;
+  // Riavvia il sidecar (stesso indirizzo): libera la memoria che è cresciuta. Solo per il sidecar acceso dal motore.
+  riavvia?(): void;
   // Richieste degli agenti in corso: intanto i grafici della dashboard non chiedono proiezioni (le avranno al prossimo
   // aggiornamento), così non rubano la CPU al giro degli agenti.
   occupato?: number;
@@ -180,11 +182,36 @@ export async function ensureKronos(o: SidecarOptions): Promise<KronosLink> {
     });
   };
   avvia(offline);
+  // Su Windows il python del venv è un lanciatore che avvia il Python vero come processo figlio: si chiude tutto l'albero
+  // (taskkill /T), se no il figlio può restare acceso con il modello in memoria.
+  const chiudi = () => {
+    try {
+      if (process.platform === "win32" && child.pid) Bun.spawnSync(["taskkill", "/PID", String(child.pid), "/T", "/F"], { stdout: "ignore", stderr: "ignore" });
+    } catch {}
+    try { child.kill(); } catch {}
+  };
   link.stop = () => {
     stopped = true;
-    try {
-      child.kill();
-    } catch {}
+    chiudi();
+  };
+  link.riavvia = () => {
+    if (stopped) return;
+    stopped = true;
+    link.ready = false;
+    link.stato = "in riavvio per liberare memoria";
+    log(`kronos: ${link.stato}`);
+    chiudi();
+    void (async () => {
+      await child.exited.catch(() => {});
+      // Il processo vero di Python (il venv su Windows passa da un lanciatore) può metterci un attimo a lasciare la porta.
+      for (let i = 0; i < 12 && (await pingKronos(url, 2_000)); i++) await Bun.sleep(5_000);
+      stopped = false;
+      avvia(offline);
+      for (let i = 0; i < 240 && !stopped; i++) {
+        if (await pingKronos(url)) { link.ready = true; link.stato = `attivo su ${url} (Kronos-${model}, riavviato)`; log(`kronos: ${link.stato}`); return; }
+        await Bun.sleep(5_000);
+      }
+    })();
   };
   // Pronto quando risponde: alla prima installazione i pesi si scaricano da Hugging Face (minuti).
   const deadline = Date.now() + (o.readyTimeoutMs ?? 20 * 60_000);

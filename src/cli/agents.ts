@@ -39,12 +39,12 @@ try {
   // con la stessa logica dei titoli, 24 ore su 24, anche a borsa chiusa.
   if (!args.noCrypto) enableCrypto();
   const deps = await buildDeps(args);
-  const registro = (testo: string) => {
+  const registro = (testo: string, livello: "ERROR" | "WARN" | "INFO" = "ERROR") => {
     try {
       mkdirSync(deps.logsDir, { recursive: true });
-      appendFileSync(join(deps.logsDir, `agenti-${new Date().toISOString().slice(0, 10)}.log`), `${new Date().toISOString()} [ERROR] ${testo}\n`);
+      appendFileSync(join(deps.logsDir, `agenti-${new Date().toISOString().slice(0, 10)}.log`), `${new Date().toISOString()} [${livello}] ${testo}\n`);
     } catch {}
-    console.error(testo);
+    if (livello === "ERROR") console.error(testo); else console.log(testo);
   };
   // Windows: un clic nella finestra del motore (QuickEdit) la mette in selezione e blocca ogni scrittura sulla console,
   // cioè tutto il motore e Kronos, finché non si preme Esc: il 10/11 il motore si è fermato così per mezz'ora. Si spegne
@@ -191,6 +191,47 @@ try {
     } catch {}
   }, 60_000);
   sorveglianza.unref();
+  // Memoria (10/11/2026: il PC è rimasto senza memoria, Kronos ha fallito i lotti e il motore si è chiuso): ogni pochi
+  // minuti, tra un giro e l'altro, si misura la memoria libera del PC, quella del motore e quella di Kronos e si scrive nel
+  // registro ogni mezz'ora. Se Kronos è cresciuto molto dall'avvio, o il PC resta con poca memoria libera, si riavvia
+  // Kronos (pochi secondi); se è il motore a essere cresciuto oltre maxMotoreMb, riparte il motore.
+  const os = await import("node:os");
+  let kronosBase: number | null = null;
+  let ultimoRegistro = 0;
+  const memoria = setInterval(async () => {
+    try {
+      const m = AGENTS.memoria;
+      if (stop || existsSync(lockFile)) return;
+      const liberaMb = Math.round(os.freemem() / 1e6), totaleMb = Math.round(os.totalmem() / 1e6);
+      const motoreMb = Math.round(process.memoryUsage().rss / 1e6);
+      let kronosMb: number | null = null;
+      if (kronos?.ready) {
+        try {
+          const r = await fetch(kronos.url, { signal: AbortSignal.timeout(3_000) });
+          const j = (await r.json()) as { memoria?: { privata?: number | null; uso?: number | null } };
+          kronosMb = j.memoria?.privata ?? j.memoria?.uso ?? null;
+        } catch {}
+      }
+      if (kronosMb !== null && kronosBase === null) kronosBase = kronosMb;
+      const riga = `memoria: PC libera ${(liberaMb / 1000).toFixed(1)} GB su ${(totaleMb / 1000).toFixed(1)} GB · motore ${motoreMb} MB · Kronos ${kronosMb ?? "?"} MB${kronosBase !== null ? ` (all'avvio ${kronosBase} MB)` : ""}`;
+      const kronosCresciuto = kronosMb !== null && kronosBase !== null && kronosMb - kronosBase > m.crescitaKronosMb;
+      const pcPieno = liberaMb < m.minLiberaMb;
+      if (motoreMb > m.maxMotoreMb) {
+        registro(`${riga}: il motore è cresciuto oltre ${m.maxMotoreMb} MB, riparto per liberare memoria`, "WARN");
+        quit(RESTART_CODE);
+        return;
+      }
+      if ((kronosCresciuto || pcPieno) && kronos?.riavvia && kronosMb !== null && kronosMb > 500) {
+        registro(`${riga}: ${kronosCresciuto ? "Kronos è cresciuto molto dall'avvio" : `poca memoria libera sul PC (meno di ${m.minLiberaMb} MB)`}, riavvio Kronos`, "WARN");
+        kronosBase = null;
+        kronos.riavvia();
+        return;
+      }
+      if (pcPieno) registro(`${riga}: poca memoria libera sul PC (altri programmi?)`, "WARN");
+      else if (Date.now() - ultimoRegistro > 30 * 60_000) { ultimoRegistro = Date.now(); registro(riga, "INFO"); }
+    } catch {}
+  }, AGENTS.memoria.controlloMinuti * 60_000);
+  memoria.unref();
   // Prova sullo storico (src/cli/backtest-intraday.ts raccolta): il file state/backtest.richiesta (con le opzioni nel
   // testo, es. «--giorni 3 --campioni 8») la avvia in un processo a parte, con un sidecar Kronos suo; il motore continua.
   const backtestFile = join(deps.stateDir, "backtest.richiesta");

@@ -125,6 +125,12 @@ Dal 10/11/2026 il motore spegne la «Modifica rapida» della sua finestra a ogni
 un giro che dura oltre 15 minuti (`watchdogMinuti`) o un errore non gestito fanno ripartire il motore da solo, con la riga
 nel registro `logs/agenti-AAAA-MM-GG.log`.
 
+**Memoria** (dal 10/11/2026): ogni 5 minuti il motore misura la memoria libera del PC, la propria e quella di Kronos e la
+scrive nel registro ogni mezz'ora («memoria: PC libera …»). Se Kronos cresce di oltre 1,5 GB dall'avvio o il PC resta con
+meno di 1 GB libero, Kronos si riavvia da solo (pochi secondi); se il motore supera 2,5 GB, riparte il motore. Su Windows
+Kronos si chiude con tutto il suo albero di processi (`taskkill /T`). Se il motore si chiude per un errore,
+`avvia-bot.cmd` lo rilancia dopo 30 secondi (si ferma solo con codice 0, chiusura chiesta, o 2, errore di avvio).
+
 ### Ripartire da zero
 
 `bun run chiudi-posizioni` (Windows: `chiudi-posizioni.cmd`) toglie gli stop e vende a mercato tutte le posizioni del conto paper

@@ -141,6 +141,9 @@ export const AGENTS = {
   // Spenta di serie: la pagina è visibile a chiunque abbia il link (conto, posizioni, operazioni). remote vuoto = origin.
   // Sorveglianza del motore: un giro più lungo di questi minuti si considera bloccato e il motore riparte da solo.
   watchdogMinuti: 15,
+  // Controllo della memoria (src/cli/agents.ts): ogni controlloMinuti; riavvio di Kronos se è cresciuto più di
+  // crescitaKronosMb dall'avvio o se il PC ha meno di minLiberaMb liberi; riavvio del motore oltre maxMotoreMb.
+  memoria: { controlloMinuti: 5, minLiberaMb: 1000, crescitaKronosMb: 1500, maxMotoreMb: 2500 },
   pages: { enabled: false, everyMinutes: 10, branch: "gh-pages", remote: "" },
   // Taglia proporzionale alla fiducia: la probabilità che la proiezione di Kronos si avveri (rendimento atteso diviso la
   // volatilità sull'orizzonte) porta il peso da minFactor (fiducia 50%) a 1 (fiducia ≥ fullAt); senza proiezione vale noForecast.
