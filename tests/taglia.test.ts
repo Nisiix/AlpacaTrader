@@ -62,6 +62,27 @@ describe("taglia intraday: indizi nella probabilità, rischio nella taglia, pavi
     AGENTS.intraday.taglia.pavimento = prima;
   });
 
+  test("più è probabile, più si investe: alla soglia ×min, ampiezza punti sopra ×max, mai oltre maxWeight", async () => {
+    setCryptoUniverse(["BTC/USD"]);
+    const tp = AGENTS.intraday.taglia.probabilita;
+    const peso = async (su: number) => (await new IntradayAgent(fetch, kf(su), misurata).observe(vista())).segnali.find((x) => x.lato === "buy");
+    const bassa = (await peso(10))!, alta = (await peso(16))!;
+    expect(alta.pesoMassimo!).toBeGreaterThan(bassa.pesoMassimo! * 1.5);
+    expect(alta.pesoMassimo!).toBeLessThanOrEqual(AGENTS.intraday.maxWeight + 1e-12);
+    expect(alta.perche).toMatch(/taglia ×\d\.\d\d per la probabilità \(\d+% contro la soglia del \d+%\)/);
+    // Spento: le due taglie tornano uguali (stesso stop, stesso rischio).
+    tp.enabled = false;
+    const b0 = (await peso(10))!, a0 = (await peso(16))!;
+    tp.enabled = true;
+    expect(a0.pesoMassimo!).toBeCloseTo(b0.pesoMassimo!, 9);
+    // Il fattore non supera max: con un'ampiezza minima (subito ×max) la taglia resta ≤ max volte quella di serie.
+    const prima = tp.ampiezza;
+    tp.ampiezza = 0.01;
+    const piena = (await peso(16))!;
+    tp.ampiezza = prima;
+    expect(piena.pesoMassimo!).toBeLessThanOrEqual(a0.pesoMassimo! * tp.max + 1e-12);
+  });
+
   test("allocatore: la taglia di un voto intraday non la riduce Kronos a 5 sedute (prima fino a ×0,4)", () => {
     setCryptoUniverse(["BTC/USD"]);
     const v = vista({ previsioni: { "BTC/USD": -0.03 }, mercatoAperto: true } as Partial<AgentView>);

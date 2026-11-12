@@ -438,7 +438,10 @@ export const AGENTS = {
     // taglia massima.
     // pavimento 0,6 (dal 10/11/2026, era 0,3): con solo azioni e poche occasioni, la fiducia e la prudenza riducono la
     // taglia al massimo del 40%, così il budget dell'80% si usa davvero.
-    taglia: { pavimento: 0.6, penalitaIndizio: 0.02 },
+    // probabilita (12/11/2026, richiesta dell'utente): più è probabile che la previsione si avveri, più si investe. Alla
+    // soglia d'ingresso il rischio allo stop è ×min, `ampiezza` punti sopra ×max (es. soglia 60%: 60% → ×0,5, 67,5% → ×1,25,
+    // 75% e oltre → ×2), sempre dentro maxWeight, il budget dell'intraday e il tetto delle crypto.
+    taglia: { pavimento: 0.6, penalitaIndizio: 0.02, probabilita: { enabled: true, min: 0.5, max: 2, ampiezza: 0.15 } },
     // Lascia correre i trade in guadagno: dopo il pareggio lo stop segue il massimo a trailingAtr ATR della candela;
     // un'uscita «morbida» (obiettivo raggiunto senza altro rialzo, piccolo calo previsto da Kronos, orizzonte scaduto,
     // medie perse) su un trade che guadagna più di minGuadagnoCosti volte i costi alza lo stop a `blocca` del guadagno
