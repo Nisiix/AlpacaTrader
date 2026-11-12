@@ -58,7 +58,9 @@ export const LIMITS = {
   // Titoli che si muovono insieme: tetto complessivo per settore (sectorOf: anche i titoli scoperti dall'esplorazione e le
   // crypto, che salgono e scendono insieme). groupMaxBySector cambia il tetto per un settore preciso.
   groupMaxPct: 0.35,
-  groupMaxBySector: {} as Record<string, number>,
+  // crypto al 100% (12/11/2026, scelta dell'utente): le crypto possono occupare tutto il conto; la ripartizione tra le
+  // singole coppie la fanno probabilità di Kronos e qualità dell'occasione (taglia.probabilita e riparto dell'allocatore).
+  groupMaxBySector: { crypto: 1 } as Record<string, number>,
   // Interruttore: oltre questa perdita dal massimo gli acquisti si fermano, e si riarma da solo dopo breakerRearmSessions
   // giorni di borsa (nel backtest su 550 sedute il riarmo manuale mai fatto costava 13 punti di rendimento).
   maxDrawdownPct: 0.05,
@@ -432,7 +434,8 @@ export const AGENTS = {
     // almeno rialzoCosti volte i costi. Le crypto si muovono insieme: al massimo maxIngressiGiro ingressi crypto nuovi a
     // giro (prima i più probabili) e maxAperte operazioni crypto intraday aperte insieme, se no è una scommessa sola
     // ripetuta (nella prova sullo storico 7 crypto entrate nello stesso giro e uscite tutte allo stop).
-    crypto: { candele: ["1Hour", "4Hour"] as string[], rialzoCosti: 3, maxIngressiGiro: 2, maxAperte: 3 },
+    // 12/11/2026: da 2 ingressi a giro e 3 aperte a 4 e 10, per poter investire fino al 100% del conto in crypto.
+    crypto: { candele: ["1Hour", "4Hour"] as string[], rialzoCosti: 3, maxIngressiGiro: 4, maxAperte: 10 },
     // Taglia intraday: gli indizi contrari tolgono penalitaIndizio di probabilità ciascuno (non dimezzano la taglia); i
     // fattori di rischio della taglia (fiducia, medie, stop, serie di perdite) non la portano sotto `pavimento` della
     // taglia massima.
@@ -465,7 +468,8 @@ export const AGENTS = {
     // Stop minimo: sulle crypto sopra il costo di andata e ritorno (0,5%), altrimenti ogni stop costa quasi il doppio.
     targetAtr: 1.5, stopAtr: 1.2, minStopPct: { stocks: 0.004, crypto: 0.01 },
     // Peso massimo di un'operazione intraday (un titolo). La taglia vera la decide il rischio allo stop (budget.rischioTrade).
-    maxWeight: 0.25,
+    // 40% dal 12/11/2026 (era 25%): un'occasione molto probabile (taglia ×2) può arrivare al 40% del conto.
+    maxWeight: 0.4,
     // Budget dell'intraday. Taglia di un trade: perdita allo stop (stop + costi + scivolamento) ≤ rischioTrade del conto,
     // al massimo maxWeight; un trade con lo stop largo (crypto, 4 ore, trend) è da solo più piccolo, uno con lo stop
     // stretto (azioni su 1 ora, −0,4%) può arrivare al 25%. Investito in intraday nello stesso momento: al massimo
@@ -474,7 +478,8 @@ export const AGENTS = {
     // del conto: servono almeno 4 titoli per riempirlo). Se le occasioni chiedono più del budget, si divide per qualità.
     // riservaOccasioni: il resto del conto (20%) resta liquido per un'occasione in più a budget pieno, ma solo se nettamente
     // migliore (probabilità d'ingresso ≥ soglia + extraProb) e al massimo maxTrade del conto a operazione.
-    budget: { quota: 0.8, rischioTrade: 0.0025, scivolamento: 0.002, maxCrypto: 0.2, maxQuotaTrade: 0.25,
+    // 12/11/2026, scelta dell'utente: quota e maxCrypto al 100% (erano 80% e 20%): tutto il conto può andare in crypto.
+    budget: { quota: 1, rischioTrade: 0.0025, scivolamento: 0.002, maxCrypto: 1, maxQuotaTrade: 0.25,
       riservaOccasioni: { enabled: true, quota: 0.2, extraProb: 0.1, maxTrade: 0.1 },
       // Profitto reinvestito: il guadagno accumulato dal capitale di partenza (state/benchmark.json) si aggiunge al budget
       // per la parte `quota` (1 = tutto), fino a `tetto` del conto. Sotto il capitale di partenza vale la quota di serie.

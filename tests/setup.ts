@@ -12,3 +12,15 @@ LIMITS.breakerEnabled = true;
 AGENTS.cryptoAcquisti.enabled = true;
 AGENTS.intraday.kronos.minProb = 0.55;
 AGENTS.intraday.kronos.minProbSenzaGrafico = 0.57;
+// Tetti storici delle crypto e del budget intraday (fino all'11/11/2026): i test della meccanica (riparto, riserva, tetto
+// per settore, ingressi per giro) li usano; i valori di serie (crypto fino al 100% del conto) hanno test propri in
+// tests/crypto-cento.test.ts.
+// I valori di serie di src/config.ts, letti prima che il preload li cambi.
+export const TETTI_SERIE = { quota: AGENTS.intraday.budget.quota, maxCrypto: AGENTS.intraday.budget.maxCrypto, maxWeight: AGENTS.intraday.maxWeight, maxIngressiGiro: AGENTS.intraday.crypto.maxIngressiGiro, maxAperte: AGENTS.intraday.crypto.maxAperte, gruppi: { ...LIMITS.groupMaxBySector } };
+export const TETTI_STORICI = { quota: 0.8, maxCrypto: 0.2, maxWeight: 0.25, maxIngressiGiro: 2, maxAperte: 3 };
+AGENTS.intraday.budget.quota = TETTI_STORICI.quota;
+AGENTS.intraday.budget.maxCrypto = TETTI_STORICI.maxCrypto;
+AGENTS.intraday.maxWeight = TETTI_STORICI.maxWeight;
+AGENTS.intraday.crypto.maxIngressiGiro = TETTI_STORICI.maxIngressiGiro;
+AGENTS.intraday.crypto.maxAperte = TETTI_STORICI.maxAperte;
+LIMITS.groupMaxBySector = {};
