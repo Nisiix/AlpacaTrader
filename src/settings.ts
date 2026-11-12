@@ -11,9 +11,13 @@ export interface MaskedSettings {
   telegramBotToken: string;
   telegramChatId: string;
   xBearerToken: string;
+  alpacaLiveKeyId: string; // conto reale (AK...), mascherate: solo conservate, il motore non le usa
+  alpacaLiveSecretKey: string;
   file: boolean; // secrets.ts esiste
 }
 
+// Solo per la prova delle chiavi del conto reale (lettura del conto): il trading usa sempre l'endpoint paper.
+const LIVE_ACCOUNT_URL = "https://api.alpaca.markets";
 const mask = (v: string) => (v ? (v.length > 8 ? `${v.slice(0, 4)}…${v.slice(-3)}` : "•".repeat(v.length)) : "");
 
 export function readSecretsFile(root: string): Partial<Secrets> {
@@ -21,12 +25,12 @@ export function readSecretsFile(root: string): Partial<Secrets> {
   if (!existsSync(p)) return {};
   const src = readFileSync(p, "utf8");
   const get = (k: keyof Secrets) => src.match(new RegExp(`${k}:\\s*"([^"]*)"`))?.[1] ?? "";
-  return { alpacaKeyId: get("alpacaKeyId"), alpacaSecretKey: get("alpacaSecretKey"), telegramBotToken: get("telegramBotToken"), telegramChatId: get("telegramChatId"), xBearerToken: get("xBearerToken") };
+  return { alpacaKeyId: get("alpacaKeyId"), alpacaSecretKey: get("alpacaSecretKey"), telegramBotToken: get("telegramBotToken"), telegramChatId: get("telegramChatId"), xBearerToken: get("xBearerToken"), alpacaLiveKeyId: get("alpacaLiveKeyId"), alpacaLiveSecretKey: get("alpacaLiveSecretKey") };
 }
 
 export function maskedSettings(root: string): MaskedSettings {
   const s = readSecretsFile(root);
-  return { alpacaKeyId: mask(s.alpacaKeyId ?? ""), alpacaSecretKey: mask(s.alpacaSecretKey ?? ""), telegramBotToken: mask(s.telegramBotToken ?? ""), telegramChatId: s.telegramChatId ?? "", xBearerToken: mask(s.xBearerToken ?? ""), file: existsSync(join(root, "secrets.ts")) };
+  return { alpacaKeyId: mask(s.alpacaKeyId ?? ""), alpacaSecretKey: mask(s.alpacaSecretKey ?? ""), telegramBotToken: mask(s.telegramBotToken ?? ""), telegramChatId: s.telegramChatId ?? "", xBearerToken: mask(s.xBearerToken ?? ""), alpacaLiveKeyId: mask(s.alpacaLiveKeyId ?? ""), alpacaLiveSecretKey: mask(s.alpacaLiveSecretKey ?? ""), file: existsSync(join(root, "secrets.ts")) };
 }
 
 // Scrive secrets.ts: i campi vuoti nella richiesta lasciano il valore già presente (così si può cambiare solo Telegram).
@@ -38,8 +42,12 @@ export function writeSecretsFile(root: string, incoming: Partial<Secrets>): { ok
     telegramBotToken: (incoming.telegramBotToken ?? "").trim() || cur.telegramBotToken || "",
     telegramChatId: (incoming.telegramChatId ?? "").trim() || cur.telegramChatId || "",
     xBearerToken: incoming.xBearerToken === "-" ? "" : (incoming.xBearerToken ?? "").trim() || cur.xBearerToken || "",
+    alpacaLiveKeyId: incoming.alpacaLiveKeyId === "-" ? "" : (incoming.alpacaLiveKeyId ?? "").trim() || cur.alpacaLiveKeyId || "",
+    alpacaLiveSecretKey: incoming.alpacaLiveSecretKey === "-" ? "" : (incoming.alpacaLiveSecretKey ?? "").trim() || cur.alpacaLiveSecretKey || "",
   };
   if (next.alpacaKeyId && !/^PK[A-Z0-9]+$/i.test(next.alpacaKeyId)) return { ok: false, errore: "la key id di Alpaca deve essere una chiave PAPER (inizia con PK)" };
+  if (next.alpacaLiveKeyId && !/^AK[A-Z0-9]+$/i.test(next.alpacaLiveKeyId)) return { ok: false, errore: "la key id del conto reale di Alpaca inizia con AK" };
+  if (!!next.alpacaLiveKeyId !== !!next.alpacaLiveSecretKey) return { ok: false, errore: "per il conto reale servono sia la key id sia il secret" };
   if (next.telegramBotToken && !/^\d+:[A-Za-z0-9_-]+$/.test(next.telegramBotToken)) return { ok: false, errore: "il token Telegram ha la forma 123456789:AAAA…" };
   if (next.telegramChatId && !/^-?\d+$/.test(next.telegramChatId)) return { ok: false, errore: "il chat id Telegram è un numero" };
   const cambiati = (Object.keys(next) as (keyof Secrets)[]).filter((k) => (cur[k] ?? "") !== next[k]);
@@ -53,6 +61,9 @@ export const secrets: Secrets = {
   telegramBotToken: "${esc(next.telegramBotToken)}",
   telegramChatId: "${esc(next.telegramChatId)}",
   xBearerToken: "${esc(next.xBearerToken ?? "")}",
+  // Conto REALE (AK...): solo conservate, il motore opera sempre sul conto paper.
+  alpacaLiveKeyId: "${esc(next.alpacaLiveKeyId ?? "")}",
+  alpacaLiveSecretKey: "${esc(next.alpacaLiveSecretKey ?? "")}",
 };
 `;
   writeFileSync(join(root, "secrets.ts"), body);
@@ -60,7 +71,7 @@ export const secrets: Secrets = {
 }
 
 // Prova delle chiavi: Alpaca (conto paper) e Telegram (getMe e, con il chat id, un messaggio di prova).
-export async function testSettings(root: string, incoming: Partial<Secrets>, timeoutMs = 10_000): Promise<{ alpaca: string; telegram: string; chatId?: string }> {
+export async function testSettings(root: string, incoming: Partial<Secrets>, timeoutMs = 10_000): Promise<{ alpaca: string; alpacaReale: string; telegram: string; chatId?: string }> {
   const cur = readSecretsFile(root);
   const k = (incoming.alpacaKeyId ?? "").trim() || cur.alpacaKeyId || "";
   const s = (incoming.alpacaSecretKey ?? "").trim() || cur.alpacaSecretKey || "";
@@ -76,6 +87,19 @@ export async function testSettings(root: string, incoming: Partial<Secrets>, tim
       } else alpaca = `rifiutate: Alpaca ${r.status}${r.status === 401 || r.status === 403 ? " (chiave o secret sbagliati, o non del conto paper)" : ""}`;
     } catch (e) {
       alpaca = `non raggiungibile: ${(e as Error).message}`;
+    }
+  }
+  // Conto reale: solo una lettura del conto (GET /v2/account) per controllare che le chiavi siano giuste; nessun ordine.
+  const kl = (incoming.alpacaLiveKeyId ?? "").trim() || cur.alpacaLiveKeyId || "";
+  const sl = (incoming.alpacaLiveSecretKey ?? "").trim() || cur.alpacaLiveSecretKey || "";
+  let alpacaReale = "non impostato";
+  if (kl && sl) {
+    try {
+      const r = await fetch(`${LIVE_ACCOUNT_URL}/v2/account`, { headers: { "APCA-API-KEY-ID": kl, "APCA-API-SECRET-KEY": sl }, signal: AbortSignal.timeout(timeoutMs) });
+      if (r.ok) { const a = (await r.json()) as { status?: string }; alpacaReale = `ok: conto reale ${a.status ?? "?"} (chiavi valide; il motore resta sul conto paper)`; }
+      else alpacaReale = `rifiutate: Alpaca ${r.status}${r.status === 401 || r.status === 403 ? " (chiave o secret sbagliati, o non del conto reale)" : ""}`;
+    } catch (e) {
+      alpacaReale = `non raggiungibile: ${(e as Error).message}`;
     }
   }
   let telegram = "non impostato";
@@ -94,7 +118,7 @@ export async function testSettings(root: string, incoming: Partial<Secrets>, tim
           if (ids.length === 1) chatId = String(ids[0]);
           telegram += ids.length === 1 ? `, chat id trovato: ${ids[0]}` : ids.length ? `, più chat trovate: ${ids.join(", ")}` : ", nessuna chat: scrivi /start al bot e riprova";
         } else {
-          const m = await fetch(`https://api.telegram.org/bot${tok}/sendMessage`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ chat_id: chat, text: "✅ Agenti Alpaca: prova dalle impostazioni riuscita." }), signal: AbortSignal.timeout(timeoutMs) });
+          const m = await fetch(`https://api.telegram.org/bot${tok}/sendMessage`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ chat_id: chat, text: "✅ Agentics sniper: prova dalle impostazioni riuscita." }), signal: AbortSignal.timeout(timeoutMs) });
           telegram += m.ok ? ", messaggio di prova inviato" : `, messaggio non inviato (chat id ${chat} rifiutato)`;
         }
       }
@@ -102,5 +126,5 @@ export async function testSettings(root: string, incoming: Partial<Secrets>, tim
       telegram = `non raggiungibile: ${(e as Error).message}`;
     }
   }
-  return { alpaca, telegram, chatId };
+  return { alpaca, alpacaReale, telegram, chatId };
 }

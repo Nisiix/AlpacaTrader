@@ -23,6 +23,11 @@ export interface Signal {
   intraday?: boolean;
   // Proiezione di Kronos che sostiene il voto (rendimento a `horizon` sedute), se c'è.
   kronos?: number;
+  // Misure del momento del voto (probabilità di riuscita, RSI...): vanno nel diario con il trade, per la prova in ombra
+  // delle impostazioni, la calibrazione delle probabilità e il meta-modello.
+  misure?: Record<string, number>;
+  // Vendita di sostituzione: libera contanti e budget per gli acquisti dello stesso giro (allocatore, gabbia, invio).
+  libera?: boolean;
 }
 
 import type { FontiDati } from "./fonti.ts";
@@ -37,6 +42,8 @@ export interface AgentView {
   account: Account;
   // Contanti già impegnati da ordini d'acquisto ancora aperti: l'allocatore non li ridistribuisce.
   cashImpegnato?: number;
+  // Capitale di partenza (state/benchmark.json): il patrimonio sopra questo è profitto accumulato, reinvestito nel budget.
+  capitaleBase?: number;
   // Giro con analisi d'ingresso (ogni AGENTS.analisiMinuti): scansione intraday con Kronos e nuovi acquisti. Negli altri
   // giri si controllano solo le posizioni (uscite, stop, protezione). Assente = analisi (valutazione dalla dashboard, test).
   analisi?: boolean;
@@ -51,6 +58,8 @@ export interface AgentView {
   percorsi?: Record<string, number[]>;
   // Contesto economico deciso prima degli altri agenti: settori in cui si aspetta, proiezioni di cui fidarsi.
   contesto?: MarketContext;
+  // Probabilità favorevole dei dossier dei trading agents (giro precedente): l'intraday la usa per una parte minima.
+  dossier?: Record<string, number>;
   // Borsa aperta adesso e finestra degli ingressi sui titoli: l'allocatore non spreca posti su titoli non negoziabili.
   mercatoAperto?: boolean;
   // Con la borsa aperta: quando chiude oggi (dall'orologio di Alpaca). Gli ingressi sulle azioni seguono l'orario vero.
@@ -59,6 +68,9 @@ export interface AgentView {
   // Giornata: guadagno dal patrimonio di ieri e stato dell'obiettivo giornaliero (raggiunto → si incassa, niente nuovi ingressi).
   // obiettivoRaggiunto: oggi il guadagno ha toccato l'obiettivo; difesa: poi è tornato al pavimento (si vendono i trade non favorevoli).
   giornata?: { pnlPct: number; obiettivoRaggiunto: boolean; perditaOltre: boolean; difesa?: boolean; picco?: number };
+  // Difesa del guadagno per persona: titolo → motivo (la persona che ci lavora ha toccato il suo obiettivo del giorno ed
+  // è tornata sotto metà): i suoi trade non favorevoli si vendono.
+  difesaPersonale?: Record<string, string>;
   // Fonti esterne (Fear & Greed delle crypto, funding dei perpetui): contorno per contesto e dossier.
   fonti?: FontiDati;
 }

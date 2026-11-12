@@ -29,8 +29,8 @@ ora legale), le crypto lavorano 24 ore su 24.
    scoperti dall'esplorazione ancora attivi.
 2. **Alpaca.** Conto, posizioni, ordini, orologio della borsa, prezzi.
 3. **Trimestrali** (una volta al giorno) e **storico giornaliero** (solo giornate concluse, 320 sedute).
-4. **Memoria del rischio.** Registro degli errori (dopo uno stop niente riacquisto per 5 giorni di borsa; due rifiuti
-   uguali di Alpaca bloccano quel titolo per 5 giorni), limite del giorno, diario dei trade.
+4. **Memoria del rischio.** Registro degli errori (dopo uno stop una pausa di 2 ore sul titolo; due rifiuti uguali di
+   Alpaca una pausa di 4 ore: niente blocchi di giorni), limite del giorno, diario dei trade.
 5. **Previsioni.** Kronos e il cervello delle previsioni (capitolo 3), riportate al prezzo di adesso.
 6. **Fonti esterne.** Fear & Greed delle crypto, funding dei futures; le notizie le leggono i custodi.
 7. **Contesto economico**, prima di tutti gli altri agenti: decide dove aspettare e di quali proiezioni fidarsi.
@@ -106,7 +106,7 @@ fidata può far vendere o fermare un acquisto, mai far comprare.
 
 | Agente | Compito | Vota |
 |---|---|---|
-| **kronos** | proiezioni a 5 sedute | compra i rialzi oltre +1% (forza 0,5 → 1 con la proiezione); sotto la media a 200 solo contro tendenza (≥ +2% con probabilità ≥ 60%, metà taglia); vende (0,5) un titolo in portafoglio con ribasso netto |
+| **kronos** | proiezioni a 5 sedute | compra i rialzi oltre +1% (forza 0,5 → 1 con la proiezione); sotto la media a 200 solo contro tendenza (≥ +2% con probabilità ≥ 57%, metà taglia); vende (0,5) un titolo in portafoglio con ribasso netto |
 | **trend** | sopra le medie a 50 e 200 giorni, rendimento a 12 mesi positivo (crypto anche a 3 mesi), classifica per momentum a 6 mesi | compra (1 → 0,5 per classifica); vende chi chiude sotto la 50, salvo Kronos ancora al rialzo |
 | **rientro** | RSI(2) sotto 10 sopra la media a 200 | compra a taglia ridotta (5%); esce a RSI 70 o dopo 5 sedute |
 | **custodi** | un investitore per ogni titolo in trend, con rialzo netto di Kronos o in portafoglio; nessun numero fisso | tesi, piano, rischio e dossier; vota ingressi e uscite (sotto) |
@@ -162,6 +162,15 @@ l'opportunità regge. Si chiude quando è comprato (lo segue il suo custode), qu
 
 ## 5. Entrare: dal voto all'ordine
 
+
+Con il motore che punta all'intraday l'esplorazione usa i criteri dell'intraday: il titolo deve muoversi abbastanza in
+una giornata (volatilità a 20 giorni ≥ 1,5% per le azioni, 3% per le crypto) e Kronos a 5 sedute non deve vedere un
+calo netto. Non vota acquisti di più giorni: il titolo entra nell'universo per 3 giorni e lo valutano gli intraday agents
+sulle candele. Si lascia solo con un calo netto di Kronos, e mai nel giro in cui gli intraday agents l'hanno votato.
+
+Il **capo ufficio** giudica le persone intraday sulla probabilità d'ingresso (non su Kronos a 5 sedute) e trae una
+«lezione per tutti» solo da almeno 20 trade. In ufficio gli agenti dei trade di più giorni (trend, Kronos a 5 sedute…)
+risultano «contesto»: con il motore intraday i loro voti d'acquisto non aprono posizioni.
 ### L'allocatore
 
 1. **Somma i voti** pesati per titolo (tutti gli agenti con peso 1; richiami e lezioni li hanno già corretti). Da +0,5
@@ -170,19 +179,238 @@ l'opportunità regge. Si chiude quando è comprato (lo segue il suo custode), qu
    - il contesto non dice di aspettare;
    - **costi**: Kronos deve prevedere almeno **2 volte** i costi di andata e ritorno (crypto 0,5% → +1%; azioni ~0,05%
      → +0,1%); con Kronos attivo, senza proiezione utilizzabile non si entra;
-   - **evidenza combinata** del dossier: almeno 50% sopra la media a 200, 60% sotto.
+   - **evidenza combinata** del dossier: almeno 57% sopra la media a 200, 65% sotto.
 
    **Voti misti**: se sullo stesso titolo votano sia agenti di più giorni sia l'intraday e uno di questi filtri fa
    aspettare l'ingresso di più giorni, si guarda la sola parte intraday: se da sola arriva a +0,5 entra come **trade
    intraday** (sua taglia, suo obiettivo e stop, chiusura in giornata o promozione), invece di perdere l'occasione.
 3. **Taglia**: al massimo il **10% del conto** per titolo, meno se il titolo è nervoso (valore × volatilità giornaliera ≤
    0,25% del conto) × rischio ammesso × **fiducia in Kronos** (50% → 40% della taglia, ≥ 80% → piena) × evidenza (al
-   minimo metà); sotto la media a 200 ancora × 0,5, mai oltre il 5%.
+   minimo metà) × la **scaletta delle medie** (sotto).
 4. **Riparto del capitale**: nessun numero fisso di titoli o di agenti. Se i contanti (meno l'1% di riserva e meno gli
    ordini d'acquisto ancora aperti) non bastano, si dividono in proporzione alla **qualità** (fiducia × evidenza ×
    punteggio), rispettando il **35% per settore** in ordine di punteggio. Una posizione nuova vale la pena da 0,2% del
    conto e 100 $; un'aggiunta da 2%.
-5. Gli acquisti si decidono solo nei giri con **analisi d'ingresso** (ogni 15 minuti); le vendite in ogni giro.
+5. Gli acquisti si decidono solo nei giri con **analisi d'ingresso** (ogni 5 minuti); le vendite in ogni giro.
+
+### Proposte del capo ufficio
+
+Oltre a giudicare le persone, il capo ufficio guarda i risultati delle operazioni intraday chiuse (le ultime 200) e,
+solo con dati sufficienti (almeno 30 operazioni e almeno 12 nel gruppo che giustifica il cambio), **propone all'utente**
+di cambiare un'impostazione generale, con il valore attuale, quello proposto e il perché in numeri
+(`src/agents/proposte.ts`, `AGENTS.capo.proposte`). Le regole:
+
+- operazioni entrate con probabilità vicina alla soglia (entro 5 punti) in perdita → soglia più alta; risultati molto
+  buoni ma meno di un'operazione al giorno → soglia senza medie in ordine più bassa di un punto;
+- nel complesso in perdita → taglia per operazione più piccola; resa costante (vinte ≥ 55%, guadagni/perdite ≥ 1,4)
+  → un po' più grande (massimo 15%);
+- un livello della scaletta delle medie in perdita → più prudenza su quel livello; molto positivo → un po' meno;
+- operazioni con obiettivo vicino ai costi in perdita → margine sui costi più alto;
+- chiusure per tempo scaduto in perdita → scadenza dell'orizzonte più corta;
+- rientri nello stesso giorno in perdita → meno ingressi al giorno per titolo;
+- operazioni riportate al giorno dopo in perdita → riporto più selettivo.
+
+Il capo non cambia niente da solo: nell'ufficio 3D si alza in piedi con la mano alzata e l'avviso «proposta per te»; la proposta è nella sua scheda (clic sul capo, sull'avviso o sul suo nome nell'elenco) e arriva su Telegram; «Accetta» la salva
+come le altre impostazioni, «Rifiuta» la tiene ferma 7 giorni. Dopo un'accettazione la stessa impostazione si riguarda
+solo con almeno 12 operazioni nuove. Per queste analisi ogni ingresso intraday registra nel diario anche la posizione
+rispetto alle medie a 50 e 200 (`misure.medie`).
+
+### Voti e tempi
+
+- **Quanti voti**: ogni agente vota con una forza (0-1) e il punteggio di un titolo è la somma dei voti d'acquisto
+  meno quelli di vendita (tutti gli agenti pesano 1). Si compra da +0,5. Con il motore che punta all'intraday conta la
+  sola parte intraday: il voto dell'intraday agent vale 1, quindi **basta il suo voto** (deciso dalle candele e da
+  Kronos su quelle candele); i voti di vendita d'opinione lo possono abbassare.
+- **Quando**: i giri sono **allineati alla chiusura delle candele da 5 minuti** (partono 20 secondi dopo: :00:20,
+  :05:20, ...). In ogni giro l'intraday legge le candele appena chiuse e Kronos le riproietta solo se è chiusa una
+  candela nuova; il voto e l'ordine arrivano nello stesso giro, dopo circa 1-2 minuti (il tempo di Kronos).
+- **Prezzo riletto**: prima di inviare un acquisto il prezzo si rilegge; se nel frattempo è salito oltre lo 0,3%
+  l'acquisto non parte e si rivaluta al giro dopo. Le crypto entrano con un ordine limite sul prezzo di adesso.
+- Lo stato del motore registra la durata di ogni agente e delle fasi del giro (`tempi`).
+
+### Titoli europei
+
+Il conto Alpaca (Trading API) tratta solo i mercati americani: le borse europee (Xetra e le altre) sono riservate ai
+broker partner. Le azioni europee entrano quindi come **titoli europei quotati in America** e **ETF sull'Europa**
+(`EUROPA` in `src/config.ts`): ASML, SAP, Novo Nordisk (NVO), AstraZeneca (AZN), Shell (SHEL), TotalEnergies (TTE),
+Unilever (UL), Sanofi (SNY) e gli ETF VGK (Europa), EZU (Eurozona), EWG (Germania), EWI (Italia). Fanno parte
+dell'universo fisso con la stessa logica di tutti gli altri titoli, negli orari della borsa americana (15:30-22:00 in
+Italia), settore «europa» con il tetto del 35%.
+
+### Il motore punta all'intraday
+
+Di serie (`AGENTS.puntaIntraday`) gli ingressi nuovi si decidono **solo sulle candele** (5 e 15 minuti, 1 e 4 ore; le
+azioni 1 e 4 ore) con gli intraday agents e Kronos su quelle candele. I voti di più giorni (trend, trading agents,
+Kronos a 5 sedute, rientro) restano come contesto ma da soli non aprono posizioni: l'allocatore entra solo con la parte
+intraday, altrimenti il titolo resta in attesa.
+
+Un trade si estende su più giorni solo per **riporto** (`AGENTS.intraday.riporto`): a fine giornata (chiusura della
+borsa, 12 ore per le crypto) l'operazione si tiene se le proiezioni di Kronos sulla sua candela e su quelle superiori,
+all'orizzonte più lungo, restano **dentro la forchetta del trade** (nessuna arriva allo stop) e la più lunga vede ancora
+salire con probabilità ≥ 55%; niente riporto con una trimestrale il giorno dopo, al massimo 5 volte. Il giorno dopo
+decidono di nuovo le candele: obiettivo e stop restano quelli del trade, l'orizzonte è quello della proiezione usata
+per il riporto e la durata massima delle crypto riparte dal riporto. Le regole a sedute (uscita a tempo, rientro a 5
+sedute, uscita di trend) non riguardano questi trade.
+
+### Come si decide un ingresso intraday (riassunto)
+
+- **Candele con un vantaggio misurato**: Kronos si usa solo sulle candele dove indovina la direzione più del caso
+  (`intraday.vantaggio`: con almeno 300 previsioni verificate e affidabilità sotto 0,25, oppure con almeno 40 e la
+  direzione giusta meno della metà delle volte, la candela non fa entrare e non conferma né blocca le altre come candela
+  superiore; si continua a proiettarla poco, 6 coppie a giro, per misurarla, e torna utilizzabile appena il vantaggio
+  compare). Esempio: le 4 ore, giuste il 41% su 44.
+- **Probabilità dai percorsi di Kronos**: il sidecar manda i singoli percorsi (16 di solito), non solo la media. La
+  probabilità è la quota di percorsi che all'orizzonte chiudono **sopra i costi senza toccare lo stop**, avvicinata a
+  50% secondo l'affidabilità della candela: 0,5 + fattore × (quota − 0,5). Esempio: 12 percorsi su 16 su una candela
+  da 1 ora con affidabilità ×0,67 → 0,5 + 0,67 × (12,5/17 − 0,5) ≈ 66%. Prima si usava solo la media dei percorsi
+  rispetto al rumore della candela, che esce quasi sempre piccola: le probabilità restavano tra il 46% e il 52%.
+- **Scelta della candela**: prima quelle con cui si può entrare (rialzo oltre i costi e probabilità oltre la soglia),
+  poi la probabilità più alta; non più «prima chi copre i costi», che sceglieva le 4 ore anche dove Kronos sbaglia di più.
+- **Stop dai percorsi peggiori**: lo stop è il livello che l'80% dei percorsi non tocca (`intraday.percorsi`), tra lo
+  stop minimo (0,4% azioni, 1% crypto) e quello dell'ATR; con questo stop decide l'aspettativa (Thorp), non il rapporto
+  fisso 1,2. Senza percorsi vale l'ATR, che ora non conta il salto tra una seduta e l'altra (prima gonfiava lo stop
+  delle candele da 1 ora delle azioni: NVDA −2,56%).
+- **Candele che non rendono**: con almeno 300 previsioni e una resa media (seguendo Kronos, lorda dei costi) ≤ 0 la
+  candela non si usa nemmeno se indovina la direzione più di metà delle volte. Esempio: le 15 minuti, giuste il 51% su
+  1.085 ma con resa −0,06% (`intraday.vantaggio.minResa`). Oggi Kronos rende sulle 1 ora (+0,44%) e sulle 4 ore (+0,71%).
+- **Crypto** (`intraday.crypto`): andata e ritorno costa lo 0,4%, più del vantaggio di Kronos sulle candele brevi. Si
+  entra sulle 1 e 4 ore con il solito doppio dei costi; sulle 5 e 15 minuti solo con un rialzo previsto di almeno 3
+  volte i costi (1,2%). Le crypto si muovono insieme: al massimo **2 ingressi crypto nuovi a giro** (prima i più
+  probabili) e **3 operazioni crypto intraday aperte** insieme. Nella prova sullo storico 7 crypto entrate nello stesso
+  giro sono uscite tutte allo stop.
+- **Stop su Alpaca al livello dell'operazione** (`intraday.stopSuAlpaca`): per le operazioni intraday lo stop su Alpaca
+  è quello che l'agente segue (−0,4%, poi pareggio e rialzi), non quello largo dei più giorni (−5/−10%): a PC spento la
+  perdita si ferma dove deve. Se il prezzo è già sotto lo stop dell'operazione (l'agente vende in quel giro) resta lo
+  stop normale; un'operazione promossa a più giorni torna allo stop dei più giorni. Uno stop su Alpaca scatta anche su
+  un calo di pochi secondi tra un giro e l'altro: è la protezione vera, non quella vista ogni 5 minuti.
+- **Proiezione riportata al prezzo di adesso**: Kronos sulle candele parte dalla chiusura dell'ultima candela, ma si usa
+  per tutta la candela (fino a 1 o 4 ore). Rialzo previsto, percorsi, probabilità e stop si ricalcolano rispetto al
+  prezzo di adesso: un rialzo già fatto non si conta due volte. E un rientro sulla stessa candela con la stessa
+  proiezione di un trade di oggi già chiuso aspetta la candela nuova (il primo giorno NVDA era rientrato due volte con la
+  proiezione delle 18:00, dopo che il primo trade aveva già preso il rialzo previsto).
+- **Uscite sulla candela con vantaggio**: una posizione si segue sulla candela più breve (es. 15 minuti per un trade su
+  1 ora) solo se lì Kronos ha almeno 40 previsioni verificate e un vantaggio misurato, e per le azioni solo sulle loro
+  candele; altrimenti sulla candela dell'operazione. Anche per tenere, incassare o tagliare la probabilità viene dai
+  percorsi. Prima le uscite le decidevano le 15 minuti, escluse dagli ingressi perché non rendono.
+- **Prudenza sui percorsi** (`intraday.percorsi.prudenza` 0,5): i percorsi misurano solo l'incertezza che Kronos vede;
+  la probabilità si avvicina ancora a 50% (12 percorsi su 16 → 62%, non 74%) finché la calibrazione sui trade veri non
+  la corregge. Lo stesso vale per il riporto al giorno dopo.
+- **Misure per classe**: il cervello conta le previsioni intraday anche separate per azioni e crypto; con almeno 150 di
+  una classe su una candela valgono le sue (i costi delle crypto sono 8 volte quelli delle azioni).
+- **Budget dell'intraday** (`intraday.budget`): la taglia di un'operazione la decide il rischio allo stop: perdita allo
+  stop (stop + costi + scivolamento 0,2%) al massimo lo **0,25% del conto**, e un'operazione da sola al massimo metà del
+  budget (25% del conto). In operazioni intraday si investe insieme fino all'**80% del conto** (regola di serie dal
+  10/11/2026: su 1.000 $ si investono 800 $ divisi tra le occasioni della giornata; le crypto, che si muovono insieme,
+  al massimo il 20%; un settore al massimo il 35%, diviso per qualità); gli ordini ancora in corso contano. Se le
+  occasioni chiedono di più, il budget si divide in proporzione alla qualità. Un segnale oltre il tetto per titolo (25%)
+  viene ridotto, non scartato dalla gabbia. **Riserva per le occasioni** (`budget.riservaOccasioni`): il 20% restante
+  resta liquido; a budget pieno lo prende solo un'occasione nettamente migliore (probabilità d'ingresso almeno 10 punti
+  sopra la soglia), al massimo il 10% del conto a operazione. La taglia di un'operazione arriva al 20% del conto e la
+  fiducia la riduce al massimo del 40% (`taglia.pavimento` 0,6).
+- **Acquisti crypto fermati** (`cryptoAcquisti`, dal 10/11/2026): nella prova sullo storico del 9/11 le crypto intraday
+  vincevano il 20-25% dei trade (−0,8% a trade) in tutte le varianti, le azioni l'83-93% (+0,7%). La gabbia rifiuta ogni
+  acquisto crypto e l'agente intraday non le analizza per entrare; le crypto già aperte si gestiscono fino all'uscita.
+  Soglie di probabilità al 60% (con e senza medie brevi in ordine).
+- **Sostituzione dei trade deboli** (`intraday.sostituzione`): con budget o contanti pieni (spazio libero sotto metà di
+  quanto chiede la migliore occasione nuova) si vende l'operazione aperta più debole per far posto. Debole: aperta da
+  almeno 30 minuti, nessuna uscita già decisa, non sostenuta dalle candele superiori né in corsa, probabilità di salire
+  sulla sua candela di controllo sotto la soglia d'ingresso. La nuova deve avere almeno 10 punti di probabilità in più.
+  Al massimo una a giro e 4 al giorno, mai nei giri in cui si vende già altro, e solo nella stessa classe (azione con azione, crypto con crypto). La vendita è «libera»: allocatore e
+  gabbia contano subito il suo ricavato; l'invio aspetta che sia eseguita e rilegge i contanti prima di comprare, e un
+  acquisto che i contanti veri non coprono si rimanda al giro dopo.
+- **Profitto reinvestito** (`intraday.budget.reinvesti`): budget, rischio per operazione e posizione minima sono quote
+  del patrimonio, che contiene il profitto: con il conto che cresce crescono le taglie, con il conto che scende si
+  riducono. Con un budget sotto il 100% il profitto incassato dal capitale di partenza (`state/benchmark.json`) si
+  aggiunge tutto al budget, fino all'80% del conto; i guadagni ancora aperti non contano (possono sparire).
+  Le sue proposte sulla taglia cambiano il rischio per operazione; la formazione riduce la taglia della persona.
+- **Lascia correre** (`intraday.lasciaCorrere`): il pareggio mette lo stop sopra i costi di andata e ritorno (crypto
+  +0,5%, prima +0,3%: sotto i costi); dopo il pareggio lo stop segue il massimo a 2 ATR della candela di controllo.
+  Un'uscita «morbida» (obiettivo raggiunto senza altro rialzo, piccolo calo previsto da Kronos, orizzonte scaduto, medie
+  perse) su un trade che guadagna più di 2 volte i costi non chiude subito: lo stop sale a tenere almeno metà del
+  guadagno (mai sotto 1,5 volte i costi: se scatta, si chiude comunque in guadagno) e si esce solo se la ragione resta per
+  2 candele di controllo di fila senza un massimo nuovo. Un massimo nuovo fa ripartire il conteggio: si esce quando il
+  prezzo smette di salire. Stop, fine giornata e perdita che peggiora restano immediati.
+- **Meno titoli, più qualità** (`intraday.selezione`): una coppia titolo-candela si proietta solo se il prezzo si muove
+  abbastanza da coprire due volte i costi sull'orizzonte più lungo (es. BTC a 5 minuti no: ±0,5% in un'ora contro lo
+  0,8% che serve); poi per ogni candela al massimo 8 (5 min), 10 (15 min), 16 (1 ora) proiezioni nuove a giro, prima
+  rotture e rientri, poi medie brevi in ordine e rimbalzi, poi per la probabilità vista all'ultima proiezione, con 2
+  posti a rotazione per le altre. Le candele si scaricano in parallelo e i grafici della dashboard non chiedono
+  proiezioni mentre lavorano gli agenti: il giro resta sotto i 5 minuti (prima ne durava 6, e i giri cadevano ogni 10).
+- **Probabilità**: con le medie brevi in ordine (o rottura/rientro) quella della persona (55% di serie); senza, 57%
+  (come la soglia generale). La probabilità con cui si decide è per l'**85% Kronos sulle candele** e per il **15% il
+  dossier** del titolo (Kronos a 5 sedute, grafico giornaliero, notizie e post, contesto con Fear & Greed e funding)
+  o, senza dossier, il contesto del settore (favorevole 60%, neutro 50%, sfavorevole 40%) (`intraday.evidenza`).
+- **Costi**: le crypto si comprano con **ordini limite** dentro le migliori offerte di adesso (a metà tra acquisto e
+  vendita meno 0,05%, mai sotto il miglior acquisto), che pagano la commissione maker (0,15%) invece della taker
+  (0,25%); le vendite restano a mercato. Andata e ritorno 0,40%: il rialzo previsto deve essere almeno 0,8%. Un limite
+  non eseguito in 10 minuti si cancella; al voto successivo sullo stesso titolo entro un'ora si compra al prezzo di
+  vendita (+0,1%, si esegue subito) (`costi.ordiniLimite`). Il prezzo delle crypto è quello a metà tra le migliori
+  offerte: l'ultimo scambio sulle coppie poco scambiate su Alpaca può essere vecchio di decine di minuti.
+- **Obiettivo** = il rialzo previsto da Kronos (mai sotto due volte i costi); con lo stop dell'ATR deve valere almeno
+  1,2 volte lo stop, con quello dei percorsi decide l'aspettativa.
+- **Rientri**: sullo stesso titolo al massimo 3 ingressi al giorno (`intraday.ingressiGiorno`). Dopo una chiusura in
+  perdita (stop compresi, di qualsiasi agente) nessun blocco di giorni (`intraday.rientro`): pausa di 2 ore, poi per 24
+  ore la soglia di probabilità sale di 3 punti e serve una proiezione nuova di Kronos; in dashboard la pausa si vede con
+  l'ora da cui il titolo si rivaluta.
+
+### La scaletta delle medie (prudenza)
+
+Si investe anche sotto le medie giornaliere, con taglie via via più piccole (la 200 conta più della 50;
+`AGENTS.prudenzaMedie`, `livelloMedie` in `src/agents/fiducia.ts`):
+
+| Prezzo | Più giorni | Intraday (candele 5 min - 4 ore) |
+|---|---|---|
+| sopra la 50 e la 200 | ×1 | ×1 |
+| sotto la 50, sopra la 200 | ×0,75 (serve Kronos ≥ +1%) | ×0,85 |
+| sopra la 50, sotto la 200 | ×0,5 (contro tendenza) | ×0,75 |
+| sotto la 50 e la 200 | ×0,4 (contro tendenza) | ×0,65 |
+
+Sotto la 50 (downtrend) si **preferisce il timeframe breve**: se sul titolo c'è anche un voto intraday che da solo
+basta, si entra come trade intraday invece che di più giorni. Sotto la 200 resta il tetto del 5% del conto.
+
+### Il rimbalzo di breve (media a 50 facoltativa)
+
+La media a 50 giorni non è più un requisito assoluto. Se un titolo o una crypto è sotto la 50 (anche sotto la 200) e
+ha avuto un **calo netto improvviso** (nell'ultimo giorno oltre il 3% per le azioni, il 5% per le crypto, o 1,5 volte la
+sua volatilità giornaliera; negli ultimi 3 giorni oltre 1,5 volte quella soglia; o nelle ultime 8 ore dal massimo
+sulle candele da 1 ora: `caloNetto` in `src/agents/fiducia.ts`), il rimbalzo
+lo cercano gli **intraday agents**, e tutto si decide **sulle candele**, non a sedute o a giorni:
+
+- Kronos proietta le candele da 5 e 15 minuti, 1 e 4 ore (le azioni 1 e 4 ore); si sceglie la candela e l'orizzonte
+  con la probabilità più alta di un rialzo che copre due volte i costi;
+- con le medie brevi della candela non ancora in ordine (normale dopo un calo) basta una probabilità **≥ 57%**
+  (`AGENTS.rimbalzo.minFiducia`) invece del 65%; il grafico giornaliero sotto la sua media non dimezza la taglia (è la
+  premessa), le medie brevi non in ordine sì;
+- **obiettivo** il rialzo previsto da Kronos sull'orizzonte scelto, **stop** della candela, **scadenza** l'orizzonte di
+  Kronos su quella candela; se le candele superiori vedono ancora un rialzo netto il trade prosegue con il loro
+  obiettivo e il loro orizzonte (stesse regole di ogni operazione intraday, chiusura entro la giornata di borsa o le
+  12 ore per le crypto).
+
+Il calo dell'ultimo giorno resta nel diario (`misure.rimbalzo`) per giudicare questi ingressi.
+
+### Frazioni di azione
+
+Un conto piccolo (1.000 $) con un ingresso intraday da 16 $ non comprerebbe nemmeno un'azione NVDA (circa 177 $). Le
+azioni si comprano anche **a frazioni** (`AGENTS.frazioni`), con le regole di Alpaca:
+
+- **Solo i titoli frazionabili**: il motore chiede ad Alpaca, una volta al giorno per titolo, se è `fractionable`. Se
+  Alpaca non risponde il titolo vale come non frazionabile (azioni intere, come prima) e si richiede al giro dopo. Un
+  acquisto a frazioni su un titolo non frazionabile la gabbia lo rifiuta, con il motivo.
+- **Intere quando bastano**: con almeno un'azione intera e uno scarto entro il 10% si comprano le intere (12,4 → 12),
+  così la posizione resta tutta sotto lo stop GTC; altrimenti la frazione a 6 decimali (0,0917 NVDA, 1,5 AAPL).
+- **Minimo 1 $** per un acquisto a frazioni (Alpaca); il minimo di una posizione nuova resta l'1% del conto.
+- **Vendite**: sempre ammesse, per tutta la quantità che Alpaca dà (fino a 9 decimali, mandata identica: niente resti);
+  una vendita parziale di una posizione a frazioni è a frazioni, di una a azioni intere resta a intere.
+- **Stop su Alpaca in due parti**: Alpaca accetta frazioni solo con ordini «day» (mai GTC). Una posizione da 12,37 ha
+  uno **stop GTC sulle 12 intere** (vale anche a PC spento, per giorni) e uno **stop «day» sulla frazione 0,37**, che
+  scade alla chiusura e si rimette al primo giro a borsa aperta del giorno dopo; lo stop delle intere non si tocca. Una
+  frazione sotto 1 $ non si copre su Alpaca. Se Alpaca rifiuta lo stop sulla frazione, non si riprova fino al giorno
+  dopo e non è un allarme: la frazione la protegge lo **stop del motore** (gabbia e uscite intraday), come nei pochi
+  minuti tra l'apertura e il primo giro.
+- **Regola dei 25.000 $ (PDT)**: dal 4 giugno 2026 FINRA l'ha tolta e Alpaca l'ha già applicato: un conto piccolo non
+  è più limitato a 3 operazioni in giornata ogni 5 giorni.
+- **Costi**: le commissioni regolamentari sulle vendite si arrotondano al centesimo sul totale della giornata, non per
+  ordine: un trade da 16 $ non costa più dello 0,05% stimato.
 
 ### La gabbia
 
@@ -191,7 +419,8 @@ Il codice che dice l'ultima parola (`src/cage.ts`):
 - titoli solo a **borsa aperta**, crypto sempre; niente short, niente leva; azioni intere, crypto frazionarie (minimo 10 $);
 - massimo **10% per titolo** (meno se nervoso) e **35% per settore** (anche crypto e titoli scoperti);
 - metodo: sopra la media a 200 e sopra la 50, **oppure** con un rialzo netto di Kronos (≥ +1%); sotto la 200 solo contro
-  tendenza (Kronos ≥ +2% con probabilità ≥ 60%, metà taglia). L'intraday ha le sue regole;
+  tendenza (Kronos ≥ +2% con probabilità ≥ 57%, metà taglia). L'intraday (compreso il rimbalzo di breve) ha le sue
+  regole;
 - niente acquisti di azioni ed ETF nel **giorno della Fed** (le crypto sì) e di un titolo nei **2 giorni di borsa prima
   della trimestrale** fino al giorno dei conti;
 - registro degli errori, contanti sufficienti, un ordine aperto uguale non si duplica;
@@ -213,7 +442,8 @@ rimasto (azioni fino a 30 minuti dalla chiusura vera; crypto entro la durata mas
    solo**: serve una probabilità più alta (65%) e la taglia si dimezza (è un'inversione anticipata).
 2. **Kronos, e quale time frame**: una proiezione per titolo e candela, letta a ogni orizzonte che sta nel tempo rimasto
    (da 15 minuti a 8 ore). Candele e orizzonti diversi si confrontano sulla stessa scala, la **probabilità di un
-   guadagno netto dei costi**: Φ((rialzo previsto − costi) / (volatilità delle candele × √candele)), moltiplicata per
+   guadagno netto dei costi**: la quota dei percorsi di Kronos sopra i costi senza toccare lo stop (senza percorsi
+   Φ((rialzo previsto − costi) / (volatilità delle candele × √candele))), avvicinata a 50% secondo
    l'**affidabilità misurata di Kronos su quella candela** (il cervello conta quante volte ha preso la direzione giusta;
    un campione piccolo resta vicino al valore atteso del 55%). Se su una candela Kronos indovina come una moneta, quella
    candela non fa più entrare e si sceglie un'altra. Esempio vero: sulle 5 minuti Kronos ha preso la direzione 27 volte
@@ -229,13 +459,19 @@ rimasto (azioni fino a 30 minuti dalla chiusura vera; crypto entro la durata mas
      così il rischio in euro resta quello del trade breve;
    - altrimenti è un trade breve.
 5. **Obiettivo = il rialzo che Kronos prevede** sull'orizzonte scelto, mai sotto il minimo dei costi (azioni 0,3%,
-   crypto 1,2%). **Stop** = 1,2 ATR della candela (minimo 0,4% azioni, 1% crypto). Si entra solo se l'obiettivo vale
-   almeno **1,2 volte lo stop**.
+   crypto 1,2%). **Stop** = il livello che l'80% dei percorsi di Kronos non tocca, al massimo 1,2 ATR della candela
+   (senza i salti tra le sedute; minimo 0,4% azioni, 1% crypto). Con lo stop dell'ATR (senza percorsi) si entra solo se
+   l'obiettivo vale almeno **1,2 volte lo stop**.
 6. **Aspettativa positiva (Thorp)**: probabilità × guadagno netto − (1 − probabilità) × perdita allo stop (costi
    compresi) deve essere maggiore di zero.
-7. **Taglia**: 10% del conto × fiducia (55% → metà, 70% → piena); il grafico della candela superiore sotto la sua media
-   (se non è un trade di trend) e il Kronos a 5 sedute contrario la dimezzano ciascuno; uno stop più largo la riduce in
-   proporzione; dopo **3 operazioni intraday in perdita di fila** nella giornata, ancora × 0,5. Il richiamo del capo
+7. **Indizi contrari e taglia**: il grafico della candela superiore sotto la sua media (se non è un trade di trend) e il
+   Kronos a 5 sedute contrario sono **indizi sulla direzione**: tolgono 2 punti di probabilità ciascuno
+   (`intraday.taglia.penalitaIndizio`); se la probabilità scende sotto la soglia non si entra, con il motivo. La
+   **taglia** viene dal rischio: 10% del conto × fiducia (55% → metà, 70% → piena) × scaletta delle medie × stop più largo
+   (trade di trend) × dopo **3 operazioni intraday in perdita di fila** ancora 0,5; il prodotto non scende sotto il **30%
+   della taglia massima** (`intraday.taglia.pavimento`). Prima ogni indizio dimezzava la taglia e 5-6 riduzioni in fila
+   portavano un trade buono allo 0,2-0,5% del conto, sotto il minimo d'ordine (SHEL 67%, SAP 63%, POL 74%: 2-5 $). Kronos
+   a 5 sedute non riduce più la taglia dei trade intraday nell'allocatore (vale solo per quelli di più giorni). Il richiamo del capo
    (×0,6) e la prudenza della sala caffè (×0,85) riducono la **taglia**, non la forza del voto: l'ingresso resta deciso
    da Kronos.
 
@@ -329,8 +565,79 @@ d'opinione prima di una candela giornaliera nuova: escono solo stop e regole vin
 ## 9. Cosa impara il motore
 
 - **Capo ufficio** e **sala caffè** (capitolo 4), dal diario dei trade, da subito e con limiti.
+- **Gli agenti come persone** (`src/agents/persone.ts`): ogni agente ha un nome. Fissi per gli agenti generali (Roberto
+  capo ufficio, Marco trend, Giulia rientro, Paolo regime, Sara orizzonte, Luca uscite, Davide presa di profitto, Elena
+  contesto, Chiara Kronos, Andrea capo degli intraday agents). Le altre persone sono uno **staff unico**
+  (`state/persone.json`, un team fisso di 20: nessuno esce, chi non lavora è in sala caffè, in pausa o in formazione): nessuna appartiene a un titolo né a un tipo di
+  operazione. Il motore trova le occasioni con i suoi criteri e a ogni giro le assegna: un'occasione è una posizione
+  aperta, un titolo pronto a entrare (dossier ≥ 57%) o un voto d'acquisto, di più giorni o intraday. Chi lavora su un
+  titolo ci resta finché l'occasione dura; le nuove vanno alla persona libera più brava in quel tipo di operazione
+  ((vinti + 1) / (trade + 2) sui suoi trade di quel tipo, se ne ha, altrimenti su tutti), a parità a chi aspetta da più
+  tempo, e a chi ha trovato il titolo con l'esplorazione. Chi non ha un'occasione aspetta in sala caffè. Ogni trade salva
+  nel diario le persone che l'hanno preso (`contesto.persone`). Le zone dell'ufficio (Trading agents, Intraday agents)
+  sono i due tipi di operazione, non due squadre: un titolo, una persona, una posizione (se più giorni e intraday lo
+  vogliono entrambi lo tiene chi ci lavora già o ha la posizione, altrimenti l'operazione di più giorni). Alla scrivania
+  solo chi è pronto a entrare o segue una posizione: un titolo «in attesa», un acquisto fermato dalla gabbia o
+  un'azione fuori orario rimandano la persona in sala caffè. Il capo ufficio resta fuori dallo staff, col suo compito.
+- **Profili personali** (`src/agents/profili.ts`, `state/profili.json`): ogni persona ha impostazioni sue, per entrambi
+  i tipi d'operazione, che valgono sul titolo su cui lavora. Più giorni: medie e momentum del trend, RSI, sedute e peso
+  del rientro, soglia, media del rientro ed estensione del dossier. Intraday: probabilità minima e peso. La
+  calibrazione del capo è separata per tipo (p:Nome sui trade di più giorni, p:Nome|intraday su quelli intraday); in
+  sala caffè si ricalibra il tipo in cui la persona ha perso. Più l'**obiettivo del giorno**
+  personale (di serie 10%, +1 punto dopo un giorno in cui lo tocca, −1 dopo un giorno chiuso in perdita, tra 3% e 25%):
+  guadagno dei suoi trade di oggi sul capitale che ci ha messo; toccato, continua; se torna a metà, si vendono i suoi
+  trade non favorevoli (Kronos sotto la soglia di anticipo). L'obiettivo del conto non c'è più nelle Generali. Le
+  impostazioni si cambiano nella scheda della persona; il capo calibra la sua soglia d'ingresso; la sala caffè la
+  ricalibra (sotto). Kronos è uguale per tutti.
+- **Capo ufficio per persona** (`src/agents/capo.ts`): giudica ogni persona sui trade che ha preso e sulle sue sessioni
+  (giorni chiusi in guadagno o in perdita), e gli agenti generali sui trade che hanno votato; i richiami valgono per la
+  persona che prende il voto, ovunque lavori.
+- **Calibrazione del capo** (`src/agents/calibrazione.ts`): quando un agente vince meno del 51% dei suoi trade chiusi
+  (almeno 5, contati dall'ultima correzione) il capo rende più selettivo di un passo il suo parametro d'ingresso; quando
+  torna sopra il 60% lo riavvicina di un passo al valore di base. Parametri: probabilità minima intraday (+2,5 punti a
+  passo, fino al 70%), probabilità minima del dossier dei trading agents (squadra +5 punti fino al 65%, e una soglia
+  personale per ognuno fino al 70%), fiducia minima di Kronos contro tendenza (+5 punti fino all'80%), RSI d'ingresso del
+  rientro (−1 fino a 4). Al massimo 4 passi; mai sotto il valore di base della scheda, mai fuori dai limiti della scheda
+  né dai principi del motore. Stato in `state/calibrazione.json`.
+- **Formazione in sala caffè** (`src/agents/formazione.ts`): una persona che, sui trade chiusi dal suo ultimo rientro
+  (almeno 5), vince meno del 51% e chiude in perdita va in sala caffè per 24 ore. Non apre nuovi trade (vendite, stop e
+  regole d'uscita restano) e ascolta chi lavora bene (almeno 51% di vinti e risultato positivo, almeno 3 trade). Torna
+  col bagaglio: proiezione minima di Kronos da cui partivano i trade vinti dei colleghi (tra la soglia di anticipo e il
+  5%), sotto la quale i suoi voti d'acquisto non valgono; tipo d'ingresso migliore; per l'intraday le candele su cui
+  vincono (fuori da quelle, taglia ×0,7). Prima della fine dei 24 h si rientra solo con un'occasione: se il capo la
+  giudica valida col bagaglio (Kronos sopra la soglia imparata, o una candela su cui i colleghi vincono), oppure se alla
+  scrivania servono persone (almeno 10 trading agents con gli agenti generali, almeno 1 operatore intraday quando c'è un'occasione; la sala intraday può restare vuota se non c'è niente da fare): allora
+  rientra per primo chi è in sala caffè da più tempo, con forza ×0,8 o taglia ×0,7 se l'occasione non passa il bagaglio.
+  Entrando in sala caffè la persona **ricalibra le sue impostazioni**: se i colleghi bravi del suo reparto le hanno
+  diverse, va a metà strada verso la loro media; se sono tutte uguali (primi giri), si ricalibra sui dati (contesto di
+  mercato, quanto erano estesi i suoi trade persi, che tipo d'ingresso perdeva) verso ingressi più selettivi e taglie più
+  piccole, sempre dentro i limiti della scheda.
+  Stato in `state/formazione.json`.
+- **Sicurezza dell'apprendimento** (`src/agents/apprendimento.ts`): nessun acquisto senza una persona alla scrivania
+  (con lo staff attivo); si vota e si entra solo da «pronto» (dossier e evidenza ≥ 57%, contro tendenza 65%). Un
+  coordinatore unico giudica chi impara: ultimi 30 trade, almeno 20 per una persona e 10 per una squadra, vittorie della
+  persona avvicinate a quelle della squadra ((vinti + 10 × squadra) / (trade + 10)), giudizio prima sul guadagno medio a
+  trade e sul profit factor e poi sul vincolo del 51%; si stringe con guadagno medio negativo o vittorie sotto il 51%, si
+  allenta con guadagno medio positivo e vittorie ≥ 55%; passi di squadra più persona ≤ 4. Il richiamo del capo agisce
+  solo sugli agenti generali; per le persone agiscono calibrazione e formazione. Assegnazione con Thompson sampling
+  (estrazione da Beta(vinti + 1, persi + 1)); un'occasione data a chi ha meno dati ha taglia ×0,75. Le impostazioni
+  personali riguardano solo selettività e taglia (le regole del mercato sono del motore); quelle ricalibrate in sala
+  caffè passano da una **prova in ombra** (`valutaProve`): sui trade chiusi dopo la proposta, con le misure salvate
+  all'ingresso (`contesto.misure`, `contesto.impostazioni`), si confronta il risultato con le soglie nuove e con quelle
+  in uso; dopo 15 trade si adottano se almeno pari, entro 30 giorni o si scartano. I mentori sono scelti sullo stesso tipo
+  di titolo (crypto o azioni) e, se ci sono abbastanza trade, sullo stesso clima di mercato.
+- **Statistica verificata** (`src/agents/statistica.ts`): calibrazione isotonica delle probabilità di riuscita (≥ 50
+  trade per tipo) e meta-modello logistico sulle misure d'ingresso (≥ 100 trade; sotto il 45% non si entra), attivi solo
+  se migliorano il Brier score sul 30% di trade più recenti (non usati per imparare). Kelly frazionario (¼): con
+  aspettativa stimata negativa il trade non si fa; il peso è al più quota di rischio / distanza dello stop.
+- **Più giorni**: profitto minimo (arrivato a +2%, crypto +4%, non si torna sotto +0,4%, crypto +1,2%) e uscita a
+  tempo (dopo 5 sedute, crypto 5 giorni, se non rende il minimo e Kronos non vede più rialzo). La giornata personale
+  parte dall'ultima chiusura giornaliera per i trade aperti prima di oggi. Intraday sulle azioni solo su 1 e 4 ore.
+- **Capitale sui vincenti**: oltre alla percentuale di trade vinti (obiettivo 51%) il diario misura la parte del capitale
+  investito finita nei trade in guadagno: sopra il 50% si è investito di più dove si è vinto. La dimensione di ogni
+  ingresso cresce già con la probabilità (fiducia di Kronos per i trading agents, probabilità netta per l'intraday).
 - **Vittorie per candela** (obiettivo: almeno il 51% di trade chiusi in guadagno): sugli ultimi 20 trade intraday chiusi
-  di ogni candela (almeno 8), se si vince meno del 51% per entrare su quella candela servono 5 punti di probabilità in
+  di ogni candela (almeno 20), se si vince meno del 51% per entrare su quella candela servono 5 punti di probabilità in
   più (10 sotto il 40%). Gli ingressi non si fermano: si spostano sulle candele dove si vince.
 - **Cervello delle previsioni**: quanto vale ogni modello, per il giornaliero e per ogni candela.
 - **Memoria per titolo** dei custodi.
@@ -358,15 +665,22 @@ Menu a sinistra (sul telefono si apre con ☰):
   oggi, rischio, confronto con SPY); **rendimento per periodo** (oggi, 7 e 30 giorni, mese, anno, tutto o date a
   scelta: variazione del patrimonio dallo storico di Alpaca, realizzato, operazioni chiuse e vinte, migliore e
   peggiore, ribasso massimo, grafico del patrimonio, giorno per giorno); profitto e perdita di oggi, situazione in breve;
-- **Ufficio**: la mappa 3D con gli agenti e a destra il loro elenco (passando sopra un nome l'avatar si alza e si
-  illumina; clic per la scheda); sotto, a schede: Decisioni (punteggi e voti), Trading agents (i custodi dei titoli),
-  Esplorazione, Sala caffè (lezioni);
+- **Ufficio**: la mappa 3D con gli agenti e a destra il loro elenco col nome di ognuno (passando sopra un nome l'avatar
+  si alza e si illumina; clic per la scheda della persona: chi è, cosa fa, la calibrazione del capo e **le sue
+  impostazioni**, modificabili lì; sugli schermi grandi la scheda si apre su due colonne). Gli agenti generali hanno una
+  scrivania solo se sono effettivi, cioè hanno votato l'ingresso di almeno un trade; gli altri lavorano come strumenti
+  comuni e le loro regole stanno in Impostazioni → Generali. La **lavagna dei risultati** si apre in un dialogo (clic
+  sulla lavagna): per agente e per giorno trade vinti e persi, percentuale, capitale sui vincenti,
+  risultato. Sotto, a schede: Trading agents (nome dell'agente e titolo seguito), Decisioni, Esplorazione, Sala caffè;
+- Ovunque compare un codice si vede anche il **nome del titolo o della crypto** (Apple Inc., Bitcoin), chiesto ad
+  Alpaca una volta per simbolo e tenuto in `state/nomi-titoli.json`;
 - **Investimenti**: card dei titoli in portafoglio e in osservazione; clic per il **grafico** (TradingView Lightweight
   Charts, Apache 2.0, incluso nel repository) con time frame 1m, 5m, 15m, 1h, 4h, 1G, medie, volumi, carico, stop,
   obiettivo, operazioni e la **proiezione dei modelli con il cono** al 50% e all'80%; le candele da 1 e 5 minuti si
   aggiornano ogni 15 secondi; poi operazioni intraday, simulazioni e tabella delle posizioni;
 - **Log operazioni**: acquisti e vendite eseguiti negli ultimi 7 giorni, con ricerca e filtri, risultato di ogni vendita;
-- **Impostazioni**: schede degli agenti con i parametri, chiavi, riavvio;
+- **Impostazioni**: Generali (regole del motore e della gabbia, conto Alpaca, pagina pubblica su GitHub Pages, e le
+  regole degli agenti generali senza scrivania), chiavi, riavvio;
 - **Guida**.
 
 Telegram riceve ordini, allarmi e il riepilogo serale.

@@ -1,11 +1,12 @@
+import { aggiornaProposte } from "./proposte.ts";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { isOpenOrder, isProtectiveStop, type Account, type Bar, type Broker, type MarketClock, type Order, type Position } from "../broker/types.ts";
-import { compareWithBenchmarks, type Comparison } from "../benchmark.ts";
+import { isOpenOrder, isProtectiveStop, type Account, type Bar, type Broker, type MarketClock, type Order, type Position, type Quote } from "../broker/types.ts";
+import { capitaleIniziale, compareWithBenchmarks, type Comparison } from "../benchmark.ts";
 import { evaluateBreaker, readBreaker, writeBreaker } from "../breaker.ts";
 import { applyCage, lossPct, tradingBlockReason, type Rejection } from "../cage.ts";
 import { AGENTS, CRYPTO_MIN_NOTIONAL, DAILY_BARS_DAYS, LIMITS, RADAR_SECTORS, UNIVERSE, isCrypto, setCryptoUniverse } from "../config.ts";
-import { roundQty } from "../broker/types.ts";
+import { roundQty, segnaFrazionabili } from "../broker/types.ts";
 import type { KronosForecastPath } from "../kronos-sidecar.ts";
 import { stopPctFor } from "../stops.ts";
 import type { CustodeStato } from "./custode.ts";
@@ -21,7 +22,7 @@ import { clientOrderId, sendOne, waitForFills, type ExecOutcome } from "../execu
 import { isObject, readJson, writeJsonAtomic } from "../fsutil.ts";
 import { indicatorsFor } from "../indicators.ts";
 import { applyFills, closeDust, contextFor, dailyPnl, pruneJournal, readJournal, recordIntent, statsOf, writeJournal, type DailyPnl, type Stats } from "../journal.ts";
-import { activeLessons, learnFromBrokerReject, learnFromStopLoss, pruneLessons, readLessons, writeLessons, type Lesson } from "../lessons.ts";
+import { activeLessons, learnFromBrokerReject, learnFromStopLoss, pauseAOre, pruneLessons, readLessons, writeLessons, type Lesson } from "../lessons.ts";
 import { acquireLock, inspectLock, releaseLock, type LockData } from "../lock.ts";
 import { Logger, type Redactor } from "../log.ts";
 import { romeTime } from "../slots.ts";
@@ -33,12 +34,22 @@ import { applyGuidance, review, type CapoReport } from "./capo.ts";
 import { simboliIntraday } from "./posizioni.ts";
 import type { Cervello, RigaCervello } from "./cervello.ts";
 import { BIBLIOTECA, type Principio } from "./biblioteca.ts";
+import { aggiornaCalibrazione, applicaCalibrazione, type RigaCalibrazione } from "./calibrazione.ts";
+import { aggiornaMeta, aggiornaProbabilita, calibraP, KELLY, META, pesoKelly, probMeta, rapportoVinciPerdi, type StatoCalibrazione, type StatoMeta } from "./statistica.ts";
+import { giornataPersone, preparaProfili, TUTTI_PERSONALI, valore, valutaProve, type GiornataPersona } from "./profili.ts";
+import { aggiornaFormazione, applicaFormazione, postazioneDelVoto, provaRientro, type FormazioneReport } from "./formazione.ts";
+import { estraiBeta } from "./casuale.ts";
+import { assegnaPersone, chiavePersona, leggiRegistro, persone, personeDelTrade, rilascia, type Bisogno, type Persona } from "./persone.ts";
+import { nomiTitoli } from "../nomi-titoli.ts";
 import { plausibile } from "./fiducia.ts";
 import { refreshEarnings, type EarningsFetcher } from "../earnings.ts";
 import { addEarnings } from "../events.ts";
 import type { EventBus } from "./bus.ts";
 import { ContextAgent } from "./context.ts";
 import type { Agent, AgentReport, AgentView, MarketContext, Signal } from "./types.ts";
+
+// Titolo → giorno in cui si è chiesto ad Alpaca se è frazionabile.
+const frazionabiliChiesti = new Map<string, string>();
 
 export interface EngineDeps {
   broker: Broker;
@@ -77,7 +88,9 @@ export interface AgentsStatus {
   prezzi: Record<string, number>;
   rischio: number;
   pesi: Record<string, number>;
-  agenti: Record<string, { segnali: number; note: string[]; errore?: string }>;
+  agenti: Record<string, { segnali: number; note: string[]; errore?: string; ms?: number }>;
+  // Quanto è durato il giro e quanto ci ha messo ogni fase (millisecondi): serve a capire il ritardo tra candela e ordine.
+  tempi?: Record<string, number>;
   segnali: Signal[];
   punteggi: Score[];
   ordini: { id: string; simbolo: string; lato: string; quantita: number; esito: string; perche: string }[];
@@ -117,12 +130,28 @@ export interface AgentsStatus {
   cervello?: { righe: RigaCervello[]; inAttesa: number };
   // La biblioteca degli agenti: i principi dei libri di trading tradotti in regole.
   biblioteca?: { principi: Principio[] };
+  // Gli agenti come persone (nome e ruolo), per chiave dell'ufficio: 'capo', 'a:trend', 'c:AAPL', 'i:BTC/USD'.
+  persone?: Record<string, Persona>;
+  // Chi è in sala caffè per formazione e chi è tornato alla scrivania col bagaglio dei colleghi bravi.
+  formazione?: FormazioneReport;
+  // La giornata di ogni persona: guadagno sul capitale dei suoi trade di oggi, obiettivo personale, difesa.
+  giornataPersone?: Record<string, GiornataPersona>;
+  // Il motore punta all'intraday: gli ingressi nuovi li decidono le candele; i dossier dei trading agents fanno da contesto.
+  puntaIntraday?: boolean;
+  // Proposte del capo ufficio sulle impostazioni generali ancora da decidere.
+  proposteAperte?: number;
+  // Calibrazione delle probabilità e meta-modello: campione, attivi o no, Brier score sulla prova fuori campione.
+  statistica?: { probabilita: Record<string, StatoCalibrazione>; meta: StatoMeta };
+  // I nomi dei titoli e delle crypto (Apple, Bitcoin...), per mostrarli accanto ai codici.
+  nomi?: Record<string, string>;
+  // La calibrazione del capo ufficio: per agente il parametro d'ingresso, il valore di base e quello calibrato.
+  calibrazione?: RigaCalibrazione[];
 }
 
 // Il registro degli errori nel motore tiene solo le regole di sicurezza: niente riacquisto dopo uno stop e niente nuovo
 // tentativo dopo due rifiuti di Alpaca. Le lezioni statistiche dal diario non si usano: imparare dai risultati lo fanno il
 // capo ufficio e la sala caffè, da subito e con limiti, e due sistemi insieme punirebbero due volte lo stesso errore.
-const lezioniDiSicurezza = (file: Parameters<typeof activeLessons>[0], today: string) => activeLessons(file, today).filter((l) => l.tipo !== "statistica");
+const lezioniDiSicurezza = (file: Parameters<typeof activeLessons>[0], today: string, now: Date) => activeLessons(file, today, now).filter((l) => l.tipo !== "statistica");
 // Tutti gli agenti votano con lo stesso peso: chi va male lo richiama il capo ufficio (forza ridotta, soglia di Kronos).
 const pesiUguali = (agents: { name: string }[]) => Object.fromEntries(agents.map((a) => [a.name, 1]));
 
@@ -138,6 +167,11 @@ interface Snapshot {
 
 // Lo storico giornaliero cambia una volta al giorno: si scarica alla prima passata di ogni data.
 export interface EngineCache {
+  // Ordini limite crypto d'acquisto cancellati perché non eseguiti (simbolo → quando): al prossimo voto sullo stesso titolo
+  // entro un'ora si compra al prezzo di vendita (commissione piena) invece di riprovare un limite che non si riempie.
+  limitiMancati?: Record<string, string>;
+  // I dossier dei trading agents dell'ultimo giro (probabilità favorevole): contesto per l'intraday.
+  dossier?: Record<string, number>;
   closesDate?: string;
   closes: Record<string, number[]>;
   bars: Record<string, Bar[]>;
@@ -152,6 +186,7 @@ export interface EngineCache {
   capoSintesi?: string;
   giriCaffe?: number;
   caffePresenti?: string;
+  difeseAvvisate?: string[];
   inTick?: boolean;
   exploring?: boolean;
   scartateNota?: string;
@@ -322,6 +357,8 @@ export interface TickResult {
 // diario e registro, scrive lo stato per la dashboard. Ogni passo lascia un evento nel registro.
 export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache()): Promise<TickResult> {
   const startedAt = deps.now();
+  const t0Reale = Date.now();
+  const tempi: Record<string, number> = {};
   const rt = romeTime(startedAt);
   const today = rt.date;
   const giro = `agenti-${today}-${String(Math.floor(rt.minutes / 60)).padStart(2, "0")}${String(rt.minutes % 60).padStart(2, "0")}`;
@@ -353,6 +390,9 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
     // Le impostazioni degli agenti cambiate dalla dashboard valgono dal giro successivo, senza riavvio.
     const settings = applyAgentSettings(deps.stateDir);
     for (const e of settings.errori) log.warn(`impostazioni agenti: ${e}`);
+    // Poi la calibrazione del capo ufficio sopra le impostazioni delle schede (solo verso ingressi più selettivi, nei limiti).
+    const calibrazione = applicaCalibrazione(deps.stateDir);
+    preparaProfili(deps.stateDir); // le impostazioni di ogni persona sul titolo su cui lavora
     // 2. L'universo crypto del giorno, poi Alpaca.
     await loadUniverse(deps, cache, today, (m) => {
       log.info(m);
@@ -396,6 +436,31 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
       for (let i = AGENTS.universe.length - 1; i >= 0; i--) { const u = AGENTS.universe[i]!; if (RADAR_SECTORS[u] && !keep.has(u)) AGENTS.universe.splice(i, 1); }
       for (const p of snap.positions) if (RADAR_SECTORS[p.symbol] && !AGENTS.universe.includes(p.symbol)) AGENTS.universe.push(p.symbol);
     }
+    // Frazioni di azione: quali titoli Alpaca accetta a frazioni (fractionable), chiesto una volta al giorno per titolo.
+    // Se Alpaca non risponde il titolo resta «non frazionabile» (azioni intere, come prima) e si richiede al giro dopo.
+    if (AGENTS.frazioni.enabled && deps.broker.getFractionable) {
+      const daChiedere = [...new Set([...UNIVERSE, ...AGENTS.universe, ...snap.positions.map((p) => p.symbol)])].filter((x) => !isCrypto(x) && frazionabiliChiesti.get(x) !== today);
+      if (daChiedere.length) {
+        try {
+          const m = await deps.broker.getFractionable(daChiedere);
+          segnaFrazionabili(m);
+          for (const x of Object.keys(m)) frazionabiliChiesti.set(x, today);
+          const no = Object.entries(m).filter(([, v]) => !v).map(([x]) => x);
+          if (no.length) log.info(`frazioni: non frazionabili su Alpaca (solo azioni intere): ${no.join(", ")}`);
+        } catch (e) {
+          log.warn(`frazioni: Alpaca non dice quali titoli sono frazionabili (${(e as Error).message}): azioni intere fino al prossimo giro`);
+        }
+      }
+    }
+    // Ordini limite d'acquisto non eseguiti entro la scadenza: si cancellano, al giro dopo l'occasione si rivaluta.
+    {
+      const scad = AGENTS.costi.ordiniLimite.scadenzaMinuti * 60_000;
+      for (const o of snap.recentOrders) {
+        if (o.side !== "buy" || o.type !== "limit" || !["new", "accepted", "pending_new", "partially_filled"].includes(o.status)) continue;
+        if (startedAt.getTime() - Date.parse(o.submittedAt) < scad) continue;
+        try { await deps.broker.cancelOrder(o.id); (cache.limitiMancati ??= {})[o.symbol] = startedAt.toISOString(); log.info(`ordine limite ${o.clientOrderId} su ${o.symbol} non eseguito in ${AGENTS.costi.ordiniLimite.scadenzaMinuti} minuti: cancellato (al prossimo voto entro un'ora si compra al prezzo di vendita)`); } catch (e) { log.warn(`cancellazione di ${o.clientOrderId} non riuscita: ${(e as Error).message}`); }
+      }
+    }
     bus.emit("conto", { patrimonio: snap.account.equity, contanti: snap.account.cash, pnlGiorno: snap.account.equity - snap.account.lastEquity, mercatoAperto: snap.clock.isOpen });
     bus.emit("prezzi", { prezzi: snap.prices });
     // Le previsioni scadute di ogni modello si confrontano con i prezzi di adesso (prima di chiederne di nuove).
@@ -415,9 +480,10 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
     const lessonsFile = lr.file;
     if (lr.problem) await alarm("Registro degli errori illeggibile", lr.problem);
     const learned: Lesson[] = [];
+    pauseAOre(lessonsFile, today, startedAt);
     for (const o of snap.recentOrders) {
       if (!isProtectiveStop(o) || o.status !== "filled") continue;
-      const l = learnFromStopLoss(lessonsFile, `stop-${o.clientOrderId}`, o.symbol, today, `stop su Alpaca eseguito, ${o.filledQty} azioni`);
+      const l = learnFromStopLoss(lessonsFile, `stop-${o.clientOrderId}`, o.symbol, today, `stop su Alpaca eseguito, ${o.filledQty} azioni`, startedAt);
       if (l) learned.push(l);
     }
     let buyBlock: string | null = null;
@@ -440,8 +506,9 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
     const pnlPct = snap.account.lastEquity > 0 ? snap.account.equity / snap.account.lastEquity - 1 : 0;
     const picco = registraPicco(deps.stateDir, today, pnlPct);
     const d = AGENTS.daily;
-    const obiettivoRaggiunto = d.enabled && d.targetPct > 0 && picco >= d.targetPct;
-    const giornata = { pnlPct, picco, obiettivoRaggiunto, difesa: obiettivoRaggiunto && d.pavimentoPct > 0 && pnlPct <= d.pavimentoPct, perditaOltre: d.enabled && d.maxLossPct > 0 && pnlPct <= -d.maxLossPct };
+    // L'obiettivo del giorno è di ogni persona (src/agents/profili.ts): qui resta solo la perdita massima del conto.
+    const obiettivoRaggiunto = false;
+    const giornata = { pnlPct, picco, obiettivoRaggiunto, difesa: false, perditaOltre: d.enabled && d.maxLossPct > 0 && pnlPct <= -d.maxLossPct };
     const pc = (x: number) => `${(x * 100).toFixed(2)}%`;
     if (obiettivoRaggiunto && cache.giornataAvvisata !== `${today}-obiettivo` && cache.giornataAvvisata !== `${today}-difesa`) {
       cache.giornataAvvisata = `${today}-obiettivo`;
@@ -459,9 +526,11 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
         await alarm("Perdita del giorno oltre la soglia", buyBlock);
       }
     }
-    const lessonsNow = lezioniDiSicurezza(lessonsFile, today);
+    const lessonsNow = lezioniDiSicurezza(lessonsFile, today, startedAt);
     const jr = readJournal(deps.stateDir, startedAt);
     const journal = jr.file;
+    // Dal diario: calibrazione delle probabilità e meta-modello, attivi solo se verificati sui trade più recenti.
+    const statistica = { probabilita: aggiornaProbabilita(journal), meta: aggiornaMeta(journal) };
     if (jr.problem) await alarm("Diario dei trade illeggibile", jr.problem);
     // Le esecuzioni dal giro scorso entrano nel diario prima che agenti, allocatore e gabbia decidano. Prima entravano solo
     // a fine giro: al giro dopo un acquisto appena eseguito non risultava «aperto oggi» né intraday, e l'uscita di trend o
@@ -472,7 +541,13 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
       for (const t of primi.closed) bus.emit("trade", { stato: "chiuso", simbolo: t.simbolo, risultato: t.risultato ?? 0, pnl: t.incassato - t.costo, giorni: t.giorni ?? 0, uscita: t.motivoUscita ?? "sconosciuto", agenti: t.contesto?.agenti ?? [] });
       if (primi.opened.length || primi.closed.length) writeJournal(deps.stateDir, journal);
     }
+    for (const n of valutaProve(deps.stateDir, journal, startedAt)) { log.info(`formazione: ${n}`); bus.emit("nota", { testo: `formazione: ${n}` }); }
+    for (const n of aggiornaCalibrazione(deps.stateDir, journal, startedAt)) {
+      log.info(n);
+      bus.emit("nota", { testo: n });
+    }
 
+    tempi.dati = Date.now() - t0Reale;
     // 4. Il massimo visto da ogni trade aperto (per lo stop che segue il profitto), poi le proiezioni, poi gli agenti.
     for (const t of journal.trade) {
       if (t.stato !== "aperto") continue;
@@ -504,7 +579,17 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
     const analisi = !cache.ultimaAnalisi || startedAt.getTime() - Date.parse(cache.ultimaAnalisi) >= AGENTS.analisiMinuti * 60_000 - 30_000;
     if (analisi) cache.ultimaAnalisi = startedAt.toISOString();
     const cashImpegnato = snap.recentOrders.filter((o) => isOpenOrder(o) && !isProtectiveStop(o) && o.side === "buy").reduce((a, o) => a + (o.qty - o.filledQty) * (snap.prices[o.symbol] ?? 0), 0);
-    const view: AgentView = { today, now: startedAt, prices: snap.prices, closes, indicators, positions: snap.positions, account: snap.account, cashImpegnato, analisi, journal, previsioni, previsioniKronos: previsioni, percorsi, mercatoAperto: snap.clock.isOpen, chiusuraBorsa: snap.clock.nextClose, finestraIngressi: stockEntryOpen(snap.clock, startedAt), giornata, fonti };
+    // La giornata di ogni persona: il suo obiettivo del giorno e, se dopo averlo toccato torna sotto metà, la difesa dei
+    // suoi trade. Al cambio di giorno l'obiettivo si aggiusta con l'esito di ieri.
+    const giornataP = giornataPersone(deps.stateDir, journal, snap.prices, today, (iso) => romeTime(new Date(iso)).date, (sym) => closes[sym]?.at(-1));
+    for (const n of giornataP.note) { log.info(n); bus.emit("nota", { testo: n }); }
+    for (const [sym, motivo] of Object.entries(giornataP.difesa)) {
+      const chiave = `${today}-difesa-${motivo.split(" ")[0]}`;
+      if (cache.difeseAvvisate?.includes(chiave)) continue;
+      (cache.difeseAvvisate ??= []).push(chiave);
+      await alarm("Difesa del guadagno di una persona", `${motivo}: si vendono i suoi trade non favorevoli (${sym}${Object.entries(giornataP.difesa).filter(([s2, m]) => s2 !== sym && m === motivo).map(([s2]) => `, ${s2}`).join("")})`);
+    }
+    const view: AgentView = { today, now: startedAt, difesaPersonale: giornataP.difesa, prices: snap.prices, closes, indicators, positions: snap.positions, account: snap.account, cashImpegnato, capitaleBase: capitaleIniziale(deps.stateDir), analisi, journal, previsioni, previsioniKronos: previsioni, percorsi, mercatoAperto: snap.clock.isOpen, chiusuraBorsa: snap.clock.nextClose, finestraIngressi: stockEntryOpen(snap.clock, startedAt), giornata, fonti, ...(cache.dossier ? { dossier: cache.dossier } : {}) };
     const reports: Record<string, AgentReport> = {};
     const agentStatus: AgentsStatus["agenti"] = {};
     // Il contesto economico si valuta per primo: decide dove si aspetta e di quali proiezioni fidarsi.
@@ -524,9 +609,10 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
     await Promise.all(
       deps.agents.map(async (a) => {
         try {
+          const t0 = Date.now();
           const r = await a.observe(view);
           reports[a.name] = r;
-          agentStatus[a.name] = { segnali: r.segnali.length, note: r.note ?? [] };
+          agentStatus[a.name] = { segnali: r.segnali.length, note: r.note ?? [], ms: Date.now() - t0 };
           bus.emit("agente", { agente: a.name, segnali: r.segnali.length, rischio: r.rischio ?? null, note: r.note ?? [] });
           for (const s of r.segnali) bus.emit("segnale", { ...s });
           if (r.rischio !== undefined) bus.emit("rischio", { agente: a.name, rischio: r.rischio, note: r.note ?? [] });
@@ -537,6 +623,7 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
         }
       }),
     );
+    tempi.agenti = Date.now() - t0Reale;
     // Esplorazione: chi ha trovato un titolo in sala caffè lo vota finché l'opportunità regge (poi capo, lezioni, gabbia).
     const scout = scoutVotes(espl, view, reports);
     for (const n of scout.note) {
@@ -545,8 +632,95 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
     }
     for (const r of Object.values(reports)) for (const sg of r.segnali) if (sg.perche.startsWith("esplorazione dalla sala caffè")) bus.emit("segnale", { ...sg });
     // Il capo ufficio: rivede i risultati di ciascun agente sul diario e applica i suoi richiami ai voti di oggi.
-    const capo = review(journal, startedAt);
-    for (const n of applyGuidance(reports, capo, view.previsioni)) {
+    // Il capo ufficio giudica le persone sui trade che hanno preso (i suoi richiami si applicano dopo l'assegnazione).
+    const capo = review(journal, startedAt, leggiRegistro(deps.stateDir).vecchi);
+    // Le proposte del capo sulle impostazioni generali (solo con dati sufficienti): le decide l'utente.
+    let proposteAperte = 0;
+    try {
+      const pr = aggiornaProposte(deps.stateDir, journal, startedAt);
+      proposteAperte = pr.file.proposte.filter((x) => x.stato === "aperta").length;
+      for (const x of pr.nuove) {
+        const m = `capo ufficio: propone di cambiare «${x.etichetta}» da ${x.attuale} a ${x.proposto}. ${x.motivo}`;
+        log.info(m);
+        bus.emit("nota", { testo: m });
+        const r = await deps.notifier.send(deps.redactor.apply(`🧑‍💼 Agentics sniper · proposta del capo ufficio\n«${x.etichetta}»: ${x.attuale} → ${x.proposto}\n${x.motivo}\nDecidi nell'Ufficio, nella scheda del capo ufficio.`));
+        if (!r.ok) log.error(`Telegram non ha ricevuto la proposta: ${r.error}`);
+      }
+    } catch (e) {
+      log.warn(`proposte del capo: ${(e as Error).message}`);
+    }
+    // Le persone. Formazione: chi lavora male va in sala caffè a imparare da chi lavora bene. Poi le occasioni del giro
+    // (posizioni aperte, trading agents pronti a entrare, voti d'acquisto) vanno alle persone libere dello staff, le
+    // più brave per risultati; chi non ha un'occasione (anche chi è «in attesa») resta in sala caffè.
+    const registro = leggiRegistro(deps.stateDir);
+    const generaliAttivi = Object.entries(reports).filter(([n, r]) => n !== "custodi" && n !== "intraday" && r.segnali.length).map(([n]) => `a:${n}`);
+    const formazione = aggiornaFormazione(deps.stateDir, journal, [...Object.keys(registro.staff).map(chiavePersona), ...generaliAttivi], startedAt, registro.vecchi, view.contesto?.generale);
+    const votiDi = (desk: string) => Object.values(reports).flatMap((r) => r.segnali).filter((s) => s.lato === "buy" && !s.vincolante && postazioneDelVoto(s) === desk);
+    const custodiGiro = Object.values(reports).flatMap((r) => r.custodi ?? []);
+    cache.dossier = Object.fromEntries(custodiGiro.filter((c) => c.dossier).map((c) => [c.simbolo, c.dossier!.probabilita]));
+    const intradayGiro = Object.values(reports).flatMap((r) => r.intraday ?? []);
+    const inIntraday = new Set(intradayGiro.filter((x) => x.fase === "in posizione").map((x) => x.simbolo));
+    const preferite = new Map(attive(espl, today).map((s) => [`${s.agente === "intraday" ? "i" : "c"}:${s.simbolo}`, s.scopritore]));
+    const bisogni: Record<"trading" | "intraday", Bisogno[]> = { trading: [], intraday: [] };
+    // Un'azione si può comprare solo nella finestra degli ingressi: fuori, chi la vorrebbe resta in sala caffè (resta
+    // alla scrivania solo chi segue una posizione aperta).
+    const entrabile = (sym: string) => isCrypto(sym) || view.finestraIngressi !== false;
+    const aggiungi = (rep: "trading" | "intraday", b: Bisogno) => { if (!b.tiene && !entrabile(b.simbolo)) return; const x = bisogni[rep].find((y) => y.simbolo === b.simbolo); if (x) { x.tiene ||= b.tiene; x.voto ||= b.voto; } else bisogni[rep].push(b); };
+    for (const c of custodiGiro) {
+      const tiene = (c.fase === "in posizione" || c.fase === "in uscita") && !inIntraday.has(c.simbolo);
+      // Con il motore che punta all'intraday un trading agent «pronto» non apre posizioni: alla scrivania solo chi le segue.
+      const pronto = !AGENTS.puntaIntraday && c.fase === "pronto" && (c.dossier?.probabilita ?? 0) >= Number(valore("AGENTS.custodi.minProbabilita", c.simbolo)) - 0.005;
+      if (tiene || pronto) aggiungi("trading", { simbolo: c.simbolo, tiene, voto: false, ...(preferite.get(`c:${c.simbolo}`) ? { preferita: preferite.get(`c:${c.simbolo}`)! } : {}) });
+    }
+    for (const x of intradayGiro) if (x.fase === "in posizione") aggiungi("intraday", { simbolo: x.simbolo, tiene: true, voto: false });
+    for (const s of Object.values(reports).flatMap((r) => r.segnali)) {
+      if (s.lato !== "buy" || s.vincolante) continue;
+      const desk = postazioneDelVoto(s);
+      // Un voto su un titolo il cui trading agent non è pronto (in attesa, in osservazione) non porta nessuno alla scrivania.
+      const cust = custodiGiro.find((c) => c.simbolo === desk.slice(2));
+      if (desk.startsWith("c:") && cust && cust.fase !== "pronto" && cust.fase !== "in posizione" && cust.fase !== "in uscita") continue;
+      if (desk.startsWith("c:") && cust?.fase === "pronto" && (cust.dossier?.probabilita ?? 0) < 0.595) continue;
+      if (desk.startsWith("c:") && AGENTS.puntaIntraday) continue;
+      if (desk.startsWith("c:")) aggiungi("trading", { simbolo: desk.slice(2), tiene: false, voto: true, ...(preferite.get(desk) ? { preferita: preferite.get(desk)! } : {}) });
+      else if (desk.startsWith("i:")) aggiungi("intraday", { simbolo: desk.slice(2), tiene: false, voto: true, ...(preferite.get(desk) ? { preferita: preferite.get(desk)! } : {}) });
+    }
+    // Più bravo = più trade vinti in quel tipo di operazione (stima prudente: (vinti + 1) / (trade + 2)); chi non ne ha
+    // ancora di quel tipo vale per i suoi risultati in generale.
+    const record = new Map<string, { n: number; v: number }>();
+    for (const t of journal.trade.filter((t) => t.stato === "chiuso")) for (const k of personeDelTrade(t, registro.vecchi)) for (const r of [k, `${k}|${t.contesto?.livelli ? "intraday" : "trading"}`]) { const g = record.get(r) ?? { n: 0, v: 0 }; g.n++; if (t.incassato - t.costo > 0) g.v++; record.set(r, g); }
+    const assegnazione = assegnaPersone({
+      stateDir: deps.stateDir,
+      now: startedAt,
+      bisogni,
+      sospesi: [...formazione.inFormazione].sort((a, b) => a.dal.localeCompare(b.dal)).map((x) => x.chiave),
+      // Thompson sampling: un'estrazione dalla distribuzione Beta(vinti + 1, persi + 1) di ogni persona in quel tipo.
+      punteggio: (p, tipo) => { const g = record.get(`${p}|${tipo}`) ?? record.get(p) ?? { n: 0, v: 0 }; return estraiBeta(g.v + 1, g.n - g.v + 1); },
+      media: (p, tipo) => { const g = record.get(`${p}|${tipo}`) ?? record.get(p); return g ? (g.v + 1) / (g.n + 2) : 0.5; },
+      rientro: (p, desk, rep, scrivania) => provaRientro(deps.stateDir, formazione, p, votiDi(desk), view.previsioni, scrivania, rep === "intraday" ? AGENTS.formazione.minIntraday : AGENTS.formazione.minOperativi, startedAt),
+    });
+    // Esplorazione (occasione data a chi ha meno dati): taglia ridotta a 3/4.
+    for (const r of Object.values(reports)) r.segnali = r.segnali.map((s) => {
+      if (s.lato !== "buy" || s.vincolante || !assegnazione.esplorazione.includes(postazioneDelVoto(s))) return s;
+      return { ...s, pesoMassimo: (s.pesoMassimo ?? LIMITS.maxPositionPct) * 0.75, perche: `${s.perche} · occasione di apprendimento per chi ha meno trade: taglia ridotta` };
+    });
+    // Una sola posizione per titolo: su un titolo con un'operazione intraday aperta non entra nessun voto di più giorni
+    // (neanche degli agenti generali), e viceversa (i voti intraday li ferma già l'assegnazione).
+    const posizioniAperte = new Set(view.positions.filter((p) => p.qty > 0).map((p) => p.symbol));
+    for (const r of Object.values(reports)) r.segnali = r.segnali.filter((s) => {
+      if (s.lato === "buy" && !s.vincolante && s.intraday && posizioniAperte.has(s.simbolo) && !inIntraday.has(s.simbolo)) {
+        assegnazione.note.push(`voto intraday su ${s.simbolo} non vale: c'è già una posizione di più giorni, una sola posizione per titolo`);
+        return false;
+      }
+      if (s.lato !== "buy" || s.vincolante || s.intraday || !inIntraday.has(s.simbolo)) return true;
+      assegnazione.note.push(`voto di ${s.agente} su ${s.simbolo} non vale: c'è già un'operazione intraday aperta, una sola posizione per titolo`);
+      return false;
+    });
+    for (const n of [...formazione.note, ...assegnazione.note.map((n) => `ufficio: ${n}`), ...applicaFormazione(deps.stateDir, reports, formazione, view.previsioni, assegnazione.chi, new Set(assegnazione.senzaPersona), startedAt, assegnazione.bloccati)]) {
+      log.info(n);
+      bus.emit("nota", { testo: n });
+    }
+    // I richiami del capo valgono per la persona che prende il voto (o per l'agente generale che l'ha dato).
+    for (const n of applyGuidance(reports, capo, view.previsioni, (s) => { const d = postazioneDelVoto(s); return d.startsWith("a:") ? d.slice(2) : assegnazione.chi[d]; })) {
       log.info(n);
       bus.emit("nota", { testo: n });
     }
@@ -564,13 +738,58 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
     }
     const weights = pesiUguali(deps.agents);
     const alloc = allocate(view, reports, weights);
+    // Nessun acquisto senza una persona alla scrivania: ogni trade ha qualcuno che ne risponde (e da cui si impara).
+    // (Senza trading agents né intraday agents nel motore, ad esempio in una prova con i soli agenti generali, non c'è
+    // staff e la regola non si applica.)
+    const conStaff = deps.agents.some((a) => a.name === "custodi" || a.name === "intraday");
+    alloc.proposte = alloc.proposte.filter((o) => {
+      if (!conStaff || o.side !== "buy" || assegnazione.chi[`c:${o.symbol}`] || assegnazione.chi[`i:${o.symbol}`]) return true;
+      alloc.inAttesa.push({ simbolo: o.symbol, motivo: "nessuna persona alla scrivania su questo titolo (non è «pronto a entrare» o lo staff è tutto occupato): non si compra" });
+      return false;
+    });
+    // Meta-modello e Kelly frazionario sugli acquisti: il meta-modello (se attivo) stima la probabilità che il trade finisca
+    // in guadagno e sotto il 45% lo ferma; Kelly (un quarto) ferma i trade ad aspettativa stimata negativa e limita la
+    // taglia a quota di rischio / distanza dello stop.
+    alloc.proposte = alloc.proposte.filter((o) => {
+      if (o.side !== "buy") return true;
+      const price = snap.prices[o.symbol];
+      if (!price) return true;
+      const tipo: "trading" | "intraday" = o.intraday ? "intraday" : "trading";
+      const voti = Object.values(reports).flatMap((r) => r.segnali).filter((x) => x.lato === "buy" && x.simbolo === o.symbol);
+      const dos = Object.values(reports).flatMap((r) => r.custodi ?? []).find((c) => c.simbolo === o.symbol)?.dossier;
+      const grezza = o.intraday ? voti.find((x) => x.intraday && x.misure?.probabilita !== undefined)?.misure?.probabilita : (dos?.grezza ?? dos?.probabilita ?? voti.find((x) => x.misure?.probabilita !== undefined)?.misure?.probabilita);
+      const ctx = contextFor(indicators[o.symbol], price, null, "", "");
+      const pm = grezza !== undefined ? probMeta({ probabilita: grezza, kronos: view.previsioni?.[o.symbol] ?? 0, distanzaMedia: ctx.distanzaMedia ?? 0, vol: ctx.volGiornaliera ?? 0, momentum: ctx.momentum20 ?? 0, crypto: isCrypto(o.symbol) ? 1 : 0, intraday: o.intraday ? 1 : 0 }) : null;
+      const fuori = (motivo: string) => { alloc.inAttesa.push({ simbolo: o.symbol, motivo }); return false; };
+      if (pm !== null && pm < META.soglia) return fuori(`il meta-modello stima solo ${Math.round(pm * 100)}% di probabilità che il trade finisca in guadagno (minimo ${Math.round(META.soglia * 100)}%)`);
+      const p = pm ?? (grezza !== undefined ? calibraP(tipo, grezza) : null);
+      if (p === null) return true;
+      const lv = Object.values(reports).flatMap((r) => r.intraday ?? []).find((x) => x.simbolo === o.symbol && x.livelli)?.livelli;
+      const stop = o.intraday && lv ? Math.max(0.002, 1 - lv.stop / price) : stopPctFor(closes[o.symbol]);
+      const b = rapportoVinciPerdi(journal, tipo) ?? (o.intraday && lv ? Math.max(0.5, (lv.obiettivo / price - 1) / stop) : KELLY.bDiSerie);
+      const kw = pesoKelly(p, b, stop);
+      if (kw === null) return fuori(`aspettativa stimata negativa (probabilità ${Math.round(p * 100)}%, guadagno medio / perdita media ${b.toFixed(2)}): Kelly dice di non entrare`);
+      const eq = snap.account.equity;
+      let qty = o.qty;
+      if (pm !== null) qty = qty * Math.max(0.5, Math.min(1, 0.5 + (pm - META.soglia) / 0.3));
+      if (eq > 0 && (qty * price) / eq > kw) qty = (kw * eq) / price;
+      qty = roundQty(o.symbol, qty);
+      if (qty <= 0 || (isCrypto(o.symbol) && qty * price < CRYPTO_MIN_NOTIONAL)) return fuori("taglia troppo piccola dopo Kelly e meta-modello");
+      if (qty < o.qty) o.expect = `${o.expect} · taglia ridotta da ${pm !== null ? "meta-modello e " : ""}Kelly frazionario`;
+      o.qty = qty;
+      return true;
+    });
     // Un titolo votato ma in attesa (contesto, Kronos al ribasso) non è un ordine rifiutato: nessuna quantità, evento a sé.
     for (const w of alloc.inAttesa) bus.emit("attesa", { simbolo: w.simbolo, motivo: w.motivo });
+    // Chi aveva preso un titolo che il riparto mette «in attesa» torna in sala caffè (resta chi segue una posizione).
+    for (const n of rilascia(deps.stateDir, assegnazione, new Set(alloc.inAttesa.map((w) => w.simbolo)), new Set(view.positions.filter((p) => p.qty > 0).map((p) => p.symbol)), startedAt)) { log.info(`ufficio: ${n}`); bus.emit("nota", { testo: `ufficio: ${n}` }); }
     bus.emit("allocazione", { rischio: alloc.rischio, pesi: weights, punteggi: alloc.punteggi, proposte: alloc.proposte, inAttesa: alloc.inAttesa });
 
     // 5. Gabbia: gli acquisti solo nella finestra di ingresso, le vendite e gli stop sempre a mercato aperto.
     const entry = stockEntryOpen(snap.clock, startedAt);
     const cage = applyCage({ today, marketOpen: snap.clock.isOpen, account: snap.account, positions: snap.positions, prices: snap.prices, closes, recentOrders: snap.recentOrders, lessons: lessonsNow, buyBlock, proposals: alloc.proposte, previsioni: view.previsioni, apertiOggi: openedToday(view), intradayAperti: simboliIntraday(journal) });
+    // Un acquisto fermato dalla gabbia non apre nulla: chi l'aveva preso torna in sala caffè.
+    for (const n of rilascia(deps.stateDir, assegnazione, new Set(cage.rejected.filter((r) => r.side === "buy").map((r) => r.symbol)), new Set(view.positions.filter((p) => p.qty > 0).map((p) => p.symbol)), startedAt)) { log.info(`ufficio: ${n.replace("è in attesa", "acquisto fermato dalle regole")}`); }
     for (const x of cage.rejected) {
       log.warn(`rifiutato ${x.side} ${x.qty} ${x.symbol} [${x.source}]: ${x.reason}`);
       bus.emit("rifiuto", { simbolo: x.symbol, lato: x.side, quantita: x.qty, origine: x.source, motivo: x.reason });
@@ -585,7 +804,34 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
       const sc = alloc.punteggi.find((p) => p.simbolo === o.symbol);
       const proposed = alloc.proposte.find((p) => p.symbol === o.symbol && p.side === o.side);
       const ctx = contextFor(indicators[o.symbol], snap.prices[o.symbol], o.source === "modello" ? (proposed?.confidence ?? null) : null, o.source === "modello" ? (proposed?.expect ?? "") : "", o.why);
-      if (o.source === "modello" && sc) ctx.agenti = sc.agenti;
+      if (o.source === "modello" && sc) {
+        ctx.agenti = sc.agenti;
+        const chi = sc.agenti.map((a) => (a.startsWith("custode ") ? assegnazione.chi[`c:${o.symbol}`] : a === "intraday" ? (proposed?.intraday ? assegnazione.chi[`i:${o.symbol}`] : assegnazione.chi[`c:${o.symbol}`]) : `a:${a}`)).filter((k): k is string => !!k);
+        if (chi.length) ctx.persone = [...new Set(chi)];
+      }
+      if (o.side === "buy") {
+        // Le misure del momento: probabilità di riuscita (intraday: Kronos sulle candele; più giorni: dossier), RSI del
+        // rientro; le impostazioni della persona in vigore sul titolo; il clima del mercato.
+        const voti = Object.values(reports).flatMap((r) => r.segnali).filter((x) => x.lato === "buy" && x.simbolo === o.symbol);
+        const dos = Object.values(reports).flatMap((r) => r.custodi ?? []).find((c) => c.simbolo === o.symbol)?.dossier;
+        const dossierP = dos?.grezza ?? dos?.probabilita; // nel diario la stima grezza: la calibrazione si rifà su quella
+        const pIntra = voti.find((x) => x.intraday && x.misure?.probabilita !== undefined)?.misure?.probabilita;
+        const rsi2 = voti.find((x) => x.misure?.rsi2 !== undefined)?.misure?.rsi2;
+        const misure: Record<string, number> = {};
+        const prob = proposed?.intraday ? pIntra : (dossierP ?? pIntra);
+        if (prob !== undefined) misure.probabilita = prob;
+        if (rsi2 !== undefined) misure.rsi2 = rsi2;
+        // Rimbalzo intraday dopo un calo netto: il calo dell'ultimo giorno, per giudicare a posteriori questi ingressi.
+        const calo = voti.find((x) => x.intraday && x.misure?.rimbalzo !== undefined)?.misure?.rimbalzo;
+        if (calo !== undefined) misure.rimbalzo = calo;
+        // Dove stava il prezzo rispetto alle medie a 50 e 200 (0 sopra, 1 sotto la 50, 2 sotto la 200, 3 sotto entrambe).
+        const medie = voti.find((x) => x.intraday && x.misure?.medie !== undefined)?.misure?.medie;
+        if (medie !== undefined) misure.medie = medie;
+        if (Object.keys(misure).length) ctx.misure = misure;
+        ctx.impostazioni = Object.fromEntries(TUTTI_PERSONALI.map((k) => [k, Number(valore(k, o.symbol))]));
+        if (view.contesto?.generale) ctx.clima = view.contesto.generale;
+        ctx.tipo = proposed?.intraday ? "intraday" : "trading";
+      }
       if (view.previsioni?.[o.symbol] !== undefined) ctx.kronos = view.previsioni[o.symbol];
       // Operazione intraday: i livelli decisi all'ingresso vanno nel diario con il trade (sopravvivono a un riavvio).
       if (o.side === "buy" && proposed?.intraday) {
@@ -599,7 +845,62 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
     // 6. Invio.
     lock.intended = cage.orders.map((o) => ({ clientOrderId: clientOrderId(runIdFor(o.side), o.symbol, o.side), symbol: o.symbol, side: o.side, qty: o.qty }));
     const outcomes: ExecOutcome[] = [];
+    // Prima di comprare il prezzo si rilegge: il giro dura qualche minuto e il prezzo può essere scappato. Se è salito
+    // oltre esecuzione.maxRialzo dal prezzo su cui si è deciso, l'occasione è passata: non si compra (si rivaluta al giro
+    // dopo); se è sceso o è fermo, il limite si mette sul prezzo di adesso.
+    const acquisti = cage.orders.filter((o) => o.side === "buy" && o.source === "modello");
+    let freschi: Record<string, number> = {};
+    if (acquisti.length) { try { freschi = await deps.broker.getLatestPrices(acquisti.map((o) => o.symbol)); } catch {} }
+    // Crypto: le migliori offerte di adesso, per mettere il limite dove il mercato è davvero (non sull'ultimo scambio, che
+    // sulle coppie poco scambiate può essere vecchio).
+    let offerte: Record<string, Quote> = {};
+    const acquistiCrypto = acquisti.filter((o) => isCrypto(o.symbol)).map((o) => o.symbol);
+    if (acquistiCrypto.length && deps.broker.getLatestQuotes) { try { offerte = await deps.broker.getLatestQuotes(acquistiCrypto); } catch {} }
+    // Vendite di sostituzione: prima di comprare si aspetta che siano eseguite e si rilegge il conto; gli acquisti che i
+    // contanti veri non coprono (vendita non ancora eseguita) si rimandano al giro dopo invece di farli rifiutare da Alpaca.
+    let contantiVeri: number | null = null;
+    let venditeAttese = false;
     for (const plan of cage.orders) {
+      if (plan.side === "buy" && !venditeAttese) {
+        venditeAttese = true;
+        const ids = outcomes.filter((o) => o.kind === "inviato" && o.plan.side === "sell" && o.plan.libera).map((o) => o.id);
+        if (ids.length) {
+          await waitForFills(deps.broker, ids, deps.sleep, log);
+          try { contantiVeri = (await deps.broker.getAccount()).cash - cashImpegnato - snap.account.equity * AGENTS.riservaContanti; } catch { contantiVeri = 0; }
+        }
+      }
+      const p0 = snap.prices[plan.symbol], p1 = freschi[plan.symbol] ?? p0;
+      if (plan.side === "buy" && contantiVeri !== null) {
+        const costo = plan.qty * (p1 ?? 0);
+        if (costo > contantiVeri + 0.01) {
+          const m = `${plan.symbol}: acquisto rimandato al giro dopo, la vendita di sostituzione non ha ancora liberato i contanti (${Math.max(0, contantiVeri).toFixed(2)} $ disponibili, ne servono ${costo.toFixed(2)})`;
+          log.info(m);
+          bus.emit("nota", { testo: m });
+          continue;
+        }
+        contantiVeri -= costo;
+      }
+      if (plan.side === "buy" && plan.source === "modello" && p0 && p1 && p1 > p0 * (1 + AGENTS.esecuzione.maxRialzo)) {
+        const m = `${plan.symbol}: acquisto non inviato, il prezzo è salito da ${p0} a ${p1} (+${((p1 / p0 - 1) * 100).toFixed(2)}%) durante il giro: l'occasione si rivaluta al giro dopo`;
+        log.info(m);
+        bus.emit("nota", { testo: m });
+        continue;
+      }
+      // Crypto in acquisto: ordine limite (commissione maker invece di taker) dentro le migliori offerte di adesso: al
+      // prezzo di metà meno ol.sotto, mai sotto il miglior acquisto né al prezzo di vendita. Se un limite sullo stesso
+      // titolo non si è riempito nell'ultima ora, si compra al prezzo di vendita (poco sopra: si esegue subito, commissione
+      // piena, 0,1% in più) invece di perdere di nuovo l'occasione.
+      const ol = AGENTS.costi.ordiniLimite;
+      if (ol.crypto && plan.side === "buy" && plan.source === "modello" && isCrypto(plan.symbol) && p1) {
+        const q = offerte[plan.symbol];
+        const mancato = cache.limitiMancati?.[plan.symbol];
+        const subito = mancato !== undefined && startedAt.getTime() - Date.parse(mancato) < 3_600_000;
+        if (subito) {
+          plan.limitPrice = (q && q.ask > 0 ? q.ask : p1) * (1 + ol.sopraVendita);
+          log.info(`${plan.symbol}: l'ultimo limite non si è riempito, si compra al prezzo di vendita (${plan.limitPrice})`);
+        } else if (q && q.bid > 0 && q.ask >= q.bid) plan.limitPrice = Math.min(q.ask * (1 - 1e-4), Math.max(q.bid, ((q.bid + q.ask) / 2) * (1 - ol.sotto)));
+        else plan.limitPrice = p1 * (1 - ol.sotto);
+      }
       const out = await sendOne(deps.broker, runIdFor(plan.side), plan, log, deps.sleep);
       outcomes.push(out);
       bus.emit("ordine", { id: out.id, simbolo: plan.symbol, lato: plan.side, quantita: plan.qty, origine: plan.source, esito: out.kind, stato: "order" in out ? out.order.status : undefined, errore: "error" in out ? out.error : undefined, perche: plan.why });
@@ -613,10 +914,11 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
     const failed = outcomes.filter((o) => o.kind === "fallito");
     if (failed.length) await alarm("Ordini rifiutati da Alpaca", failed.map((o) => `${o.id}: ${o.kind === "fallito" ? o.error : ""}`).join("\n"));
     for (const o of outcomes) {
-      const l = o.kind === "inviato" && o.plan.source === "stop-loss" ? learnFromStopLoss(lessonsFile, `stop-${o.id}`, o.plan.symbol, today, o.plan.why) : o.kind === "fallito" ? learnFromBrokerReject(lessonsFile, o.plan.symbol, o.plan.side, today, o.error) : null;
+      const l = o.kind === "inviato" && o.plan.source === "stop-loss" ? learnFromStopLoss(lessonsFile, `stop-${o.id}`, o.plan.symbol, today, o.plan.why, startedAt) : o.kind === "fallito" ? learnFromBrokerReject(lessonsFile, o.plan.symbol, o.plan.side, today, o.error, startedAt) : null;
       if (l) learned.push(l);
     }
 
+    tempi.ordini = Date.now() - t0Reale;
     // 7. Stop su Alpaca, diario, lezioni.
     let stops: StopsReport | null = null;
     let positions = snap.positions;
@@ -629,7 +931,18 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
         // A borsa chiusa si toccano solo gli stop delle crypto; quelli dei titoli restano com'erano.
         const manageable = equitiesOpen ? positions : positions.filter((p) => isCrypto(p.symbol));
         const relevantOpen = equitiesOpen ? open : open.filter((o) => isCrypto(o.symbol));
-        stops = await manageStops(deps.broker, giro, manageable, relevantOpen, log, closes, AGENTS.exit.enabled && AGENTS.exit.stopMode === "fisso" ? AGENTS.exit.stopPct : undefined);
+        // Operazioni intraday: su Alpaca lo stop dell'operazione (quello che l'agente segue, anche dopo pareggio e rialzi),
+        // non quello largo dei più giorni. Prima dallo stato dell'agente in questo giro, poi dai livelli salvati nel diario
+        // (se l'agente non ha risposto); le operazioni promosse a più giorni restano con lo stop dei più giorni.
+        const stopIntraday: Record<string, number> = {};
+        if (AGENTS.intraday.stopSuAlpaca) {
+          for (const t of journal.trade) if (t.stato === "aperto" && t.contesto?.agenti?.includes("intraday") && !t.contesto.promossa && t.contesto.livelli?.stop) stopIntraday[t.simbolo] = t.contesto.livelli.stop;
+          for (const x of Object.values(reports).flatMap((r) => r.intraday ?? [])) {
+            const st = x.fase === "in posizione" ? x.stop : x.livelli?.stop;
+            if (st && st > 0 && !journal.trade.some((t) => t.simbolo === x.simbolo && t.stato === "aperto" && t.contesto?.promossa)) stopIntraday[x.simbolo] = st;
+          }
+        }
+        stops = await manageStops(deps.broker, giro, manageable, relevantOpen, log, closes, AGENTS.exit.enabled && AGENTS.exit.stopMode === "fisso" ? AGENTS.exit.stopPct : undefined, deps.now(), stopIntraday);
       } catch (e) {
         stops = { ok: [], placed: [], cancelled: [], errors: [`Alpaca non risponde: ${(e as Error).message}`] };
       }
@@ -664,7 +977,9 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
       } catch {}
     }
     const bm = compareWithBenchmarks(deps.stateDir, today, account.equity, snap.prices.SPY, snap.prices.TLT);
+    tempi.totale = Date.now() - t0Reale;
     const status: AgentsStatus = {
+      tempi,
       versione: 1,
       aggiornato: deps.now().toISOString(),
       giro,
@@ -689,7 +1004,7 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
       inAttesa: alloc.inAttesa,
       stopSuAlpaca: stops,
       acquistiBloccati: buyBlock,
-      lezioniAttive: lezioniDiSicurezza(lessonsFile, today),
+      lezioniAttive: lezioniDiSicurezza(lessonsFile, today, startedAt),
       allarmi: alarms,
       diario: { stato: `${journal.trade.filter((t) => t.stato === "chiuso").length} trade chiusi: da questi imparano il capo ufficio e la sala caffè`, statistiche: statsOf(journal.trade) },
       confronto: bm.cmp,
@@ -698,14 +1013,22 @@ export async function runTick(deps: EngineDeps, cache: EngineCache = emptyCache(
       pnlOggi: { ...dailyPnl(journal, today), nonRealizzato: positions.reduce((s, p) => s + (p.currentPrice - p.avgEntryPrice) * p.qty, 0) },
       custodi: Object.values(reports).flatMap((r) => r.custodi ?? []),
       intraday: Object.values(reports).flatMap((r) => r.intraday ?? []),
+      nomi: await nomiTitoli(deps.stateDir, deps.broker, [...AGENTS.universe, ...positions.map((p) => p.symbol), ...Object.values(reports).flatMap((r) => r.intraday ?? []).map((x) => x.simbolo)]).catch(() => ({})),
+      persone: persone(assegnazione.reg, assegnazione.chi),
+      calibrazione,
       universo: { titoli: AGENTS.universe.filter((s) => !isCrypto(s)), crypto: AGENTS.universe.filter(isCrypto), fonteCrypto: cache.universeInfo?.fonte ?? null, aggiornatoCrypto: cache.universeInfo?.aggiornato ?? null },
       kronos: { stato: deps.kronosStato?.() ?? (deps.forecaster ? "attivo" : "non configurato"), proiezioniDel: cache.previsioni?.giorno ?? null, simboli: Object.keys(cache.previsioni?.data ?? {}).length, scartate },
+      giornataPersone: giornataP.perPersona,
+      puntaIntraday: AGENTS.puntaIntraday,
+      proposteAperte,
+      statistica,
       giornata: { pnlPct, obiettivoPct: AGENTS.daily.targetPct, pavimentoPct: AGENTS.daily.pavimentoPct, picco: giornata.picco, perditaMaxPct: AGENTS.daily.maxLossPct, obiettivoRaggiunto: giornata.obiettivoRaggiunto, difesa: giornata.difesa, perditaOltre: giornata.perditaOltre },
       simulazioni,
       analisi: { questoGiro: analisi, ultima: cache.ultimaAnalisi ?? null, prossima: cache.ultimaAnalisi ? new Date(Date.parse(cache.ultimaAnalisi) + AGENTS.analisiMinuti * 60_000).toISOString() : null, ogniMinuti: AGENTS.analisiMinuti },
       capo,
       fonti: fonti ? { paura: fonti.paura, funding: Object.fromEntries(AGENTS.universe.filter((u) => fonti!.funding[u] !== undefined).map((u) => [u, fonti!.funding[u]!])), errori: fonti.errori } : undefined,
-      caffe: coffeeBreak({ now: deps.now(), reports, held: new Set([...positions.map((p) => p.symbol), ...cage.orders.filter((o) => o.side === "buy").map((o) => o.symbol)]), previsioni: view.previsioni, scartate, lezioni, capo, applicati: applicatiCaffe, giro: (cache.giriCaffe = (cache.giriCaffe ?? 0) + 1), primaInPausa: new Set((cache.caffePresenti ?? "").split(",").filter(Boolean)), esploratori: scout.esploratori }),
+      caffe: coffeeBreak({ now: deps.now(), reports, held: new Set([...positions.map((p) => p.symbol), ...cage.orders.filter((o) => o.side === "buy").map((o) => o.symbol)]), previsioni: view.previsioni, scartate, lezioni, capo, applicati: applicatiCaffe, giro: (cache.giriCaffe = (cache.giriCaffe ?? 0) + 1), primaInPausa: new Set((cache.caffePresenti ?? "").split(",").filter(Boolean)), esploratori: scout.esploratori, formazione, staff: { chi: assegnazione.chi, reg: assegnazione.reg } }),
+      formazione,
     };
     // Esplorazione: con qualcuno in pausa si passa in rassegna un pezzo del radar (anche tra un giro e l'altro, ogni minuto).
     await exploreRound(deps, cache, today, espl, status.caffe!, (m) => log.info(m), (m) => log.warn(m));
@@ -784,7 +1107,7 @@ export async function valutaTitolo(deps: EngineDeps, cache: EngineCache, symbol:
   const buyBlock = !LIMITS.breakerEnabled ? null : br.kind === "corrupt" ? "interruttore illeggibile" : evaluateBreaker(br.file, account.equity, account.lastEquity, now.toISOString()).buyBlock;
   const journal = readJournal(deps.stateDir, now).file;
   const previsioniNum = riallinea(usableForecasts(cache.previsioni ? Object.fromEntries(Object.entries(cache.previsioni.data).map(([k, v]) => [k, v.rendimentoPrevisto])) : undefined, closes).usabili, cache.previsioni?.data, prices);
-  const view: AgentView = { today, now, prices, closes, indicators, positions, account, journal, previsioni: previsioniNum, previsioniKronos: previsioniNum, mercatoAperto: clock.isOpen, chiusuraBorsa: clock.nextClose, finestraIngressi: stockEntryOpen(clock, now) };
+  const view: AgentView = { today, now, prices, closes, indicators, positions, account, capitaleBase: capitaleIniziale(deps.stateDir), journal, previsioni: previsioniNum, previsioniKronos: previsioniNum, mercatoAperto: clock.isOpen, chiusuraBorsa: clock.nextClose, finestraIngressi: stockEntryOpen(clock, now) };
   const ctxAgent = deps.agents.find((a): a is ContextAgent => a instanceof ContextAgent);
   let contesto: MarketContext | null = null;
   if (ctxAgent) {
@@ -815,7 +1138,7 @@ export async function valutaTitolo(deps: EngineDeps, cache: EngineCache, symbol:
   const proposals = alloc.proposte.filter((p) => p.symbol === symbol);
   const entry = stockEntryOpen(clock, now);
   const recentOrders = open;
-  const cage = applyCage({ today, marketOpen: clock.isOpen, account, positions, prices, closes, recentOrders, lessons: lezioniDiSicurezza(lessonsFile, today), buyBlock, proposals, previsioni: view.previsioni, apertiOggi: openedToday(view), intradayAperti: simboliIntraday(journal) });
+  const cage = applyCage({ today, marketOpen: clock.isOpen, account, positions, prices, closes, recentOrders, lessons: lezioniDiSicurezza(lessonsFile, today, now), buyBlock, proposals, previsioni: view.previsioni, apertiOggi: openedToday(view), intradayAperti: simboliIntraday(journal) });
   const pos = positions.find((p) => p.symbol === symbol && p.qty > 0) ?? null;
   const price = prices[symbol] ?? closes[symbol]?.at(-1) ?? null;
   const c = closes[symbol];
@@ -995,7 +1318,13 @@ export async function runEngine(deps: EngineDeps, tickMs: number, shouldStop: ()
     } finally {
       cache.inTick = false;
     }
-    const wait = Math.max(5_000, tickMs - (deps.now().getTime() - t0));
+    // Giri allineati alla chiusura delle candele: il prossimo parte `allineamentoSecondi` dopo il prossimo multiplo di
+    // tickMs (con 5 minuti: alle :00:20, :05:20, ...), quando la candela appena chiusa è già disponibile. Così tra la
+    // chiusura di una candela e la decisione passano pochi secondi più la durata del giro, non fino a 5 minuti.
+    const off = AGENTS.allineamentoSecondi * 1000;
+    const ora = deps.now().getTime();
+    const prossimo = off >= 0 ? Math.floor((ora - off) / tickMs) * tickMs + tickMs + off : t0 + tickMs;
+    const wait = Math.max(5_000, prossimo - ora);
     await deps.sleep(wait);
   }
 }

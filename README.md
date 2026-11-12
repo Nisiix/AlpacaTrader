@@ -96,9 +96,7 @@ attesa del contesto; blu) e **nel radar** (grigio). Per il titolo scelto: le ult
 motore, le operazioni fatte (▲▼ dal diario), la **candela di oggi che si forma in diretta** con i prezzi letti dal motore a ogni giro,
 le **scelte di oggi** del motore sul titolo (puntini = voti, frecce = ordini, × = rifiuti) con il feed sotto il grafico, e lo
 **scenario di Kronos**: il percorso previsto per le prossime sedute con il cono d'incertezza (una volatilità e mezza), ricaricato da
-solo appena il motore calcola proiezioni nuove. «Chiedi agli agenti adesso» fa valutare quel titolo a tutti gli agenti con i prezzi
-di quel momento (`/api/valuta`): voti, punteggio, cosa direbbe la gabbia, livelli, custode con dossier. È una prova a secco: nessun
-ordine parte dalla dashboard. Dati: `/api/bars`, `/api/previsioni`, `/api/journal`.
+solo appena il motore calcola proiezioni nuove. Nessun ordine parte dalla dashboard. Dati: `/api/bars`, `/api/previsioni`, `/api/journal`.
 
 ### Impostazioni, schede degli agenti, guida
 
@@ -120,6 +118,19 @@ del giorno, nessun numero fisso di titoli (`LIMITS.maxPositions` è solo una sic
 toccato il **+10%** sul patrimonio di ieri gli agenti continuano a investire; se il guadagno del giorno torna al **+5%** vendono i
 trade non favorevoli (Kronos non vede più rialzo) e tengono gli altri. Da **Impostazioni → Riavvia il motore** il processo esce con
 codice 75 e `avvia-bot.cmd` lo rilancia da solo: codice e chiavi nuove entrano in uso senza toccare il PC.
+
+**Se il motore sembra fermo** (dashboard che non si aggiorna, nessun giro nel registro): su Windows un clic nella finestra
+nera del motore la mette in selezione («Seleziona» nel titolo) e blocca il motore e Kronos finché non si preme **Esc**.
+Dal 10/11/2026 il motore spegne la «Modifica rapida» della sua finestra a ogni avvio (`tools/senza-quickedit.ps1`); in più
+un giro che dura oltre 15 minuti (`watchdogMinuti`) o un errore non gestito fanno ripartire il motore da solo, con la riga
+nel registro `logs/agenti-AAAA-MM-GG.log`.
+
+**Memoria** (dal 10/11/2026): ogni 5 minuti il motore misura la memoria libera del PC, la propria e quella di Kronos e la
+scrive nel registro ogni mezz'ora («memoria: PC libera …»). Se Kronos cresce di oltre 1,5 GB dall'avvio o il PC resta con
+meno di 1 GB libero, Kronos si riavvia da solo (pochi secondi); se il motore supera 2,5 GB, riparte il motore. Su Windows
+Kronos si chiude con tutto il suo albero di processi (`taskkill /T`). Se il motore si chiude per un errore,
+`avvia-bot.cmd` lo rilancia dopo 30 secondi (si ferma solo con codice 0, chiusura chiesta, o 2, errore di avvio).
+Dal 10/11/2026 il sidecar carica solo Kronos (`AGENTS.kronos.modelli`): Chronos-2 e TimesFM sono spenti.
 
 ### Ripartire da zero
 
@@ -157,8 +168,8 @@ bun test                           # test con broker finto
 - Calendario: Fed scritta in `src/events.ts` (niente acquisti di azioni ed ETF nel giorno della decisione; le crypto no);
   trimestrali di tutti i titoli seguiti lette ogni giorno dal calendario pubblico di Nasdaq (`state/trimestrali.json`):
   niente acquisti del titolo nei 2 giorni di borsa prima dei conti.
-- Registro degli errori (`state/lessons.json`): dopo uno stop loss niente riacquisto per 5 giorni di borsa; due rifiuti di
-  Alpaca uguali bloccano quel titolo-lato per 5 giorni. Imparare dai risultati lo fanno capo ufficio e sala caffè.
+- Registro degli errori (`state/lessons.json`): dopo uno stop loss una pausa di 2 ore sul titolo (poi l'agente intraday
+  rientra solo con 3 punti di probabilità in più per 24 ore); due rifiuti di Alpaca uguali, una pausa di 4 ore. Imparare dai risultati lo fanno capo ufficio e sala caffè.
 - Interruttore (`state/breaker.json`): spento di serie, si riaccende dalle impostazioni come freno d'emergenza.
 - Azioni solo a borsa aperta (orologio di Alpaca); crypto 24 ore su 24.
 

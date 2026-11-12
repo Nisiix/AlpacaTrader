@@ -1,6 +1,6 @@
 import type { ProposedOrder } from "./ordini.ts";
 import type { Account, Order, Position, Side } from "./broker/types.ts";
-import { isOpenOrder, isProtectiveStop } from "./broker/types.ts";
+import { aFrazioni, frazionabile, isOpenOrder, isProtectiveStop } from "./broker/types.ts";
 import { AGENTS, CRYPTO, CRYPTO_MIN_NOTIONAL, LIMITS, UNIVERSE, isCrypto, sectorOf } from "./config.ts";
 import { EVENTS, eventBlockFor, type MarketEvent } from "./events.ts";
 import { dailyVol, indicatorsFor, sma, trendOf } from "./indicators.ts";
@@ -20,6 +20,10 @@ export interface PlannedOrder {
   qty: number;
   why: string;
   source: OrderSource;
+  // Prezzo limite (acquisti crypto con ordini limite): deciso al momento dell'invio.
+  limitPrice?: number;
+  // Vendita di sostituzione: l'invio aspetta che sia eseguita prima degli acquisti dello stesso giro.
+  libera?: boolean;
 }
 
 // stop-loss = protezione contro i crolli; uscita-trend = l'uscita normale del metodo, decisa dal codice.
@@ -154,7 +158,15 @@ export function applyCage(i: CageInput): CageResult {
     if (isCrypto(p.symbol)) {
       if (!(p.qty > 0)) { reject("quantità positiva"); continue; }
       if (p.side === "buy" && p.qty * (i.prices[p.symbol] ?? 0) < CRYPTO_MIN_NOTIONAL) { reject(`ordine crypto sotto il minimo di ${CRYPTO_MIN_NOTIONAL} $`); continue; }
-    } else if (!Number.isInteger(p.qty) || p.qty < 1) { reject("solo azioni intere e quantità positiva"); continue; }
+    } else {
+      if (!(p.qty > 0)) { reject("quantità positiva"); continue; }
+      // Frazioni di azione: in acquisto solo sui titoli frazionabili (Alpaca) e da almeno frazioni.minimoUsd; in vendita
+      // sempre (una posizione può essere già frazionaria, e va potuta chiudere tutta).
+      if (Math.abs(p.qty - Math.round(p.qty)) > 1e-9 && p.side === "buy") {
+        if (!aFrazioni(p.symbol)) { reject(!AGENTS.frazioni.enabled ? "frazioni di azione spente: solo azioni intere" : frazionabile(p.symbol) === false ? "titolo non frazionabile su Alpaca: solo azioni intere" : "Alpaca non ha ancora detto se il titolo è frazionabile: per ora solo azioni intere"); continue; }
+        if (p.qty * (i.prices[p.symbol] ?? 0) < AGENTS.frazioni.minimoUsd) { reject(`frazione sotto il minimo di ${AGENTS.frazioni.minimoUsd} $ di Alpaca`); continue; }
+      }
+    }
     const key = `${p.symbol}-${p.side}`;
     if (seen.has(key)) { reject(stopped.has(p.symbol) && p.side === "sell" ? "già venduto dal codice (stop o uscita di trend)" : "doppione nello stesso giro"); continue; }
     if (p.side === "buy" && stopped.has(p.symbol)) { reject("in uscita in questo giro (stop o trend)"); continue; }
@@ -164,9 +176,17 @@ export function applyCage(i: CageInput): CageResult {
 
     if (p.side === "sell") {
       const q = held.get(p.symbol)?.qty ?? 0;
-      if (p.qty > q) { reject(`niente short: in portafoglio ce ne sono ${q}`); continue; }
+      if (p.qty > q + 1e-9) { reject(`niente short: in portafoglio ce ne sono ${q}`); continue; }
+      // Vendita di sostituzione (tutta la posizione): il ricavato (meno costi e scivolamento) va ai contanti degli acquisti
+      // di questo giro, e il titolo esce dai conti del peso e del settore.
+      if (p.libera && p.qty >= q - 1e-9) {
+        const px = i.prices[p.symbol] ?? held.get(p.symbol)?.currentPrice ?? 0;
+        cash += p.qty * px * (1 - (isCrypto(p.symbol) ? AGENTS.costi.cryptoAndataRitorno / 2 : 0) - AGENTS.intraday.budget.scivolamento);
+        added.set(p.symbol, (added.get(p.symbol) ?? 0) - q * px);
+      }
     } else {
       if (i.buyBlock) { reject(i.buyBlock); continue; }
+      if (isCrypto(p.symbol) && !AGENTS.cryptoAcquisti.enabled) { reject("acquisti crypto fermati (impostazione «Acquisti crypto»): le crypto già aperte si gestiscono fino all'uscita"); continue; }
       // L'intraday si chiude in giornata con obiettivo e stop propri: non segue il filtro macro né il trend giornaliero.
       const ev = p.intraday ? null : eventBlockFor(p.symbol, i.today, i.events ?? EVENTS);
       if (ev) { reject(ev); continue; }
@@ -174,7 +194,9 @@ export function applyCage(i: CageInput): CageResult {
       if (!price || price <= 0) { reject("prezzo non disponibile"); continue; }
       const cost = p.qty * price;
       const share = (valueOf(p.symbol) + cost) / i.account.equity;
-      if (share > LIMITS.maxPositionPct) { reject(`porterebbe il titolo al ${pct(share)} del conto (massimo ${pct(LIMITS.maxPositionPct)})`); continue; }
+      // Intraday: il tetto per titolo è il suo (AGENTS.intraday.maxWeight); la taglia la decide il rischio allo stop.
+      const tettoTitolo = p.intraday ? Math.max(LIMITS.maxPositionPct, AGENTS.intraday.maxWeight) : LIMITS.maxPositionPct;
+      if (share > tettoTitolo + 1e-9) { reject(`porterebbe il titolo al ${pct(share)} del conto (massimo ${pct(tettoTitolo)})`); continue; }
       if (!symbols.has(p.symbol) && symbols.size >= LIMITS.maxPositions) { reject(`massimo ${LIMITS.maxPositions} titoli in portafoglio`); continue; }
       const settore = sectorOf(p.symbol);
       if (settore !== "altro") {
@@ -188,7 +210,7 @@ export function applyCage(i: CageInput): CageResult {
       if (!p.intraday) {
         if (t === null) { reject(`storico insufficiente per il metodo (servono ${LIMITS.longSmaDays} giorni di chiusure)`); continue; }
         // Kronos può anticipare: con una proiezione netta si entra anche sotto la media a 50; sotto la 200 solo contro
-        // tendenza (Kronos ≥ 2% con probabilità di successo ≥ 60%), a metà del peso massimo.
+        // tendenza (Kronos ≥ 2% con probabilità di successo ≥ 57%), a metà del peso massimo.
         const kronosForte = p.kronos !== undefined && p.kronos >= AGENTS.kronos.anticipaSoglia;
         // Sotto la 200 solo contro tendenza: Kronos netto, probabilità di successo sufficiente, taglia ridotta.
         if (t.close <= t.long) {
@@ -202,14 +224,14 @@ export function applyCage(i: CageInput): CageResult {
         }
       }
       const w = maxWeightFor(closes);
-      if (share > w.max) { reject(`con volatilità giornaliera ${pct(w.vol)}${w.estimated ? " (stimata)" : ""} il massimo è ${pct(w.max)} del conto, qui si arriverebbe al ${pct(share)}`); continue; }
+      if (!p.intraday && share > w.max) { reject(`con volatilità giornaliera ${pct(w.vol)}${w.estimated ? " (stimata)" : ""} il massimo è ${pct(w.max)} del conto, qui si arriverebbe al ${pct(share)}`); continue; }
       if (cost > cash) { reject("niente leva: contanti insufficienti"); continue; }
       cash -= cost;
       symbols.add(p.symbol);
       added.set(p.symbol, (added.get(p.symbol) ?? 0) + cost);
     }
     seen.add(key);
-    orders.push({ symbol: p.symbol, side: p.side, qty: p.qty, why: p.why, source: "modello" });
+    orders.push({ symbol: p.symbol, side: p.side, qty: p.qty, why: p.why, source: "modello", ...(p.side === "sell" && p.libera ? { libera: true } : {}) });
   }
   return { orders, rejected };
 }

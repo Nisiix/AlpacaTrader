@@ -143,8 +143,8 @@ describe("briciole e arrotondamenti", () => {
   test("un rifiuto di Alpaca per quantità non diventa una lezione", async () => {
     const { emptyLessons, learnFromBrokerReject } = await import("../src/lessons.ts");
     const f = emptyLessons();
-    expect(learnFromBrokerReject(f, "LTC/USD", "sell", "2026-11-08", 'Alpaca 403: {"message":"insufficient balance for LTC"}')).toBeNull();
-    expect(learnFromBrokerReject(f, "LTC/USD", "sell", "2026-11-08", 'Alpaca 422: {"message":"qty must be > 0"}')).toBeNull();
+    expect(learnFromBrokerReject(f, "LTC/USD", "sell", "2026-11-08", 'Alpaca 403: {"message":"insufficient balance for LTC"}', new Date("2026-11-08T12:00:00Z"))).toBeNull();
+    expect(learnFromBrokerReject(f, "LTC/USD", "sell", "2026-11-08", 'Alpaca 422: {"message":"qty must be > 0"}', new Date("2026-11-08T12:00:00Z"))).toBeNull();
     expect(f.rifiuti).toHaveLength(0);
   });
 });

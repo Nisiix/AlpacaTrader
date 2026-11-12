@@ -2,7 +2,7 @@ import { join } from "node:path";
 import type { Bar } from "../broker/types.ts";
 import { AGENTS, LIMITS, RADAR_SECTORS, isCrypto, sectorOf } from "../config.ts";
 import { isObject, readJson, writeJsonAtomic } from "../fsutil.ts";
-import { momentum, sma } from "../indicators.ts";
+import { dailyVol, momentum, sma } from "../indicators.ts";
 import type { Presenza } from "./caffe.ts";
 import { technicalRead } from "./custode.ts";
 import { controTendenza, pesoControTendenza, plausibile } from "./fiducia.ts";
@@ -82,15 +82,29 @@ export function technicalGate(closes: number[] | undefined): { ok: boolean; cont
   return { ok: true, tecnica: t, motivo: t.pattern.join(", ") };
 }
 
+// Il filtro per l'intraday: il titolo si muove abbastanza in una giornata (volatilità a 20 giorni) per coprire i costi.
+export function intradayGate(simbolo: string, closes: number[] | undefined): { ok: boolean; vol: number | null; motivo: string } {
+  const v = closes && closes.length >= LIMITS.volLookbackDays + 1 ? dailyVol(closes, LIMITS.volLookbackDays) : null;
+  const min = isCrypto(simbolo) ? AGENTS.esplorazione.intraday.volMin.crypto : AGENTS.esplorazione.intraday.volMin.azioni;
+  if (v === null) return { ok: false, vol: null, motivo: "storico insufficiente" };
+  if (v < min) return { ok: false, vol: v, motivo: `volatilità giornaliera ${pct(v)} sotto ${pct(min)}: si muove troppo poco per l'intraday` };
+  return { ok: true, vol: v, motivo: `volatilità giornaliera ${pct(v)}: si muove abbastanza per l'intraday` };
+}
+
 // Chi va a cercare: gli agenti in pausa, gli investitori prima (custodi e operatori intraday), poi gli altri.
 function scoutFor(simbolo: string, presenti: Presenza[], busy: Set<string>): Presenza | null {
-  const free = presenti.filter((p) => !busy.has(p.chiave));
+  // Chi è in formazione impara, non esplora; tra gli altri prima i trading agents liberi dello staff.
+  const free = presenti.filter((p) => !busy.has(p.chiave) && !p.formazione);
+  const staff = free.find((p) => p.chiave.startsWith("p:") && p.reparto !== "intraday");
+  if (staff) return staff;
   const sec = sectorOf(simbolo);
   const same = (p: Presenza) => (p.chiave.startsWith("c:") || p.chiave.startsWith("i:")) && sectorOf(p.chiave.slice(2)) === sec;
   const sameClass = (p: Presenza) => (p.chiave.startsWith("c:") || p.chiave.startsWith("i:")) && isCrypto(p.chiave.slice(2)) === isCrypto(simbolo);
   return free.find(same) ?? free.find(sameClass) ?? free.find((p) => p.chiave.startsWith("c:") || p.chiave.startsWith("i:")) ?? free[0] ?? null;
 }
-const agentOf = (p: Presenza) => (p.chiave.startsWith("c:") ? `custode ${p.chiave.slice(2)}` : p.chiave.startsWith("i:") ? "intraday" : p.nome);
+// Chi trova il titolo lo vota col suo ruolo: un trading agent (persona dello staff o vecchia postazione c:) come trading
+// agent di quel titolo, un intraday agent come intraday, un agente generale col suo nome.
+const agentOf = (p: Presenza, simbolo: string) => (p.chiave.startsWith("p:") ? (p.reparto === "intraday" ? "intraday" : `custode ${simbolo}`) : p.chiave.startsWith("c:") ? `custode ${p.chiave.slice(2)}` : p.chiave.startsWith("i:") ? "intraday" : p.nome);
 
 export interface GiroEsplorazione {
   esaminati: string[];
@@ -135,7 +149,14 @@ export async function explore(input: {
   f.esaminati.push(...batch);
   const scartati: GiroEsplorazione["scartati"] = [];
   const passa: string[] = [];
+  const intraday = AGENTS.puntaIntraday;
   for (const s of batch) {
+    if (intraday) {
+      const gi = intradayGate(s, bars[s]?.map((b) => b.close));
+      if (gi.ok) passa.push(s);
+      else scartati.push({ simbolo: s, motivo: gi.motivo });
+      continue;
+    }
     const g = technicalGate(bars[s]?.map((b) => b.close));
     if (g.ok || (g.contro && AGENTS.kronos.controTendenza.enabled)) passa.push(s);
     else scartati.push({ simbolo: s, motivo: g.motivo });
@@ -150,11 +171,21 @@ export async function explore(input: {
     }
   } else if (passa.length) for (const s of passa.splice(0)) scartati.push({ simbolo: s, motivo: "senza Kronos non si entra" });
   const nuove: Scoperta[] = [];
-  const busy = new Set(attive(f, input.today).map((s) => s.scopritore));
+  // Con il motore intraday lo scopritore non resta alla scrivania (non vota): può scoprire ancora.
+  const busy = new Set(intraday ? [] : attive(f, input.today).map((s) => s.scopritore));
   for (const s of passa) {
     const fc = previsioni[s];
     if (fc === undefined || !Number.isFinite(fc)) scartati.push({ simbolo: s, motivo: "nessuna proiezione" });
     else if (!plausibile(fc, bars[s]?.map((b) => b.close))) scartati.push({ simbolo: s, motivo: `proiezione fuori misura (${pct(fc)}): oltre ${AGENTS.kronos.zMax} volte la volatilità del titolo` });
+    else if (intraday && fc <= -AGENTS.kronos.anticipaSoglia) scartati.push({ simbolo: s, motivo: `Kronos a ${AGENTS.kronos.horizon} sedute ${pct(fc)}: calo netto, niente intraday al rialzo` });
+    else if (intraday) {
+      if (oggi + nuove.length >= c.maxScoperte) break;
+      const who = scoutFor(s, input.presenti, busy);
+      if (!who) break;
+      busy.add(who.chiave);
+      const gi = intradayGate(s, bars[s]!.map((b) => b.close));
+      nuove.push({ simbolo: s, settore: sectorOf(s), scopritore: who.chiave, agente: "intraday", trovata: input.now.toISOString(), validaFino: addDays(input.today, c.giorniValida - 1), kronos: fc, tecnica: { punteggio: 0, pattern: [] }, motivo: `per l'intraday: ${gi.motivo}; Kronos a ${AGENTS.kronos.horizon} sedute ${pct(fc)}, non contrario: lo valutano gli intraday agents sulle candele`, stato: "attiva" });
+    }
     else if (fc < AGENTS.kronos.anticipaSoglia) scartati.push({ simbolo: s, motivo: `Kronos ${pct(fc)}: nessun rialzo oltre la soglia` });
     else if (technicalGate(bars[s]!.map((b) => b.close)).contro && !controTendenza(bars[s]!.map((b) => b.close), fc).ok) scartati.push({ simbolo: s, motivo: `sotto la media a 200: ${controTendenza(bars[s]!.map((b) => b.close), fc).motivo}` });
     else {
@@ -164,7 +195,7 @@ export async function explore(input: {
       busy.add(who.chiave);
       const g = technicalGate(bars[s]!.map((b) => b.close));
       nuove.push({
-        simbolo: s, settore: sectorOf(s), scopritore: who.chiave, agente: agentOf(who), trovata: input.now.toISOString(), validaFino: addDays(input.today, c.giorniValida - 1), kronos: fc, tecnica: g.tecnica,
+        simbolo: s, settore: sectorOf(s), scopritore: who.chiave, agente: agentOf(who, s), trovata: input.now.toISOString(), validaFino: addDays(input.today, c.giorniValida - 1), kronos: fc, tecnica: g.tecnica,
         motivo: `${g.contro ? `contro tendenza (sotto la media a 200, ${controTendenza(bars[s]!.map((b) => b.close), fc).motivo.replace(/^Kronos [^ ]+ /, "")})` : `sopra la media a 200, ${g.tecnica.pattern.slice(0, 2).join(", ") || "grafico in ordine"}`}; Kronos anticipa ${pct(fc)} a ${AGENTS.kronos.horizon} sedute`,
         stato: "attiva",
       });
@@ -193,11 +224,22 @@ export function scoutVotes(f: EsplorazioneFile, v: AgentView, reports: Record<st
     }
     if (held.has(s.simbolo)) {
       s.stato = "comprata";
-      note.push(`esplorazione: ${s.simbolo} comprato; da ora lo segue il suo custode`);
+      note.push(`esplorazione: ${s.simbolo} comprato; da ora lo segue ${AGENTS.puntaIntraday ? "l'intraday agent che l'ha preso" : "il suo custode"}`);
       continue;
     }
     const fc = v.previsioni?.[s.simbolo];
     const c = v.closes[s.simbolo];
+    // Motore che punta all'intraday: nessun voto di più giorni (non aprirebbe nulla); il titolo resta nell'universo e lo
+    // valutano gli intraday agents sulle candele. Si lascia solo con un calo netto di Kronos a 5 sedute, e mai se in questo
+    // giro gli intraday agents lo hanno votato (prima NOW, votato al 75%, usciva dall'universo nello stesso giro).
+    if (AGENTS.puntaIntraday) {
+      const votato = (reports.intraday?.segnali ?? []).some((x) => x.simbolo === s.simbolo && x.lato === "buy");
+      if (fc !== undefined && fc <= -AGENTS.kronos.anticipaSoglia && !votato) {
+        s.stato = "svanita";
+        note.push(`esplorazione: ${s.simbolo} lasciato, Kronos a ${AGENTS.kronos.horizon} sedute ora vede ${pct(fc)}`);
+      }
+      continue;
+    }
     const m200 = c ? sma(c, LIMITS.longSmaDays) : null;
     const price = v.prices[s.simbolo] ?? c?.[c.length - 1];
     if (fc !== undefined && fc < AGENTS.kronos.anticipaSoglia) {
@@ -214,7 +256,7 @@ export function scoutVotes(f: EsplorazioneFile, v: AgentView, reports: Record<st
     }
     const forza = Math.min(1, (0.5 + k * 5) * (0.75 + 0.25 * s.tecnica.punteggio));
     const sig: Signal = { agente: s.agente, simbolo: s.simbolo, lato: "buy", forza, orizzonteSedute: AGENTS.kronos.horizon, kronos: k, ...(contro ? { pesoMassimo: pesoControTendenza() } : {}), perche: `esplorazione dalla sala caffè: ${s.simbolo} ${s.motivo.replace(/Kronos anticipa [^;]+/, `Kronos anticipa ${pct(k)} a ${AGENTS.kronos.horizon} sedute`)}` };
-    const home = s.scopritore.startsWith("c:") ? "custodi" : s.scopritore.startsWith("i:") ? "intraday" : s.scopritore.slice(2);
+    const home = s.agente.startsWith("custode ") ? "custodi" : s.agente === "intraday" ? "intraday" : s.scopritore.slice(2);
     (reports[home] ??= { segnali: [] }).segnali.push(sig);
     esploratori.set(s.scopritore, `opera su ${s.simbolo} (scoperto in sala caffè)`);
   }

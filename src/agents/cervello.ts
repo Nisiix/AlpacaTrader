@@ -92,11 +92,15 @@ export class Cervello {
       }
       const vero = p / x.base - 1;
       if (Math.abs(vero) >= PIATTO && x.prev !== 0) {
-        const k = `${x.tipo}|${x.m}`;
-        const st = (this.f.stat[k] ??= { n: 0, giusti: 0, segno: 0 });
-        st.n++;
-        if (Math.sign(vero) === Math.sign(x.prev)) st.giusti++;
-        st.segno += Math.sign(x.prev) * vero;
+        // Le previsioni intraday contano anche per classe (azioni o crypto): i costi sono 8 volte diversi e il vantaggio
+        // di Kronos pure; il conto complessivo resta per i pesi tra i modelli e come riserva finché la classe ne ha poche.
+        const chiavi = [`${x.tipo}|${x.m}`, ...(x.tipo.startsWith("intraday-") ? [`${x.tipo}-${classeDi(x.s)}|${x.m}`] : [])];
+        for (const k of chiavi) {
+          const st = (this.f.stat[k] ??= { n: 0, giusti: 0, segno: 0 });
+          st.n++;
+          if (Math.sign(vero) === Math.sign(x.prev)) st.giusti++;
+          st.segno += Math.sign(x.prev) * vero;
+        }
         contate++;
       }
     }
@@ -161,14 +165,26 @@ export class Cervello {
 
   // Affidabilità misurata di Kronos su un tipo di previsione (es. "intraday-5m"): quota di direzioni giuste avvicinata al
   // valore atteso `prior` con il peso di `forza` previsioni, e il fattore che ne deriva (1 = come atteso, 0 = come il caso).
-  affidabilitaTipo(tipo: string, modello = "kronos"): { fattore: number; quota: number; campione: number; giusti: number | null } {
+  affidabilitaTipo(tipo: string, modello = "kronos"): { fattore: number; quota: number; campione: number; giusti: number | null; resa: number | null } {
     const a = AGENTS.intraday.affidabilita;
     const st = this.f.stat[`${tipo}|${modello}`];
     const n = st?.n ?? 0;
     const quota = ((st?.giusti ?? 0) + a.prior * a.forza) / (n + a.forza);
     const fattore = Math.max(0, Math.min(a.max, (quota - 0.5) / (a.prior - 0.5)));
-    return { fattore, quota, campione: n, giusti: n ? st!.giusti / n : null };
+    // resa: rendimento medio seguendo il segno della previsione (lordo dei costi), la stessa «resa media» della dashboard.
+    return { fattore, quota, campione: n, giusti: n ? st!.giusti / n : null, resa: n ? st!.segno / n : null };
   }
+
+  // La stessa per un simbolo: le misure della sua classe (azioni o crypto) quando ne ha almeno minClasse, altrimenti
+  // quelle complessive della candela.
+  affidabilitaPer(tipo: string, simbolo: string | undefined, modello = "kronos") {
+    if (simbolo) {
+      const cl = this.affidabilitaTipo(`${tipo}-${classeDi(simbolo)}`, modello);
+      if (cl.campione >= AGENTS.intraday.affidabilita.minClasse) return { ...cl, classe: classeDi(simbolo) };
+    }
+    return this.affidabilitaTipo(tipo, modello);
+  }
+
 
   // Per la dashboard: una riga per tipo e modello con campione, direzione giusta, resa e peso di adesso.
   stato(): { righe: RigaCervello[]; inAttesa: number } {
@@ -195,6 +211,8 @@ export class Cervello {
 export const scadenzaGiorno = (now: Date) => new Date(now.getTime() + Math.ceil((AGENTS.kronos.horizon * 7) / 5) * 86_400_000);
 export const scadenzaIntraday = (ultimaCandela: string, stepMinutes: number, n: number) => new Date(Date.parse(ultimaCandela) + (n + 1) * stepMinutes * 60_000);
 export const tipoIntraday = (stepMinutes: number) => `intraday-${stepMinutes}m`;
+// Classe di un simbolo per le misure intraday separate: «crypto» (BTC/USD) o «azioni».
+export const classeDi = (simbolo: string) => (simbolo.includes("/") ? "crypto" : "azioni");
 
 // Le previsioni giornaliere passano dal cervello: si registra la previsione di ogni modello e si restituisce il percorso
 // combinato (il motore non vede differenze: un percorso, un rendimento previsto).

@@ -2,10 +2,23 @@ import { describe, expect, test } from "bun:test";
 import { applyLessons, coffeeBreak, teamLessons } from "../src/agents/caffe.ts";
 import { explore, readEsplorazione, scoutVotes, technicalGate } from "../src/agents/esplorazione.ts";
 import { AGENTS } from "../src/config.ts";
-import { SQUADRA_CUSTODI, applyGuidance, kronosOf, regolaSuperata, review } from "../src/agents/capo.ts";
+import { applyGuidance, kronosOf, regolaSuperata, review } from "../src/agents/capo.ts";
 import type { CustodeStato } from "../src/agents/custode.ts";
 import type { AgentReport } from "../src/agents/types.ts";
+
+// Soglie del coordinatore dell'apprendimento abbassate per i test con pochi trade (si ripristinano alla fine).
+function sogliePiccole() {
+  const a = { ...AGENTS.apprendimento }, f = AGENTS.formazione.minTrade, c = AGENTS.calibrazione.minTrade;
+  Object.assign(AGENTS.apprendimento, { minTradePersona: 5, minTradeSquadra: 3 });
+  AGENTS.formazione.minTrade = 5; AGENTS.calibrazione.minTrade = 5;
+  return () => { Object.assign(AGENTS.apprendimento, a); AGENTS.formazione.minTrade = f; AGENTS.calibrazione.minTrade = c; };
+}
 import { emptyJournal, type JournalFile, type Trade } from "../src/journal.ts";
+
+// Questi test provano anche il metodo di più giorni e la promozione: il motore che punta all'intraday (e il riporto al
+// giorno dopo) ha i suoi test, che lo riaccendono.
+AGENTS.puntaIntraday = false;
+AGENTS.intraday.riporto.enabled = false;
 
 // Un trade chiuso: aperto un giorno, chiuso qualche giorno dopo (salvo indicato), con agenti, motivo e risultato.
 function trade(i: number, simbolo: string, risultato: number, agenti: string[], perche: string, o: { kronos?: number; stessoGiorno?: boolean; uscita?: string } = {}): Trade {
@@ -36,20 +49,24 @@ describe("capo ufficio", () => {
     expect(r.sintesi).toContain("dalla vecchia uscita in giornata");
   });
 
-  test("la squadra dei custodi si giudica insieme: con 3 trade persi (uno per custode) scatta il richiamo e vale per tutti i custodi", () => {
-    const ts = ["SOL/USD", "LTC/USD", "AVAX/USD"].map((s, i) => trade(i, s, -0.02, [`custode ${s}`], `custode ${s}: rialzo anticipato da Kronos`, { kronos: 0.012 }));
+  test("il capo giudica le persone, non i titoli: chi perde su tre titoli diversi è richiamato, e il richiamo vale dove lavora", () => {
+    const ts = ["SOL/USD", "LTC/USD", "AVAX/USD"].map((s, i) => ({ ...trade(i, s, -0.02, [`custode ${s}`], `custode ${s}: rialzo anticipato da Kronos`, { kronos: 0.012 }), contesto: { ...trade(i, s, -0.02, [`custode ${s}`], `custode ${s}: rialzo anticipato da Kronos`, { kronos: 0.012 }).contesto!, persone: ["p:Anna"] } }));
+    const ripristina = sogliePiccole();
     const r = review(journalOf(ts), new Date("2026-11-08T17:00:00Z"));
-    const sq = r.valutazioni.find((v) => v.agente === SQUADRA_CUSTODI)!;
-    expect(sq.giudizio).toBe("richiamato");
-    expect(r.valutazioni.find((v) => v.agente === "custode SOL/USD")!.giudizio).toBe("nuovo");
-    // Un custode nuovo (DOT) eredita il richiamo della squadra: voto sotto la soglia scartato, sopra con forza ridotta.
+    ripristina();
+    expect(r.valutazioni.map((v) => v.agente)).toEqual(["p:Anna"]);
+    expect(r.valutazioni[0]!.giudizio).toBe("richiamato");
+    expect(r.valutazioni[0]!.sessioni).toEqual({ positive: 0, negative: 3 });
+    // Anna ora lavora su DOT/USD: il suo voto sotto la soglia è scartato. Bruno su ADA/USD non è richiamato.
     const reports: Record<string, AgentReport> = { custodi: { segnali: [
       { agente: "custode DOT/USD", simbolo: "DOT/USD", lato: "buy", forza: 1, orizzonteSedute: 5, kronos: 0.004, perche: "x" },
-      { agente: "custode ADA/USD", simbolo: "ADA/USD", lato: "buy", forza: 1, orizzonteSedute: 5, kronos: 0.04, perche: "y" },
+      { agente: "custode ADA/USD", simbolo: "ADA/USD", lato: "buy", forza: 1, orizzonteSedute: 5, kronos: 0.004, perche: "y" },
     ] } };
-    const note = applyGuidance(reports, r, undefined);
-    expect(note[0]).toContain("custode DOT/USD");
-    expect(reports.custodi!.segnali.map((s) => [s.simbolo, s.forza])).toEqual([["ADA/USD", 0.6]]);
+    const chi: Record<string, string> = { "DOT/USD": "p:Anna", "ADA/USD": "p:Bruno" };
+    const note = applyGuidance(reports, r, undefined, (s) => chi[s.simbolo]);
+    // Per le persone dello staff il richiamo non stringe i voti: agiscono calibrazione e formazione (una leva sola).
+    expect(note).toEqual([]);
+    expect(reports.custodi!.segnali.map((s) => [s.simbolo, s.forza])).toEqual([["DOT/USD", 1], ["ADA/USD", 1]]);
   });
 });
 
@@ -97,23 +114,28 @@ describe("sala caffè", () => {
       intraday: { segnali: [], intraday: [{ simbolo: "DOT/USD", candela: "5Min", fase: "cerca ingresso", ingresso: null, obiettivo: null, stop: null, prezzo: 1, motivo: "prudenza: giornaliero sotto le medie" }] },
     };
     const lezioni = teamLessons(journalOf(perdenti));
-    const c = coffeeBreak({ now: new Date("2026-11-08T17:00:00Z"), reports, held: new Set(["AAPL"]), previsioni: { NVDA: 0.047, "DOT/USD": 0.04, AAPL: -0.14 }, scartate: ["PEPE/USD"], lezioni, capo: null, applicati: [], giro: 1 });
+    // Lo staff: Anna segue la posizione su AAPL, Bruno ha preso ETH/USD (voto d'acquisto), Carlo e Diana (trading) e
+    // Elio (intraday) non hanno occasioni. BTC/USD è «in attesa»: nessuno ci lavora, resta un titolo in osservazione.
+    const reg = { versione: 2 as const, vecchi: {}, staff: { Anna: { reparto: "trading" as const, simbolo: "AAPL", dal: "" }, Bruno: { reparto: "trading" as const, simbolo: "ETH/USD", dal: "" }, Carlo: { reparto: "trading" as const, simbolo: null, dal: "" }, Diana: { reparto: "trading" as const, simbolo: null, dal: "" }, Elio: { reparto: "intraday" as const, simbolo: null, dal: "" } } };
+    const staff = { chi: { "c:AAPL": "p:Anna", "c:ETH/USD": "p:Bruno" }, reg };
+    const c = coffeeBreak({ now: new Date("2026-11-08T17:00:00Z"), reports, held: new Set(["AAPL"]), previsioni: { NVDA: 0.047, "DOT/USD": 0.04, AAPL: -0.14 }, scartate: ["PEPE/USD"], lezioni, capo: null, applicati: [], giro: 1, staff });
     const qui = c.presenti.map((p) => p.chiave).sort();
-    expect(qui).toEqual(["a:kronos", "a:trend", "c:BTC/USD", "c:SOL/USD", "i:DOT/USD"]);
+    expect(qui).toEqual(["a:kronos", "a:trend", "p:Carlo", "p:Diana", "p:Elio"]);
     const op = Object.fromEntries(c.operativi.map((o) => [o.chiave, o.perche]));
-    expect(op["c:ETH/USD"]).toBe("trade da aprire su ETH/USD");
-    expect(op["c:AAPL"]).toBe("segue la posizione");
+    expect(op["p:Bruno"]).toBe("trade da aprire su ETH/USD");
+    expect(op["p:Anna"]).toBe("segue la posizione su AAPL");
     expect(op["a:regime"]).toContain("75%");
     const testi = c.scambi.map((s) => s.testo).join("\n");
-    expect(testi).toContain("BTC/USD: 42% favorevole");
+    expect(testi).toContain("BTC/USD: 42% favorevole"); // lo racconta una persona libera in sala caffè
     expect(testi).toContain("DOT/USD su candele 5Min");
     expect(testi).toContain("NVDA +4.7%");
     expect(testi).toContain("non fidatevi di PEPE/USD");
     expect(testi).toContain("0 vinti su 3");
-    // ETH non era in pausa al giro prima: non "torna". Se c'era, lo dice.
+    expect(c.scambi.filter((s) => s.tema === "parere" && s.testo.startsWith("BTC/USD")).every((s) => ["p:Carlo", "p:Diana"].includes(s.da))).toBe(true);
+    // Bruno non era in pausa al giro prima: non "torna". Se c'era, lo dice.
     expect(c.scambi.some((s) => s.tema === "rientro")).toBe(false);
-    const c2 = coffeeBreak({ now: new Date("2026-11-08T17:05:00Z"), reports, held: new Set(["AAPL"]), previsioni: undefined, scartate: [], lezioni: [], capo: null, applicati: [], giro: 2, primaInPausa: new Set(["c:ETH/USD"]) });
-    expect(c2.scambi.find((s) => s.tema === "rientro")).toMatchObject({ da: "c:ETH/USD", testo: "Torno alla scrivania: trade da aprire su ETH/USD." });
+    const c2 = coffeeBreak({ now: new Date("2026-11-08T17:05:00Z"), reports, held: new Set(["AAPL"]), previsioni: undefined, scartate: [], lezioni: [], capo: null, applicati: [], giro: 2, primaInPausa: new Set(["p:Bruno"]), staff });
+    expect(c2.scambi.find((s) => s.tema === "rientro")).toMatchObject({ da: "p:Bruno", testo: "Torno alla scrivania: trade da aprire su ETH/USD." });
     // I pareri dei custodi vanno a un collega in sala (preferibilmente dello stesso settore), mai a se stessi.
     for (const s of c.scambi.filter((s) => s.tema === "parere")) expect(s.a).not.toBe(s.da);
   });

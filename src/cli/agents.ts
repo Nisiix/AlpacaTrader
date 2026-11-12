@@ -25,7 +25,7 @@ import { ROOT, buildDeps } from "../deps.ts";
 import { CAMPIONI, ensureKronos, intradayForecaster, pathForecaster, type KronosLink } from "../kronos-sidecar.ts";
 import { Cervello, previsioniCombinate, previsioniIntradayCombinate, tipoIntraday } from "../agents/cervello.ts";
 import { nasdaqEarnings } from "../earnings.ts";
-import { appendFileSync, existsSync, mkdirSync, unlinkSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { parseArgs } from "./args.ts";
 import { publishPages } from "../pages.ts";
@@ -39,6 +39,23 @@ try {
   // con la stessa logica dei titoli, 24 ore su 24, anche a borsa chiusa.
   if (!args.noCrypto) enableCrypto();
   const deps = await buildDeps(args);
+  const registro = (testo: string, livello: "ERROR" | "WARN" | "INFO" = "ERROR") => {
+    try {
+      mkdirSync(deps.logsDir, { recursive: true });
+      appendFileSync(join(deps.logsDir, `agenti-${new Date().toISOString().slice(0, 10)}.log`), `${new Date().toISOString()} [${livello}] ${testo}\n`);
+    } catch {}
+    if (livello === "ERROR") console.error(testo); else console.log(testo);
+  };
+  // Windows: un clic nella finestra del motore (QuickEdit) la mette in selezione e blocca ogni scrittura sulla console,
+  // cioè tutto il motore e Kronos, finché non si preme Esc: il 10/11 il motore si è fermato così per mezz'ora. Si spegne
+  // la Modifica rapida per questa finestra a ogni avvio.
+  if (process.platform === "win32" && process.stdin.isTTY) {
+    try { Bun.spawnSync(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", join(ROOT, "tools", "senza-quickedit.ps1")], { stdin: "inherit", stdout: "inherit", stderr: "inherit" }); } catch {}
+  }
+  // Un errore non gestito si scrive nel registro (prima finiva solo nella finestra) e il motore riparte da solo
+  // (codice 75: avvia-bot.cmd lo rilancia) invece di restare fermo.
+  process.on("uncaughtException", (e) => { registro(`errore non gestito: ${e?.stack ?? e}: riavvio del motore`); process.exit(RESTART_CODE); });
+  process.on("unhandledRejection", (e) => { registro(`promessa rifiutata non gestita: ${(e as Error)?.stack ?? e}`); });
   for (const w of deps.warnings) console.warn(w);
   const bus = new EventBus(deps.stateDir, deps.now);
   const agents: Agent[] = [new TrendAgent(), new PullbackAgent(), new RegimeAgent(), new HorizonAgent()];
@@ -77,7 +94,7 @@ try {
   // sulle candele brevi (se il sidecar c'è) con le medie brevi; il grafico più lungo pesa solo sulla taglia.
   if (AGENTS.intraday.enabled) {
     const kf = kronos ? previsioniIntradayCombinate(intradayForecaster(kronos), cervello, deps.now) : null;
-    agents.push(new IntradayAgent((s, tf, n) => deps.broker.getIntradayBars(s, tf, n), kf ? async (b, step, h) => Object.fromEntries(Object.entries(await kf(b, step, h)).map(([k, v]) => [k, v.percorso.length ? v.percorso : [v.rendimentoPrevisto]])) : null, kf ? (step) => cervello.affidabilitaTipo(tipoIntraday(step)) : null));
+    agents.push(new IntradayAgent((s, tf, n) => deps.broker.getIntradayBars(s, tf, n), kf ? async (b, step, h) => Object.fromEntries(Object.entries(await kf(b, step, h)).map(([k, v]) => [k, { path: v.percorso.length ? v.percorso : [v.rendimentoPrevisto], ...(v.campioni ? { campioni: v.campioni } : {}) }])) : null, kf ? (step, s) => cervello.affidabilitaPer(tipoIntraday(step), s) : null, join(deps.stateDir, "kronos-intraday.json")));
   }
   const cache = emptyCache();
   const engine: EngineDeps = {
@@ -157,6 +174,93 @@ try {
     quit(RESTART_CODE);
   }, 5_000);
   watcher.unref();
+  // Sorveglianza: un giro che dura più di watchdogMinuti (di solito 1-3 minuti, al massimo 6) è bloccato su una chiamata
+  // che non risponde: si scrive nel registro e il motore riparte (codice 75) invece di restare fermo per ore.
+  const lockFile = join(deps.stateDir, "run.lock");
+  const sorveglianza = setInterval(() => {
+    try {
+      if (stop || !existsSync(lockFile)) return;
+      const l = JSON.parse(readFileSync(lockFile, "utf8")) as { runId?: string; pid?: number; startedAt?: string };
+      if (l.pid !== process.pid || !l.startedAt) return;
+      const minuti = (Date.now() - Date.parse(l.startedAt)) / 60_000;
+      if (minuti < AGENTS.watchdogMinuti) return;
+      registro(`giro ${l.runId} bloccato da ${Math.round(minuti)} minuti: riavvio del motore`);
+      try { unlinkSync(lockFile); } catch {}
+      kronos?.stop();
+      process.exit(RESTART_CODE);
+    } catch {}
+  }, 60_000);
+  sorveglianza.unref();
+  // Memoria (10/11/2026: il PC è rimasto senza memoria, Kronos ha fallito i lotti e il motore si è chiuso): ogni pochi
+  // minuti, tra un giro e l'altro, si misura la memoria libera del PC, quella del motore e quella di Kronos e si scrive nel
+  // registro ogni mezz'ora. Se Kronos è cresciuto molto dall'avvio, o il PC resta con poca memoria libera, si riavvia
+  // Kronos (pochi secondi); se è il motore a essere cresciuto oltre maxMotoreMb, riparte il motore.
+  const os = await import("node:os");
+  let kronosBase: number | null = null;
+  let ultimoRegistro = 0;
+  const memoria = setInterval(async () => {
+    try {
+      const m = AGENTS.memoria;
+      if (stop || existsSync(lockFile)) return;
+      const liberaMb = Math.round(os.freemem() / 1e6), totaleMb = Math.round(os.totalmem() / 1e6);
+      const motoreMb = Math.round(process.memoryUsage().rss / 1e6);
+      let kronosMb: number | null = null;
+      if (kronos?.ready) {
+        try {
+          const r = await fetch(kronos.url, { signal: AbortSignal.timeout(3_000) });
+          const j = (await r.json()) as { memoria?: { privata?: number | null; uso?: number | null } };
+          kronosMb = j.memoria?.privata ?? j.memoria?.uso ?? null;
+        } catch {}
+      }
+      if (kronosMb !== null && kronosBase === null) kronosBase = kronosMb;
+      const riga = `memoria: PC libera ${(liberaMb / 1000).toFixed(1)} GB su ${(totaleMb / 1000).toFixed(1)} GB · motore ${motoreMb} MB · Kronos ${kronosMb ?? "?"} MB${kronosBase !== null ? ` (all'avvio ${kronosBase} MB)` : ""}`;
+      const kronosCresciuto = kronosMb !== null && kronosBase !== null && kronosMb - kronosBase > m.crescitaKronosMb;
+      const pcPieno = liberaMb < m.minLiberaMb;
+      if (motoreMb > m.maxMotoreMb) {
+        registro(`${riga}: il motore è cresciuto oltre ${m.maxMotoreMb} MB, riparto per liberare memoria`, "WARN");
+        quit(RESTART_CODE);
+        return;
+      }
+      if ((kronosCresciuto || pcPieno) && kronos?.riavvia && kronosMb !== null && kronosMb > 500) {
+        registro(`${riga}: ${kronosCresciuto ? "Kronos è cresciuto molto dall'avvio" : `poca memoria libera sul PC (meno di ${m.minLiberaMb} MB)`}, riavvio Kronos`, "WARN");
+        kronosBase = null;
+        kronos.riavvia();
+        return;
+      }
+      if (pcPieno) registro(`${riga}: poca memoria libera sul PC (altri programmi?)`, "WARN");
+      else if (Date.now() - ultimoRegistro > 30 * 60_000) { ultimoRegistro = Date.now(); registro(riga, "INFO"); }
+    } catch {}
+  }, AGENTS.memoria.controlloMinuti * 60_000);
+  memoria.unref();
+  // Prova sullo storico (src/cli/backtest-intraday.ts raccolta): il file state/backtest.richiesta (con le opzioni nel
+  // testo, es. «--giorni 3 --campioni 8») la avvia in un processo a parte, con un sidecar Kronos suo; il motore continua.
+  const backtestFile = join(deps.stateDir, "backtest.richiesta");
+  const btWatcher = setInterval(() => {
+    if (!existsSync(backtestFile)) return;
+    let opzioni: string[] = [];
+    try { opzioni = readFileSync(backtestFile, "utf8").split(/\s+/).filter(Boolean); unlinkSync(backtestFile); } catch {}
+    const log = join(deps.logsDir, `backtest-${new Date().toISOString().slice(0, 10)}.log`);
+    try {
+      mkdirSync(deps.logsDir, { recursive: true });
+      const child = Bun.spawn([process.execPath, join(ROOT, "src", "cli", "backtest-intraday.ts"), "raccolta", ...opzioni], { cwd: ROOT, stdout: Bun.file(log), stderr: Bun.file(log.replace(".log", "-errori.log")) });
+      child.unref();
+      console.log(`prova sullo storico avviata (pid ${child.pid}): ${log}`);
+    } catch (e) {
+      console.warn(`prova sullo storico non avviata: ${(e as Error).message}`);
+    }
+  }, 5_000);
+  btWatcher.unref();
+  // state/backtest.stop ferma la prova sullo storico e il suo sidecar (porta 8766), anche se l'ha avviata un motore precedente.
+  const btStop = join(deps.stateDir, "backtest.stop");
+  const btStopWatcher = setInterval(() => {
+    if (!existsSync(btStop)) return;
+    try { unlinkSync(btStop); } catch {}
+    const cmd = process.platform === "win32"
+      ? ["powershell", "-NoProfile", "-Command", "Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -like '*backtest-intraday*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }; Get-NetTCPConnection -LocalPort 8766 -State Listen -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }"]
+      : ["sh", "-c", "pkill -f backtest-intraday; pkill -f 'server.py.*--port 8766'"];
+    try { Bun.spawn(cmd, { stdout: "ignore", stderr: "ignore" }).unref(); console.log("prova sullo storico fermata"); } catch (e) { console.warn(`prova sullo storico: ${(e as Error).message}`); }
+  }, 5_000);
+  btStopWatcher.unref();
   // Sala caffè: ogni minuto gli agenti in pausa passano un pezzo del radar, anche tra un giro e l'altro.
   const exploreTimer = setInterval(() => {
     if (!stop) exploreNow(engine, cache).catch((e) => console.warn(`esplorazione: ${(e as Error).message}`));

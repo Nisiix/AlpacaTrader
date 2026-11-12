@@ -28,8 +28,8 @@ export interface AgentCard {
 export const AGENT_CARDS: AgentCard[] = [
   {
     agente: "motore",
-    titolo: "Motore e gabbia",
-    ruolo: "Le regole comuni a tutti: quanto si può avere in portafoglio, le soglie dei voti, il ritmo dei giri.",
+    titolo: "Generali",
+    ruolo: "Le regole comuni del profilo di investimento su Alpaca e della piattaforma: quanto si può avere in portafoglio, soglie dei voti, ritmo dei giri, obiettivo del giorno, stop, pagina pubblica su GitHub.",
     come: "L'allocatore somma i voti pesati; sopra la soglia di acquisto compra, sotto quella di vendita vende. La gabbia impone peso massimo per titolo, orari dei titoli (le crypto sempre) e il limite di guadagno del giorno; nessun tetto di perdita né interruttore: decidono gli agenti con Kronos.",
     parametri: [
       { chiave: "AGENTS.tickMinutes", etichetta: "Minuti tra un giro e l'altro", descrizione: "Ogni quanto il motore rilegge conto, prezzi e posizioni: uscite, stop, protezione del profitto.", tipo: "intero", min: 1, max: 60 },
@@ -40,9 +40,7 @@ export const AGENT_CARDS: AgentCard[] = [
       { chiave: "LIMITS.maxPositionPct", etichetta: "Peso massimo per titolo", descrizione: "Quota del conto che un solo titolo può occupare.", tipo: "percento", min: 0.02, max: 0.5 },
       { chiave: "AGENTS.pages.enabled", etichetta: "Pagina pubblica su GitHub Pages", descrizione: "Pubblica ogni N minuti un'istantanea in sola lettura sul ramo gh-pages (usa il git del PC). Visibile a chiunque abbia il link.", tipo: "bool" },
       { chiave: "AGENTS.pages.everyMinutes", etichetta: "Pagina pubblica: ogni (minuti)", descrizione: "Ogni quanto si aggiorna l'istantanea.", tipo: "intero", min: 2, max: 120 },
-      { chiave: "AGENTS.daily.enabled", etichetta: "Obiettivo del giorno con difesa del guadagno", descrizione: "Acceso di serie: toccato l'obiettivo si continua a investire; se il guadagno torna al pavimento si vendono i trade non favorevoli.", tipo: "bool" },
-      { chiave: "AGENTS.daily.targetPct", etichetta: "Obiettivo del giorno", descrizione: "Di serie 10%: guadagno del giorno che arma la difesa. 0 = nessuna difesa.", tipo: "percento", min: 0, max: 0.5 },
-      { chiave: "AGENTS.daily.pavimentoPct", etichetta: "Pavimento della difesa", descrizione: "Di serie 5%: toccato l'obiettivo, se il guadagno del giorno torna qui si vendono i trade non favorevoli (Kronos non vede più rialzo).", tipo: "percento", min: 0, max: 0.5 },
+      { chiave: "AGENTS.daily.enabled", etichetta: "Obiettivi personali del giorno con difesa del guadagno", descrizione: "Acceso di serie: ogni persona ha il suo obiettivo del giorno (nella sua scheda, di serie 10%, sale dopo i successi e scende dopo i fallimenti); toccato, si continua a investire, ma se il guadagno dei suoi trade torna a metà si vendono i suoi trade non favorevoli.", tipo: "bool" },
       { chiave: "AGENTS.evidenza.min", etichetta: "Evidenza minima per entrare", descrizione: "Dossier del custode (Kronos, grafico, notizie, contesto) sotto il quale non si apre una posizione nuova sopra la media a 200.", tipo: "percento", min: 0.3, max: 0.9 },
       { chiave: "AGENTS.evidenza.minContro", etichetta: "Evidenza minima sotto la media a 200", descrizione: "Più alta: contro tendenza serve più conferma.", tipo: "percento", min: 0.4, max: 0.95 },
       { chiave: "AGENTS.sizing.byKronos", etichetta: "Taglia proporzionale alla fiducia in Kronos", descrizione: "Più è probabile che la proiezione si avveri, più si investe (fino al peso massimo).", tipo: "bool" },
@@ -171,6 +169,7 @@ export const AGENT_CARDS: AgentCard[] = [
       { chiave: "AGENTS.custodi.enabled", etichetta: "Attivi", descrizione: "Spenti, niente custodi.", tipo: "bool" },
       { chiave: "AGENTS.custodi.pullbackSmaDays", etichetta: "Media del rientro (giorni)", descrizione: "Vicino a questa media l'ingresso è migliore.", tipo: "intero", min: 5, max: 60 },
       { chiave: "AGENTS.custodi.extendedPct", etichetta: "Esteso oltre la media a 50", descrizione: "Sopra questa distanza si entra solo a taglia ridotta.", tipo: "percento", min: 0.03, max: 0.5 },
+      { chiave: "AGENTS.custodi.minProbabilita", etichetta: "Probabilità minima del dossier per votare l'acquisto", descrizione: "Sotto questa probabilità favorevole il trading agent non vota (è il suo «restare fuori»). Il capo ufficio la alza di un passo se la squadra o il singolo vincono meno del 51%.", tipo: "percento", min: 0.3, max: 0.8 },
       { chiave: "AGENTS.custodi.keepIdleTicks", etichetta: "Giri di attesa prima di lasciare", descrizione: "Dopo tanti giri fuori dai criteri il custode muore.", tipo: "intero", min: 1, max: 200 },
     ],
   },
@@ -191,7 +190,33 @@ export const AGENT_CARDS: AgentCard[] = [
       { chiave: "AGENTS.intraday.minStopPct.crypto", etichetta: "Stop minimo crypto", descrizione: "Sopra il costo di andata e ritorno (0,5%): con uno stop più stretto ogni perdita costa quasi il doppio.", tipo: "percento", min: 0.002, max: 0.1 },
       { chiave: "AGENTS.intraday.kronos.minProb", etichetta: "Probabilità minima di Kronos", descrizione: "Probabilità che il rialzo previsto sulla candela e sull'orizzonte scelti si avveri.", tipo: "percento", min: 0.5, max: 0.95 },
       { chiave: "AGENTS.intraday.scadenzaOrizzonte", etichetta: "Scadenza dell'orizzonte (multiplo)", descrizione: "Oltre questo multiplo dell'orizzonte scelto, senza obiettivo e senza rialzo ancora probabile, si chiude.", tipo: "numero", min: 1, max: 4, passo: 0.1 },
-      { chiave: "AGENTS.intraday.maxWeight", etichetta: "Peso massimo per operazione", descrizione: "Quota del conto.", tipo: "percento", min: 0.01, max: 0.3 },
+      { chiave: "AGENTS.intraday.maxWeight", etichetta: "Peso massimo per operazione", descrizione: "Quota del conto che un'operazione intraday può occupare al massimo; la taglia vera la decide il rischio allo stop (40% di serie, raggiunto solo dalle occasioni più probabili).", tipo: "percento", min: 0.01, max: 0.5 },
+      { chiave: "AGENTS.intraday.budget.quota", etichetta: "Budget intraday (investito insieme)", descrizione: "Quota del conto investita in operazioni intraday nello stesso momento: 100% di serie (dal 12/11/2026), divisa tra le occasioni in base alla probabilità e alla qualità; un'operazione al massimo un quarto del budget, il doppio se molto probabile (sempre entro il peso massimo).", tipo: "percento", min: 0.05, max: 1 },
+      { chiave: "AGENTS.intraday.budget.maxCrypto", etichetta: "Quota massima in crypto", descrizione: "Quanto del conto può stare in crypto insieme: 100% di serie (dal 12/11/2026, era 20%). Le crypto si muovono insieme: più è alta, più il conto segue il mercato crypto.", tipo: "percento", min: 0.05, max: 1 },
+      { chiave: "AGENTS.intraday.budget.riservaOccasioni.enabled", etichetta: "Riserva per le occasioni", descrizione: "A budget pieno, la liquidità rimasta va a un'occasione nettamente migliore (probabilità ≥ soglia + vantaggio).", tipo: "bool" },
+      { chiave: "AGENTS.intraday.budget.riservaOccasioni.quota", etichetta: "Riserva: quota del conto", descrizione: "Quanta liquidità si tiene per le occasioni in più (20% di serie).", tipo: "percento", min: 0, max: 0.5 },
+      { chiave: "AGENTS.intraday.budget.riservaOccasioni.extraProb", etichetta: "Riserva: vantaggio richiesto", descrizione: "Punti di probabilità sopra la soglia d'ingresso per usare la riserva.", tipo: "percento", min: 0, max: 0.3 },
+      { chiave: "AGENTS.intraday.budget.riservaOccasioni.maxTrade", etichetta: "Riserva: massimo a operazione", descrizione: "Quota del conto che un'operazione può prendere dalla riserva.", tipo: "percento", min: 0.02, max: 0.2 },
+      { chiave: "AGENTS.intraday.budget.reinvesti.enabled", etichetta: "Reinvesti il profitto accumulato", descrizione: "Il guadagno accumulato dal capitale di partenza si aggiunge al budget intraday (oltre la quota di serie), fino al tetto. Sotto il capitale di partenza vale la quota di serie.", tipo: "bool" },
+      { chiave: "AGENTS.intraday.budget.reinvesti.quota", etichetta: "Parte del profitto reinvestita", descrizione: "100% = tutto il profitto accumulato va nel budget delle nuove operazioni.", tipo: "percento", min: 0, max: 1 },
+      { chiave: "AGENTS.intraday.budget.reinvesti.tetto", etichetta: "Tetto del budget con il profitto", descrizione: "Quota massima del conto investita insieme in intraday anche con molto profitto reinvestito (conta solo con il budget sotto il 100%).", tipo: "percento", min: 0.5, max: 1 },
+      { chiave: "AGENTS.cryptoAcquisti.enabled", etichetta: "Acquisti crypto", descrizione: "Spento dal 10/11/2026: nella prova sullo storico le crypto intraday vincevano il 20-25% dei trade. Le crypto già aperte si gestiscono fino all'uscita.", tipo: "bool" },
+      { chiave: "AGENTS.intraday.sostituzione.enabled", etichetta: "Sostituzione dei trade deboli", descrizione: "Con budget o contanti pieni, si vende l'operazione aperta più debole (oggi non la si aprirebbe) per far posto a un'occasione nuova nettamente più probabile.", tipo: "bool" },
+      { chiave: "AGENTS.intraday.sostituzione.margine", etichetta: "Sostituzione: vantaggio minimo", descrizione: "Punti di probabilità in più che l'occasione nuova deve avere rispetto a quella che si vende.", tipo: "percento", min: 0.03, max: 0.3 },
+      { chiave: "AGENTS.intraday.sostituzione.maxGiorno", etichetta: "Sostituzioni al giorno", descrizione: "Al massimo questo numero di sostituzioni al giorno (una per giro).", tipo: "intero", min: 0, max: 10 },
+      { chiave: "AGENTS.intraday.sostituzione.minMinuti", etichetta: "Sostituzione: minuti minimi in posizione", descrizione: "Un'operazione aperta da meno di questi minuti non si sostituisce.", tipo: "intero", min: 5, max: 240 },
+      { chiave: "AGENTS.intraday.budget.rischioTrade", etichetta: "Rischio per operazione", descrizione: "Perdita massima allo stop di un'operazione intraday (stop + costi + scivolamento), in quota del conto: decide la taglia.", tipo: "percento", min: 0.0005, max: 0.01 },
+      { chiave: "AGENTS.intraday.taglia.probabilita.enabled", etichetta: "Taglia secondo la probabilità", descrizione: "Più è probabile che la previsione si avveri, più si investe: alla soglia la metà del rischio di serie, 15 punti sopra il doppio (sempre dentro i tetti).", tipo: "bool" },
+      { chiave: "AGENTS.intraday.taglia.probabilita.max", etichetta: "Moltiplicatore massimo della taglia", descrizione: "Quante volte il rischio di serie si investe quando la probabilità è ben sopra la soglia.", tipo: "numero", min: 1, max: 3, passo: 0.25 },
+      { chiave: "AGENTS.intraday.kronos.minProbSenzaGrafico", etichetta: "Probabilità minima senza medie brevi in ordine", descrizione: "Quando le medie brevi della candela non sono ancora in ordine (anche per il rimbalzo).", tipo: "percento", min: 0.5, max: 0.95 },
+      { chiave: "AGENTS.costi.margineCosti", etichetta: "Margine sui costi", descrizione: "Il rialzo previsto deve valere almeno tante volte i costi di andata e ritorno.", tipo: "numero", min: 1, max: 5, passo: 0.5 },
+      { chiave: "AGENTS.intraday.ingressiGiorno.max", etichetta: "Ingressi al giorno per titolo", descrizione: "Dopo un'operazione chiusa in guadagno si può rientrare, fino a questo numero di ingressi al giorno.", tipo: "intero", min: 1, max: 6 },
+      { chiave: "AGENTS.intraday.riporto.minProb", etichetta: "Probabilità minima per riportare al giorno dopo", descrizione: "A fine giornata un'operazione si tiene solo se Kronos sulle candele vede ancora salire con questa probabilità.", tipo: "percento", min: 0.5, max: 0.9 },
+      { chiave: "AGENTS.intraday.evidenza.peso", etichetta: "Peso del dossier nella decisione", descrizione: "Quanto contano dossier e contesto nella probabilità con cui si entra (il resto è Kronos sulle candele).", tipo: "percento", min: 0, max: 0.4 },
+      { chiave: "AGENTS.prudenzaMedie.intraday.sopra", etichetta: "Taglia sopra le medie a 50 e 200", descrizione: "Moltiplicatore della taglia intraday.", tipo: "numero", min: 0.2, max: 1, passo: 0.05 },
+      { chiave: "AGENTS.prudenzaMedie.intraday.sotto50", etichetta: "Taglia sotto la media a 50", descrizione: "Moltiplicatore della taglia intraday (sopra la 200).", tipo: "numero", min: 0.2, max: 1, passo: 0.05 },
+      { chiave: "AGENTS.prudenzaMedie.intraday.sotto200", etichetta: "Taglia sotto la media a 200", descrizione: "Moltiplicatore della taglia intraday (sopra la 50).", tipo: "numero", min: 0.2, max: 1, passo: 0.05 },
+      { chiave: "AGENTS.prudenzaMedie.intraday.sottoEntrambe", etichetta: "Taglia sotto le medie a 50 e 200", descrizione: "Moltiplicatore della taglia intraday.", tipo: "numero", min: 0.2, max: 1, passo: 0.05 },
       { chiave: "AGENTS.intraday.maxExtensionAtr", etichetta: "Estensione massima (ATR)", descrizione: "Oltre tanti ATR sopra la rottura non si insegue.", tipo: "numero", min: 1, max: 8, passo: 0.5 },
       { chiave: "AGENTS.intraday.cryptoOreMax", etichetta: "Crypto: durata massima (ore)", descrizione: "Le crypto non chiudono mai: un'operazione intraday si chiude al più tardi dopo tante ore.", tipo: "intero", min: 1, max: 48 },
       { chiave: "AGENTS.intraday.minutiPrimaChiusura.ingresso", etichetta: "Azioni: ultimo ingresso (minuti prima della chiusura)", descrizione: "Dall'orario vero della borsa.", tipo: "intero", min: 5, max: 180 },
@@ -212,13 +237,13 @@ export function getPath(chiave: string): unknown {
   for (const k of rest) o = o?.[k];
   return o;
 }
-function setPath(chiave: string, value: unknown) {
+export function setPath(chiave: string, value: unknown) {
   const [root, ...rest] = chiave.split(".");
   let o: any = ROOTS[root!];
   for (const k of rest.slice(0, -1)) o = o[k];
   o[rest[rest.length - 1]!] = value;
 }
-const paramOf = (chiave: string) => AGENT_CARDS.flatMap((c) => c.parametri).find((p) => p.chiave === chiave);
+export const paramOf = (chiave: string) => AGENT_CARDS.flatMap((c) => c.parametri).find((p) => p.chiave === chiave);
 
 // Controlla un valore contro lo schema: tipo e limiti. Restituisce il valore pulito o un errore.
 export function validate(chiave: string, raw: unknown): { ok: true; value: unknown } | { ok: false; errore: string } {

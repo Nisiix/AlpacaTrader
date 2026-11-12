@@ -19,19 +19,35 @@ import { TrendAgent } from "../src/agents/trend.ts";
 import type { Agent, AgentView } from "../src/agents/types.ts";
 import { evaluateBreaker } from "../src/breaker.ts";
 import { applyCage } from "../src/cage.ts";
-import { controTendenza } from "../src/agents/fiducia.ts";
+import { caloNetto, controTendenza, livelloMedie } from "../src/agents/fiducia.ts";
 import { FAKE_VOL, syntheticCloses } from "../src/broker/fake.ts";
 import { AGENTS, LIMITS, UNIVERSE, enableCrypto, setCryptoUniverse } from "../src/config.ts";
 import { stopPctFor } from "../src/stops.ts";
 import { startDashboard } from "../src/dashboard/server.ts";
 import { indicatorsFor } from "../src/indicators.ts";
 import { emptyJournal, type JournalFile } from "../src/journal.ts";
+
+// Soglie del coordinatore dell'apprendimento abbassate per i test con pochi trade (si ripristinano alla fine).
+function sogliePiccole() {
+  const a = { ...AGENTS.apprendimento }, f = AGENTS.formazione.minTrade, c = AGENTS.calibrazione.minTrade;
+  Object.assign(AGENTS.apprendimento, { minTradePersona: 5, minTradeSquadra: 3 });
+  AGENTS.formazione.minTrade = 5; AGENTS.calibrazione.minTrade = 5;
+  return () => { Object.assign(AGENTS.apprendimento, a); AGENTS.formazione.minTrade = f; AGENTS.calibrazione.minTrade = c; };
+}
 import { makeEnv, ordersFor, openStopsFor, type TestEnv } from "./helpers.ts";
+
+// Questi test provano anche il metodo di più giorni e la promozione: il motore che punta all'intraday (e il riporto al
+// giorno dopo) ha i suoi test, che lo riaccendono.
+AGENTS.puntaIntraday = false;
+// Le candele sintetiche dei test si muovono poco: qui il filtro del movimento (selezione prima di Kronos) non si usa.
+AGENTS.intraday.selezione.movimentoMin = 0;
+AGENTS.intraday.riporto.enabled = false;
 
 const day = (d: string, hhmm: string) => new Date(`${d}T${hhmm}:00+02:00`);
 const PRICES: Record<string, number> = { SPY: 600, QQQ: 520, IWM: 230, AAPL: 250, MSFT: 480, NVDA: 180, GLD: 380, TLT: 90 };
 
 // Una vista degli agenti costruita a mano: storico sintetico in salita per tutti, salvo dove indicato.
+const salitaDi = (p: number) => syntheticCloses(p, 0.01, 260);
 function view(over: Partial<AgentView> & { falling?: string[]; journal?: JournalFile } = {}): AgentView {
   const closes: Record<string, number[]> = {};
   for (const s of UNIVERSE) {
@@ -323,7 +339,7 @@ describe("motore", () => {
   });
 
   test("il riepilogo elenca il profitto e la perdita di ogni vendita del giorno, il totale e il conto per agente", () => {
-    const base = { versione: 1 as const, aggiornato: "2026-09-24T20:10:00.000Z", giro: "g", mercatoAperto: false, finestraIngressi: false, conto: null, posizioni: [], prezzi: {}, rischio: 1, pesi: {}, agenti: {}, segnali: [], punteggi: [], ordini: [], rifiuti: [], contesto: null, inAttesa: [], stopSuAlpaca: null, acquistiBloccati: null, lezioniAttive: [], allarmi: [], diario: { stato: "x", statistiche: { trade: 0, vinti: 0, percVinti: null, mediaVincita: null, mediaPerdita: null, attesa: null, campione: "nessuno" as const } }, confronto: null, ultimoRiepilogo: null, tradeChiusiOggi: [], custodi: [], intraday: [], universo: { titoli: [], crypto: [], fonteCrypto: null, aggiornatoCrypto: null }, kronos: { stato: "non configurato", proiezioniDel: null, simboli: 0 }, giornata: { pnlPct: 0, obiettivoPct: 0.01, pavimentoPct: 0.005, picco: 0, perditaMaxPct: 0.02, obiettivoRaggiunto: false, difesa: false, perditaOltre: false }, simulazioni: [] , capo: { aggiornato: "", sintesi: "", migliori: [], valutazioni: [], sogliaKronos: null, ingressoMigliore: null } };
+    const base = { versione: 1 as const, aggiornato: "2026-09-24T20:10:00.000Z", giro: "g", mercatoAperto: false, finestraIngressi: false, conto: null, posizioni: [], prezzi: {}, rischio: 1, pesi: {}, agenti: {}, segnali: [], punteggi: [], ordini: [], rifiuti: [], contesto: null, inAttesa: [], stopSuAlpaca: null, acquistiBloccati: null, lezioniAttive: [], allarmi: [], diario: { stato: "x", statistiche: { trade: 0, vinti: 0, percVinti: null, percCapitaleVinti: null, mediaVincita: null, mediaPerdita: null, attesa: null, campione: "nessuno" as const } }, confronto: null, ultimoRiepilogo: null, tradeChiusiOggi: [], custodi: [], intraday: [], universo: { titoli: [], crypto: [], fonteCrypto: null, aggiornatoCrypto: null }, kronos: { stato: "non configurato", proiezioniDel: null, simboli: 0 }, giornata: { pnlPct: 0, obiettivoPct: 0.01, pavimentoPct: 0.005, picco: 0, perditaMaxPct: 0.02, obiettivoRaggiunto: false, difesa: false, perditaOltre: false }, simulazioni: [] , capo: { aggiornato: "", sintesi: "", migliori: [], valutazioni: [], sogliaKronos: null, ingressoMigliore: null } };
     const st: AgentsStatus = {
       ...base,
       pnlOggi: {
@@ -357,7 +373,7 @@ describe("dashboard", () => {
     const d = startDashboard({ port: 0, stateDir: env.stateDir, bus: deps.bus });
     try {
       const page = await (await fetch(`${d.url}/`)).text();
-      expect(page).toContain("Agenti Alpaca");
+      expect(page).toContain("Agentics sniper");
       const st = (await (await fetch(`${d.url}/api/status`)).json()) as AgentsStatus;
       expect(st.giro).toBe("agenti-2026-09-24-1541");
       const ev = (await (await fetch(`${d.url}/api/events?n=5&tipi=ordine`)).json()) as { giorno: string; eventi: { tipo: string }[] };
@@ -381,16 +397,17 @@ describe("dashboard", () => {
 
 describe("uscite (regole vincolanti)", () => {
   const pos = (symbol: string, avg: number, price: number) => ({ symbol, qty: 10, avgEntryPrice: avg, currentPrice: price, marketValue: price * 10 });
-  const openTrade = (simbolo: string, massimo?: number) => ({ id: simbolo, simbolo, stato: "aperto" as const, apertoIl: "2026-09-01T14:00:00Z", comprate: 10, costo: 1000, vendute: 0, incassato: 0, quantita: 10, contesto: null, massimo });
+  const openTrade = (simbolo: string, massimo?: number) => ({ id: simbolo, simbolo, stato: "aperto" as const, apertoIl: "2026-09-23T14:00:00Z", comprate: 10, costo: 1000, vendute: 0, incassato: 0, quantita: 10, contesto: null, massimo });
 
-  test("difesa del guadagno del giorno: toccato l'obiettivo e tornati al pavimento si vendono solo i trade non favorevoli; il picco resta dopo un riavvio", async () => {
+  test("difesa del guadagno della persona: toccato il suo obiettivo e tornata a metà si vendono solo i suoi trade non favorevoli; il picco resta dopo un riavvio", async () => {
     const j = emptyJournal();
     j.trade.push(openTrade("AAPL"), openTrade("MSFT"));
     const v = view({ positions: [pos("AAPL", 100, 102), pos("MSFT", 100, 101)], journal: j, previsioni: { AAPL: -0.004, MSFT: 0.03 } });
     v.prices.AAPL = 102; v.prices.MSFT = 101;
     const ex = new ExitAgent(AGENTS.exit);
     expect(ex.observe(v).segnali.filter((x) => /difesa/.test(x.perche))).toEqual([]);
-    const difesa = ex.observe({ ...v, giornata: { pnlPct: 0.049, picco: 0.11, obiettivoRaggiunto: true, difesa: true, perditaOltre: false } });
+    // La persona che lavora su AAPL e MSFT ha toccato il suo obiettivo ed è tornata sotto metà.
+    const difesa = ex.observe({ ...v, difesaPersonale: { AAPL: "Anna ha toccato il suo obiettivo", MSFT: "Anna ha toccato il suo obiettivo" } });
     const vendite = difesa.segnali.filter((x) => /difesa del guadagno/.test(x.perche));
     expect(vendite.map((x) => x.simbolo)).toEqual(["AAPL"]); // MSFT: Kronos +3%, resta
     const { registraPicco } = await import("../src/agents/engine.ts");
@@ -674,6 +691,8 @@ describe("intraday", () => {
   });
 
   test("l'agente: entra su rottura nel verso del trend con peso ridotto; esce all'obiettivo, allo stop, a fine giornata; non entra contro Kronos", async () => {
+    // Questo test prova le uscite di prima (all'obiettivo si esce subito): «lascia correre» ha i suoi test.
+    AGENTS.intraday.lasciaCorrere.enabled = false;
     setCryptoUniverse(["BTC/USD", "ETH/USD"]);
     const fetched: string[] = [];
     const bars: Record<string, IntradayBar[]> = { NVDA: candles(180, 40, [180.2, 180.5, 180.9]), "BTC/USD": candles(76_000, 40, [76_100, 76_250, 76_450]) };
@@ -690,7 +709,9 @@ describe("intraday", () => {
     // BTC entra (rottura, Kronos a favore); NVDA no: Kronos anticipa un ribasso.
     expect(buys.map((x) => x.simbolo)).toEqual(["BTC/USD"]);
     expect(buys[0]!.intraday).toBe(true);
-    expect(buys[0]!.pesoMassimo).toBe(AGENTS.intraday.maxWeight);
+    // Taglia dal rischio allo stop: (stop + costi + scivolamento) × taglia = rischioTrade, al massimo maxWeight.
+    expect(buys[0]!.pesoMassimo!).toBeLessThanOrEqual(AGENTS.intraday.maxWeight);
+    expect(buys[0]!.pesoMassimo!).toBeGreaterThan(AGENTS.intraday.maxWeight * AGENTS.intraday.taglia.pavimento * 0.5);
     expect(buys[0]!.perche).toContain("5Min");
     expect(fetched.some((f) => f.startsWith("5Min:") && f.includes("BTC/USD"))).toBe(true);
     const st = r.intraday!.find((x) => x.simbolo === "BTC/USD")!;
@@ -705,29 +726,33 @@ describe("intraday", () => {
     // Allo stop vende.
     const r3 = await a.observe(view({ closes, prices: { ...prices, "BTC/USD": st.stop! - 1 }, now: day("2026-09-22", "17:35"), today: "2026-09-22", positions: pos }));
     expect(r3.segnali.find((x) => x.lato === "sell")!.perche).toContain("stop intraday");
-    // Il prezzo è già arrivato all'obiettivo: lo stop è salito in pareggio (carico + metà margine dei costi), quindi da
-    // qui il trade non chiude in perdita. Crypto: nessun orario di chiusura, ma dopo la durata massima (12 ore) si chiude.
+    // Il prezzo è già arrivato all'obiettivo: lo stop è salito in pareggio (carico + i costi di andata e ritorno con
+    // margine: crypto +0,5%), quindi da qui il trade non chiude in perdita nemmeno dopo i costi. Crypto: nessun orario di chiusura, ma dopo la durata massima (12 ore) si chiude.
     const stPareggio = r3.intraday!.find((x) => x.simbolo === "BTC/USD")!;
     expect(stPareggio.stop!).toBeGreaterThan(76_450);
-    const r4a = await a.observe(view({ closes, prices: { ...prices, "BTC/USD": 76_800 }, now: day("2026-09-22", "23:40"), today: "2026-09-22", positions: pos }));
+    const r4a = await a.observe(view({ closes, prices: { ...prices, "BTC/USD": 76_900 }, now: day("2026-09-22", "23:40"), today: "2026-09-22", positions: pos }));
     expect(r4a.segnali.filter((x) => x.lato === "sell" && x.simbolo === "BTC/USD")).toEqual([]);
-    const r4 = await a.observe(view({ closes, prices: { ...prices, "BTC/USD": 76_800 }, now: day("2026-09-23", "04:40"), today: "2026-09-23", positions: pos }));
+    const r4 = await a.observe(view({ closes, prices: { ...prices, "BTC/USD": 76_900 }, now: day("2026-09-23", "04:40"), today: "2026-09-23", positions: pos }));
     expect(r4.segnali.find((x) => x.lato === "sell")!.perche).toContain("durata massima");
     // Senza ordine eseguito il voto non blocca il titolo: al giro dopo si riprova (un voto scartato dall'allocatore non lo ferma).
     const fresh = new IntradayAgent(async (syms) => Object.fromEntries(syms.filter((x) => bars[x]).map((x) => [x, bars[x]!])));
     await fresh.observe(view({ closes, prices, now, today: "2026-09-22" }));
     const again = await fresh.observe(view({ closes, prices, now: day("2026-09-22", "16:35"), today: "2026-09-22" }));
     expect(again.segnali.some((x) => x.lato === "buy" && x.simbolo === "BTC/USD")).toBe(true);
-    // Stesso giorno, dopo l'uscita (trade di oggi nel diario): niente secondo ingresso su BTC.
-    const diario = { versione: 1, trade: [{ simbolo: "BTC/USD", stato: "chiuso", apertoIl: day("2026-09-22", "16:31").toISOString(), contesto: { agenti: ["intraday"] } }] } as unknown as JournalFile;
+    // Stesso giorno, dopo un'uscita in perdita alle 16:50: pausa di 2 ore, niente secondo ingresso su BTC alle 18:00.
+    const diario = { versione: 1, trade: [{ simbolo: "BTC/USD", stato: "chiuso", apertoIl: day("2026-09-22", "16:31").toISOString(), chiusoIl: day("2026-09-22", "16:50").toISOString(), costo: 100, incassato: 99, contesto: { agenti: ["intraday"] } }] } as unknown as JournalFile;
     const r5 = await a.observe(view({ closes, prices, now: day("2026-09-22", "18:00"), today: "2026-09-22", journal: diario }));
     expect(r5.segnali.filter((x) => x.lato === "buy" && x.simbolo === "BTC/USD")).toEqual([]);
+    expect(r5.intraday?.find((x) => x.simbolo === "BTC/USD")?.motivo ?? "", JSON.stringify(r5.intraday?.find((x) => x.simbolo === "BTC/USD"))).not.toContain("ingresso votato");
     // Fuori orario per i titoli (22:30): NVDA non è candidata neanche con Kronos favorevole.
     const r6 = await a.observe(view({ closes, prices, now: day("2026-09-22", "22:30"), today: "2026-09-22", previsioni: { NVDA: 0.03 } }));
     expect(r6.segnali.filter((x) => x.simbolo === "NVDA")).toEqual([]);
+    AGENTS.intraday.lasciaCorrere.enabled = true;
   });
 
-  test("con Kronos intraday decide la proiezione sulle candele brevi, non la media a 200; grafico più lungo e Kronos a 5 sedute pesano solo sulla taglia", async () => {
+  test("con Kronos intraday decide la proiezione sulle candele brevi, non la media a 200; grafico più lungo e Kronos a 5 sedute contano come indizi sulla probabilità", async () => {
+    // Questo test prova le uscite di prima (all'obiettivo si esce subito): «lascia correre» ha i suoi test.
+    AGENTS.intraday.lasciaCorrere.enabled = false;
     setCryptoUniverse(["BTC/USD", "ETH/USD"]);
     const bars: Record<string, IntradayBar[]> = { NVDA: candles(180, 40, [180.2, 180.5, 180.9]), "BTC/USD": candles(76_000, 40, [76_100, 76_250, 76_450]) };
     const closes: Record<string, number[]> = {};
@@ -738,7 +763,8 @@ describe("intraday", () => {
     const prices = { ...PRICES, NVDA: 180.9, "BTC/USD": 76_450, "ETH/USD": 2_100 };
     const now = day("2026-09-22", "16:30");
     const asked: string[] = [];
-    let kint: Record<string, number> = { "BTC/USD": 0.01, NVDA: 0.006 };
+    // BTC +1,3%: l'obiettivo è il rialzo previsto e deve valere almeno 1,2 volte lo stop (1%).
+    let kint: Record<string, number> = { "BTC/USD": 0.013, NVDA: 0.006 };
     const a = new IntradayAgent(async (syms) => Object.fromEntries(syms.filter((x) => bars[x]).map((x) => [x, bars[x]!])), async (b, step, h) => { asked.push(`${step}:${h}:${Object.keys(b).join(",")}`); return Object.fromEntries(Object.keys(b).map((x) => [x, kint[x] ?? -0.01])); });
     const r = await a.observe(view({ closes, prices, now, today: "2026-09-22" }));
     const btc = r.segnali.find((x) => x.lato === "buy" && x.simbolo === "BTC/USD")!;
@@ -755,22 +781,28 @@ describe("intraday", () => {
     expect(prot.vincolante).toBe(true);
     expect(prot.perche).toContain("protezione del profitto");
     bars["BTC/USD"]!.pop();
-    kint = { "BTC/USD": 0.01, NVDA: 0.006 };
-    // Lo stesso ingresso con il Kronos a 5 sedute contrario: si entra lo stesso, ma a taglia ridotta.
+    kint = { "BTC/USD": 0.013, NVDA: 0.006 };
+    // Lo stesso ingresso con il Kronos a 5 sedute contrario: è un indizio contrario, toglie punti di probabilità (non
+    // dimezza più la taglia); con la probabilità ancora sopra la soglia si entra.
     const a2 = new IntradayAgent(async (syms) => Object.fromEntries(syms.filter((x) => bars[x]).map((x) => [x, bars[x]!])), async (b) => Object.fromEntries(Object.keys(b).map((x) => [x, kint[x] ?? -0.01])));
     const rr = await a2.observe(view({ closes, prices, now, today: "2026-09-22", previsioni: { "BTC/USD": -0.03 } }));
     const btc2 = rr.segnali.find((x) => x.lato === "buy" && x.simbolo === "BTC/USD")!;
-    expect(btc2.perche).toContain("taglia ridotta");
-    expect(btc2.pesoMassimo!).toBeCloseTo(btc.pesoMassimo! / 2, 9);
+    expect(btc2.perche).toContain("indizi contrari: Kronos a 5 sedute -3.00%");
+    expect(btc2.perche).toContain(`−${Math.round(AGENTS.intraday.taglia.penalitaIndizio * 100)} punti di probabilità`);
+    expect(btc2.pesoMassimo!).toBeLessThanOrEqual(btc.pesoMassimo! + 1e-12);
+    expect(btc2.pesoMassimo!).toBeGreaterThanOrEqual(AGENTS.intraday.maxWeight * AGENTS.intraday.taglia.pavimento - 1e-12);
     // Kronos intraday al ribasso: nessun ingresso, con il motivo.
     kint = { "BTC/USD": -0.004 };
     const b2 = new IntradayAgent(async (syms) => Object.fromEntries(syms.filter((x) => bars[x]).map((x) => [x, bars[x]!])), async (b) => Object.fromEntries(Object.keys(b).map((x) => [x, kint[x] ?? -0.01])));
     const r2 = await b2.observe(view({ closes, prices, now, today: "2026-09-22" }));
     expect(r2.segnali.filter((x) => x.lato === "buy")).toEqual([]);
     expect(r2.intraday!.find((x) => x.simbolo === "BTC/USD")!.motivo).toContain("non basta");
+    AGENTS.intraday.lasciaCorrere.enabled = true;
   });
 
   test("con Kronos si sceglie la candela con la probabilità di successo più alta; la posizione si segue sulla candela più breve", async () => {
+    // Questo test prova le uscite di prima (all'obiettivo si esce subito): «lascia correre» ha i suoi test.
+    AGENTS.intraday.lasciaCorrere.enabled = false;
     setCryptoUniverse(["BTC/USD", "ETH/USD"]);
     const bars: Record<string, IntradayBar[]> = { "BTC/USD": candles(76_000, 40, [76_100, 76_250, 76_450]) };
     const closes: Record<string, number[]> = {};
@@ -782,8 +814,10 @@ describe("intraday", () => {
     const steps: number[] = [];
     // Candele più lunghe = movimenti più ampi (√ dei minuti): così obiettivo e raggiungibilità sono realistici per ogni candela.
     const mins = (tf: string) => (tf.endsWith("Min") ? Number(tf.replace("Min", "")) : Number(tf.replace("Hour", "")) * 60);
-    const scaled = (b: IntradayBar[], tf: string) => { const f = Math.sqrt(mins(tf) / 5); const base = 76_000; const m = (x: number) => base + (x - base) * f; return b.map((x) => ({ ...x, open: m(x.open), high: m(x.high), low: m(x.low), close: m(x.close) })); };
-    const a = new IntradayAgent(async (syms, tf) => Object.fromEntries(syms.filter((x) => bars[x]).map((x) => [x, scaled(bars[x]!, tf)])), async (b, step) => { steps.push(step); return Object.fromEntries(Object.keys(b).map((x) => [x, byStep[step] ?? 0])); });
+    // Attorno all'ultima chiusura: tutte le candele finiscono al prezzo di adesso (le proiezioni di Kronos partono da lì).
+    const scaled = (b: IntradayBar[], tf: string) => { const f = Math.sqrt(mins(tf) / 5); const base = b.at(-1)!.close; const m = (x: number) => base + (x - base) * f; return b.map((x) => ({ ...x, open: m(x.open), high: m(x.high), low: m(x.low), close: m(x.close) })); };
+    const a = new IntradayAgent(async (syms, tf) => Object.fromEntries(syms.filter((x) => bars[x]).map((x) => [x, scaled(bars[x]!, tf)])), async (b, step) => { steps.push(step); return Object.fromEntries(Object.keys(b).map((x) => [x, byStep[step] ?? 0])); }, () => ({ fattore: 1, quota: 0.55, campione: 120, giusti: 0.56, resa: 0.001 }));
+    // Kronos misurato su tutte le candele (120 previsioni, 56% giuste, resa positiva): la candela più breve vale come controllo.
     const r = await a.observe(view({ closes, prices, now: day("2026-09-22", "16:30"), today: "2026-09-22" }));
     const buy = r.segnali.find((x) => x.lato === "buy" && x.simbolo === "BTC/USD")!;
     expect(buy.perche).toContain("su candele 15Min");
@@ -791,7 +825,10 @@ describe("intraday", () => {
     expect(buy.perche).toContain("controllo su candele 5Min");
     // In posizione oltre l'obiettivo: sulla candela più breve (5 min) Kronos vede ancora salire → si lascia correre.
     const st = r.intraday!.find((x) => x.simbolo === "BTC/USD")!;
-    const lastB = bars["BTC/USD"]!.at(-1)!; bars["BTC/USD"]!.push({ ...lastB, t: new Date(Date.parse(lastB.t) + 5 * 60_000).toISOString() });
+    const lastB = bars["BTC/USD"]!.at(-1)!;
+    // Le candele nuove chiudono al prezzo di adesso (le proiezioni partono da lì).
+    const sopra = st.obiettivo! + 50;
+    bars["BTC/USD"]!.push({ ...lastB, t: new Date(Date.parse(lastB.t) + 5 * 60_000).toISOString(), open: sopra, high: sopra, low: sopra, close: sopra });
     // Valori credibili per candele da 5 minuti che si muovono di circa lo 0,1% (oltre 4 volte la volatilità è rumore).
     byStep[5] = 0.004;
     const pos = [{ symbol: "BTC/USD", qty: 0.05, avgEntryPrice: 76_450, currentPrice: st.obiettivo! + 50, marketValue: 3_900 }];
@@ -802,11 +839,12 @@ describe("intraday", () => {
     expect(st2.stop!).toBeGreaterThan(76_450); // lo stop è salito sopra il carico
     expect(st2.controllo).toContain("candele 5Min");
     // Ora sulla candela breve Kronos gira al ribasso: oltre l'obiettivo si incassa.
-    bars["BTC/USD"]!.push({ ...lastB, t: new Date(Date.parse(lastB.t) + 10 * 60_000).toISOString() });
+    bars["BTC/USD"]!.push({ ...lastB, t: new Date(Date.parse(lastB.t) + 10 * 60_000).toISOString(), open: sopra, high: sopra, low: sopra, close: sopra });
     byStep[5] = -0.004;
     const r3 = await a.observe(view({ closes, prices: { ...prices, "BTC/USD": st.obiettivo! + 50 }, now: day("2026-09-22", "16:45"), today: "2026-09-22", positions: pos }));
     expect(r3.segnali.find((x) => x.lato === "sell" && x.simbolo === "BTC/USD")!.perche).toMatch(/obiettivo raggiunto|protezione del profitto/);
     bars["BTC/USD"]!.splice(-2);
+    AGENTS.intraday.lasciaCorrere.enabled = true;
   });
 
   test("una proiezione intraday fuori misura (es. prezzi minuscoli) è rumore: niente ingresso", async () => {
@@ -849,11 +887,13 @@ describe("capo ufficio", () => {
     const { review, applyGuidance } = await import("../src/agents/capo.ts");
     const j = emptyJournal();
     const add = (sym: string, agenti: string[], r: number, kronos: number, i: number) => j.trade.push({ id: `k${i}`, simbolo: sym, stato: "chiuso", apertoIl: `2026-10-${String(i + 1).padStart(2, "0")}T14:00:00Z`, comprate: 1, costo: 100, vendute: 1, incassato: 100 * (1 + r), quantita: 0, contesto: { setup: "", momentum20: null, volGiornaliera: null, distanzaMedia: null, fiducia: null, attesa: "", perche: "vicino alla media a 20", agenti, kronos }, chiusoIl: `2026-10-${String(i + 1).padStart(2, "0")}T18:00:00Z`, prezzoIngresso: 100, prezzoUscita: 100 * (1 + r), risultato: r, giorni: 2, motivoUscita: r < 0 ? "stop su Alpaca" : "trend" });
-    // "custode SOL/USD" vince con Kronos alto; "trend" perde con Kronos basso.
-    [0.04, 0.03, 0.05, 0.02].forEach((r, i) => add("SOL/USD", ["custode SOL/USD"], r, 0.03, i));
+    // Sara (trading agent su SOL/USD) vince con Kronos alto; "trend" perde con Kronos basso.
+    [0.04, 0.03, 0.05, 0.02].forEach((r, i) => { add("SOL/USD", ["custode SOL/USD"], r, 0.03, i); j.trade.at(-1)!.contesto!.persone = ["p:Sara"]; });
     [-0.03, -0.02, 0.01, -0.04].forEach((r, i) => add("NVDA", ["trend"], r, 0.002, i + 10));
+    const ripristina = sogliePiccole();
     const rep = review(j, new Date("2026-11-08T12:00:00Z"));
-    const sol = rep.valutazioni.find((v) => v.agente === "custode SOL/USD")!;
+    ripristina();
+    const sol = rep.valutazioni.find((v) => v.agente === "p:Sara")!;
     const tr = rep.valutazioni.find((v) => v.agente === "trend")!;
     expect(sol.giudizio).toBe("ottimo");
     expect(tr.giudizio).toBe("richiamato");
@@ -918,6 +958,8 @@ describe("contesto economico", () => {
   });
 
   test("lettura esterna (claude) peggiora ma non migliora le regole; cache rispettata; l'allocatore non apre sui titoli in attesa", async () => {
+    // L'universo crypto lo lasciano altri test: qui serve BTC (in ordine casuale a volte mancava).
+    setCryptoUniverse(["BTC/USD", "ETH/USD"]);
     let calls = 0;
     const runner = async () => {
       calls++;
@@ -1050,6 +1092,41 @@ describe("ingressi contro tendenza guidati da Kronos", () => {
   });
 });
 
+describe("rimbalzo di breve: la premessa giornaliera (sotto la 50 dopo un calo netto)", () => {
+  test("calo netto nell'ultimo giorno sotto la media a 50; senza calo o sopra la 50 no", () => {
+    const c = Array.from({ length: 245 }, (_, i) => 100 * (1 + 0.01 * Math.sin(i / 3)));
+    for (let i = 1; i <= 14; i++) c.push(100 * (1 - 0.006 * i));
+    c.push(c.at(-1)! * 0.94);
+    expect(caloNetto("NVDA", c, c.at(-1)!).ok).toBe(true);
+    expect(caloNetto("NVDA", c, c.at(-1)!).calo!).toBeCloseTo(-0.06, 6);
+    const piatta = [...c.slice(0, -1), c.at(-2)!];
+    expect(caloNetto("NVDA", piatta, piatta.at(-1)!).ok).toBe(false);
+    expect(caloNetto("BTC/USD", c, c.at(-1)!).ok).toBe(true); // crypto: oltre il 5%
+    expect(caloNetto("NVDA", salitaDi(100), 120).ok).toBe(false); // sopra la 50 vale il trend
+  });
+  test("calo improvviso anche negli ultimi giorni o nelle ultime ore (candele da 1 ora)", () => {
+    const c = Array.from({ length: 245 }, (_, i) => 100 * (1 + 0.01 * Math.sin(i / 3)));
+    for (let i = 1; i <= 14; i++) c.push(100 * (1 - 0.006 * i));
+    const giorni = [...c, c.at(-1)! * 0.98, c.at(-1)! * 0.96, c.at(-1)! * 0.94]; // -2% al giorno: -6% in 3 giorni
+    const r = caloNetto("NVDA", giorni, giorni.at(-1)!);
+    expect(r.ok).toBe(true);
+    expect(r.quando).toBe("negli ultimi 3 giorni");
+    const p = c.at(-1)!;
+    const ore = Array.from({ length: 12 }, (_, i) => (i < 6 ? p * 1.04 : p)); // -3,8% dal massimo delle ultime 8 ore
+    expect(caloNetto("NVDA", [...c, p], p * 0.999, ore).quando).toBe("nelle ultime 8 ore");
+    expect(caloNetto("NVDA", [...c, p], p * 0.999).ok).toBe(false);
+  });
+  test("scaletta delle medie: sopra entrambe, sotto la 50, sotto la 200, sotto entrambe", () => {
+    const su = salitaDi(100);
+    expect(livelloMedie(su, su.at(-1)! * 1.01)!.livello).toBe("sopra");
+    const m50 = su.slice(-50).reduce((a, x) => a + x, 0) / 50, m200 = su.slice(-200).reduce((a, x) => a + x, 0) / 200;
+    expect(livelloMedie(su, (m50 + m200) / 2)!.livello).toBe(m200 < m50 ? "sotto50" : "sotto200");
+    expect(livelloMedie(su, Math.min(m50, m200) * 0.9)!.livello).toBe("sottoEntrambe");
+    expect(AGENTS.prudenzaMedie.piuGiorni.sotto50).toBeGreaterThan(AGENTS.prudenzaMedie.piuGiorni.sotto200);
+    expect(AGENTS.prudenzaMedie.piuGiorni.sotto200).toBeGreaterThan(AGENTS.prudenzaMedie.piuGiorni.sottoEntrambe);
+  });
+});
+
 describe("protezione del profitto", () => {
   test("in guadagno, se Kronos nelle prossime 2 sedute vede un calo che azzera il profitto si vende; se il calo è piccolo si tiene", () => {
     const v = view({ positions: [{ symbol: "NVDA", qty: 10, avgEntryPrice: 170, currentPrice: 180, marketValue: 1800 }] });
@@ -1116,9 +1193,9 @@ describe("evidenza combinata e prudenza sotto la media a 200", () => {
     const v = view({ previsioni: { NVDA: 0.03 } });
     const low = allocate(v, { ...buy("NVDA"), custodi: custodiCon("NVDA", 0.42) }, { trend: 1 });
     expect(low.proposte.filter((x) => x.symbol === "NVDA")).toEqual([]);
-    expect(low.inAttesa.find((x) => x.simbolo === "NVDA")!.motivo).toContain("evidenza combinata 42%");
+    expect(low.inAttesa.find((x) => x.simbolo === "NVDA")!.motivo).toContain("evidenza combinata 42,0%");
     const q = (p: number) => allocate(v, { ...buy("NVDA"), custodi: custodiCon("NVDA", p) }, { trend: 1 }).proposte.find((x) => x.symbol === "NVDA")!.qty;
-    expect(q(0.5)).toBeLessThan(q(0.85));
+    expect(q(0.62)).toBeLessThan(q(0.85));
   });
   test("a parità di Kronos ed evidenza, sotto la 200 la taglia è più piccola che sopra (metà) e serve un'evidenza più alta", () => {
     const up = view({ previsioni: { NVDA: 0.04 } });
@@ -1126,8 +1203,8 @@ describe("evidenza combinata e prudenza sotto la media a 200", () => {
     const w = (vv: AgentView, p: number) => { const pr = allocate(vv, { ...buy("NVDA"), kronos: { segnali: [] }, custodi: custodiCon("NVDA", p) }, { trend: 1 }).proposte.find((x) => x.symbol === "NVDA"); return pr ? (pr.qty * vv.prices.NVDA!) / vv.account.equity : 0; };
     expect(w(down, 0.7)).toBeGreaterThan(0);
     expect(w(down, 0.7)).toBeLessThanOrEqual(w(up, 0.7) * 0.5 + 0.002);
-    expect(w(down, 0.55)).toBe(0); // sotto la 200 serve almeno il 60%
-    expect(w(up, 0.55)).toBeGreaterThan(0);
+    expect(w(down, 0.62)).toBe(0); // sotto la 200 serve almeno il 65%
+    expect(w(up, 0.62)).toBeGreaterThan(0); // sopra basta il 60%, come per la scrivania
   });
 });
 
@@ -1268,6 +1345,20 @@ describe("capo ufficio e intraday", () => {
     expect(a.punteggi[0]!.punteggio).toBeGreaterThanOrEqual(AGENTS.buyScore);
   });
 
+  test("il motore punta all'intraday: un voto di più giorni da solo non apre; con un voto intraday entra quello", () => {
+    AGENTS.puntaIntraday = true;
+    try {
+      const v = view();
+      const kronos = { segnali: [{ agente: "kronos", simbolo: "SPY", lato: "buy" as const, forza: 1, orizzonteSedute: 5, kronos: 0.05, perche: "Kronos +5%" }] };
+      const intraday = { segnali: [{ agente: "intraday", simbolo: "SPY", lato: "buy" as const, forza: 1, orizzonteSedute: 1, intraday: true, pesoMassimo: 0.02, perche: "candele 1Hour, Kronos a 2 h +1.5%" }] };
+      const solo = allocate(v, { kronos }, { kronos: 1 });
+      expect(solo.proposte.find((p) => p.symbol === "SPY")).toBeUndefined();
+      expect(solo.inAttesa.find((x) => x.simbolo === "SPY")!.motivo).toContain("punta all'intraday");
+      const con = allocate(v, { kronos, intraday }, { kronos: 1, intraday: 1 });
+      expect(con.proposte.find((p) => p.symbol === "SPY")!.intraday).toBe(true);
+    } finally { AGENTS.puntaIntraday = false; }
+  });
+
   test("voti misti: se l'ingresso di più giorni aspetta (evidenza bassa), entra la sola parte intraday con la sua taglia", () => {
     const v = view();
     const reports: Record<string, any> = {
@@ -1285,5 +1376,20 @@ describe("capo ufficio e intraday", () => {
     const b = allocate(v, { kronos: reports.kronos, custodi: reports.custodi }, { kronos: 1 });
     expect(b.proposte.find((p) => p.symbol === "SPY")).toBeUndefined();
     expect(b.inAttesa.find((x) => x.simbolo === "SPY")!.motivo).toContain("evidenza combinata");
+  });
+});
+
+describe("più giorni: profitto minimo e uscita a tempo", () => {
+  const pos = (symbol: string, avg: number, price: number) => ({ symbol, qty: 10, avgEntryPrice: avg, currentPrice: price, marketValue: price * 10 });
+  const t = (simbolo: string, apertoIl: string, massimo?: number) => ({ id: simbolo, simbolo, stato: "aperto" as const, apertoIl, comprate: 10, costo: 1000, vendute: 0, incassato: 0, quantita: 10, contesto: null, massimo });
+  test("arrivato a +2% e tornato a +0,3%: si esce in guadagno; dopo 5 sedute senza rendere e senza Kronos favorevole: si esce", () => {
+    const j = emptyJournal();
+    j.trade.push(t("SPY", "2026-09-23T14:00:00Z", 102.5), t("QQQ", "2026-09-10T14:00:00Z"), t("MSFT", "2026-09-10T14:00:00Z"));
+    const v = view({ positions: [pos("SPY", 100, 100.3), pos("QQQ", 100, 100.1), pos("MSFT", 100, 100.1)], journal: j, previsioni: { MSFT: 0.03 } });
+    v.prices.SPY = 100.3; v.prices.QQQ = 100.1; v.prices.MSFT = 100.1;
+    const r = new ExitAgent(AGENTS.exit).observe(v).segnali;
+    expect(r.find((x) => x.simbolo === "SPY")!.perche).toContain("profitto minimo");
+    expect(r.find((x) => x.simbolo === "QQQ")!.perche).toContain("uscita a tempo");
+    expect(r.find((x) => x.simbolo === "MSFT")).toBeUndefined(); // Kronos vede ancora +3%: resta
   });
 });

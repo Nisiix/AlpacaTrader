@@ -28,6 +28,12 @@ export interface Comparison {
 
 export const MIX = { spy: 0.6, tlt: 0.4 };
 
+// Capitale di partenza del conto (il patrimonio del primo giro): sopra c'è il profitto accumulato.
+export function capitaleIniziale(stateDir: string): number | undefined {
+  const r = readJson(benchmarkPath(stateDir), isBenchmark);
+  return r.kind === "ok" && r.value.patrimonio > 0 ? r.value.patrimonio : undefined;
+}
+
 // Il primo giro fissa il punto di partenza; un file rotto si rifà da adesso e lo si dice.
 export function compareWithBenchmarks(stateDir: string, today: string, equity: number, spyPrice: number | undefined, tltPrice: number | undefined): { cmp: Comparison | null; note?: string } {
   if (!spyPrice || equity <= 0) return { cmp: null };

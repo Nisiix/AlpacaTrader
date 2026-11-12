@@ -46,17 +46,18 @@ if ($LASTEXITCODE -ne 0) { throw "I test non passano: non avviare il motore." }
 
 # Collegamento sul desktop: avvia il motore in una finestra che resta aperta (Ctrl-C per fermarlo).
 $desktop = [Environment]::GetFolderPath("Desktop")
-$lnk = (New-Object -ComObject WScript.Shell).CreateShortcut((Join-Path $desktop "Bot alpaca agents.lnk"))
+$lnk = (New-Object -ComObject WScript.Shell).CreateShortcut((Join-Path $desktop "Agentics sniper.lnk"))
 $lnk.TargetPath = "powershell.exe"
 $lnk.Arguments = "-NoExit -Command `"Set-Location '$Cartella'; bun run agents`""
 $lnk.WorkingDirectory = $Cartella
-$lnk.Description = "Motore degli agenti Alpaca (paper) con dashboard su http://127.0.0.1:8787"
+$lnk.Description = "Agentics sniper: motore degli agenti (paper) con dashboard su http://127.0.0.1:8787"
+$lnk.IconLocation = (Join-Path $Cartella "assets\icon.ico")
 $lnk.Save()
 
 Write-Host ""
 Write-Host "Fatto. Prossimi passi:" -ForegroundColor Green
 Write-Host "  1. Compila '$Cartella\secrets.ts' (chiavi PAPER di Alpaca, bot Telegram); poi installa-kronos.cmd per le proiezioni."
 Write-Host "  2. Prova a vuoto:   bun run agents --fake --once"
-Write-Host "  3. Avvia davvero:   doppio clic su 'Bot alpaca agents' sul desktop o su avvia-bot.cmd nella cartella (o bun run agents)."
+Write-Host "  3. Avvia davvero:   doppio clic su 'Agentics sniper' sul desktop o su avvia-bot.cmd nella cartella (o bun run agents)."
 Write-Host "  4. Dashboard:       http://127.0.0.1:8787"
 Write-Host "  5. Per partire da solo all'accensione del PC: copia il collegamento in shell:startup (Win+R, shell:startup)."

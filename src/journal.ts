@@ -21,6 +21,14 @@ export interface EntryContext {
   perche: string;
   // Motore degli agenti: quali agenti hanno votato l'ingresso (serve a pesarli sui risultati).
   agenti?: string[];
+  // Le persone che hanno preso l'occasione (p:Nome per trading e intraday agents, a:nome per gli agenti generali).
+  persone?: string[];
+  // Il momento dell'ingresso: misure (probabilità di riuscita, RSI(2)...), le impostazioni della persona in vigore, il
+  // clima del mercato. Servono a giudicare a posteriori (prova in ombra, calibrazione delle probabilità, meta-modello).
+  misure?: Record<string, number>;
+  impostazioni?: Record<string, number>;
+  clima?: string;
+  tipo?: "trading" | "intraday";
   // Proiezione di Kronos all'ingresso: il capo ufficio la confronta con l'esito per consigliare la soglia giusta.
   kronos?: number;
   // Operazione intraday promossa a posizione di più giorni (ISO del momento): da lì la seguono le regole di più giorni.
@@ -37,6 +45,15 @@ export interface LivelliIntraday {
   orizzonteMin?: number;
   sopraMedia?: boolean;
   sostegno?: { tf: string; obiettivo: number; orizzonteMin: number };
+  // Riportata al giorno dopo: quante volte, da quando conta la nuova finestra (ISO) e in che giorno si è deciso.
+  riporti?: number;
+  rinnovo?: string;
+  riportoGiorno?: string;
+  // La proiezione di Kronos con cui si è entrati («candela|ora dell'ultima candela chiusa»): un rientro sulla stessa
+  // candela aspetta una proiezione nuova (quella vecchia ha già fatto il suo trade).
+  previsione?: string;
+  // Il prezzo più alto visto dall'ingresso (lo stop che segue il trade riparte da qui dopo un riavvio).
+  massimo?: number;
 }
 
 export interface Intent {
@@ -270,6 +287,7 @@ export interface Stats {
   trade: number;
   vinti: number;
   percVinti: number | null;
+  percCapitaleVinti: number | null;
   mediaVincita: number | null;
   mediaPerdita: number | null;
   attesa: number | null; // risultato medio per trade: è questo che dice se il metodo guadagna
@@ -279,7 +297,11 @@ export interface Stats {
 const mean = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
 
 export function statsOf(trades: Trade[]): Stats {
-  const r = trades.filter((t) => t.stato === "chiuso" && t.risultato !== undefined).map((t) => t.risultato!);
+  const chiusi = trades.filter((t) => t.stato === "chiuso" && t.risultato !== undefined);
+  const r = chiusi.map((t) => t.risultato!);
+  // Capitale sui vincenti: la parte del capitale investito nei trade chiusi finita in quelli in guadagno.
+  const capV = chiusi.filter((t) => t.risultato! > 0).reduce((a, t) => a + t.costo, 0);
+  const capT = chiusi.reduce((a, t) => a + t.costo, 0);
   const wins = r.filter((x) => x > 0);
   const losses = r.filter((x) => x <= 0);
   const n = r.length;
@@ -287,6 +309,7 @@ export function statsOf(trades: Trade[]): Stats {
     trade: n,
     vinti: wins.length,
     percVinti: n ? wins.length / n : null,
+    percCapitaleVinti: capT > 0 ? capV / capT : null,
     mediaVincita: mean(wins),
     mediaPerdita: mean(losses),
     attesa: mean(r),

@@ -19,6 +19,8 @@ const ENV_NAMES: Record<keyof Secrets, string> = {
   telegramBotToken: "TELEGRAM_BOT_TOKEN",
   telegramChatId: "TELEGRAM_CHAT_ID",
   xBearerToken: "X_BEARER_TOKEN",
+  alpacaLiveKeyId: "ALPACA_LIVE_KEY_ID",
+  alpacaLiveSecretKey: "ALPACA_LIVE_SECRET_KEY",
 };
 
 export async function loadSecrets(required: boolean): Promise<Secrets | null> {
@@ -59,7 +61,7 @@ export async function buildDeps(args: CliArgs): Promise<BaseDeps & { warnings: s
   if (fixedNow && Number.isNaN(fixedNow.getTime())) throw new Error(`--now non valido: ${args.now}`);
   const offset = fixedNow ? fixedNow.getTime() - Date.now() : 0;
   const now = () => new Date(Date.now() + offset);
-  const redactor = new Redactor(secrets ? [secrets.alpacaKeyId, secrets.alpacaSecretKey, secrets.telegramBotToken] : []);
+  const redactor = new Redactor(secrets ? [secrets.alpacaKeyId, secrets.alpacaSecretKey, secrets.telegramBotToken, secrets.alpacaLiveKeyId ?? "", secrets.alpacaLiveSecretKey ?? ""].filter(Boolean) : []);
   const sleep = (ms: number) => Bun.sleep(ms);
   const warnings: string[] = [];
   const outbox = new FileNotifier(join(stateDir, "telegram-outbox.log"));

@@ -2,6 +2,7 @@ import { AGENTS, LIMITS, isCrypto } from "../config.ts";
 import { rsi, sma } from "../indicators.ts";
 import { addTradingDays } from "../slots.ts";
 import { type Agent, type AgentReport, type AgentView, type Signal } from "./types.ts";
+import { valore } from "./profili.ts";
 
 // Rientro = mean reversion di Connors, come comparto separato a breve orizzonte: compra un titolo sopra la media a 200
 // quando l'RSI(2) scende sotto 10 (ipervenduto di breve), con taglia piccola; esce quando l'RSI(2) torna sopra 70 o
@@ -15,7 +16,10 @@ export class PullbackAgent implements Agent {
 
   observe(v: AgentView): AgentReport {
     const segnali: Signal[] = [];
-    const { rsiDays, rsiEntry, rsiExit, maxHoldSessions, maxWeight } = AGENTS.pullback;
+    // RSI d'ingresso e peso sono della persona che lavora sul titolo (quanto è selettiva, quanto investe); uscita e sedute
+    // sono regole del motore, uguali per tutti.
+    const { rsiDays, rsiExit, maxHoldSessions } = AGENTS.pullback;
+    const per = (s: string) => ({ rsiEntry: valore("AGENTS.pullback.rsiEntry", s), rsiExit, maxHoldSessions, maxWeight: valore("AGENTS.pullback.maxWeight", s) });
     const held = new Set(v.positions.filter((p) => p.qty > 0).map((p) => p.symbol));
     for (const s of AGENTS.universe) {
       if (held.has(s)) continue;
@@ -24,8 +28,9 @@ export class PullbackAgent implements Agent {
       const m200 = sma(c, LIMITS.longSmaDays);
       const price = v.prices[s] ?? c[c.length - 1]!;
       const r = rsi(conAdesso(c, price, v, s), rsiDays);
+      const { rsiEntry, maxHoldSessions, maxWeight } = per(s);
       if (m200 === null || r === null || price <= m200 || r >= rsiEntry) continue;
-      segnali.push({ agente: this.name, simbolo: s, lato: "buy", forza: 0.7, orizzonteSedute: maxHoldSessions, pesoMassimo: maxWeight, perche: `RSI(${rsiDays}) a ${r.toFixed(0)} sopra la media a 200: ipervenduto di breve, rientro con taglia ridotta` });
+      segnali.push({ agente: this.name, simbolo: s, lato: "buy", forza: 0.7, misure: { rsi2: r }, orizzonteSedute: maxHoldSessions, pesoMassimo: maxWeight, perche: `RSI(${rsiDays}) a ${r.toFixed(0)} sopra la media a 200: ipervenduto di breve, rientro con taglia ridotta` });
     }
     // Le uscite valgono solo per i trade aperti dal rientro da solo: quelli del trend li gestisce il trend.
     for (const t of v.journal.trade) {
@@ -35,6 +40,7 @@ export class PullbackAgent implements Agent {
       const c = v.closes[t.simbolo];
       const price = v.prices[t.simbolo] ?? c?.[c.length - 1];
       const r = c && price ? rsi(conAdesso(c, price, v, t.simbolo), rsiDays) : null;
+      const { rsiExit, maxHoldSessions } = per(t.simbolo);
       const due = addTradingDays(t.apertoIl.slice(0, 10), maxHoldSessions);
       if (r !== null && r >= rsiExit) segnali.push({ agente: this.name, simbolo: t.simbolo, lato: "sell", forza: 1, orizzonteSedute: 0, vincolante: true, perche: `RSI(${rsiDays}) a ${r.toFixed(0)}: il rientro ha fatto il suo lavoro` });
       else if (v.today >= due) segnali.push({ agente: this.name, simbolo: t.simbolo, lato: "sell", forza: 1, orizzonteSedute: 0, vincolante: true, perche: `${maxHoldSessions} sedute dal rientro senza RSI sopra ${rsiExit}: si esce` });

@@ -2,7 +2,7 @@ import { limitiSedute } from "../sedute.ts";
 import { CRYPTO_STOP_LIMIT_GAP, HTTP_TIMEOUT_MS, MARKET_DATA_URL, PAPER_TRADING_URL, isCrypto } from "../config.ts";
 import { assertPaperUrl } from "../guard.ts";
 import type { Account, Bar, Broker, IntradayBar, MarketClock, Order, OrderRequest, Position, StopOrderRequest } from "./types.ts";
-import { BrokerError, DuplicateOrderError, humanizeBrokerError, prezzoStringa } from "./types.ts";
+import { BrokerError, DuplicateOrderError, humanizeBrokerError, prezzoStringa, prezzoDaQuote, type Quote } from "./types.ts";
 
 const num = (v: unknown) => (v === null || v === undefined || v === "" ? 0 : Number(v));
 
@@ -13,7 +13,13 @@ export function canonicalSymbol(symbol: string, assetClass?: string): string {
 }
 // Crypto: 6 decimali troncati, mai arrotondati per eccesso (80,874531937 → 80,874531): con toFixed Alpaca rispondeva
 // "insufficient balance" perché si chiedeva un milionesimo in più di quanto c'è (la commissione si paga nella moneta).
-export const qtyString = (symbol: string, qty: number) => (isCrypto(symbol) ? (Math.floor(qty * 1e6 + 1e-6) / 1e6).toFixed(6).replace(/0+$/, "").replace(/\.$/, "") : String(qty));
+// Titoli: intere come numero intero; frazioni con al massimo 9 decimali (la precisione di Alpaca, oltre tronca), senza
+// il rumore della virgola mobile (0,1 + 0,2 = 0,30000000000000004) e senza zeri in coda. Una vendita di tutta la
+// posizione manda esattamente la quantità che Alpaca ha dato (al più 9 decimali): niente resti.
+export const qtyString = (symbol: string, qty: number) =>
+  isCrypto(symbol)
+    ? (Math.floor(qty * 1e6 + 1e-6) / 1e6).toFixed(6).replace(/0+$/, "").replace(/\.$/, "")
+    : Number.isInteger(qty) ? String(qty) : qty.toFixed(9).replace(/0+$/, "").replace(/\.$/, "");
 
 function toOrder(o: any): Order {
   return {
@@ -29,6 +35,7 @@ function toOrder(o: any): Order {
     stopPrice: o.stop_price === null || o.stop_price === undefined ? null : Number(o.stop_price),
     filledAvgPrice: o.filled_avg_price === null || o.filled_avg_price === undefined ? null : Number(o.filled_avg_price),
     filledAt: o.filled_at ? String(o.filled_at) : null,
+    ...(o.time_in_force ? { tif: String(o.time_in_force) } : {}),
   };
 }
 
@@ -111,8 +118,22 @@ export class AlpacaBroker implements Broker {
     }
     if (crypto.length) {
       const data = await this.request(MARKET_DATA_URL, `/v1beta3/crypto/us/latest/trades?symbols=${crypto.map(encodeURIComponent).join(",")}`);
-      for (const [sym, t] of Object.entries<any>(data?.trades ?? {})) if (t?.p) out[sym] = Number(t.p);
+      const ultimi: Record<string, number> = {};
+      for (const [sym, t] of Object.entries<any>(data?.trades ?? {})) if (t?.p) ultimi[sym] = Number(t.p);
+      // Le crypto poco scambiate hanno l'ultimo scambio vecchio: vale il prezzo a metà tra le migliori offerte.
+      let quotes: Record<string, Quote> = {};
+      try { quotes = await this.getLatestQuotes(crypto); } catch {}
+      for (const sym of crypto) { const p = prezzoDaQuote(quotes[sym], ultimi[sym]); if (p) out[sym] = p; }
     }
+    return out;
+  }
+
+  async getLatestQuotes(symbols: string[]): Promise<Record<string, Quote>> {
+    const crypto = symbols.filter(isCrypto);
+    const out: Record<string, Quote> = {};
+    if (!crypto.length) return out;
+    const data = await this.request(MARKET_DATA_URL, `/v1beta3/crypto/us/latest/quotes?symbols=${crypto.map(encodeURIComponent).join(",")}`);
+    for (const [sym, q] of Object.entries<any>(data?.quotes ?? {})) if (Number(q?.bp) > 0 && Number(q?.ap) > 0) out[sym] = { bid: Number(q.bp), ask: Number(q.ap) };
     return out;
   }
 
@@ -130,7 +151,8 @@ export class AlpacaBroker implements Broker {
       symbol: req.symbol,
       qty: qtyString(req.symbol, req.qty),
       side: req.side,
-      type: "market",
+      type: req.limitPrice ? "limit" : "market",
+      ...(req.limitPrice ? { limit_price: prezzoStringa(req.symbol, req.limitPrice) } : {}),
       // Le crypto non accettano "day".
       time_in_force: isCrypto(req.symbol) ? "gtc" : "day",
       client_order_id: req.clientOrderId,
@@ -142,7 +164,7 @@ export class AlpacaBroker implements Broker {
     // Le crypto non accettano lo stop a mercato: stop_limit con limite mezzo punto sotto.
     const body = isCrypto(req.symbol)
       ? { symbol: req.symbol, qty: qtyString(req.symbol, req.qty), side: "sell", type: "stop_limit", stop_price: prezzoStringa(req.symbol, req.stopPrice), limit_price: prezzoStringa(req.symbol, req.stopPrice * (1 - CRYPTO_STOP_LIMIT_GAP)), time_in_force: "gtc", client_order_id: req.clientOrderId }
-      : { symbol: req.symbol, qty: String(req.qty), side: "sell", type: "stop", stop_price: prezzoStringa(req.symbol, req.stopPrice), time_in_force: "gtc", client_order_id: req.clientOrderId };
+      : { symbol: req.symbol, qty: qtyString(req.symbol, req.qty), side: "sell", type: "stop", stop_price: prezzoStringa(req.symbol, req.stopPrice), time_in_force: req.giornaliero ? "day" : "gtc", client_order_id: req.clientOrderId };
     return toOrder(await this.request(this.baseUrl, "/v2/orders", { method: "POST", body: JSON.stringify(body) }));
   }
 
@@ -174,6 +196,28 @@ export class AlpacaBroker implements Broker {
       .sort();
   }
 
+  // fractionable di ogni titolo (GET /v2/assets/{simbolo}), quattro richieste alla volta; chi non risponde resta fuori.
+  async getFractionable(symbols: string[]): Promise<Record<string, boolean>> {
+    const out: Record<string, boolean> = {};
+    const coda = symbols.filter((s) => !isCrypto(s));
+    let i = 0;
+    await Promise.all(Array.from({ length: Math.min(4, coda.length) }, async () => {
+      while (i < coda.length) {
+        const s = coda[i++]!;
+        try {
+          const a = await this.request(this.baseUrl, `/v2/assets/${encodeURIComponent(s)}`);
+          if (typeof a?.fractionable === "boolean") out[s] = a.fractionable && a.tradable !== false;
+        } catch {}
+      }
+    }));
+    return out;
+  }
+
+  async getAssetName(symbol: string): Promise<string | null> {
+    const a = await this.request(this.baseUrl, `/v2/assets/${encodeURIComponent(symbol.replace("/", ""))}`);
+    return typeof a?.name === "string" && a.name.trim() ? a.name.trim() : null;
+  }
+
   async getPortfolioHistory(start: string, end: string, timeframe: string): Promise<{ t: string; equity: number; pnl: number }[]> {
     // intraday_reporting=continuous: anche fuori orario (crypto 24 ore su 24); pnl_reset=no_reset: guadagno dall'inizio del periodo.
     const q = `timeframe=${encodeURIComponent(timeframe)}&start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}&intraday_reporting=continuous&pnl_reset=no_reset`;
@@ -197,11 +241,13 @@ export class AlpacaBroker implements Broker {
     // Abbastanza indietro da coprire `count` candele anche con notti e fine settimana (titoli: ~6,5 ore al giorno).
     const spanMin = minutes * count * (minutes >= 240 ? 4 : 3) + 3 * 1440;
     const start = new Date(Date.now() - spanMin * 60_000).toISOString();
+    // Le crypto sono aperte sempre: basta poco più di `count` candele (meno dati, nessuna pagina persa).
+    const startCrypto = new Date(Date.now() - (minutes * count * 1.5 + 2 * minutes) * 60_000).toISOString();
     const now = Date.now();
     const closedBefore = (t: string) => Date.parse(t) + minutes * 60_000 <= now; // candela finita
     const fetchAll = async (path: string) => {
       let token = "";
-      for (let page = 0; page < 10; page++) {
+      for (let page = 0; page < 40; page++) {
         const data = await this.request(MARKET_DATA_URL, `${path}${token ? `&page_token=${encodeURIComponent(token)}` : ""}`);
         for (const [sym, bars] of Object.entries<any[]>(data?.bars ?? {})) (out[sym] ??= []).push(...bars.filter((b) => closedBefore(String(b.t))).map((b) => ({ t: String(b.t), open: Number(b.o), high: Number(b.h), low: Number(b.l), close: Number(b.c), volume: Number(b.v ?? 0) })));
         token = data?.next_page_token ?? "";
@@ -210,8 +256,19 @@ export class AlpacaBroker implements Broker {
     };
     const stocks = symbols.filter((s) => !isCrypto(s));
     const crypto = symbols.filter(isCrypto);
-    if (stocks.length) await fetchAll(`/v2/stocks/bars?timeframe=${encodeURIComponent(timeframe)}&adjustment=all&feed=iex&limit=10000&start=${start}&symbols=${stocks.map(encodeURIComponent).join(",")}`);
-    if (crypto.length) await fetchAll(`/v1beta3/crypto/us/bars?timeframe=${encodeURIComponent(timeframe)}&limit=10000&start=${start}&symbols=${crypto.map(encodeURIComponent).join(",")}`);
+    // A gruppi di pochi simboli: Alpaca restituisce le candele un simbolo dopo l'altro, e con tanti simboli le ultime pagine
+    // (gli ultimi in ordine alfabetico: SHIB, SOL, UNI, XRP...) restavano fuori, con «candele insufficienti».
+    const gruppi = (xs: string[], n = 6) => Array.from({ length: Math.ceil(xs.length / n) }, (_, i) => xs.slice(i * n, i * n + n));
+    // I gruppi si scaricano tre alla volta (prima uno dopo l'altro): con decine di simboli e quattro passi di candela era
+    // il grosso del tempo del giro, prima ancora di Kronos. Ogni gruppo ha le sue pagine, in ordine.
+    const percorsi = [
+      ...gruppi(stocks).map((g) => `/v2/stocks/bars?timeframe=${encodeURIComponent(timeframe)}&adjustment=all&feed=iex&limit=10000&start=${start}&symbols=${g.map(encodeURIComponent).join(",")}`),
+      ...gruppi(crypto).map((g) => `/v1beta3/crypto/us/bars?timeframe=${encodeURIComponent(timeframe)}&limit=10000&start=${startCrypto}&symbols=${g.map(encodeURIComponent).join(",")}`),
+    ];
+    let prossimo = 0;
+    await Promise.all(Array.from({ length: Math.min(3, percorsi.length) }, async () => {
+      while (prossimo < percorsi.length) await fetchAll(percorsi[prossimo++]!);
+    }));
     for (const sym of Object.keys(out)) out[sym] = out[sym]!.sort((a, b) => a.t.localeCompare(b.t)).slice(-count);
     return out;
   }

@@ -1,11 +1,15 @@
 import type { IntradayBar } from "../broker/types.ts";
-import { AGENTS, LIMITS, isCrypto } from "../config.ts";
+import { AGENTS, LIMITS, isCrypto, sectorOf } from "../config.ts";
 import { dailyVol, momentum, sma, trendOf } from "../indicators.ts";
 import { romeTime } from "../slots.ts";
-import { erf, kronosProb } from "./fiducia.ts";
+import { caloNetto, erf, kronosProb, livelloMedie } from "./fiducia.ts";
 import { prossimaTrimestrale } from "../events.ts";
 import { addTradingDays } from "../slots.ts";
 import type { Agent, AgentReport, AgentView, Signal } from "./types.ts";
+import { valore } from "./profili.ts";
+import { calibraP } from "./statistica.ts";
+import { guadagniAperti, quotaBudget } from "./budget.ts";
+import { isObject, readJson, writeJsonAtomic } from "../fsutil.ts";
 import type { LivelliIntraday } from "../journal.ts";
 
 // L'agente intraday: operazioni che nascono e muoiono nella stessa giornata, solo nel verso del trend giornaliero.
@@ -72,12 +76,19 @@ export function ema(values: number[], n: number): number | null {
   return e;
 }
 
+// ATR delle candele, senza i salti tra una seduta e l'altra: tra due candele separate da più di 1,5 volte il passo
+// normale (la notte, il fine settimana delle azioni) la chiusura precedente non conta, vale solo massimo − minimo. Così lo
+// stop di una candela da 1 ora non si allarga per il salto d'apertura.
 export function atr(bars: IntradayBar[], n = 14): number | null {
   if (bars.length < n + 1) return null;
+  const tempi = bars.slice(-(n + 1)).map((b) => Date.parse(b.t));
+  const passi = tempi.slice(1).map((t, i) => t - tempi[i]!).filter((d) => Number.isFinite(d) && d > 0).sort((a, b) => a - b);
+  const passo = passi.length ? passi[Math.floor(passi.length / 2)]! : null;
   let sum = 0;
   for (let i = bars.length - n; i < bars.length; i++) {
     const b = bars[i]!, prev = bars[i - 1]!;
-    sum += Math.max(b.high - b.low, Math.abs(b.high - prev.close), Math.abs(b.low - prev.close));
+    const salto = passo !== null && Date.parse(b.t) - Date.parse(prev.t) > 1.5 * passo;
+    sum += salto ? b.high - b.low : Math.max(b.high - b.low, Math.abs(b.high - prev.close), Math.abs(b.low - prev.close));
   }
   return sum / n;
 }
@@ -134,7 +145,21 @@ export function readBars(bars: IntradayBar[], price: number, crypto: boolean): {
 
 // Kronos sulle candele intraday: per ogni titolo il rendimento previsto a fine delle prossime `horizon` candele.
 // Restituisce, per titolo, il rendimento cumulato candela per candela (un numero vale come percorso piatto).
-export type IntradayForecast = (bars: Record<string, IntradayBar[]>, stepMinutes: number, horizon: number) => Promise<Record<string, number | number[]>>;
+// Con i singoli percorsi (campioni) la probabilità e lo stop si leggono da quanti salgono e da quanto scendono i peggiori.
+export type PrevisioneIntraday = number | number[] | { path: number[]; campioni?: number[][] };
+export type IntradayForecast = (bars: Record<string, IntradayBar[]>, stepMinutes: number, horizon: number) => Promise<Record<string, PrevisioneIntraday>>;
+
+// Dai percorsi di Kronos a `n` candele: quanti chiudono sopra `costo` senza scendere sotto −stop, e lo stop stesso (il
+// quantile `qStop` dei minimi dei percorsi, tra `minStop` e `maxStop`).
+export function letturaCampioni(campioni: number[][], n: number, costo: number, minStop: number, maxStop: number, qStop: number): { sopra: number; tot: number; stop: number } | null {
+  const righe = campioni.filter((r) => r.length >= n && n >= 1);
+  if (!righe.length) return null;
+  const minimi = righe.map((r) => Math.min(0, ...r.slice(0, n))).sort((a, b) => a - b);
+  const qi = Math.min(minimi.length - 1, Math.max(0, Math.floor(qStop * (minimi.length - 1))));
+  const stop = Math.min(Math.max(minStop, maxStop), Math.max(minStop, -minimi[qi]!));
+  const sopra = righe.filter((r) => r[n - 1]! > costo && Math.min(...r.slice(0, n)) > -stop).length;
+  return { sopra, tot: righe.length, stop };
+}
 
 interface Operazione {
   simbolo: string;
@@ -144,6 +169,11 @@ interface Operazione {
   obiettivo: number;
   stop: number;
   aperta?: string; // ISO dell'ingresso (per la durata massima sulle crypto)
+  // Riporto al giorno dopo: quante volte, da quando conta la nuova finestra (durata massima delle crypto, orizzonte) e il
+  // giorno in cui si è deciso (le azioni non lo ridecidono a ogni giro fino alla chiusura).
+  riporti?: number;
+  rinnovo?: string;
+  riportoGiorno?: string;
   orizzonteMin?: number; // orizzonte della proiezione di Kronos con cui si è entrati
   // Il prezzo è stato sopra la media a 20 della candela (all'ingresso o dopo). Solo allora "due candele sotto la media"
   // vuol dire che il movimento è finito: un ingresso deciso da Kronos sotto la media (ripartenza anticipata) non si chiude
@@ -154,10 +184,12 @@ interface Operazione {
   // breve (media persa, orizzonte breve scaduto, calo previsto sulla candela da 1 minuto) non valgono finché le candele
   // superiori restano a favore: un calo di pochi minuti non chiude un movimento che continua sulle ore.
   sostegno?: { tf: string; obiettivo: number; orizzonteMin: number };
+  massimo?: number; // il prezzo più alto visto dall'ingresso (per lo stop che segue il trade)
 }
 
 // L'affidabilità misurata di Kronos sulle candele di `stepMinutes` minuti (dal cervello): fattore 1 = come atteso.
-export type AffidabilitaCandela = (stepMinutes: number) => { fattore: number; quota: number; campione: number; giusti?: number | null };
+// `simbolo`: per le misure della sua classe (azioni o crypto), se ce ne sono abbastanza.
+export type AffidabilitaCandela = (stepMinutes: number, simbolo?: string) => { fattore: number; quota: number; campione: number; giusti?: number | null; resa?: number | null };
 
 // L'obiettivo minimo per tipo: copre i costi di andata e ritorno con margine.
 const minimoObiettivo = (s: string) => (isCrypto(s) ? AGENTS.intraday.target.crypto : AGENTS.intraday.target.stocks);
@@ -185,24 +217,42 @@ export function promuovibile(v: AgentView, s: string, gain: number): { ok: boole
 }
 
 export class IntradayAgent implements Agent {
+  private giroKronos = 0; // rotazione delle coppie titolo-candela da proiettare
   readonly name = "intraday";
   private operazioni = new Map<string, Operazione>();
   private entrateOggi = new Map<string, string>(); // simbolo -> giorno dell'ultimo ingresso
   // Ultima proiezione intraday per titolo: si ricalcola solo quando chiude una candela nuova.
-  private kCache = new Map<string, { chiave: string; path: number[] }>();
+  private kCache = new Map<string, { chiave: string; path: number[]; campioni?: number[][] }>();
+  // Uscite «morbide» in attesa di conferma (lascia correre): simbolo → motivo, candela di controllo dell'ultimo conteggio, quante.
+  private attese = new Map<string, { chiave: string; n: number; motivo: string; massimo: number }>();
+  // Sostituzioni dei trade deboli fatte oggi (intraday.sostituzione.maxGiorno).
+  private sostituzioni = { giorno: "", n: 0 };
+  // La probabilità vista all'ultima proiezione di ogni coppia titolo-candela: decide chi si riproietta per primo.
+  private ultimaProb = new Map<string, number>();
   // Gli stati delle candidate all'ultima analisi d'ingresso: tra un'analisi e l'altra restano visibili in dashboard.
   private ultimeCandidate: IntradayStato[] = [];
   constructor(
     private fetchBars: BarFetcher,
     private forecast: IntradayForecast | null = null,
     private affidabilita: AffidabilitaCandela | null = null,
-  ) {}
+    // File in cui tenere le proiezioni di Kronos sulle candele: dopo un riavvio si riparte da quelle ancora valide
+    // (stessa candela), invece di restare «in attesa della proiezione» per qualche analisi.
+    private cacheFile: string | null = null,
+  ) {
+    if (cacheFile) {
+      const r = readJson(cacheFile, (x): x is Record<string, { chiave: string; path: number[]; campioni?: number[][] }> => isObject(x));
+      if (r.kind === "ok") for (const [k, val] of Object.entries(r.value)) this.kCache.set(k, val);
+    }
+  }
 
   async observe(v: AgentView): Promise<AgentReport> {
     const c = AGENTS.intraday;
     const rt = romeTime(v.now);
     const segnali: Signal[] = [];
     const note: string[] = [];
+    // Per la sostituzione: le operazioni aperte che oggi non si aprirebbero e le occasioni nuove votate in questo giro.
+    const deboli: { s: string; pl: number; gain: number; valore: number; minuti: number; tf: string }[] = [];
+    const nuovi: { s: string; pr: number; peso: number }[] = [];
     const stati: IntradayStato[] = [];
     const held = new Map(v.positions.filter((p) => p.qty > 0).map((p) => [p.symbol, p]));
     // Le mie operazioni aperte: dal diario (trade aperti votati da "intraday") e dalla memoria del processo.
@@ -223,8 +273,9 @@ export class IntradayAgent implements Agent {
       const w = c.entry.stocks;
       return rt.minutes >= minutesOf(w.from) && rt.minutes <= minutesOf(w.to) && rt.weekday >= 1 && rt.weekday <= 5;
     };
-    const apertaDa = (s: string) => { const op = this.operazioni.get(s); return op?.aperta ? (v.now.getTime() - Date.parse(op.aperta)) / 60_000 : null; };
-    const mustClose = (s: string) => isCrypto(s) ? (apertaDa(s) ?? 0) >= c.cryptoOreMax * 60 : minToClose !== null ? minToClose <= c.minutiPrimaChiusura.uscita : rt.minutes >= minutesOf(c.closeBy.stocks);
+    // Minuti dall'ingresso o, per un'operazione riportata al giorno dopo, dal riporto (la nuova finestra).
+    const apertaDa = (s: string) => { const op = this.operazioni.get(s); const da = op?.rinnovo ?? op?.aperta; return da ? (v.now.getTime() - Date.parse(da)) / 60_000 : null; };
+    const mustClose = (s: string) => !isCrypto(s) && this.operazioni.get(s)?.riportoGiorno === v.today ? false : isCrypto(s) ? (apertaDa(s) ?? 0) >= c.cryptoOreMax * 60 : minToClose !== null ? minToClose <= c.minutiPrimaChiusura.uscita : rt.minutes >= minutesOf(c.closeBy.stocks);
     // Minuti a disposizione per arrivare all'obiettivo: crypto la durata massima, azioni fino all'uscita prima della chiusura.
     const minutiPer = (s: string) => isCrypto(s) ? c.cryptoOreMax * 60 - (apertaDa(s) ?? 0) : minToClose !== null ? minToClose - c.minutiPrimaChiusura.uscita : minutesOf(c.closeBy.stocks) - rt.minutes;
     const chiusuraDi = (s: string) => isCrypto(s) ? `al massimo ${c.cryptoOreMax} ore` : `entro ${c.minutiPrimaChiusura.uscita} minuti dalla chiusura della borsa`;
@@ -233,11 +284,44 @@ export class IntradayAgent implements Agent {
     // giornata non decidono le medie giornaliere (50, 200) né il settimanale: decidono la proiezione di Kronos sulle
     // candele brevi e le medie brevi della candela scelta; il grafico più lungo e il Kronos a 5 sedute pesano solo sulla
     // taglia. Senza Kronos intraday (sidecar spento) vale il Kronos a 5 sedute, come prima.
+    // Ultima chiusura in perdita sul titolo (qualsiasi agente, stop compresi) entro rientro.finestraOre: da lì la pausa e
+    // il margine in più per rientrare.
+    const ultimaPerdita = (s: string): number | null => {
+      let ultima: number | null = null;
+      for (const t of v.journal.trade) {
+        if (t.simbolo !== s || t.stato !== "chiuso" || !t.chiusoIl || !(t.incassato - t.costo < 0)) continue;
+        const ms = Date.parse(t.chiusoIl);
+        if (v.now.getTime() - ms <= c.rientro.finestraOre * 3_600_000 && (ultima === null || ms > ultima)) ultima = ms;
+      }
+      return ultima;
+    };
+    const hhmm = (ms: number) => { const m = romeTime(new Date(ms)).minutes; return `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`; };
+    const extraRientro = (s: string) => (ultimaPerdita(s) !== null ? c.rientro.extraProb : 0);
+    // Ingressi di oggi sullo stesso titolo: al massimo ingressiGiorno.max; con una ancora aperta no; dopo una chiusa in
+    // perdita una pausa di qualche ora (rientro.pausaOre), poi si rientra con più margine (extraRientro nella soglia).
+    const bloccatoOggi = (s: string): string | null => {
+      const persa = ultimaPerdita(s);
+      if (persa !== null && v.now.getTime() - persa < c.rientro.pausaOre * 3_600_000) return `pausa dopo una perdita (chiusa alle ${hhmm(persa)}): rientro valutato dalle ${hhmm(persa + c.rientro.pausaOre * 3_600_000)}, con ${Math.round(c.rientro.extraProb * 100)} punti di probabilità in più`;
+      const oggi = v.journal.trade.filter((t) => t.simbolo === s && t.apertoIl && romeTime(new Date(t.apertoIl)).date === v.today && t.contesto?.agenti?.includes(this.name)).sort((a, b) => a.apertoIl.localeCompare(b.apertoIl));
+      if (!oggi.length) return this.entrateOggi.get(s) === v.today ? "ingresso appena fatto" : null;
+      if (oggi.length >= c.ingressiGiorno.max) return `già ${oggi.length} ingressi oggi`;
+      const ultimo = oggi.at(-1)!;
+      if (ultimo.stato !== "chiuso") return "operazione di oggi ancora aperta";
+      return null;
+    };
     const candidates: string[] = [];
     for (const s of AGENTS.universe) {
       if (v.analisi === false) break; // la scansione delle candidate si fa nell'analisi d'ingresso, ogni AGENTS.analisiMinuti
       if (v.giornata?.perditaOltre) break; // oltre la perdita massima del giorno (se impostata) niente ingressi
-      if (held.has(s) || this.entrateOggi.get(s) === v.today) continue;
+      if (held.has(s)) continue;
+      // Acquisti crypto fermati: nessuna analisi d'ingresso (e nessuna sostituzione verso una crypto).
+      if (isCrypto(s) && !AGENTS.cryptoAcquisti.enabled) continue;
+      const blocco = bloccatoOggi(s);
+      if (blocco) {
+        // La pausa dopo una perdita si vede in dashboard (con l'ora da cui si rivaluta), gli altri limiti del giorno no.
+        if (blocco.startsWith("pausa") && inWindow(s)) stati.push({ simbolo: s, candela: "1Hour", fase: "cerca ingresso", ingresso: null, obiettivo: null, stop: null, prezzo: v.prices[s] ?? null, motivo: blocco });
+        continue;
+      }
       if (!inWindow(s)) continue;
       if (!v.closes[s] || !v.prices[s]) continue;
       if (!this.forecast) {
@@ -252,7 +336,7 @@ export class IntradayAgent implements Agent {
     // la probabilità di successo più alta; senza Kronos vale la candela scelta dalla volatilità, come prima.
     const TFS = this.forecast ? c.candele : [];
     const candTfs = new Map<string, string[]>();
-    for (const s of candidates) candTfs.set(s, this.forecast ? TFS : [timeframeFor(v.closes[s])]);
+    for (const s of candidates) candTfs.set(s, this.forecast ? (isCrypto(s) ? TFS : TFS.filter((tf) => c.candeleAzioni.includes(tf))) : [timeframeFor(v.closes[s])]);
     const tfOfMine = new Map<string, string>();
     for (const s of mine) tfOfMine.set(s, this.operazioni.get(s)?.candela ?? v.journal.trade.find((t) => t.simbolo === s && t.stato === "aperto")?.contesto?.livelli?.candela ?? timeframeFor(v.closes[s]));
     // Candele: per i candidati su ogni candela da valutare, per le posizioni sulla loro candela e su quella più breve
@@ -261,35 +345,62 @@ export class IntradayAgent implements Agent {
     const ask = (tf: string, s: string) => { if (tf === "1Day") return; (want.get(tf) ?? want.set(tf, new Set()).get(tf)!).add(s); };
     for (const [s, tfs] of candTfs) for (const tf of tfs) { ask(tf, s); ask(UP[tf] ?? "1Day", s); }
     for (const [s, tf] of tfOfMine) { ask(tf, s); ask(LOWER[tf] ?? tf, s); for (const sup of SUPERIORI[tf] ?? []) ask(sup, s); }
+    // Le candele di tutti i passi insieme (richieste in parallelo): prima si scaricavano una dopo l'altra.
     const barsBy = new Map<string, Record<string, IntradayBar[]>>();
-    for (const [tf, syms] of want) {
+    const tCandele = Date.now();
+    await Promise.all([...want].map(async ([tf, syms]) => {
       try {
         barsBy.set(tf, await this.fetchBars([...syms], tf, c.bars));
       } catch (e) {
         note.push(`candele ${tf} non disponibili: ${(e as Error).message}`);
         barsBy.set(tf, {});
       }
-    }
+    }));
+    const msCandele = Date.now() - tCandele;
     const barsOf = (s: string, tf: string) => barsBy.get(tf)?.[s];
     // Kronos sulle prossime candele, una proiezione per titolo e candela finché non ne chiude una nuova.
+    let msKronos = 0, serieKronos = 0;
+    // Una proiezione di Kronos parte dalla chiusura dell'ultima candela, ma si usa per tutta la candela (fino a un'ora o
+    // quattro): nel frattempo il prezzo si muove. Rendimenti (percorso e singoli percorsi) riportati al prezzo di adesso:
+    // un rialzo già fatto non si conta due volte (prima, a obiettivo raggiunto, si rientrava con la stessa proiezione).
+    const prezzoDi = (s: string) => v.prices[s] ?? held.get(s)?.currentPrice;
+    const attuale = (s: string, tf: string, path: number[]) => {
+      const base = barsOf(s, tf)?.at(-1)?.close, p = prezzoDi(s);
+      if (!(base! > 0) || !(p! > 0)) return path;
+      const rel = base! / p!;
+      return Math.abs(rel - 1) < 1e-12 ? path : path.map((r) => (1 + r) * rel - 1);
+    };
     const kronosOn = async (pairs: { s: string; tf: string }[]) => {
       const out = new Map<string, number[]>();
       if (!this.forecast || !pairs.length) return out;
+      const t0 = Date.now();
+      try { return await kronosSu(pairs, out); } finally { msKronos += Date.now() - t0; }
+    };
+    const kronosSu = async (pairs: { s: string; tf: string }[], out: Map<string, number[]>) => {
+      if (!this.forecast) return out;
       const byTf = new Map<string, string[]>();
       for (const p of pairs) byTf.set(p.tf, [...(byTf.get(p.tf) ?? []), p.s]);
       for (const [tf, syms] of byTf) {
         const keyOf = (s: string) => `${tf}|${barsOf(s, tf)!.at(-1)!.t}`;
         const need = syms.filter((s) => this.kCache.get(`${s}|${tf}`)?.chiave !== keyOf(s));
         if (need.length) {
+          serieKronos += need.length;
           try {
             const n = profondita(tf);
             const r = await this.forecast(Object.fromEntries(need.map((s) => [s, barsOf(s, tf)!])), tfMinutes(tf), n);
-            for (const s of need) if (r[s] !== undefined) this.kCache.set(`${s}|${tf}`, { chiave: keyOf(s), path: Array.isArray(r[s]) ? (r[s] as number[]) : Array.from({ length: n }, () => r[s] as number) });
+            for (const s of need) {
+              const x = r[s];
+              if (x === undefined) continue;
+              const path = Array.isArray(x) ? x : typeof x === "number" ? Array.from({ length: n }, () => x) : x.path;
+              const campioni = typeof x === "object" && !Array.isArray(x) && x.campioni?.length ? x.campioni : undefined;
+              this.kCache.set(`${s}|${tf}`, { chiave: keyOf(s), path, ...(campioni ? { campioni } : {}) });
+            }
+            if (this.cacheFile) { try { writeJsonAtomic(this.cacheFile, Object.fromEntries(this.kCache)); } catch {} }
           } catch (e) {
             note.push(`Kronos intraday non disponibile (${tf}): ${(e as Error).message}`);
           }
         }
-        for (const s of syms) { const k = this.kCache.get(`${s}|${tf}`); if (k && k.chiave === keyOf(s)) out.set(`${s}|${tf}`, k.path); }
+        for (const s of syms) { const k = this.kCache.get(`${s}|${tf}`); if (k && k.chiave === keyOf(s)) out.set(`${s}|${tf}`, attuale(s, tf, k.path)); }
       }
       return out;
     };
@@ -311,25 +422,82 @@ export class IntradayAgent implements Agent {
     // Costo di andata e ritorno: il rialzo previsto deve coprirlo `margineCosti` volte.
     const costoVero = (s: string) => (isCrypto(s) ? AGENTS.costi.cryptoAndataRitorno : AGENTS.costi.azioniAndataRitorno);
     const costoDi = (s: string) => costoVero(s) * AGENTS.costi.margineCosti;
+    // Rialzo minimo per entrare su una candela: di norma `margineCosti` volte i costi. Crypto sulle candele brevi (fuori da
+    // intraday.crypto.candele, cioè 5 e 15 minuti): almeno crypto.rialzoCosti volte i costi (0,4% × 3 = 1,2%), perché lì
+    // il vantaggio misurato di Kronos è più piccolo dei costi di andata e ritorno.
+    const breveCrypto = (s: string, tf: string) => isCrypto(s) && !c.crypto.candele.includes(tf);
+    const minRialzo = (s: string, tf: string) => (breveCrypto(s, tf) ? Math.max(costoDi(s), c.crypto.rialzoCosti * costoVero(s)) : costoDi(s));
+    const quanteVolte = (s: string, tf: string) => (breveCrypto(s, tf) ? Math.max(AGENTS.costi.margineCosti, c.crypto.rialzoCosti) : AGENTS.costi.margineCosti);
     // Affidabilità di Kronos sulla candela (misurata dal cervello; senza cervello 1).
-    const affOf = (tf: string) => this.affidabilita?.(tfMinutes(tf)) ?? { fattore: 1, quota: AGENTS.intraday.affidabilita.prior, campione: 0 };
+    const affOf = (tf: string, s?: string) => this.affidabilita?.(tfMinutes(tf), s) ?? { fattore: 1, quota: AGENTS.intraday.affidabilita.prior, campione: 0 };
     // Probabilità di un guadagno netto dei costi sull'orizzonte, corretta per l'affidabilità della candela: è il criterio
     // con cui si confrontano candele e orizzonti diversi (un +1,5% in 15 minuti e un +3% in 4 ore si misurano sulla stessa
     // scala: rialzo netto rispetto al rumore atteso in quel tempo, su una candela di cui Kronos ha dimostrato di capire).
+    // Candele su cui Kronos non ha un vantaggio misurato: non si entra e non confermano né bloccano le altre (ma si
+    // continuano a misurare, poche coppie a giro). Tre casi: tante previsioni con un fattore d'affidabilità troppo basso;
+    // abbastanza previsioni con la direzione giusta meno della metà delle volte (peggio di una moneta); tante previsioni
+    // che, seguite, non rendono (resa media ≤ minResa: es. le 15 minuti, giuste il 51% ma con resa −0,06%).
+    const senzaVantaggio = (tf: string, s?: string) => {
+      if (this.forecast === null) return false;
+      const a = affOf(tf, s), w = c.vantaggio;
+      return (a.campione >= w.minCampione && a.fattore < w.minFattore) || (a.campione >= w.minCampioneContro && a.giusti !== undefined && a.giusti !== null && a.giusti < w.minGiusti) || (a.campione >= w.minCampione && a.resa !== undefined && a.resa !== null && a.resa <= w.minResa);
+    };
+    // Dai singoli percorsi di Kronos (se ci sono): quanti chiudono sopra i costi senza toccare lo stop, e lo stop.
+    const stopAtrDi = (s: string, b: IntradayBar[]) => { const a = atr(b, 14); const last = b.at(-1)?.close; const min = isCrypto(s) ? c.minStopPct.crypto : c.minStopPct.stocks; return a !== null && last ? Math.max(min, (c.stopAtr * a) / last) : min; };
+    const daCampioni = (s: string, tf: string, b: IntradayBar[], candele: number) => {
+      const grezzi = this.kCache.get(`${s}|${tf}`)?.campioni;
+      if (!grezzi || grezzi.length < c.percorsi.minCampioni) return null;
+      const cs = grezzi.map((r) => attuale(s, tf, r));
+      return letturaCampioni(cs, candele, costoVero(s), isCrypto(s) ? c.minStopPct.crypto : c.minStopPct.stocks, stopAtrDi(s, b), c.percorsi.quantileStop);
+    };
+    // Con i percorsi: 0,5 + fattore × (quota − 0,5), la quota con mezzo percorso in più per parte (16 su 16 non fa 100%).
+    // Senza: Φ(fattore × z), z = (rialzo previsto − costi) / (volatilità × √candele).
     const probNetta = (s: string, tf: string, b: IntradayBar[], k: number, candele: number) => {
+      const lc = daCampioni(s, tf, b, candele);
+      if (lc) {
+        const q = (lc.sopra + 0.5) / (lc.tot + 1);
+        return Math.min(0.99, Math.max(0.01, 0.5 + affOf(tf, s).fattore * c.percorsi.prudenza * (q - 0.5)));
+      }
       const sd = sdOf(b);
       if (sd === null || sd <= 0) return null;
       const z = (k - costoVero(s)) / (sd * Math.sqrt(candele));
-      return 0.5 * (1 + erf((affOf(tf).fattore * z) / Math.SQRT2));
+      return 0.5 * (1 + erf((affOf(tf, s).fattore * z) / Math.SQRT2));
     };
-    // La coppia candela + orizzonte migliore tra quelle che stanno nel tempo rimasto: prima chi copre i costi, poi la probabilità.
-    const migliore = (s: string, tf: string, path: number[], b: IntradayBar[], disponibili: number) => {
+    // Probabilità che il prezzo salga (per tenere, incassare o tagliare una posizione): con i percorsi la quota che chiude
+    // sopra il prezzo di adesso, avvicinata a 50% come quella d'ingresso; senza, Φ(z) della media.
+    const probSale = (s: string, tf: string, b: IntradayBar[], k: number, candele: number) => {
+      const grezzi = this.kCache.get(`${s}|${tf}`)?.campioni;
+      if (grezzi && grezzi.length >= c.percorsi.minCampioni) {
+        const righe = grezzi.map((r) => attuale(s, tf, r)).filter((r) => r.length >= candele);
+        if (righe.length) {
+          const q = (righe.filter((r) => r[candele - 1]! > 0).length + 0.5) / (righe.length + 1);
+          return Math.min(0.99, Math.max(0.01, 0.5 + affOf(tf, s).fattore * c.percorsi.prudenza * (q - 0.5)));
+        }
+      }
+      return probOf(b, k, candele);
+    };
+    // La candela su cui si segue una posizione: la più breve (LOWER) solo se Kronos lì ha un vantaggio misurato (almeno
+    // minCampioneContro previsioni e nessuna regola di «senza vantaggio») e, per le azioni, se è tra le loro candele;
+    // altrimenti la candela dell'operazione. Prima le uscite le decidevano le 15 minuti, che il motore escludeva dagli
+    // ingressi perché non rendono: trade pensati per ore chiusi in pochi minuti sul rumore.
+    const controlloDi = (s: string, tf: string) => {
+      const lo = LOWER[tf];
+      if (!lo || !this.forecast) return lo ?? tf;
+      if (!(barsOf(s, lo)?.length)) return tf; // senza candele lì non si segue niente: la candela dell'operazione
+      const a = affOf(lo, s);
+      const ammessa = isCrypto(s) || c.candeleAzioni.includes(lo);
+      return ammessa && a.campione >= c.vantaggio.minCampioneContro && !senzaVantaggio(lo, s) ? lo : tf;
+    };
+    // L'orizzonte migliore di una candela tra quelli che stanno nel tempo rimasto: prima quelli con cui si può entrare
+    // (rialzo che copre i costi e probabilità ≥ soglia), poi la probabilità più alta, poi chi copre i costi.
+    const migliore = (s: string, tf: string, path: number[], b: IntradayBar[], disponibili: number, soglia: number = Number(valore("AGENTS.intraday.kronos.minProb", s))) => {
       const opz = orizzonti(tf).filter((o) => o.h <= disponibili && o.n <= path.length).map((o) => {
         const k = retAt(path, o.n);
         const fuori = !credibile(b, k, o.n);
-        return { ...o, k, pr: fuori ? null : probNetta(s, tf, b, k, o.n), fuori, passa: !fuori && k > 0 && k >= costoDi(s) };
+        return { ...o, k, pr: fuori ? null : probNetta(s, tf, b, k, o.n), fuori, passa: !fuori && k > 0 && k >= minRialzo(s, tf) };
       });
-      opz.sort((a, d) => Number(d.passa) - Number(a.passa) || Number(a.fuori) - Number(d.fuori) || (d.pr ?? 0) - (a.pr ?? 0) || d.k - a.k);
+      const entra = (x: (typeof opz)[number]) => x.passa && x.pr !== null && x.pr >= soglia;
+      opz.sort((a, d) => Number(entra(d)) - Number(entra(a)) || Number(a.fuori) - Number(d.fuori) || (d.pr ?? 0) - (a.pr ?? 0) || Number(d.passa) - Number(a.passa) || d.k - a.k);
       return opz[0] ?? null;
     };
 
@@ -341,6 +509,7 @@ export class IntradayAgent implements Agent {
       const letti: string[] = [];
       let sostegno: { tf: string; h: number; k: number; pr: number; stopPct: number } | null = null;
       for (const sup of SUPERIORI[tf] ?? []) {
+        if (senzaVantaggio(sup, s)) continue; // Kronos lì non indovina: non conferma e non blocca
         const path = mappa.get(`${s}|${sup}`);
         const b = barsOf(s, sup);
         if (!path || !b || b.length < 22) continue;
@@ -355,7 +524,7 @@ export class IntradayAgent implements Agent {
           continue;
         }
         const o = migliore(s, sup, path, b, disponibili);
-        if (o && o.passa && o.pr !== null && o.pr >= c.kronos.minProb && (!sostegno || o.pr > sostegno.pr)) sostegno = { tf: sup, h: o.h, k: o.k, pr: o.pr, stopPct: readBars(b, price, isCrypto(s)).stopPct };
+        if (o && o.passa && o.pr !== null && o.pr >= valore("AGENTS.intraday.kronos.minProb", s) && (!sostegno || o.pr > sostegno.pr)) sostegno = { tf: sup, h: o.h, k: o.k, pr: o.pr, stopPct: readBars(b, price, isCrypto(s)).stopPct };
       }
       return { contrari, letti, sostegno: contrari.length ? null : sostegno };
     };
@@ -363,13 +532,42 @@ export class IntradayAgent implements Agent {
     // Uscite, vincolanti: obiettivo, stop, media a 20 candele persa, fine giornata; e la candela più breve per decidere:
     // Kronos lì sopra dice se tenere (rialzo probabile: oltre l'obiettivo si lascia correre con lo stop alzato), se
     // incassare prima (calo che azzererebbe il guadagno) o se tagliare la perdita (calo che porta verso lo stop).
-    const lowK = await kronosOn([...mine].filter((s) => barsOf(s, LOWER[tfOfMine.get(s)!] ?? tfOfMine.get(s)!)?.length).map((s) => ({ s, tf: LOWER[tfOfMine.get(s)!] ?? tfOfMine.get(s)! })));
+    const lowK = await kronosOn([...mine].map((s) => ({ s, tf: controlloDi(s, tfOfMine.get(s)!) })).filter((x) => barsOf(x.s, x.tf)?.length));
     const supK = await kronosOn([...mine].flatMap((s) => (SUPERIORI[tfOfMine.get(s)!] ?? []).filter((sup) => (barsOf(s, sup)?.length ?? 0) >= 22).map((sup) => ({ s, tf: sup }))));
+    // Kronos anche sulla candela dell'operazione: serve a decidere, a fine giornata, se riportarla al giorno dopo.
+    const ownK = await kronosOn([...mine].filter((s) => (barsOf(s, tfOfMine.get(s)!)?.length ?? 0) >= 22).map((s) => ({ s, tf: tfOfMine.get(s)! })));
+    // Riporto al giorno dopo (il motore punta all'intraday: un trade si estende su più giorni solo così). A fine giornata
+    // (chiusura della borsa, durata massima delle crypto) si tiene se le proiezioni di Kronos sulle candele (la sua e le
+    // superiori, all'orizzonte più lungo) restano dentro la forchetta del trade: nessuna tocca lo stop e la più lunga vede
+    // ancora salire con probabilità sufficiente. Il giorno dopo decidono di nuovo le candele, con una nuova finestra.
+    const riportabile = (s: string, tf: string, price: number, op: Operazione): { ok: boolean; perche: string; h?: number } => {
+      const r = c.riporto;
+      if (!r.enabled) return { ok: false, perche: "riporto spento" };
+      if ((op.riporti ?? 0) >= r.maxRiporti) return { ok: false, perche: `già riportata ${op.riporti} volte` };
+      if (price <= op.stop) return { ok: false, perche: "sullo stop" };
+      if (!isCrypto(s)) { const tri = prossimaTrimestrale(s, v.today); if (tri && tri.date <= addTradingDays(v.today, 1)) return { ok: false, perche: `trimestrale il ${tri.date}` }; }
+      const letture: { t: string; n: number; k: number; min: number; pr: number | null }[] = [];
+      for (const t of [tf, ...(SUPERIORI[tf] ?? [])]) {
+        const path = (t === tf ? ownK : supK).get(`${s}|${t}`);
+        const b = barsOf(s, t);
+        if (!path?.length || !b || b.length < 22) continue;
+        const k = retAt(path, path.length);
+        if (!credibile(b, k, path.length)) continue;
+        letture.push({ t, n: path.length, k, min: Math.min(...path), pr: probSale(s, t, b, k, path.length) });
+      }
+      if (!letture.length) return { ok: false, perche: "nessuna proiezione di Kronos sulle candele per decidere" };
+      const tocca = letture.find((x) => price * (1 + x.min) <= op.stop);
+      if (tocca) return { ok: false, perche: `sulle candele ${tocca.t} Kronos vede fino a ${pct(tocca.min)}: arriverebbe allo stop` };
+      const lunga = letture.at(-1)!;
+      const dove = `candele ${lunga.t} a ${etichetta(lunga.n * tfMinutes(lunga.t))}`;
+      if (lunga.k <= 0 || (lunga.pr ?? 0) < r.minProb) return { ok: false, perche: `Kronos sulle ${dove} ${pct(lunga.k)}${lunga.pr !== null ? ` (${Math.round(lunga.pr * 100)}% al rialzo)` : ""}: non abbastanza per tenerla` };
+      return { ok: true, h: lunga.n * tfMinutes(lunga.t), perche: `Kronos sulle ${dove} ${pct(lunga.k)} (${Math.round((lunga.pr ?? 0) * 100)}% al rialzo), senza toccare lo stop ${num(op.stop)}` };
+    };
     for (const s of mine) {
       const p = held.get(s)!;
       const price = v.prices[s] ?? p.currentPrice;
       const tf = tfOfMine.get(s)!;
-      const lo = LOWER[tf] ?? tf;
+      const lo = controlloDi(s, tf);
       const b = barsOf(s, tf) ?? [];
       const read = b.length ? readBars(b, price, isCrypto(s)) : null;
       let op = this.operazioni.get(s);
@@ -377,7 +575,7 @@ export class IntradayAgent implements Agent {
       if (!op && salvati) {
         // Processo ripartito: l'operazione riprende con i livelli salvati nel diario all'ingresso.
         const aperta = v.journal.trade.find((t) => t.simbolo === s && t.stato === "aperto")?.apertoIl;
-        op = { simbolo: s, candela: salvati.candela, giorno: v.today, ...(aperta ? { aperta } : {}), ingresso: p.avgEntryPrice, obiettivo: salvati.obiettivo, stop: salvati.stop, ...(salvati.orizzonteMin !== undefined ? { orizzonteMin: salvati.orizzonteMin } : {}), sopraMedia: salvati.sopraMedia ?? false, ...(salvati.sostegno ? { sostegno: { ...salvati.sostegno } } : {}) };
+        op = { simbolo: s, candela: salvati.candela, giorno: v.today, ...(aperta ? { aperta } : {}), ingresso: p.avgEntryPrice, obiettivo: salvati.obiettivo, stop: salvati.stop, ...(salvati.orizzonteMin !== undefined ? { orizzonteMin: salvati.orizzonteMin } : {}), sopraMedia: salvati.sopraMedia ?? false, ...(salvati.sostegno ? { sostegno: { ...salvati.sostegno } } : {}), ...(salvati.riporti ? { riporti: salvati.riporti } : {}), ...(salvati.rinnovo ? { rinnovo: salvati.rinnovo } : {}), ...(salvati.riportoGiorno ? { riportoGiorno: salvati.riportoGiorno } : {}), ...(salvati.massimo ? { massimo: salvati.massimo } : {}) };
         this.operazioni.set(s, op);
       }
       if (!op) {
@@ -396,13 +594,15 @@ export class IntradayAgent implements Agent {
       const bl = barsOf(s, lo);
       const klRaw = kpath ? retAt(kpath, nl) : undefined;
       const kl = klRaw !== undefined && (!bl || credibile(bl, klRaw, nl)) ? klRaw : undefined;
-      const pl = kl !== undefined && bl ? probOf(bl, kl, nl) : null;
+      const pl = kl !== undefined && bl ? probSale(s, lo, bl, kl, nl) : null;
       const orizzonteCtrl = etichetta(nl * tfMinutes(lo));
       const controllo = kl !== undefined ? `candele ${lo} a ${orizzonteCtrl}: Kronos ${pct(kl)}${pl !== null ? ` (${Math.round(pl * 100)}% al rialzo)` : ""}` : `candele ${lo}: nessuna proiezione`;
       const margine = isCrypto(s) ? AGENTS.protezioneProfitto.margine.crypto : AGENTS.protezioneProfitto.margine.stocks;
       // Pareggio: a una buona parte della strada verso l'obiettivo lo stop sale sopra il carico (salvato anche nel diario).
       if (c.pareggio.enabled && gain > 0) {
-        const pareggio = op.ingresso * (1 + margine / 2);
+        // Sopra i costi di andata e ritorno: per le crypto metà margine (+0,3%) stava sotto lo 0,4% di costi, e il trade
+        // «che non chiude in perdita» chiudeva a −0,1%.
+        const pareggio = op.ingresso * (1 + Math.max(margine / 2, costoVero(s) * 1.25));
         const soglia = Math.max(c.pareggio.quota * (op.obiettivo / op.ingresso - 1), 2 * margine);
         if (op.stop < pareggio && gain >= soglia) {
           op.stop = pareggio;
@@ -411,8 +611,28 @@ export class IntradayAgent implements Agent {
           note.push(`${s}: stop portato in pareggio (${num(pareggio)}) a ${pct(gain)} dall'ingresso: il trade non chiuderà in perdita`);
         }
       }
+      // Lascia correre (intraday.lasciaCorrere): il massimo dall'ingresso; dopo il pareggio lo stop segue il massimo a
+      // trailingAtr ATR della candela dell'operazione (mai giù), così un trade in guadagno resta aperto finché sale e si
+      // chiude quando ritraccia davvero, sempre in guadagno. Lo stop nuovo va anche su Alpaca e nel diario.
+      const lc = c.lasciaCorrere;
+      op.massimo = Math.max(op.massimo ?? op.ingresso, price);
+      const lvAperto = () => v.journal.trade.find((t) => t.simbolo === s && t.stato === "aperto")?.contesto?.livelli;
+      const salvaStop = () => { const lv = lvAperto(); if (lv) { lv.stop = op.stop; lv.massimo = op.massimo; } };
+      // L'ATR della candela di controllo (più breve, più reattiva: per un trade su 4 ore quella da 1 ora), se no la sua.
+      const atrSegue = (bl && bl.length > 15 ? atr(bl, 14) : null) ?? read?.atr ?? null;
+      if (lc.enabled && op.stop >= op.ingresso && atrSegue) {
+        const segue = op.massimo - lc.trailingAtr * atrSegue;
+        if (segue > op.stop && segue < price) {
+          op.stop = segue;
+          salvaStop();
+        }
+      }
       const why = (m: string) => `${s} intraday (${tf}, controllo su ${lo}): ${m}`;
       let motivo: string | null = null;
+      // Uscite «morbide» (obiettivo raggiunto senza altro rialzo, Kronos che vede un piccolo calo, orizzonte scaduto, medie
+      // perse): su un trade in guadagno non chiudono subito, vedi sotto. Quelle «dure» (stop, fine giornata, difesa,
+      // perdita che peggiora) sì.
+      let morbido: string | null = null;
       // Le candele superiori: se sono a favore, un calo sulle candele brevi è rumore e non chiude l'operazione; se girano
       // contro, il trade torna alle regole della candela breve (e di solito si chiude per orizzonte scaduto o media persa).
       const sup = leggiSuperiori(s, tf, supK, Math.max(minutiPer(s), 0), price);
@@ -430,12 +650,26 @@ export class IntradayAgent implements Agent {
       if (price >= op.obiettivo && corre) {
         // Oltre l'obiettivo e Kronos vede ancora salire (sulla candela breve o sulle superiori): si lascia correre, lo stop sale a metà strada.
         op.stop = Math.max(op.stop, op.ingresso * (1 + margine), price - (price - op.ingresso) / 2);
-      } else if (price >= op.obiettivo) motivo = `obiettivo raggiunto: ${num(price)} ≥ ${num(op.obiettivo)} (${pct(gain)} dall'ingresso)${kl !== undefined ? `; sulle candele ${lo} Kronos non vede altro rialzo` : ""}`;
+      } else if (price >= op.obiettivo) morbido = `obiettivo raggiunto: ${num(price)} ≥ ${num(op.obiettivo)} (${pct(gain)} dall'ingresso)${kl !== undefined ? `; sulle candele ${lo} Kronos non vede altro rialzo` : ""}`;
       if (!motivo) {
         if (v.giornata?.difesa && !corre) motivo = `difesa del guadagno del giorno: il conto è tornato a ${pct(v.giornata.pnlPct)} dopo aver toccato ${pct(v.giornata.picco ?? AGENTS.daily.targetPct)} e Kronos non vede più salire: si vende a ${pct(gain)}`;
         else if (price <= op.stop) motivo = `stop intraday: ${num(price)} ≤ ${num(op.stop)} (${pct(gain)})`;
         else if (mustClose(s)) {
-          const prom = promuovibile(v, s, gain);
+          const rip = riportabile(s, tf, price, op);
+          if (rip.ok) {
+            // Le proiezioni restano dentro la forchetta: si tiene fino al giorno dopo, poi decidono di nuovo le candele.
+            op.riporti = (op.riporti ?? 0) + 1;
+            op.rinnovo = v.now.toISOString();
+            op.riportoGiorno = v.today;
+            op.orizzonteMin = rip.h;
+            op.sostegno = undefined;
+            const lv = v.journal.trade.find((t) => t.simbolo === s && t.stato === "aperto")?.contesto?.livelli;
+            if (lv) { lv.riporti = op.riporti; lv.rinnovo = op.rinnovo; lv.riportoGiorno = op.riportoGiorno; lv.orizzonteMin = op.orizzonteMin; delete lv.sostegno; }
+            note.push(`${s}: operazione riportata al giorno dopo (${op.riporti}ª volta): ${rip.perche}`);
+            stati.push({ simbolo: s, candela: tf, fase: "in posizione", ingresso: op.ingresso, obiettivo: op.obiettivo, stop: op.stop, prezzo: price, motivo: `riportata al giorno dopo: ${rip.perche}; domani decidono di nuovo le candele (obiettivo ${num(op.obiettivo)}, stop ${num(op.stop)}, ${pct(gain)})` });
+            continue;
+          }
+          const prom = c.riporto.enabled ? { ok: false, perche: rip.perche } : promuovibile(v, s, gain);
           if (prom.ok) {
             // Il trend continua e il metodo di più giorni la terrebbe: non si chiude, passa alle sue regole.
             const t = v.journal.trade.find((x) => x.simbolo === s && x.stato === "aperto");
@@ -448,19 +682,69 @@ export class IntradayAgent implements Agent {
           motivo = `${isCrypto(s) ? `${c.cryptoOreMax} ore dall'ingresso, durata massima` : "chiusura della borsa vicina"}: si chiude a ${pct(gain)} dall'ingresso (${prom.perche})`;
         }
         else if (appoggio) motivo = null; // trade di trend: valgono solo obiettivo, stop e fine giornata finché le candele superiori sono a favore
-        else if (AGENTS.protezioneProfitto.enabled && kl !== undefined && kl < 0 && gain > margine && (1 + gain) * (1 + kl) - 1 <= margine) motivo = `protezione del profitto: +${(gain * 100).toFixed(2)}% in tasca, ma Kronos vede ${pct(kl)} nei prossimi ${orizzonteCtrl} (candele ${lo}), che lo azzererebbe: si incassa adesso`;
+        else if (morbido) { /* già deciso sopra: obiettivo raggiunto */ }
+        else if (AGENTS.protezioneProfitto.enabled && kl !== undefined && kl < 0 && gain > margine && (1 + gain) * (1 + kl) - 1 <= margine) morbido = `protezione del profitto: +${(gain * 100).toFixed(2)}% in tasca, ma Kronos vede ${pct(kl)} nei prossimi ${orizzonteCtrl} (candele ${lo}), che lo azzererebbe: si incassa adesso`;
         else if (kl !== undefined && gain < 0 && kl < 0 && (pl ?? 1) <= 0.35 && price * (1 + kl) <= price - (price - op.stop) / 2) motivo = `taglio della perdita: ${pct(gain)} e sulle candele ${lo} Kronos vede ancora ${pct(kl)} (rialzo solo al ${Math.round((pl ?? 0) * 100)}%), metà strada verso lo stop: si esce prima`;
-        else if (op.orizzonteMin !== undefined && (apertaDa(s) ?? 0) >= op.orizzonteMin * c.scadenzaOrizzonte && !corre) motivo = `orizzonte di Kronos scaduto (${etichetta(op.orizzonteMin)} × ${c.scadenzaOrizzonte}) senza raggiungere l'obiettivo e senza rialzo ancora probabile: si chiude a ${pct(gain)}`;
-        else if (op.sopraMedia && read?.ema20 && b.length >= 2 && b[b.length - 1]!.close < read.ema20 && b[b.length - 2]!.close < read.ema20 && !corre) motivo = `due candele chiuse sotto la media a 20 (${num(read.ema20)}): il movimento è finito (${pct(gain)})`;
+        else if (op.orizzonteMin !== undefined && (apertaDa(s) ?? 0) >= op.orizzonteMin * c.scadenzaOrizzonte && !corre) morbido = `orizzonte di Kronos scaduto (${etichetta(op.orizzonteMin)} × ${c.scadenzaOrizzonte}) senza raggiungere l'obiettivo e senza rialzo ancora probabile: si chiude a ${pct(gain)}`;
+        else if (op.sopraMedia && read?.ema20 && b.length >= 2 && b[b.length - 1]!.close < read.ema20 && b[b.length - 2]!.close < read.ema20 && !corre) morbido = `due candele chiuse sotto la media a 20 (${num(read.ema20)}): il movimento è finito (${pct(gain)})`;
       }
+      // Lascia correre: un'uscita morbida su un trade in guadagno oltre lascia.minGuadagnoCosti volte i costi non chiude
+      // subito. Lo stop sale per tenere almeno `blocca` del guadagno di adesso (sempre sopra i costi: se scatta, il trade
+      // chiude comunque in guadagno) e l'uscita aspetta la conferma: la stessa ragione per `conferma` candele di controllo
+      // di fila. Se nel frattempo la ragione sparisce (Kronos torna a vedere salire) si riparte da zero; se il prezzo scende
+      // allo stop, chiude lo stop. Un trade con poco o nessun guadagno esce subito, come prima.
+      let attesa = "";
+      if (motivo) this.attese.delete(s);
+      else if (morbido) {
+        if (lc.enabled && gain > lc.minGuadagnoCosti * costoVero(s)) {
+          const blocco = op.ingresso * (1 + Math.max(costoVero(s) * 1.5, lc.blocca * gain));
+          if (blocco > op.stop && blocco < price) {
+            op.stop = blocco;
+            salvaStop();
+          }
+          // Si conta per candele chiuse (della candela di controllo, o dell'operazione se lì non ci sono), non per giri.
+          const chiave = barsOf(s, lo)?.at(-1)?.t ?? barsOf(s, tf)?.at(-1)?.t ?? v.now.toISOString();
+          // Un massimo nuovo nel frattempo vuol dire che il trade funziona ancora: si riparte da 1 (si esce quando il prezzo
+          // smette di salire, non dopo 2 candele qualunque).
+          const a = this.attese.get(s);
+          const n = a && op.massimo! <= a.massimo * (1 + 1e-6) ? (a.chiave !== chiave ? a.n + 1 : a.n) : 1;
+          this.attese.set(s, { chiave, n, motivo: morbido, massimo: op.massimo! });
+          if (n >= lc.conferma) {
+            motivo = `${morbido} (confermato su ${n} candele ${lo})`;
+            this.attese.delete(s);
+          } else attesa = `in attesa di conferma (${n} di ${lc.conferma} candele ${lo}): ${morbido}; intanto lo stop è salito a ${num(op.stop)} per tenere almeno ${pct(op.stop / op.ingresso - 1)}`;
+        } else motivo = morbido;
+      } else this.attese.delete(s);
       if (motivo) segnali.push({ agente: this.name, simbolo: s, lato: "sell", forza: 1, orizzonteSedute: 1, vincolante: true, intraday: true, perche: why(motivo) });
-      stati.push({ simbolo: s, candela: tf, controllo: [controllo, superiori].filter(Boolean).join(" · "), fase: "in posizione", ingresso: op.ingresso, obiettivo: op.sostegno?.obiettivo ?? op.obiettivo, stop: op.stop, prezzo: price, motivo: motivo ?? `${corre && price >= op.obiettivo ? "oltre l'obiettivo, si lascia correre" : appoggio ? `trade di trend sostenuto dalle candele ${op.sostegno!.tf}` : "in corsa"}: obiettivo ${num(op.obiettivo)}${op.sostegno ? `, poi ${num(op.sostegno.obiettivo)} (candele ${op.sostegno.tf})` : ""}, stop ${num(op.stop)}, ${pct(gain)}` });
+      else if (!appoggio && !corre && pl !== null) deboli.push({ s, pl, gain, valore: p.qty * price, minuti: apertaDa(s) ?? 0, tf: lo });
+      stati.push({ simbolo: s, candela: tf, controllo: [controllo, superiori].filter(Boolean).join(" · "), fase: "in posizione", ingresso: op.ingresso, obiettivo: op.sostegno?.obiettivo ?? op.obiettivo, stop: op.stop, prezzo: price, motivo: motivo ?? (attesa || `${op.riporti ? `riportata ${op.riporti === 1 ? "una volta" : `${op.riporti} volte`} al giorno dopo · ` : ""}${corre && price >= op.obiettivo ? "oltre l'obiettivo, si lascia correre" : appoggio ? `trade di trend sostenuto dalle candele ${op.sostegno!.tf}` : "in corsa"}: obiettivo ${num(op.obiettivo)}${op.sostegno ? `, poi ${num(op.sostegno.obiettivo)} (candele ${op.sostegno.tf})` : ""}, stop ${num(op.stop)}, ${pct(gain)}`) });
     }
 
     // Ingressi: per ogni candidato e ogni candela che sta nel tempo rimasto, 1) medie brevi (EMA 9 sopra EMA 20, prezzo sopra
     // la 9) o rottura/rientro, obiettivo raggiungibile e rapporto obiettivo/stop; 2) Kronos sulle prossime candele, letto a più
     // orizzonti (minuti e ore): si sceglie la coppia candela + orizzonte che copre i costi con la probabilità più alta. 3) In parte il grafico superiore e il Kronos a 5 sedute: contrari, taglia dimezzata.
-    interface Prova { tf: string; read: ReturnType<typeof readBars>; breve: boolean; ok: string | null; reward: number; expected: number }
+    interface Prova { tf: string; read: ReturnType<typeof readBars>; breve: boolean; ok: string | null; reward: number; expected: number; movimento: number }
+    // Rimbalzo di breve: sotto la media a 50 giorni dopo un calo netto improvviso (ultimo giorno, ultimi giorni o ultime
+    // ore sulle candele da 1 ora). Le medie brevi della candela di solito non sono ancora in ordine: decide Kronos sulle
+    // candele con probabilità ≥ AGENTS.rimbalzo.minFiducia (invece di minProbSenzaGrafico), e le sue proiezioni si
+    // calcolano a ogni analisi, senza aspettare il turno.
+    const rimbalzi = new Map<string, { calo: number; quando: string }>();
+    for (const s of candidates) { const r = caloNetto(s, v.closes[s], v.prices[s], barsOf(s, "1Hour")?.map((b) => b.close)); if (r.ok) rimbalzi.set(s, { calo: r.calo!, quando: r.quando! }); }
+    const fmtCalo = (s: string) => `rimbalzo dopo un calo del ${pct(rimbalzi.get(s)!.calo)} ${rimbalzi.get(s)!.quando}, sotto la media a ${LIMITS.trendSmaDays} giorni`;
+    // Scaletta della prudenza secondo le medie giornaliere: sotto le medie si investe lo stesso, con taglie più piccole.
+    const livMedie = (s: string) => { const l = livelloMedie(v.closes[s], v.prices[s]); return l ? ["sopra", "sotto50", "sotto200", "sottoEntrambe"].indexOf(l.livello) : -1; };
+    const prudenza = (s: string) => { const l = livelloMedie(v.closes[s], v.prices[s]); return l ? { f: AGENTS.prudenzaMedie.intraday[l.livello], etichetta: l.etichetta } : { f: 1, etichetta: "" }; };
+    // Le informazioni del dossier (o, senza, il contesto del settore) pesano una parte minima nella probabilità con cui
+    // si decide l'ingresso: (1 − peso) × Kronos sulle candele + peso × evidenza.
+    const evidenzaDi = (s: string): { ev: number; fonte: string } | null => {
+      const d = v.dossier?.[s];
+      if (d !== undefined) return { ev: d, fonte: `dossier ${Math.round(d * 100)}%` };
+      const cx = v.contesto;
+      if (!cx) return null;
+      const o = cx.attendi[s] ? "sfavorevole" : cx.settori[sectorOf(s)] ?? cx.generale;
+      return { ev: o === "favorevole" ? 0.6 : o === "sfavorevole" ? 0.4 : 0.5, fonte: `contesto ${o}` };
+    };
+    const conEvidenza = (s: string, p: number | null) => { const e = evidenzaDi(s); return p === null || !e ? p : (1 - c.evidenza.peso) * p + c.evidenza.peso * e.ev; };
     const prove = new Map<string, Prova[]>();
     for (const s of candidates) {
       const price = v.prices[s]!;
@@ -474,15 +758,46 @@ export class IntradayAgent implements Agent {
         const remainingBars = Math.max(0, minutiPer(s) / tfMinutes(tf));
         const expected = read.atr !== null ? (read.atr * Math.sqrt(Math.max(1, remainingBars))) / price : 0;
         const reward = read.targetPct / read.stopPct;
+        // Movimento: la volatilità della candela sull'orizzonte più lungo che sta nel tempo rimasto deve arrivare almeno a
+        // movimentoMin × due volte i costi, se no nemmeno un percorso tipico coprirebbe i costi: non vale una proiezione.
+        const sd = sdOf(b);
+        const nMax = Math.max(0, ...orizzonti(tf).filter((o) => o.h <= minutiPer(s)).map((o) => o.n));
+        const movimento = sd !== null && nMax > 0 ? sd * Math.sqrt(nMax) : null;
+        const fermo = this.forecast !== null && movimento !== null && movimento < c.selezione.movimentoMin * minRialzo(s, tf);
         // Con Kronos obiettivo e rapporto con lo stop si decidono sul rialzo previsto (più sotto); senza, sull'ATR.
-        const ok = tfMinutes(tf) > minutiPer(s) ? `la candela ${tf} è più lunga del tempo rimasto (${etichetta(Math.max(0, minutiPer(s)))}): non può completarsi in giornata` : !breve && !read.entra && !this.forecast ? `medie brevi non in ordine sulle candele ${tf} (serve EMA 9 sopra EMA 20 e prezzo sopra la 9) e ${read.pattern}` : /troppo esteso/.test(read.pattern) ? read.pattern : this.forecast ? null : reward < c.rapportoMin ? `rapporto obiettivo/stop ${reward.toFixed(2)} troppo basso (${tf})` : expected < read.targetPct * 0.8 ? `obiettivo ${pct(read.targetPct)} non raggiungibile entro la chiusura sulle candele ${tf} (atteso ${pct(expected)})` : null;
-        list.push({ tf, read, breve, ok, reward, expected });
+        // Rientro sulla stessa candela con la stessa proiezione di Kronos di un trade di oggi già chiuso: no, quella
+        // proiezione ha già fatto il suo trade (spesso il rialzo previsto è già avvenuto); si aspetta la candela nuova.
+        const chiaveK = `${tf}|${b.at(-1)!.t}`;
+        const giaUsata = v.journal.trade.find((t) => t.simbolo === s && t.stato === "chiuso" && t.contesto?.livelli?.previsione === chiaveK && t.apertoIl && romeTime(new Date(t.apertoIl)).date === v.today);
+        const ok = giaUsata ? `rientro: la proiezione di Kronos sulle candele ${tf} (chiusa alle ${(() => { const m = romeTime(new Date(Date.parse(b.at(-1)!.t) + tfMinutes(tf) * 60_000)).minutes; return `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`; })()}) ha già fatto il suo trade: si aspetta la candela nuova` : fermo ? `sulle candele ${tf} il prezzo si muove troppo poco per coprire i costi (tipicamente ${pct(movimento!).replace("+", "±")} in ${etichetta(nMax * tfMinutes(tf))}, servono ${pct(minRialzo(s, tf))}${breveCrypto(s, tf) ? `: crypto su candele brevi, ${quanteVolte(s, tf)} volte i costi` : ""}): non si proietta` : senzaVantaggio(tf, s) ? `Kronos sulle candele ${tf} senza vantaggio misurato (direzione giusta ${Math.round((affOf(tf, s).giusti ?? affOf(tf, s).quota) * 100)}% su ${affOf(tf, s).campione} previsioni${affOf(tf, s).resa !== undefined && affOf(tf, s).resa !== null ? `, resa media ${pct(affOf(tf, s).resa!)}` : ""}): per ora qui non si entra, si continua a misurare` : tfMinutes(tf) > minutiPer(s) ? `la candela ${tf} è più lunga del tempo rimasto (${etichetta(Math.max(0, minutiPer(s)))}): non può completarsi in giornata` : !breve && !read.entra && !this.forecast ? `medie brevi non in ordine sulle candele ${tf} (serve EMA 9 sopra EMA 20 e prezzo sopra la 9) e ${read.pattern}` : /troppo esteso/.test(read.pattern) ? read.pattern : this.forecast ? null : reward < c.rapportoMin ? `rapporto obiettivo/stop ${reward.toFixed(2)} troppo basso (${tf})` : expected < read.targetPct * 0.8 ? `obiettivo ${pct(read.targetPct)} non raggiungibile entro la chiusura sulle candele ${tf} (atteso ${pct(expected)})` : null;
+        list.push({ tf, read, breve, ok, reward, expected, movimento: movimento !== null ? movimento / minRialzo(s, tf) : 0 });
       }
       prove.set(s, list);
     }
-    // Kronos per le coppie titolo-candela valide, fino a perGiro coppie: prima rotture e rientri, poi medie brevi in ordine,
-    // poi quelle dove decide Kronos da solo (grafico della candela non ancora allineato).
-    const pairs = [...prove].flatMap(([s, l]) => l.filter((x) => x.ok === null).map((x) => ({ s, tf: x.tf, rank: x.read.entra ? 0 : x.breve ? 1 : 2 }))).sort((a, b) => a.rank - b.rank).slice(0, c.kronos.perGiro);
+    // Kronos per le coppie titolo-candela valide. Le coppie con una proiezione ancora valida (nessuna candela nuova) non
+    // costano: si tengono tutte. Delle altre, per ogni candela al massimo selezione.perCandela a giro (meno titoli, più
+    // qualità): prima rotture e rientri, poi medie brevi in ordine e rimbalzi, poi le altre; a parità la probabilità vista
+    // all'ultima proiezione e il movimento rispetto ai costi. `esplora` posti vanno a rotazione alle altre, così ogni
+    // coppia ha la sua proiezione entro qualche giro.
+    const tutte = [...prove].flatMap(([s, l]) => l.filter((x) => x.ok === null).map((x) => ({ s, tf: x.tf, rank: x.read.entra ? 0 : x.breve || rimbalzi.has(s) ? 1 : 2, prima: this.ultimaProb.get(`${s}|${x.tf}`) ?? 0.5, movimento: x.movimento })));
+    tutte.sort((a, b) => a.rank - b.rank || b.prima - a.prima || b.movimento - a.movimento);
+    const valida = (x: { s: string; tf: string }) => { const b = barsOf(x.s, x.tf); return !!b?.length && this.kCache.get(`${x.s}|${x.tf}`)?.chiave === `${x.tf}|${b.at(-1)!.t}`; };
+    const daFare = tutte.filter((x) => !valida(x));
+    const giro = (this.giroKronos = this.giroKronos + 1);
+    const scelte: { s: string; tf: string }[] = [];
+    for (const tf of new Set(daFare.map((x) => x.tf))) {
+      const fila = daFare.filter((x) => x.tf === tf);
+      const max = c.selezione.perCandela[tf] ?? 8;
+      const esplora = Math.min(c.selezione.esplora, Math.max(0, fila.length - max));
+      const primi = fila.slice(0, max - esplora);
+      const resto = fila.slice(max - esplora);
+      const ruota = resto.length ? [...resto.slice((giro * esplora) % resto.length), ...resto.slice(0, (giro * esplora) % resto.length)].slice(0, esplora) : [];
+      scelte.push(...primi, ...ruota);
+    }
+    // Le candele senza vantaggio si proiettano poco, solo per continuare a misurarle.
+    const misura = [...prove].flatMap(([s, l]) => l.filter((x) => senzaVantaggio(x.tf, s)).map((x) => ({ s, tf: x.tf }))).filter((x) => !valida(x));
+    const daMisurare = misura.length ? [...misura.slice((giro * c.vantaggio.misuraPerGiro) % misura.length), ...misura.slice(0, (giro * c.vantaggio.misuraPerGiro) % misura.length)].slice(0, c.vantaggio.misuraPerGiro) : [];
+    const pairs = [...tutte.filter(valida), ...scelte.slice(0, c.kronos.perGiro), ...daMisurare];
     const kIn = await kronosOn(pairs);
     // Vittorie per candela: dove gli ultimi trade intraday chiusi vincono meno dell'obiettivo, per entrare serve più probabilità.
     const vittorieDi = new Map<string, { n: number; v: number }>();
@@ -493,8 +808,12 @@ export class IntradayAgent implements Agent {
     }
     const extraVittorie = (tf: string) => { const g = vittorieDi.get(tf); if (!g || g.n < c.vittorie.minimo) return 0; const q = g.v / g.n; return q >= c.vittorie.obiettivo ? 0 : q < c.vittorie.obiettivo - 0.11 ? 2 * c.vittorie.passo : c.vittorie.passo; };
     for (const [k, g] of vittorieDi) if (g.n >= c.vittorie.minimo && g.v / g.n < c.vittorie.obiettivo) note.push(`candele ${k}: ${g.v} vinti su ${g.n} (${Math.round((g.v / g.n) * 100)}%), sotto l'obiettivo del ${Math.round(c.vittorie.obiettivo * 100)}%: per entrare serve +${Math.round(extraVittorie(k) * 100)} punti di probabilità`);
+    // Probabilità minima per entrare: con le medie brevi in ordine (o rottura/rientro) quella della persona; senza, quella
+    // più alta di minProbSenzaGrafico, salvo il rimbalzo dopo un calo netto (AGENTS.rimbalzo.minFiducia).
+    // Dopo una perdita recente sul titolo la soglia sale di rientro.extraProb (rientro con più margine).
+    const sogliaDi = (s: string, grafico: boolean) => { const mp = Number(valore("AGENTS.intraday.kronos.minProb", s)); return (grafico ? mp : Math.max(rimbalzi.has(s) ? AGENTS.rimbalzo.minFiducia : c.kronos.minProbSenzaGrafico, mp)) + extraRientro(s); };
     // Candidate che hanno passato i controlli della loro candela: poi si guardano le candele superiori.
-    const pronti: { s: string; price: number; best: (typeof prove extends Map<string, (infer P)[]> ? P : never) & { k?: number; pr: number | null; h?: number; passa: boolean; fuori: boolean }; valutate: string; fc: number | undefined }[] = [];
+    const pronti: { s: string; price: number; best: (typeof prove extends Map<string, (infer P)[]> ? P : never) & { k?: number; pr: number | null; prGrezza?: number | null; h?: number; passa: boolean; fuori: boolean }; valutate: string; fc: number | undefined; stopIn: number }[] = [];
 
     for (const s of candidates) {
       const price = v.prices[s]!;
@@ -506,23 +825,38 @@ export class IntradayAgent implements Agent {
       const fc = v.previsioni?.[s];
       // Per ogni candela l'orizzonte migliore (da un quarto d'ora a ore, nel tempo rimasto); poi la coppia candela + orizzonte
       // che copre i costi con la probabilità di successo più alta (a parità, il rialzo previsto più grande).
+      const sogliaTf = (x: Prova) => sogliaDi(s, x.breve || x.read.entra) + extraVittorie(x.tf);
       const scored = list.map((x) => {
         const path = kIn.get(`${s}|${x.tf}`);
-        const o = path ? migliore(s, x.tf, path, barsOf(s, x.tf)!, minutiPer(s)) : null;
-        return { ...x, k: o?.k, pr: o?.pr ?? null, h: o?.h, passa: o?.passa ?? false, fuori: o?.fuori ?? false };
+        const b = barsOf(s, x.tf)!;
+        const o = path ? migliore(s, x.tf, path, b, minutiPer(s), sogliaTf(x)) : null;
+        // Dai percorsi di Kronos: quanti chiudono sopra i costi senza toccare lo stop, e lo stop (i peggiori).
+        const lc = o ? daCampioni(s, x.tf, b, o.n) : null;
+        // Probabilità calibrata sui risultati intraday del diario (uguale alla grezza finché la calibrazione non è attiva).
+        // Probabilità con cui si decide: Kronos sulle candele (calibrata) più una parte minima di dossier o contesto.
+        const pr = conEvidenza(s, o?.pr != null ? calibraP("intraday", o.pr) : null);
+        if (pr !== null && !o?.fuori) this.ultimaProb.set(`${s}|${x.tf}`, pr);
+        return { ...x, k: o?.k, pr, prGrezza: o?.pr ?? null, h: o?.h, passa: o?.passa ?? false, fuori: o?.fuori ?? false, lc };
       });
       const valide = scored.filter((x) => x.ok === null);
-      const conK = valide.filter((x) => x.k !== undefined).sort((a, b) => Number(b.passa) - Number(a.passa) || (b.pr ?? 0) - (a.pr ?? 0) || (b.k ?? 0) - (a.k ?? 0));
+      // La candela: prima quelle con cui si può entrare (rialzo oltre i costi e probabilità oltre la soglia), poi la
+      // probabilità più alta, poi chi copre i costi; non più «prima chi copre i costi», che sceglieva le candele lunghe
+      // anche dove Kronos indovina meno.
+      const entraCon = (x: (typeof scored)[number]) => x.passa && x.pr !== null && x.pr >= sogliaTf(x);
+      const conK = valide.filter((x) => x.k !== undefined).sort((a, b) => Number(entraCon(b)) - Number(entraCon(a)) || (b.pr ?? 0) - (a.pr ?? 0) || Number(b.passa) - Number(a.passa) || (b.k ?? 0) - (a.k ?? 0));
       const best = conK[0] ?? valide[0] ?? scored[0]!;
-      const valutate = this.forecast ? scored.filter((x) => x.pr !== null).map((x) => { const a = affOf(x.tf); return `${x.tf} a ${etichetta(x.h!)} ${pct(x.k!)} → ${Math.round(x.pr! * 100)}%${a.campione ? ` (Kronos giusto ${Math.round((a.giusti ?? a.quota) * 100)}% su ${a.campione}, affidabilità ×${a.fattore.toFixed(2)})` : ""}`; }).join(" · ") : "";
+      const valutate = this.forecast ? scored.filter((x) => x.pr !== null).map((x) => { const a = affOf(x.tf, s); return `${x.tf} a ${etichetta(x.h!)} ${pct(x.k!)} → ${Math.round(x.pr! * 100)}%${x.lc ? ` (${x.lc.sopra} percorsi su ${x.lc.tot} sopra i costi)` : ""}${a.campione ? ` (Kronos giusto ${Math.round((a.giusti ?? a.quota) * 100)}% su ${a.campione}, affidabilità ×${a.fattore.toFixed(2)})` : ""}`; }).join(" · ") : "";
       const { tf, read, k, pr, h } = best;
+      // Stop dell'ingresso: con i percorsi di Kronos quello dei peggiori (tra lo stop minimo e quello dell'ATR), senza
+      // quello dell'ATR (senza i salti tra le sedute).
+      const stopIn = best.lc ? best.lc.stop : read.stopPct;
       // Coerenza tra le candele: le altre candele già proiettate da Kronos, lette allo stesso orizzonte, non devono dire
       // il contrario. Se sulle candele da 5 minuti Kronos vede +1,5% in un'ora ma su quelle da 15 o da 1 ora vede un calo
       // nella stessa ora, il segnale è rumore della candela, non un'occasione.
       const discordi: string[] = [];
       if (k !== undefined && h !== undefined) {
         for (const x of scored) {
-          if (x.tf === tf) continue;
+          if (x.tf === tf || senzaVantaggio(x.tf, s)) continue;
           const path = kIn.get(`${s}|${x.tf}`);
           const n2 = Math.round(h / tfMinutes(x.tf));
           if (!path || n2 < 1 || n2 > path.length) continue;
@@ -534,16 +868,18 @@ export class IntradayAgent implements Agent {
       if (!motivo) {
         if (this.forecast && k === undefined) motivo = "in attesa della proiezione di Kronos sulle candele brevi";
         else if (best.fuori) motivo = `proiezione di Kronos sulle candele ${tf} fuori misura (${pct(k!)}): rumore del modello, non si usa`;
-        else if (k !== undefined && (!best.passa || (pr ?? 0) < (best.breve || read.entra ? c.kronos.minProb : c.kronos.minProbSenzaGrafico) + extraVittorie(tf))) motivo = `Kronos a ${etichetta(h!)} sulle candele ${tf}: ${pct(k)}${pr !== null ? `, probabilità ${Math.round(pr * 100)}%` : ""}: non basta (serve un rialzo di almeno ${pct(costoDi(s))}, ${AGENTS.costi.margineCosti} volte i costi, con probabilità ≥ ${Math.round((best.breve || read.entra ? c.kronos.minProb : c.kronos.minProbSenzaGrafico) * 100)}%${best.breve || read.entra ? "" : ": medie brevi della candela non ancora in ordine"}${extraVittorie(tf) ? `; +${Math.round(extraVittorie(tf) * 100)} punti perché sulle ${tf} si vince sotto il ${Math.round(c.vittorie.obiettivo * 100)}%` : ""})`;
+        else if (k !== undefined && (!best.passa || (pr ?? 0) < sogliaDi(s, best.breve || read.entra) + extraVittorie(tf))) motivo = `${rimbalzi.has(s) ? `${fmtCalo(s)}; ` : ""}Kronos a ${etichetta(h!)} sulle candele ${tf}: ${pct(k)}${pr !== null ? `, probabilità ${Math.round(pr * 100)}%` : ""}: non basta (serve un rialzo di almeno ${pct(minRialzo(s, tf))}, ${quanteVolte(s, tf)} volte i costi${breveCrypto(s, tf) ? " (crypto su candele brevi)" : ""}, con probabilità ≥ ${Math.round(sogliaDi(s, best.breve || read.entra) * 100)}%${best.breve || read.entra ? "" : rimbalzi.has(s) ? ": rimbalzo, medie brevi non ancora in ordine" : ": medie brevi della candela non ancora in ordine"}${extraVittorie(tf) ? `; +${Math.round(extraVittorie(tf) * 100)} punti perché sulle ${tf} si vince sotto il ${Math.round(c.vittorie.obiettivo * 100)}%` : ""})`;
         else if (k === undefined && !(fc !== undefined && fc >= AGENTS.kronos.anticipaSoglia / 2) && !read.entra) motivo = "senza Kronos intraday serve una rottura o un rientro";
         else if (discordi.length) motivo = `Kronos discorde tra le candele: a ${etichetta(h!)} sulle ${tf} ${pct(k!)}, ma sulle ${discordi.join(", ")}: non è un'occasione chiara`;
-        else if (k !== undefined && Math.max(minimoObiettivo(s), k) / read.stopPct < c.rapportoMin) motivo = `Kronos a ${etichetta(h!)} sulle candele ${tf}: ${pct(k)}, non abbastanza rispetto allo stop di ${pct(-read.stopPct)} (serve almeno ${c.rapportoMin} volte)`;
+        // Rapporto obiettivo/stop fisso solo con lo stop dell'ATR: con i percorsi di Kronos probabilità e stop vengono dalle
+        // stesse simulazioni e decide l'aspettativa (più sotto: probabilità × guadagno − resto × perdita allo stop > 0).
+        else if (k !== undefined && !best.lc && Math.max(costoDi(s), k) / stopIn < c.rapportoMin) motivo = `Kronos a ${etichetta(h!)} sulle candele ${tf}: ${pct(k)}, non abbastanza rispetto allo stop di ${pct(-stopIn)} (serve almeno ${c.rapportoMin} volte)`;
       }
       if (motivo) {
         stati.push({ simbolo: s, candela: tf, fase: "cerca ingresso", ingresso: null, obiettivo: null, stop: null, prezzo: price, motivo: `${motivo}${valutate ? ` · probabilità netta per candela: ${valutate}` : ""}` });
         continue;
       }
-      pronti.push({ s, price, best, valutate, fc });
+      pronti.push({ s, price, best, valutate, fc, stopIn });
     }
 
     // Le candele superiori delle candidate pronte su candele brevi (Kronos su 1 ora e 4 ore, ricalcolato solo a candela nuova).
@@ -556,7 +892,13 @@ export class IntradayAgent implements Agent {
     const inSerie = perditeDiFila >= c.serieNegativa.perdite;
     if (inSerie) note.push(`${perditeDiFila} operazioni intraday chiuse in perdita di fila oggi: taglia ×${c.serieNegativa.fattore} per il resto della giornata`);
 
-    for (const { s, price, best, valutate, fc } of pronti) {
+    // Tetto alle crypto: si muovono insieme, tante entrate nello stesso giro sono una scommessa sola. Le candidate pronte
+    // si guardano dalla più probabile; oltre maxIngressiGiro crypto nuove a giro (o maxAperte crypto intraday aperte in
+    // tutto) le altre aspettano il giro dopo.
+    pronti.sort((a, b) => (b.best.pr ?? 0) - (a.best.pr ?? 0));
+    const cryptoAperte = [...mine].filter(isCrypto).length;
+    let cryptoNuove = 0;
+    for (const { s, price, best, valutate, fc, stopIn } of pronti) {
       const { tf, read, k, pr, h } = best;
       // Triple Screen (Elder): la direzione la danno le candele superiori. Se Kronos su 1 ora o 4 ore vede un calo oltre i
       // costi, il rialzo sulle candele brevi va controcorrente e non si entra; se vede un rialzo netto probabile, il trade
@@ -568,47 +910,125 @@ export class IntradayAgent implements Agent {
         continue;
       }
       const ss = sup.sostegno;
-      const trend = ss !== null && k !== undefined && ss.k > k && Math.max(read.stopPct, ss.stopPct) > 0 && ss.k / Math.max(read.stopPct, ss.stopPct) >= c.rapportoMin ? ss : null;
-      const stopPct = trend ? Math.max(read.stopPct, trend.stopPct) : read.stopPct;
+      const trend = ss !== null && k !== undefined && ss.k > k && Math.max(stopIn, ss.stopPct) > 0 && ss.k / Math.max(stopIn, ss.stopPct) >= c.rapportoMin ? ss : null;
+      const stopPct = trend ? Math.max(stopIn, trend.stopPct) : stopIn;
       // Correttivi: il grafico superiore (prezzo sotto la sua EMA 20) e il Kronos a 5 sedute contrario dimezzano la taglia.
       const up = UP[tf] ?? "1Day";
       const ub = up === "1Day" ? null : barsOf(s, up);
       const eUp = up === "1Day" ? ema(v.closes[s] ?? [], 20) : ub ? ema(ub.map((x) => x.close), 20) : null;
       const correttivi: string[] = [];
       if (!best.breve && !read.entra) correttivi.push(`medie brevi delle candele ${tf} non ancora in ordine: decide Kronos`);
-      if (eUp !== null && price < eUp && !trend) correttivi.push(`grafico ${up === "1Day" ? "giornaliero" : `a ${up}`} sotto la sua media a 20`);
+      // Il grafico giornaliero lo pesa la scaletta delle medie (sotto); qui solo le candele superiori intraday.
+      if (up !== "1Day" && eUp !== null && price < eUp && !trend) correttivi.push(`grafico ${up === "1Day" ? "giornaliero" : `a ${up}`} sotto la sua media a 20`);
       if (this.forecast && fc !== undefined && fc <= -AGENTS.kronos.anticipaSoglia) correttivi.push(`Kronos a ${AGENTS.kronos.horizon} sedute ${pct(fc)}`);
+      // Indizi contrari (grafico superiore sotto la sua media, Kronos a 5 sedute al ribasso): sono informazioni sulla
+      // direzione, quindi tolgono punti di probabilità (taglia.penalitaIndizio ciascuno) invece di dimezzare la taglia. Se
+      // con gli indizi la probabilità scende sotto la soglia non si entra, con il motivo; se resta sopra, si entra con la
+      // taglia del rischio. «Medie brevi non in ordine» è già nella soglia più alta (minProbSenzaGrafico): non conta due volte.
+      const indizi = correttivi.filter((x) => !/medie brevi/.test(x));
+      const penalita = indizi.length * c.taglia.penalitaIndizio;
+      const prA = pr === null ? null : pr - penalita;
+      const sogliaQui = sogliaDi(s, best.breve || read.entra) + extraVittorie(tf);
+      if (penalita > 0 && prA !== null && prA < sogliaQui) {
+        stati.push({ simbolo: s, candela: tf, fase: "cerca ingresso", ingresso: null, obiettivo: null, stop: null, prezzo: price, motivo: `indizi contrari (${indizi.join(" e ")}): la probabilità scende da ${Math.round(pr! * 100)}% a ${Math.round(prA * 100)}%, sotto la soglia del ${Math.round(sogliaQui * 100)}% · probabilità netta per candela: ${valutate}` });
+        continue;
+      }
       // Obiettivo: il rialzo che Kronos prevede sull'orizzonte scelto (trade di pochi minuti su candele da 5 minuti, di ore
       // su quelle più lunghe), mai sotto il minimo dei costi; senza Kronos quello dell'ATR.
-      const targetPct = k !== undefined ? Math.max(minimoObiettivo(s), k) : read.targetPct;
+      // Con Kronos l'obiettivo è il rialzo previsto (mai sotto due volte i costi); senza, il minimo fisso o l'ATR.
+      const targetPct = k !== undefined ? Math.max(costoDi(s), k) : read.targetPct;
       // Aspettativa (Thorp): probabilità × guadagno netto − (1 − probabilità) × perdita allo stop (costi compresi) > 0.
-      const pE = trend ? trend.pr : pr;
+      const pE = trend ? trend.pr - penalita : prA;
       const gE = (trend ? trend.k : targetPct) - costoVero(s);
       const aspettativa = pE === null ? null : pE * gE - (1 - pE) * (stopPct + costoVero(s));
       if (aspettativa !== null && aspettativa <= 0) {
         stati.push({ simbolo: s, candela: tf, fase: "cerca ingresso", ingresso: null, obiettivo: null, stop: null, prezzo: price, motivo: `aspettativa negativa: ${Math.round(pE! * 100)}% × ${pct(gE)} contro ${Math.round((1 - pE!) * 100)}% × ${pct(-(stopPct + costoVero(s)))} (Thorp: si entra solo se in media il trade rende) · probabilità netta per candela: ${valutate}` });
         continue;
       }
+      if (isCrypto(s) && (cryptoNuove >= c.crypto.maxIngressiGiro || cryptoAperte + cryptoNuove >= c.crypto.maxAperte)) {
+        stati.push({ simbolo: s, candela: tf, fase: "cerca ingresso", ingresso: null, obiettivo: null, stop: null, prezzo: price, motivo: `tetto alle crypto: ${cryptoNuove >= c.crypto.maxIngressiGiro ? `già ${cryptoNuove} ingressi crypto in questo giro (massimo ${c.crypto.maxIngressiGiro}, prima i più probabili)` : `${cryptoAperte + cryptoNuove} operazioni crypto intraday già aperte (massimo ${c.crypto.maxAperte})`}: le crypto si muovono insieme, si aspetta · probabilità netta per candela: ${valutate}` });
+        continue;
+      }
+      if (isCrypto(s)) cryptoNuove++;
       const target = price * (1 + targetPct), stop = price * (1 - stopPct);
       const obiettivoTrend = trend ? price * (1 + trend.k) : null;
       // I livelli si tengono da subito; il blocco "un ingresso al giorno" scatta solo a ordine eseguito (dal diario): se
       // l'allocatore o la gabbia scartano il voto, il titolo resta candidato al giro dopo.
       this.operazioni.set(s, { simbolo: s, candela: tf, giorno: v.today, ingresso: price, obiettivo: target, stop, aperta: v.now.toISOString(), sopraMedia: read.ema20 !== null && price > read.ema20, ...(h !== undefined && k !== undefined ? { orizzonteMin: h } : {}), ...(trend ? { sostegno: { tf: trend.tf, obiettivo: obiettivoTrend!, orizzonteMin: trend.h } } : {}) });
-      // Taglia: la fiducia in Kronos intraday la scala (al minimo metà, dal 70% piena); ogni correttivo la dimezza; uno stop
-      // più largo (trade di trend) la riduce in proporzione; una serie di perdite di oggi la riduce ancora.
-      const fid = pr === null ? 1 : Math.max(0.5, Math.min(1, 0.5 + ((pr - c.kronos.minProb) / (0.7 - c.kronos.minProb)) * 0.5));
-      const peso = c.maxWeight * fid * Math.pow(0.5, correttivi.length) * Math.min(1, read.stopPct / stopPct) * (inSerie ? c.serieNegativa.fattore : 1);
-      const ingresso = read.entra ? read.pattern : best.breve ? `medie brevi in ordine sulle candele ${tf} (prezzo sopra EMA 9 sopra EMA 20)` : `Kronos anticipa la ripartenza sulle candele ${tf} prima delle medie brevi`;
+      // Taglia, dal rischio: la probabilità (taglia.probabilita, sotto), la scaletta delle medie
+      // giornaliere, uno stop più largo (trade di trend: stesso rischio in euro) e una serie di perdite di oggi. Il prodotto
+      // non scende sotto taglia.pavimento della taglia massima: un trade che ha passato soglia, aspettativa e controlli
+      // si fa con una taglia vera. Prima 5-6 riduzioni in fila lo portavano allo 0,2-0,5% del conto e il minimo d'ordine lo
+      // scartava (SHEL 67%, SAP 63%, POL 74%: 2-5 $).
+      // Soglia e peso sono quelli dell'intraday agent che lavora sul titolo (il suo profilo), altrimenti di serie.
+      // Taglia proporzionale alla probabilità (taglia.probabilita): alla soglia d'ingresso il rischio allo stop è `min` volte
+      // quello di serie, `ampiezza` punti sopra la soglia `max` volte (in mezzo in linea retta). Sopra 1 cresce anche il
+      // tetto del trade (quota del budget × fattore), mai oltre maxWeight: più è probabile, più si investe. Sotto 1 non va sotto
+      // il pavimento della taglia, come gli altri fattori di rischio.
+      const tp = c.taglia.probabilita;
+      const pTaglia = pE ?? prA;
+      const fp = !tp.enabled || pTaglia === null ? 1 : tp.min + (tp.max - tp.min) * Math.max(0, Math.min(1, (pTaglia - sogliaQui) / Math.max(0.01, tp.ampiezza)));
+      const pru = prudenza(s);
+      // Taglia dal rischio allo stop: (stop + costi + scivolamento) × taglia ≤ budget.rischioTrade, al massimo maxWeight.
+      // Uno stop più largo (trade di trend, crypto, 4 ore) dà da solo una taglia più piccola.
+      // Un'operazione da sola al massimo metà del budget (budget.maxQuotaTrade): la prima occasione della giornata non
+      // prende tutto lo spazio, ne resta per le altre (budget 25% → 12,5% a operazione; 50% → 25%).
+      // Il peso personale (profilo della persona, formazione: ×0,8) scala la taglia rispetto a quello di serie: con il tetto
+      // a metà budget ridurre il solo massimo non avrebbe più effetto.
+      const tettoTrade = Math.min(c.maxWeight, quotaBudget(v.account.equity, v.capitaleBase, Number(valore("AGENTS.intraday.budget.quota", s)), guadagniAperti(v.positions, v.prices)).quota * c.budget.maxQuotaTrade);
+      const fattorePersona = Math.min(1.5, Math.max(0, Number(valore("AGENTS.intraday.maxWeight", s)) / Math.max(1e-9, c.maxWeight)));
+      // Il peso personale scala la taglia ma non supera il tetto per titolo della gabbia (c.maxWeight).
+      const tettoP = Math.min(c.maxWeight, tettoTrade * Math.max(1, fp));
+      // Sotto 1 il fattore della probabilità è uno dei fattori di rischio (con il pavimento); sopra 1 alza rischio e tetto.
+      const pesoRischio = Math.min(c.maxWeight, Math.min(tettoP, (Number(valore("AGENTS.intraday.budget.rischioTrade", s)) / (stopPct + costoVero(s) + c.budget.scivolamento)) * Math.max(1, fp)) * fattorePersona);
+      const fattoriTaglia = Math.min(1, fp) * pru.f * (inSerie ? c.serieNegativa.fattore : 1);
+      const peso = pesoRischio * Math.max(c.taglia.pavimento, fattoriTaglia);
+      const ingresso = `${rimbalzi.has(s) ? `${fmtCalo(s)}: ` : ""}${read.entra ? read.pattern : best.breve ? `medie brevi in ordine sulle candele ${tf} (prezzo sopra EMA 9 sopra EMA 20)` : `Kronos anticipa la ripartenza sulle candele ${tf} prima delle medie brevi`}`;
       const superiori = sup.letti.length ? `candele superiori: ${sup.letti.join(", ")}` : "";
       const tipo = trend ? `; trade di trend: le candele ${trend.tf} vedono ${pct(trend.k)} in ${etichetta(trend.h)} (probabilità ${Math.round(trend.pr * 100)}%), obiettivo finale ${num(obiettivoTrend!)}, stop della candela ${trend.tf}` : superiori ? "; trade breve: le candele superiori non sono contrarie ma non vedono un rialzo netto" : "";
-      segnali.push({ agente: this.name, simbolo: s, lato: "buy", forza: 1, orizzonteSedute: 1, intraday: true, pesoMassimo: peso, ...(k !== undefined ? {} : fc !== undefined ? { kronos: fc } : {}), perche: `${s} intraday su candele ${tf}${valutate ? ` (scelta per probabilità netta dei costi: ${valutate})` : ""}: ${ingresso}${k !== undefined ? `; Kronos a ${etichetta(h!)} sulle candele ${tf} ${pct(k)} (probabilità ${Math.round((pr ?? 0) * 100)}%)` : fc !== undefined ? `; Kronos ${pct(fc)} a ${AGENTS.kronos.horizon} sedute` : ""}${superiori ? `; ${superiori}` : ""}${tipo}${correttivi.length ? `; in parte contrari: ${correttivi.join(" e ")}, taglia ridotta` : ""}${inSerie ? `; dopo ${perditeDiFila} perdite di fila, taglia ridotta` : ""}; obiettivo ${num(target)} (${pct(targetPct)}${k !== undefined ? `, da Kronos in ${etichetta(h!)}` : ""}), stop ${num(stop)} (${pct(-stopPct)}), poi controllo su candele ${LOWER[tf] ?? tf}, chiusura ${chiusuraDi(s)}` });
+      segnali.push({ agente: this.name, simbolo: s, lato: "buy", forza: 1, orizzonteSedute: 1, intraday: true, pesoMassimo: peso, ...(best.prGrezza !== null && best.prGrezza !== undefined ? { misure: { probabilita: best.prGrezza, ingresso: pE ?? prA ?? best.prGrezza, ...(rimbalzi.has(s) ? { rimbalzo: rimbalzi.get(s)!.calo } : {}), ...(livMedie(s) >= 0 ? { medie: livMedie(s) } : {}) } } : {}), ...(k !== undefined ? {} : fc !== undefined ? { kronos: fc } : {}), perche: `${s} intraday su candele ${tf}${valutate ? ` (scelta per probabilità netta dei costi: ${valutate})` : ""}: ${ingresso}${k !== undefined ? `; Kronos a ${etichetta(h!)} sulle candele ${tf} ${pct(k)} (probabilità ${Math.round((pr ?? 0) * 100)}%)` : fc !== undefined ? `; Kronos ${pct(fc)} a ${AGENTS.kronos.horizon} sedute` : ""}${superiori ? `; ${superiori}` : ""}${tipo}${pru.f < 1 ? `; ${pru.etichetta}: taglia ×${pru.f}` : ""}${indizi.length ? `; indizi contrari: ${indizi.join(" e ")} (−${Math.round(penalita * 100)} punti di probabilità, ${Math.round(prA! * 100)}%)` : ""}${correttivi.length > indizi.length ? `; ${correttivi.find((x) => /medie brevi/.test(x))}` : ""}${fp !== 1 ? `; taglia ×${fp.toFixed(2)} per la probabilità (${Math.round(pTaglia! * 100)}% contro la soglia del ${Math.round(sogliaQui * 100)}%)` : ""}${fattoriTaglia < c.taglia.pavimento ? `; taglia al pavimento (${Math.round(c.taglia.pavimento * 100)}% della massima)` : ""}${inSerie ? `; dopo ${perditeDiFila} perdite di fila, taglia ridotta` : ""}${extraRientro(s) ? `; rientro dopo una perdita alle ${hhmm(ultimaPerdita(s)!)}: soglia più alta di ${Math.round(c.rientro.extraProb * 100)} punti` : ""}; obiettivo ${num(target)} (${pct(targetPct)}${k !== undefined ? `, da Kronos in ${etichetta(h!)}` : ""}), stop ${num(stop)} (${pct(-stopPct)}), poi controllo su candele ${controlloDi(s, tf)}, chiusura ${chiusuraDi(s)}` });
+      nuovi.push({ s, pr: pE ?? prA ?? 0, peso });
       const opNuova = this.operazioni.get(s)!;
-      stati.push({ simbolo: s, candela: tf, livelli: { candela: tf, obiettivo: opNuova.obiettivo, stop: opNuova.stop, ...(opNuova.orizzonteMin !== undefined ? { orizzonteMin: opNuova.orizzonteMin } : {}), sopraMedia: !!opNuova.sopraMedia, ...(opNuova.sostegno ? { sostegno: opNuova.sostegno } : {}) }, ...(h !== undefined && k !== undefined ? { orizzonte: etichetta(trend ? trend.h : h) } : {}), controllo: [`poi candele ${LOWER[tf] ?? tf}`, superiori].filter(Boolean).join(" · "), fase: "cerca ingresso", ingresso: price, obiettivo: obiettivoTrend ?? target, stop, prezzo: price, motivo: `ingresso votato: ${ingresso}${trend ? ` · trade di trend sulle candele ${trend.tf}` : ""}${valutate ? ` · probabilità netta per candela: ${valutate}` : ""}` });
+      stati.push({ simbolo: s, candela: tf, livelli: { candela: tf, previsione: `${tf}|${barsOf(s, tf)!.at(-1)!.t}`, obiettivo: opNuova.obiettivo, stop: opNuova.stop, ...(opNuova.orizzonteMin !== undefined ? { orizzonteMin: opNuova.orizzonteMin } : {}), sopraMedia: !!opNuova.sopraMedia, ...(opNuova.sostegno ? { sostegno: opNuova.sostegno } : {}) }, ...(h !== undefined && k !== undefined ? { orizzonte: etichetta(trend ? trend.h : h) } : {}), controllo: [`poi candele ${controlloDi(s, tf)}`, superiori].filter(Boolean).join(" · "), fase: "cerca ingresso", ingresso: price, obiettivo: obiettivoTrend ?? target, stop, prezzo: price, motivo: `ingresso votato: ${ingresso}${trend ? ` · trade di trend sulle candele ${trend.tf}` : ""}${valutate ? ` · probabilità netta per candela: ${valutate}` : ""}` });
     }
-    if (v.analisi === false) stati.push(...this.ultimeCandidate.filter((x) => !held.has(x.simbolo) && this.entrateOggi.get(x.simbolo) !== v.today));
+    if (v.analisi === false) stati.push(...this.ultimeCandidate.filter((x) => !held.has(x.simbolo) && !bloccatoOggi(x.simbolo)));
     else this.ultimeCandidate = stati.filter((x) => x.fase !== "in posizione");
     const n = segnali.filter((x) => x.lato === "buy").length;
-    note.unshift(v.analisi === false ? `${[...mine].length} operazioni aperte seguite; nuove candidate alla prossima analisi d'ingresso (ogni ${AGENTS.analisiMinuti} minuti)` : `${[...mine].length} operazioni aperte, ${candidates.length} candidate, ${n} ingressi votati${this.forecast ? ` · candele valutate: ${TFS.join(", ")}` : ""}`);
+    // Budget dell'intraday: quanto è investito adesso in operazioni intraday (lo stesso conto dell'allocatore).
+    const eq = v.account.equity > 0 ? v.account.equity : 1;
+    const investito = [...mine].reduce((a, s) => a + (held.get(s)?.qty ?? 0) * (v.prices[s] ?? held.get(s)?.currentPrice ?? 0), 0);
+    const qb = quotaBudget(eq, v.capitaleBase, Number(valore("AGENTS.intraday.budget.quota", "")), guadagniAperti(v.positions, v.prices));
+    // Sostituzione dei trade deboli (intraday.sostituzione): budget o contanti pieni e un'occasione nuova nettamente più
+    // probabile di un'operazione aperta che oggi non si aprirebbe più: si vende quella, e il ricavato va subito alla nuova
+    // (la vendita è «libera»: allocatore, gabbia e invio ne contano il ricavato nello stesso giro).
+    const so = c.sostituzione;
+    if (this.sostituzioni.giorno !== v.today) this.sostituzioni = { giorno: v.today, n: 0 };
+    if (so.enabled && nuovi.length && deboli.length && !segnali.some((x) => x.lato === "sell") && this.sostituzioni.n < so.maxGiorno) {
+      const impegnato = v.cashImpegnato ?? 0;
+      const migliore = [...nuovi].sort((a, b) => b.pr - a.pr)[0]!;
+      // La riserva per le occasioni (budget.riservaOccasioni) conta come spazio per un'occasione nettamente migliore: prima
+      // si usa quella, poi si vende.
+      const ro = c.budget.riservaOccasioni;
+      const riserva = ro.enabled && migliore.pr >= Number(valore("AGENTS.intraday.kronos.minProb", migliore.s)) + ro.extraProb ? Math.max(0, ro.quota * eq - Math.max(0, investito + impegnato - qb.quota * eq)) : 0;
+      const spazio = Math.max(0, Math.min(qb.quota * eq - investito - impegnato + riserva, v.account.cash - impegnato - AGENTS.riservaContanti * eq));
+      const chiesto = Math.min(nuovi.reduce((a, x) => a + x.peso * eq, 0), migliore.peso * eq);
+      if (spazio < so.mancanza * chiesto) {
+        const debole = deboli
+          .filter((d) => d.s !== migliore.s && (so.traClassi || isCrypto(d.s) === isCrypto(migliore.s)) && d.minuti >= so.minMinuti && d.pl < Number(valore("AGENTS.intraday.kronos.minProb", d.s)) && migliore.pr - d.pl >= so.margine && (isCrypto(d.s) || v.mercatoAperto !== false))
+          .sort((a, b) => a.pl - b.pl || a.gain - b.gain)[0];
+        if (debole) {
+          this.sostituzioni.n++;
+          const m = `sostituito da ${migliore.s} (probabilità ${Math.round(migliore.pr * 100)}% contro ${Math.round(debole.pl * 100)}% di salire qui sulle candele ${debole.tf}): budget pieno (${spazio.toFixed(2)} $ liberi su ${chiesto.toFixed(2)} $ chiesti), si chiude a ${pct(debole.gain)} per far posto (${this.sostituzioni.n}ª sostituzione di oggi)`;
+          segnali.push({ agente: this.name, simbolo: debole.s, lato: "sell", forza: 1, orizzonteSedute: 1, vincolante: true, intraday: true, libera: true, perche: `${debole.s} intraday: ${m}` });
+          note.push(`${debole.s}: ${m}`);
+          const st = stati.find((x) => x.simbolo === debole.s && x.fase === "in posizione");
+          if (st) st.motivo = m;
+        }
+      }
+    }
+    note.push(`budget intraday: investito ${((investito / eq) * 100).toFixed(1).replace(".", ",")}% del conto su ${(qb.quota * 100).toFixed(1).replace(".", ",").replace(",0", "")}%${qb.reinvestito > 0.5 ? ` (${Math.round(Number(valore("AGENTS.intraday.budget.quota", "")) * 100)}% del capitale di partenza più ${qb.reinvestito.toFixed(2).replace(".", ",")} $ di profitto reinvestito)` : ""} (crypto al massimo ${Math.round(c.budget.maxCrypto * 100)}%), rischio allo stop ${(c.budget.rischioTrade * 100).toFixed(2).replace(".", ",")}% per operazione`);
+    const tempi = this.forecast ? ` · tempi: candele ${(msCandele / 1000).toFixed(1)} s, Kronos ${(msKronos / 1000).toFixed(1)} s su ${serieKronos} serie nuove` : "";
+    note.unshift(v.analisi === false ? `${[...mine].length} operazioni aperte seguite; nuove candidate alla prossima analisi d'ingresso (ogni ${AGENTS.analisiMinuti} minuti)${tempi}` : `${[...mine].length} operazioni aperte, ${candidates.length} candidate, ${n} ingressi votati${this.forecast ? ` · candele valutate: ${TFS.filter((tf) => !senzaVantaggio(tf)).join(", ")}${TFS.some((tf) => senzaVantaggio(tf)) ? ` (senza vantaggio misurato, solo misurate: ${TFS.filter((tf) => senzaVantaggio(tf)).join(", ")})` : ""}` : ""}${tempi}`);
     return { segnali, note, intraday: stati };
   }
 }
